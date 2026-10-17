@@ -31,9 +31,12 @@ pub const MAX_COUNT: usize = 20;
 /// core and halo masks (141,376 bytes), then the shot ring (a write count, a
 /// pad word, and eight {key, record} entries).
 pub const PICTURE_SCRATCH: usize = 141376 + 8 + 8 * 8;
-// One script array holds the header, every record, and the scratch: at most 65536 words.
-const _: () = assert!(HEADER_SIZE + MAX_COUNT * RECORD_SIZE + PICTURE_SCRATCH <= 65536 * 4);
-const _: () = assert!(PICTURE_SCRATCH.is_multiple_of(4));
+/// Everything after the records: the picture scratch, then the menu text
+/// (`crate::menu_text`).
+pub const TAIL_SIZE: usize = PICTURE_SCRATCH + crate::menu_text::TEXT_SIZE;
+// One script array holds the header, every record, the scratch, and the text: at most 65536 words.
+const _: () = assert!(HEADER_SIZE + MAX_COUNT * RECORD_SIZE + TAIL_SIZE <= 65536 * 4);
+const _: () = assert!(PICTURE_SCRATCH.is_multiple_of(4) && TAIL_SIZE.is_multiple_of(4));
 pub const MAX_CHUNKS: usize = (MAX_COUNT + HOST_ICON_COUNT).div_ceil(ICONS_PER_CHUNK);
 const _: () = assert!(MAX_COUNT + HOST_ICON_COUNT <= ICONS_PER_CHUNK);
 pub const HEADER_REFERENCE: u32 = 0x58012340;
@@ -63,7 +66,7 @@ pub fn layout(count: usize) -> Result<Value> {
         .map(|start| ICONS_PER_CHUNK.min(count + HOST_ICON_COUNT - start) * ICON_STRIDE / 4)
         .collect();
     Ok(
-        json!({"words": (HEADER_SIZE + count * RECORD_SIZE + PICTURE_SCRATCH) / 4, "icon_words": icon_words}),
+        json!({"words": (HEADER_SIZE + count * RECORD_SIZE + TAIL_SIZE) / 4, "icon_words": icon_words}),
     )
 }
 
@@ -139,7 +142,7 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         "fileclose fh".into(),
         format!(
             "expected = {} + count * {}",
-            (HEADER_SIZE + PICTURE_SCRATCH) / 4,
+            (HEADER_SIZE + TAIL_SIZE) / 4,
             RECORD_SIZE / 4
         ),
         "if words != expected goto reject".into(),

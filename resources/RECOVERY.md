@@ -1,31 +1,20 @@
 # Recovery
 
-GRKit installs session patches in RAM. The activation procedure separately enables the camera's persistent SD-script setting.
-GRKit does not provide an automatic rollback after a camera hang.
+GRKit changes the camera only until the camera turns off. It does not write the firmware.
 
-## Camera hangs during normal startup
+## The camera stops during startup
 
-Do not interrupt an active official firmware update or remove power while an update progress screen is visible.
-
-If the camera has frozen during normal startup:
-
-1. Attempt normal power-off.
-2. If the camera remains unresponsive, remove the battery.
+1. Try to turn the camera off.
+2. If the camera does not respond, remove the battery.
 3. Remove the SD card.
-4. Reinsert a charged battery.
-5. Try startup without a card.
+4. Insert a charged battery. Turn the camera on without the card.
 
-Do not push or pull the lens barrel. Keep the card out during recovery.
+Do not push or pull the lens barrel. Do not remove the power during an official firmware update.
 
-## Normal startup still fails
+## The camera still does not start
 
-1. Hold the playback button to start in playback mode without the card.
-2. If settings remain accessible, use the camera's reset function.
-3. Restart without the card before trying any SD scripts again.
+1. Without the card, hold the playback button to start the camera in playback mode.
+2. If the menu opens, reset the camera settings. The reset deletes your personal settings.
+3. Turn the camera on again without the card.
 
-Resetting the camera removes personal settings. Record those settings first if the camera permits it.
-An earlier implementation that stored a custom native Image Control value required this reset after a startup hang.
-Avoid opening Image Control if that screen itself causes a hang. Use the general reset setting instead.
-
-If playback startup or reset is unavailable, stop trying script installations and contact camera service.
-Reinstalling official firmware does not necessarily clear a stored setting that causes startup failure.
+If the camera still does not start, stop using GRKit and contact camera service.

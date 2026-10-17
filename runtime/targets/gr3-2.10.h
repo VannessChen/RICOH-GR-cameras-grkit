@@ -55,6 +55,10 @@
 #define FW_CHANGE_CONTROLLER 0x5316c9d8
 /* AdjModeController fields. */
 #define ADJ_CANVAS 0x4
+/* The UI language: a byte of the settings object that this slot points to
+   (reader 0x532465dc). 18 is Traditional Chinese and 19 Simplified Chinese. */
+#define LANGUAGE_SETTINGS_SLOT 0x55063f34
+#define LANGUAGE_SETTING 0x9ba
 #define ADJ_TITLE 0x160
 #define ADJ_DETAIL 0x164
 #define ADJ_DETAIL_VALUE 0x168

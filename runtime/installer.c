@@ -1,5 +1,4 @@
 #include "abi.h"
-#include "menu_labels.h"
 /* GRKit installer. Native selection state is read-only. */
 typedef unsigned char u8;
 typedef unsigned short u16;
@@ -149,7 +148,7 @@ static u32 effect_code(const u8 *id)
 }
 static void layout(void)
 {
-    size = GRKIT_HOST_HEADER_SIZE + count * GRKIT_RECORD_SIZE + GRKIT_PICTURE_SCRATCH;
+    size = GRKIT_HOST_HEADER_SIZE + count * GRKIT_RECORD_SIZE + GRKIT_TAIL_SIZE;
     icon_chunks = (count + HOST_ICON_COUNT + ICONS_PER_CHUNK - 1) / ICONS_PER_CHUNK;
 }
 static u32 chunk_count(u32 chunk)
@@ -292,6 +291,11 @@ static int install(void)
         zero(at(icon_bases[i]), chunk_count(i) * ICON_STRIDE);
         store(base + GRKIT_HOST_ICON_CHUNKS + i * 4, icon_bases[i]);
     }
+    /* Menu text after the picture scratch (runtime/abi.h). */
+    _Static_assert(MAX_COUNT <= GRKIT_TEXT_RECORDS, "Menu text has no summary slot for each record");
+    _Static_assert(MENU_TEXT_BYTES <= GRKIT_TEXT_SUMMARY, "Menu text table overlaps the summaries");
+    u32 text = base + GRKIT_HOST_HEADER_SIZE + count * GRKIT_RECORD_SIZE + GRKIT_PICTURE_SCRATCH;
+    copy(at(text), menu_text, MENU_TEXT_BYTES);
 #ifndef GRKIT_NO_IMAGE_CONTROL
     for (u32 i = 0; i < count; ++i) {
         u32 record = base + GRKIT_HOST_HEADER_SIZE + i * GRKIT_RECORD_SIZE;
@@ -307,7 +311,17 @@ static int install(void)
         for (u32 j = 0; j < n; ++j) at(record + GRKIT_RECORD_NAME + j * 2)[0] = profile[48 + j];
         store(record + GRKIT_RECORD_MONOCHROME, get32(profile + 80));
         copy(at(record + GRKIT_RECORD_ID), profile + 16, 32);
-        module_summary((volatile u16 *)at(record + GRKIT_RECORD_SUMMARY), profile + 48);
+        /* The Image Control summary in each language: the prefix, then the name. */
+        for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language) {
+            volatile u16 *summary = (volatile u16 *)at(text + GRKIT_TEXT_SUMMARY +
+                (language * GRKIT_TEXT_RECORDS + i) * GRKIT_SUMMARY_UNITS * 2);
+            const u16 *table = (const u16 *)menu_text;
+            const u16 *prefix = table + table[language * GRKIT_TEXT_STRINGS + TEXT_IMAGE_PREFIX] / 2;
+            u32 k = 0, m = n < 16 ? n : 16;
+            for (; prefix[k]; ++k) summary[k] = prefix[k];
+            for (u32 j = 0; j < m; ++j) summary[k + j] = profile[48 + j];
+            summary[k + m] = 0;
+        }
         u32 icon = icon_bases[i / ICONS_PER_CHUNK] + (i % ICONS_PER_CHUNK) * ICON_STRIDE;
         ICON_HEADER(icon);
         copy(at(icon + ICON_PIXELS), profile + 1684, 6400);
@@ -364,7 +378,7 @@ static int select_profile(const char *id)
     u32 base = word(ARRAY_TABLE + 4);
     if (!heap(base, GRKIT_HOST_HEADER_SIZE) || word(base + 16) != 0x314d5247 || word(base + 20) != 1) return 41;
     u32 n = word(base), records = word(base + 4), selected = 0;
-    if (n > MAX_COUNT || records != base + GRKIT_HOST_HEADER_SIZE || !heap(base, GRKIT_HOST_HEADER_SIZE + n * GRKIT_RECORD_SIZE + GRKIT_PICTURE_SCRATCH)) return 41;
+    if (n > MAX_COUNT || records != base + GRKIT_HOST_HEADER_SIZE || !heap(base, GRKIT_HOST_HEADER_SIZE + n * GRKIT_RECORD_SIZE + GRKIT_TAIL_SIZE)) return 41;
     if (!text_equal(id, "off")) {
         for (u32 i = 0; i < n; ++i) {
             u32 p = records + i * GRKIT_RECORD_SIZE;

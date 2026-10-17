@@ -179,6 +179,96 @@ fn is_effect_path(name: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
+/// The language of a package's guide. Each package has the English guide
+/// (`INSTALLATION.md`). Another language adds its own guide next to it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Language {
+    #[default]
+    English,
+    SimplifiedChinese,
+    TraditionalChinese,
+}
+
+impl Language {
+    pub const ALL: [Language; 3] = [
+        Language::English,
+        Language::SimplifiedChinese,
+        Language::TraditionalChinese,
+    ];
+
+    /// Parses a language tag of the site: `en`, `zh-Hans`, or `zh-Hant`.
+    pub fn parse(code: &str) -> Result<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|language| language.code() == code)
+            .with_context(|| format!("Unknown language {code:?}. Use en, zh-Hans, or zh-Hant"))
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Language::English => "en",
+            Language::SimplifiedChinese => "zh-Hans",
+            Language::TraditionalChinese => "zh-Hant",
+        }
+    }
+
+    /// The package path of the guide in this language.
+    pub fn guide_path(self) -> &'static str {
+        match self {
+            Language::English => "INSTALLATION.md",
+            Language::SimplifiedChinese => "INSTALLATION.zh-Hans.md",
+            Language::TraditionalChinese => "INSTALLATION.zh-Hant.md",
+        }
+    }
+
+    /// The guide text for a camera of `target`, before the camera names go in.
+    fn guide_template(self, gr4: bool) -> &'static str {
+        match (gr4, self) {
+            (false, Language::English) => include_str!("../../../resources/INSTALLATION.md"),
+            (false, Language::SimplifiedChinese) => {
+                include_str!("../../../resources/INSTALLATION.zh-Hans.md")
+            }
+            (false, Language::TraditionalChinese) => {
+                include_str!("../../../resources/INSTALLATION.zh-Hant.md")
+            }
+            (true, Language::English) => include_str!("../../../resources/INSTALLATION-GR4.md"),
+            (true, Language::SimplifiedChinese) => {
+                include_str!("../../../resources/INSTALLATION-GR4.zh-Hans.md")
+            }
+            (true, Language::TraditionalChinese) => {
+                include_str!("../../../resources/INSTALLATION-GR4.zh-Hant.md")
+            }
+        }
+    }
+
+    /// The camera phrase of the GR III guide, for example "GR III firmware 2.10".
+    pub fn camera_phrase(self, camera: &Camera) -> String {
+        let word = match self {
+            Language::English => "firmware",
+            Language::SimplifiedChinese => "固件",
+            Language::TraditionalChinese => "韌體",
+        };
+        format!("{} {word} {}", camera.name, camera.firmware)
+    }
+}
+
+/// The screenshot of the GR III guides, at its package path. The guides link it
+/// as `images/grkit-root.png`, so the link works in the repository and in the package.
+const GUIDE_IMAGES: [(&str, &[u8]); 1] = [(
+    "images/grkit-root.png",
+    include_bytes!("../../../resources/images/grkit-root.png"),
+)];
+
+/// The screenshots that the guides of `camera` show. The GR IV guides have none,
+/// because GR III screens could differ from GR IV screens.
+pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])] {
+    if camera.target == camera::GR4.target {
+        &[]
+    } else {
+        &GUIDE_IMAGES
+    }
+}
+
 /// What a valid package holds besides the runtime.
 #[derive(Debug)]
 pub struct Contents {
@@ -186,6 +276,8 @@ pub struct Contents {
     pub camera: &'static Camera,
     pub effect_ids: Vec<String>,
     pub hidden: Hidden,
+    /// The language of the translated guide, or English if the package has none.
+    pub language: Language,
 }
 
 /// Checks the package entries.
@@ -221,7 +313,12 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         .map(|name| format!("SD_ROOT/{name}"))
         .collect();
     mandatory.extend(activation.keys().map(|name| format!("SD_ROOT/{name}")));
-    mandatory.extend(["INSTALLATION.md", "SHA256SUMS"].map(String::from));
+    mandatory.extend(["INSTALLATION.md", "LICENSES.md", "SHA256SUMS"].map(String::from));
+    mandatory.extend(
+        guide_images(camera)
+            .iter()
+            .map(|(name, _)| (*name).to_owned()),
+    );
     ensure!(
         mandatory.iter().all(|name| contents.contains_key(name)),
         "Package is missing required files"
@@ -239,6 +336,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
     validate_runtime(&runtime, camera.target)?;
     let mut ids = BTreeSet::new();
     let mut hidden = Hidden::default();
+    let mut language = Language::English;
     let modules_path = format!("SD_ROOT/{}", modules::PATH);
     for (name, blob) in contents
         .iter()
@@ -254,6 +352,15 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
             ensure!(ids.insert(id.to_owned()), "Duplicate effect ID");
         } else if *name == modules_path {
             hidden = Hidden::parse(blob)?;
+        } else if let Some(translated) = Language::ALL
+            .into_iter()
+            .find(|other| *other != Language::English && other.guide_path() == name)
+        {
+            ensure!(
+                language == Language::English,
+                "Package has more than one translated guide"
+            );
+            language = translated;
         } else {
             bail!("Package contains unexpected files: {name}");
         }
@@ -275,6 +382,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         camera,
         effect_ids: ids.into_iter().collect(),
         hidden,
+        language,
     })
 }
 
@@ -287,30 +395,59 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
         .into_bytes()
 }
 
-/// The installation guide of a package. The main resource describes GR III.
-/// GR IIIx gets its name, firmware version, and ModeSet file. GR IV, which has
-/// fewer modules, has its own resource.
-pub fn installation_guide(camera: &Camera) -> Vec<u8> {
-    if camera.target == camera::GR4.target {
-        return include_bytes!("../../../resources/INSTALLATION-GR4.md").to_vec();
+/// The installation guide of a package in one language. The main resource
+/// describes GR III. GR IIIx gets its name, firmware version, and ModeSet file.
+/// GR IV, which has fewer modules, has its own resource.
+pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
+    let gr4 = camera.target == camera::GR4.target;
+    let template = language.guide_template(gr4);
+    if gr4 {
+        return template.as_bytes().to_vec();
     }
-    include_str!("../../../resources/INSTALLATION.md")
+    template
         .replace(
-            &format!("{} firmware {}", camera::GR3.name, camera::GR3.firmware),
-            &format!("{} firmware {}", camera.name, camera.firmware),
+            &language.camera_phrase(&camera::GR3),
+            &language.camera_phrase(camera),
         )
         .replace(camera::GR3.modeset, camera.modeset)
         .into_bytes()
 }
 
-/// Builds the package ZIP for one camera. `hidden` names the modules that the
-/// camera menu hides.
+/// The license notice of every package. CC BY-SA 4.0 and the MIT License
+/// require the attribution and the notices in each copy of an effect, so the
+/// package carries them with the effects.
+pub const LICENSES: &str = concat!(
+    include_str!("../../../resources/LICENSES.md"),
+    "\n## Changes to the LUTs\n\n```text\n",
+    include_str!("../../../effects/sources/CHANGELOG.txt"),
+    "```\n\n## GRKit license\n\n```text\n",
+    include_str!("../../../LICENSE"),
+    "```\n\n## Spectral Film LUT license\n\n```text\n",
+    include_str!("../../../effects/sources/SPECTRAL_FILM_LUT_LICENSE.txt"),
+    "```\n",
+);
+
+/// Builds the package ZIP for one camera with the English guide only. `hidden`
+/// names the modules that the camera menu hides.
 pub fn assemble(
     runtime: &Files,
     build: &Value,
     effects: &Files,
     hidden: Hidden,
     camera: &Camera,
+) -> Result<Vec<u8>> {
+    assemble_localized(runtime, build, effects, hidden, camera, Language::English)
+}
+
+/// Builds the package ZIP for one camera. A `language` other than English adds
+/// the guide in that language next to the English guide.
+pub fn assemble_localized(
+    runtime: &Files,
+    build: &Value,
+    effects: &Files,
+    hidden: Hidden,
+    camera: &Camera,
+    language: Language,
 ) -> Result<Vec<u8>> {
     ensure!(
         build.get("profile") == Some(&json!("production"))
@@ -342,7 +479,20 @@ pub fn assemble(
     if let Some(file) = hidden.file() {
         contents.insert(format!("SD_ROOT/{}", modules::PATH), file);
     }
-    contents.insert("INSTALLATION.md".into(), installation_guide(camera));
+    contents.insert(
+        Language::English.guide_path().into(),
+        installation_guide(camera, Language::English),
+    );
+    if language != Language::English {
+        contents.insert(
+            language.guide_path().into(),
+            installation_guide(camera, language),
+        );
+    }
+    for (name, image) in guide_images(camera) {
+        contents.insert((*name).into(), image.to_vec());
+    }
+    contents.insert("LICENSES.md".into(), LICENSES.as_bytes().to_vec());
     contents.insert("SHA256SUMS".into(), checksum_list(&contents));
     validate_contents(&contents)?;
     let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
@@ -413,6 +563,7 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
         camera,
         effect_ids,
         hidden,
+        language,
     } = validate_contents(&contents)?;
     ensure!(
         contents["SHA256SUMS"] == checksum_list(&contents),
@@ -420,7 +571,8 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
     );
     Ok(
         json!({"camera": camera.id, "target": camera.target, "effect_ids": effect_ids,
-            "hidden_modules": hidden.names(), "entries": contents.len()}),
+            "hidden_modules": hidden.names(), "language": language.code(),
+            "entries": contents.len()}),
     )
 }
 

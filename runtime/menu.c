@@ -30,9 +30,42 @@ static void plugin_touch(u32 controller);
 static void render(u32 controller);
 static void enter(u32 controller,u32 edge);
 static const u16 plugins[] = {'G','R','K','i','t',0};
-static const u16 image_control[] = {'I','m','a','g','e',' ','C','o','n','t','r','o','l',0};
-static const u16 off[] = {'O','f','f',0};
-static const u16 off_summary[] = {'I','m','a','g','e',' ','C','o','n','t','r','o','l',':',' ','O','f','f',0};
+#ifndef MENU_TEXT
+/* The menu text at a camera address. Host tests map the address. */
+#define MENU_TEXT(address) ((const u16 *)(address))
+#endif
+#ifndef MENU_LANGUAGE
+/* The camera's UI language byte (runtime/targets): 18 is Traditional Chinese,
+   19 Simplified Chinese. */
+static u32 camera_language(void) {
+#if defined(LANGUAGE_SETTINGS_SLOT)
+    u32 settings=WORD(LANGUAGE_SETTINGS_SLOT,0);
+    return settings ? BYTE(settings,LANGUAGE_SETTING) : 0;
+#elif defined(LANGUAGE_SETTING_BYTE)
+    return BYTE(LANGUAGE_SETTING_BYTE,0);
+#else
+    return 0;
+#endif
+}
+/* The camera language as a menu language (runtime/abi.h), or English. */
+#define MENU_LANGUAGE() (camera_language()==19 ? 1U : camera_language()==18 ? 2U : 0U)
+#endif
+static u32 menu_language(void) {
+    u32 language=MENU_LANGUAGE();
+    return language<GRKIT_TEXT_LANGUAGES ? language : 0;
+}
+/* The language table index that the text hooks of menu.S pass on for GRKit
+   text. It selects the font: a Chinese font draws Chinese text, and the Latin
+   table index 1 draws English. Chinese text with index 1 shows "?" glyphs. */
+A32_ENTRY u32 menu_table_index(void) {
+    u32 language=menu_language();
+    return language==1 ? 19 : language==2 ? 18 : 1;
+}
+/* One string of the label table in the menu language. */
+static const u16 *text(volatile u32 *h,u32 id) {
+    u32 base=GRKIT_TEXT(h);
+    return MENU_TEXT(base+MENU_TEXT(base)[menu_language()*GRKIT_TEXT_STRINGS+id]);
+}
 
 /* A wrapped stock navigation result places the private entry across that edge. */
 static u32 wrapped_edge(u32 kind,u32 old,u32 next,u32 movie) {

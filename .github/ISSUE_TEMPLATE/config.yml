@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Recovery guide
+    url: https://github.com/ahonn/grkit/blob/main/resources/RECOVERY.md
+    about: Read this guide first if the camera does not start.

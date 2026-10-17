@@ -1,30 +1,53 @@
 # GRKit
 
-GRKit is an SD-loaded plugin runtime for the RICOH GR III with firmware 2.10 and the GR IIIx with firmware 1.60. It adds a sixth ADJ entry with five modules:
+English | [简体中文](README.zh-Hans.md) | [繁體中文](README.zh-Hant.md)
 
-- **Image Control**: film effects and custom effects, with a live-view preview.
-- **Framing**: XPan (65:24), 16:9, or 4:3 photos, with a mask in the 3:2 viewfinder.
-- **Guides**: thirds, center, golden ratio, or diagonal lines inside the Framing area.
-- **Date Stamp**: a film data-back date in orange seven-segment digits on photos.
-- **Grain**: film grain on photos from the camera's own grain stage, in three strengths.
+[![Tests](https://github.com/ahonn/grkit/actions/workflows/tests.yml/badge.svg)](https://github.com/ahonn/grkit/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A package can leave out modules. The camera menu then shows only the modules in the package.
+GRKit adds film looks and shooting tools to RICOH GR cameras. It loads from the SD card and does not write the camera firmware.
 
-GR IV and GR IV HDF with firmware 1.11 have experimental support for all five modules. Framing offers only XPan, cropped from native 16:9. This support has not been tested on a camera.
+![The GRKit page in the ADJ menu](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.png)
+
+## Features
+
+GRKit adds a sixth entry, GRK, to the ADJ menu. It has five modules:
+
+- **Image Control**: 16 film looks, such as Portra 400, Velvia 100, and Tri-X 400. The viewfinder previews the look.
+- **Framing**: XPan (65:24), 16:9, or 4:3 photos. The viewfinder dims the area outside the photo.
+- **Guides**: thirds, center, golden ratio, or diagonal lines.
+- **Date Stamp**: an orange date on the photo, like a film camera's data back.
+- **Grain**: film grain on the photo, in three strengths.
+
+You select the modules when you make a package. The menu shows only those modules.
+
+## Supported cameras
+
+| Camera | Firmware | Status |
+| --- | --- | --- |
+| RICOH GR III | 2.10 | Tested on a camera |
+| RICOH GR IIIx | 1.60 | Not tested on a camera |
+| RICOH GR IV, GR IV HDF | 1.11 | Experimental, not tested on a camera. Framing offers only XPan. |
+
+Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
 
 > [!WARNING]
-> GRKit is experimental and is not affiliated with Ricoh. It patches the firmware in RAM for the current session and does not write the firmware. Activation enables the camera's persistent SD-script setting. A failure can stop the camera during startup. Read the [recovery guide](resources/RECOVERY.md) before you install GRKit.
-> GR IIIx 1.60 runs the code of GR III 2.10, so it uses the same runtime. GRKit has not been tested on a GR IIIx camera.
-> GRKit has not been tested on a GR IV camera. GR IV support stays experimental until it passes that test.
-> Other models and firmware versions are not supported. File formats and the package layout can change.
+> GRKit is experimental. Use it at your own risk.
+> GRKit changes the camera memory only until the camera turns off. The installation turns on the camera's SD script setting, and this setting stays on.
+> If GRKit fails, the camera can stop during startup. Read the [recovery guide](resources/RECOVERY.md) before you install GRKit.
 
 ## Install
 
-Each package contains `INSTALLATION.md`. The [installation guide](resources/INSTALLATION.md) is the same document. GR IV packages contain the [GR IV installation guide](resources/INSTALLATION-GR4.md).
+Each package contains `INSTALLATION.md`, with the installation steps and the menu use for its camera:
 
-## Build a package
+- [GR III and GR IIIx](resources/INSTALLATION.md)
+- [GR IV and GR IV HDF](resources/INSTALLATION-GR4.md)
 
-You need Rust 1.92 or later, Clang and LLD with ARM support, and the official GR III 2.10 firmware file from Ricoh. The repository does not contain firmware.
+To remove GRKit, turn the camera off and delete the `SCRIPT` folder from the card.
+
+## Build from source
+
+You need Rust 1.92 or later, Clang and LLD with ARM support, and the official firmware file from Ricoh. The repository does not contain firmware.
 
 ```sh
 cargo install --path crates/grkit-cli --locked
@@ -34,22 +57,43 @@ grkit package --build build/runtime --effects build/effects --out dist/GRKit.zip
 grkit verify dist/GRKit.zip
 ```
 
-`grkit package --camera gr3x` makes a package for the GR IIIx. The runtime build is the same, and only the file that enables SD scripts changes.
-For GR IV, build the runtime from the GR IV 1.11 firmware file (`fwdc248b.bin`) with `--target gr4-1.11`, then package it with `--camera gr4`.
-`grkit package --hide framing,guides,date-stamp,grain` hides modules. A package without `--effects` has no Image Control.
+- GR IIIx: add `--camera gr3x` to `grkit package`. The runtime is the same as for GR III.
+- GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4`.
+- Fewer modules: add `--hide framing,guides,date-stamp,grain`. Without `--effects`, the package has no Image Control.
+- Guide language: add `--language zh-Hans` or `--language zh-Hant`. The package then has the guide in that language, next to the English guide.
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `crates/grkit-core` | Effect formats and package rules, with no platform I/O |
+| `crates/grkit-build` | Runtime builds from the firmware file |
+| `crates/grkit-cli` | The `grkit` command |
+| `crates/grkit-wasm` | Package assembly in the browser |
+| `runtime/` | The code that runs on the camera |
+| `effects/` | The sources of the Image Control effects |
+| `web/` | The site that makes packages in the browser |
+| `resources/` | The installation and recovery guides |
+| `docs/` | The architecture and the release process |
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the setup, the tests, and the pull request rules.
+If you test GRKit on a camera, open a device report issue with the result, as a pass or a failure. Reports for GR IIIx and GR IV are the most useful.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Release process](docs/releasing.md)
 - [Effects](effects/README.md)
 - [Web site](web/README.md)
-- [Contributing](CONTRIBUTING.md)
 
 ## License
 
-The code is licensed under the [MIT License](LICENSE).
+The code is licensed under the [MIT License](LICENSE). Each package contains `LICENSES.md`, which gives the licenses of its files.
 
-- Effect definitions are licensed under CC BY-SA 4.0 or MIT. [effects/NOTICE.md](effects/NOTICE.md) gives the license of each effect.
-- Icon text uses the [Inter](https://github.com/rsms/inter) typeface under the [SIL Open Font License 1.1](crates/grkit-core/assets/Inter-LICENSE.txt).
+- The effects are licensed under CC BY-SA 4.0 or MIT. [effects/NOTICE.md](effects/NOTICE.md) gives the license of each effect.
+- The icon text uses the [Inter](https://github.com/rsms/inter) typeface under the [SIL Open Font License 1.1](crates/grkit-core/assets/Inter-LICENSE.txt).
 - The effect fit is ported from [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) under the [MIT License](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt).
-- Generated installers contain bytes derived from the firmware.
+
+RICOH and GR are trademarks of Ricoh Company, Ltd. Film names are trademarks of their owners. GRKit is an independent project. It is not affiliated with, endorsed by, or supported by Ricoh or by a film manufacturer.

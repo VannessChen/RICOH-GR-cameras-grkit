@@ -22,12 +22,18 @@ menu_text_measure:
     ldr r2, [r1, #ADJ_TITLE]
     cmp r5, r2
     addeq r7, r0, #96
-    moveq r9, #1
-    beq measure_done
+    beq measure_language
     ldr r2, [r1, #ADJ_DETAIL]
     cmp r5, r2
-    addeq r7, r0, #104
-    moveq r9, #1
+    bne measure_done
+    add r7, r0, #104
+measure_language:
+    /* r9 is the language table index, which selects the font. menu.c picks
+       the index of the text language. r12 may be live after the hook. */
+    push {r12}
+    bl menu_table_index
+    mov r9, r0
+    pop {r12}
 measure_done:
     pop {r0-r3, lr}
     ldr pc, =HOOK_MENU_TEXT_MEASURE_RESUME
@@ -44,12 +50,16 @@ menu_text_draw:
     ldr r2, [r1, #ADJ_TITLE]
     cmp r4, r2
     addeq r3, r12, #96
-    moveq r0, #1
-    beq draw_done
+    beq draw_language
     ldr r2, [r1, #ADJ_DETAIL]
     cmp r4, r2
-    addeq r3, r12, #104
-    moveq r0, #1
+    bne draw_done
+    add r3, r12, #104
+draw_language:
+    /* r0 is the language table index, as at the measure hook. */
+    push {r3, lr}
+    bl menu_table_index
+    pop {r3, lr}
 draw_done:
     pop {r1, r2, r12, lr}
     ldr pc, =HOOK_MENU_TEXT_DRAW_RESUME

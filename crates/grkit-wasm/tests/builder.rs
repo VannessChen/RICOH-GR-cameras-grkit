@@ -101,6 +101,24 @@ fn the_camera_selects_the_modeset_file() {
 }
 
 #[test]
+fn the_language_adds_its_guide() {
+    let mut builder = builder_with_runtime(&runtime_files());
+    assert!(error(builder.set_language("fr")).contains("Unknown language"));
+    builder.set_language("zh-Hant").unwrap();
+    let package = builder.build().unwrap();
+    assert_eq!(
+        packaging::verify_package(&package).unwrap()["language"],
+        "zh-Hant"
+    );
+    builder.set_language("en").unwrap();
+    let package = builder.build().unwrap();
+    assert_eq!(
+        packaging::verify_package(&package).unwrap()["language"],
+        "en"
+    );
+}
+
+#[test]
 fn missing_or_changed_runtime_files_are_rejected() {
     let files = runtime_files();
     let mut missing = Builder::new(&manifest(&files)).unwrap();

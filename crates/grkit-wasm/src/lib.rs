@@ -21,6 +21,7 @@ pub struct Builder {
     effects: Files,
     hidden: Vec<String>,
     camera: &'static Camera,
+    language: packaging::Language,
 }
 
 impl Builder {
@@ -45,6 +46,7 @@ impl Builder {
             effects: Files::new(),
             hidden: Vec::new(),
             camera: &camera::GR3,
+            language: packaging::Language::English,
         })
     }
 
@@ -105,11 +107,25 @@ impl Builder {
         Ok(())
     }
 
+    /// Selects the language of a second guide next to the English one: `en` (the
+    /// default, no second guide), `zh-Hans`, or `zh-Hant`.
+    pub fn set_language(&mut self, code: &str) -> Result<()> {
+        self.language = packaging::Language::parse(code)?;
+        Ok(())
+    }
+
     /// Verifies the runtime against its manifest and returns the verified package ZIP.
     pub fn build(&self) -> Result<Vec<u8>> {
         let (runtime, manifest) = packaging::load_runtime(&self.manifest, &self.runtime)?;
         let hidden = Hidden::from_names(self.hidden.iter().map(String::as_str))?;
-        packaging::assemble(&runtime, &manifest, &self.effects, hidden, self.camera)
+        packaging::assemble_localized(
+            &runtime,
+            &manifest,
+            &self.effects,
+            hidden,
+            self.camera,
+            self.language,
+        )
     }
 }
 
@@ -155,6 +171,12 @@ impl Package {
     #[wasm_bindgen(js_name = setCamera)]
     pub fn set_camera(&mut self, id: &str) -> Result<(), JsError> {
         self.0.set_camera(id).map_err(js_error)
+    }
+
+    /// Adds the guide in `en` (no second guide), `zh-Hans`, or `zh-Hant` next to the English one.
+    #[wasm_bindgen(js_name = setLanguage)]
+    pub fn set_language(&mut self, code: &str) -> Result<(), JsError> {
+        self.0.set_language(code).map_err(js_error)
     }
 
     /// Returns the verified package as ZIP bytes.

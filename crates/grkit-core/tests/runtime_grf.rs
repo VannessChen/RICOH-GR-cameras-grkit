@@ -1,6 +1,6 @@
 //! Compare the portable decoder with the actual installer parser and C ABI.
 
-use grkit_core::{effects, modules::Hidden, runtime, selective::Selective};
+use grkit_core::{effects, menu_text, modules::Hidden, packaging, runtime, selective::Selective};
 use serde_json::{json, Value};
 use std::{
     env,
@@ -79,15 +79,31 @@ fn compile_for(
     executable: &Path,
     extra_sources: &[PathBuf],
 ) {
+    compile_with(target, compiler, source, executable, extra_sources, None);
+}
+
+/// Builds a host C harness, optionally with one more include directory.
+fn compile_with(
+    target: &str,
+    compiler: &OsString,
+    source: &Path,
+    executable: &Path,
+    extra_sources: &[PathBuf],
+    include: Option<&Path>,
+) {
+    let mut command = Command::new(compiler);
+    command.args([
+        "-std=c11",
+        "-O2",
+        "-Wno-int-to-pointer-cast",
+        "-Wno-pointer-to-int-cast",
+        target,
+    ]);
+    if let Some(include) = include {
+        command.arg("-I").arg(include);
+    }
     checked(
-        Command::new(compiler)
-            .args([
-                "-std=c11",
-                "-O2",
-                "-Wno-int-to-pointer-cast",
-                "-Wno-pointer-to-int-cast",
-                target,
-            ])
+        command
             .arg("-I")
             .arg(root().join("runtime"))
             .arg(source)
@@ -388,8 +404,7 @@ fn native_c_abi_matches_rust_allocation_constants() {
         r#"
 #include <stdio.h>
 #include "abi.h"
-_Static_assert(GRKIT_RECORD_ID + 32 <= GRKIT_RECORD_SUMMARY, "Summary overlap");
-_Static_assert(GRKIT_RECORD_SUMMARY + GRKIT_SUMMARY_UNITS * 2 <= GRKIT_RECORD_CODE, "Code overlap");
+_Static_assert(GRKIT_RECORD_ID + 32 <= GRKIT_RECORD_CODE, "Code overlap");
 _Static_assert(GRKIT_RECORD_CODE + 2 <= GRKIT_RECORD_SIZE, "Record overflow");
 _Static_assert(GRKIT_HOST_RETURN + 4 <= GRKIT_HOST_HEADER_SIZE, "Header word overflow");
 _Static_assert(GRKIT_HOST_ICON_CHUNKS + 4 * 4 <= GRKIT_HOST_HEADER_SIZE, "Header overflow");
@@ -398,9 +413,10 @@ _Static_assert(GRKIT_RECORD_NAME + 34 <= GRKIT_RECORD_MONOCHROME, "Name overlap"
 _Static_assert(GRKIT_RECORD_CODE + 2 <= GRKIT_RECORD_FEATURES, "Extension overlap");
 _Static_assert(GRKIT_RECORD_POST + 20 <= GRKIT_RECORD_SIZE, "Extension overflow");
 int main(void) {
-    printf("%u %u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE, GRKIT_ICON_STRIDE,
+    printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE, GRKIT_ICON_STRIDE,
            GRKIT_PICTURE_SCRATCH, GRKIT_HOST_COUNT, GRKIT_HOST_RECORDS, GRKIT_HOST_ACTIVE, GRKIT_HOST_STAMP,
-           GRKIT_HOST_GUIDE, GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE, GRKIT_HOST_HIDDEN);
+           GRKIT_HOST_GUIDE, GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE, GRKIT_HOST_HIDDEN, GRKIT_TEXT_SIZE,
+           GRKIT_TEXT_SUMMARY, GRKIT_TEXT_STRINGS, GRKIT_TEXT_LANGUAGES, GRKIT_TEXT_RECORDS, GRKIT_SUMMARY_UNITS, GRKIT_TAIL_SIZE);
     return 0;
 }
 "#,
@@ -428,7 +444,14 @@ int main(void) {
             runtime::HOST_GUIDE,
             runtime::HOST_FRAME_RATIO,
             runtime::RECORD_CODE,
-            runtime::HOST_HIDDEN
+            runtime::HOST_HIDDEN,
+            menu_text::TEXT_SIZE,
+            menu_text::TEXT_SUMMARY,
+            menu_text::STRINGS,
+            packaging::Language::ALL.len(),
+            runtime::MAX_COUNT,
+            menu_text::SUMMARY_UNITS,
+            runtime::TAIL_SIZE,
         ]
     );
 }
@@ -440,11 +463,24 @@ fn native_menu_contract_preserves_events_icons_and_empty_catalog() {
     };
     let temporary = tempfile::tempdir().unwrap();
     let executable = temporary.path().join("menu_contract");
-    compile(
+    // The harness reads the label table that the installer copies.
+    let table = grkit_core::menu_text::table().unwrap();
+    let bytes: Vec<String> = table.iter().map(u8::to_string).collect();
+    fs::write(
+        temporary.path().join("menu_text.h"),
+        format!(
+            "static const unsigned char menu_text_table[] __attribute__((aligned(2))) = {{{}}};\n",
+            bytes.join(",")
+        ),
+    )
+    .unwrap();
+    compile_with(
+        GR3_TARGET,
         &compiler,
         &root().join("tests/runtime/menu_contract.c"),
         &executable,
         &[],
+        Some(temporary.path()),
     );
     checked(&mut Command::new(&executable));
 }

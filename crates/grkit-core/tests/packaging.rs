@@ -95,14 +95,28 @@ fn package_round_trip_is_deterministic_and_preserves_metadata() {
 }
 
 #[test]
-fn packages_ship_only_the_guide_and_checksums() {
+fn packages_ship_only_the_guide_its_images_the_licenses_and_checksums() {
     let files = unpack(&package());
     let documents: Vec<_> = files
         .keys()
         .filter(|name| !name.starts_with("SD_ROOT/"))
         .map(String::as_str)
         .collect();
-    assert_eq!(documents, ["INSTALLATION.md", "SHA256SUMS"]);
+    assert_eq!(
+        documents,
+        [
+            "INSTALLATION.md",
+            "LICENSES.md",
+            "SHA256SUMS",
+            "images/grkit-root.png",
+        ]
+    );
+    // The guide links each packaged image, and the package has each linked image.
+    let guide = String::from_utf8(files["INSTALLATION.md"].clone()).unwrap();
+    for name in documents.iter().filter(|name| name.starts_with("images/")) {
+        assert!(guide.contains(&format!("]({name})")), "{name}");
+    }
+    assert_eq!(guide.matches("](images/").count(), 1);
 }
 
 #[test]
@@ -133,7 +147,12 @@ fn legacy_deflated_packages_remain_supported() {
 fn corrupted_profiles_documents_manifests_and_sums_are_rejected() {
     let original = unpack(&package());
     let profile = original.keys().find(|name| name.ends_with(".GRF")).unwrap();
-    for name in [profile.as_str(), "INSTALLATION.md", "SHA256SUMS"] {
+    for name in [
+        profile.as_str(),
+        "INSTALLATION.md",
+        "LICENSES.md",
+        "SHA256SUMS",
+    ] {
         let mut files = original.clone();
         files.get_mut(name).unwrap().push(b' ');
         assert!(
@@ -383,11 +402,11 @@ fn runtime_layout_matches_target_capacity() {
     assert_eq!(runtime::MAX_COUNT, 20);
     assert_eq!(
         runtime::layout(0).unwrap(),
-        json!({"words": 35426, "icon_words": [32040]})
+        json!({"words": 37474, "icon_words": [32040]})
     );
     assert_eq!(
         runtime::layout(20).unwrap(),
-        json!({"words": 44706, "icon_words": [64080]})
+        json!({"words": 46754, "icon_words": [64080]})
     );
     assert!(runtime::layout(21).is_err());
 }
@@ -403,10 +422,10 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
             .iter()
             .map(|v| v.as_u64().unwrap() as usize)
             .collect();
-        // Picture scratch: the date stamp masks, then the shot ring.
+        // Picture scratch (the date stamp masks, then the shot ring), then the menu text.
         assert_eq!(
             words * 4,
-            256 + count * 0x740 + 141376 + 72,
+            256 + count * 0x740 + 141376 + 72 + 8192,
             "count {count}"
         );
         assert_eq!(
@@ -548,9 +567,82 @@ fn each_camera_gets_its_modeset_file_and_guide() {
 #[test]
 fn the_guide_names_the_camera_once_and_the_modeset_file_once() {
     // installation_guide replaces these strings, so each must occur exactly once.
-    let guide = include_str!("../../../resources/INSTALLATION.md");
-    assert_eq!(guide.matches("GR III firmware 2.10").count(), 1);
-    assert_eq!(guide.matches(camera::GR3.modeset).count(), 1);
+    for (language, guide) in [
+        (
+            Language::English,
+            include_str!("../../../resources/INSTALLATION.md"),
+        ),
+        (
+            Language::SimplifiedChinese,
+            include_str!("../../../resources/INSTALLATION.zh-Hans.md"),
+        ),
+        (
+            Language::TraditionalChinese,
+            include_str!("../../../resources/INSTALLATION.zh-Hant.md"),
+        ),
+    ] {
+        let phrase = language.camera_phrase(&camera::GR3);
+        assert_eq!(guide.matches(&phrase).count(), 1, "{phrase}");
+        assert_eq!(
+            guide.matches(camera::GR3.modeset).count(),
+            1,
+            "{language:?}"
+        );
+    }
+}
+
+#[test]
+fn a_package_adds_the_guide_of_its_language() {
+    let effects = Files::from([effect("test-effect")]);
+    for language in [Language::SimplifiedChinese, Language::TraditionalChinese] {
+        let bytes = assemble_localized(
+            &runtime_fixture(),
+            &build(),
+            &effects,
+            Hidden::default(),
+            &camera::GR3X,
+            language,
+        )
+        .unwrap();
+        assert_eq!(verify_package(&bytes).unwrap()["language"], language.code());
+        let files = unpack(&bytes);
+        // The English guide stays, and the translated guide names GR IIIx.
+        assert_eq!(
+            files["INSTALLATION.md"],
+            installation_guide(&camera::GR3X, Language::English)
+        );
+        let guide = String::from_utf8(files[language.guide_path()].clone()).unwrap();
+        assert!(guide.contains(&language.camera_phrase(&camera::GR3X)));
+        assert!(guide.contains(camera::GR3X.modeset) && !guide.contains(camera::GR3.modeset));
+    }
+    // A GR IV package gets the translated GR IV guide.
+    let bytes = assemble_localized(
+        &gr4_runtime_fixture(),
+        &gr4_build(),
+        &Files::new(),
+        Hidden::default(),
+        &camera::GR4,
+        Language::TraditionalChinese,
+    )
+    .unwrap();
+    assert_eq!(
+        unpack(&bytes)["INSTALLATION.zh-Hant.md"],
+        include_bytes!("../../../resources/INSTALLATION-GR4.zh-Hant.md")
+    );
+    assert_eq!(verify_package(&package()).unwrap()["language"], "en");
+}
+
+#[test]
+fn a_package_has_at_most_one_translated_guide() {
+    let mut files = unpack(&package());
+    for language in [Language::SimplifiedChinese, Language::TraditionalChinese] {
+        files.insert(
+            language.guide_path().into(),
+            installation_guide(&camera::GR3, language),
+        );
+    }
+    assert!(verify_package(&repack(&with_sums(files), CompressionMethod::Stored)).is_err());
+    assert!(Language::parse("fr").is_err());
 }
 
 #[test]

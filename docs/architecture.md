@@ -117,6 +117,15 @@ Module state stays in the private host header.
 MENU returns one level. From the GRKit root it returns to the native ADJ items. The private menu restores the native list on its supported exit paths.
 List restoration suppresses the native selection callbacks.
 
+### Menu text
+
+The menu text is in English, Simplified Chinese, and Traditional Chinese. The menu uses the camera language if it is one of them, and English otherwise. Effect names stay as their definitions give them.
+`grkit_core::menu_text` holds the strings and builds a label table: for each language, 40 u16 offsets, then NUL-terminated UTF-16 strings. The string IDs are in `runtime/abi.h`.
+
+The text is data, not menu code, because the menu region has little room. The script array has 8192 bytes of text after the picture scratch.
+The installer copies the label table to the start of that area. At offset 4096, it writes the Image Control summary of each record in each language: the prefix from the table, then the effect name.
+The menu finds the text from the record count, so the header needs no pointer. A summary slot comes from the record offset: `x * 2260 >> 16` equals `x / 29` for each record offset divided by 64, so no division helper is necessary.
+
 ## Image Control
 
 Selection changes a private active-record pointer. Each processing task captures that pointer once. Off follows the native processing path.

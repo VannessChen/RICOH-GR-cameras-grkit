@@ -264,8 +264,8 @@ fn package_roundtrip_and_output_ownership() {
         text(&zip),
     ];
     let packaged = success(&args);
-    // Nine runtime and document entries, then one per effect.
-    assert_eq!(packaged["entries"], 9 + source_count());
+    // Eleven runtime, document, and image entries, then one per effect.
+    assert_eq!(packaged["entries"], 11 + source_count());
     assert_eq!(success(&["verify", text(&zip)])["effects"], source_count());
     let before = fs::read(&zip).unwrap();
     assert!(!run(&args).status.success());
@@ -303,9 +303,34 @@ fn package_targets_the_selected_camera() {
         text(&zip),
     ]);
     assert_eq!(packaged["camera"], "gr3x");
+    assert_eq!(packaged["language"], "en");
     let verified = success(&["verify", text(&zip)]);
     assert_eq!(verified["camera"], "gr3x");
     assert_eq!(verified["target"], "gr3-2.10");
+    // A second language adds its guide next to the English guide.
+    let chinese = tmp.path().join("zh-Hans.zip");
+    let packaged = success(&[
+        "package",
+        "--build",
+        text(&build),
+        "--language",
+        "zh-Hans",
+        "--out",
+        text(&chinese),
+    ]);
+    assert_eq!(packaged["language"], "zh-Hans");
+    assert_eq!(success(&["verify", text(&chinese)])["language"], "zh-Hans");
+    assert!(!run(&[
+        "package",
+        "--build",
+        text(&build),
+        "--language",
+        "fr",
+        "--out",
+        text(&tmp.path().join("fr.zip"))
+    ])
+    .status
+    .success());
     let rejected = tmp.path().join("gr4.zip");
     let output = run(&[
         "package",
@@ -337,7 +362,7 @@ fn package_hides_modules_and_may_omit_effects() {
         text(&zip),
     ]);
     // The module file is one more entry.
-    assert_eq!(packaged["entries"], 10 + source_count());
+    assert_eq!(packaged["entries"], 12 + source_count());
     assert_eq!(packaged["hidden_modules"], json!(["guides", "date-stamp"]));
     let verified = success(&["verify", text(&zip)]);
     assert_eq!(verified["hidden_modules"], json!(["guides", "date-stamp"]));
@@ -355,7 +380,7 @@ fn package_hides_modules_and_may_omit_effects() {
         "--out",
         text(&framing_only),
     ]);
-    assert_eq!(packaged["entries"], 10);
+    assert_eq!(packaged["entries"], 12);
     assert_eq!(success(&["verify", text(&framing_only)])["effects"], 0);
     for hide in [
         "framing,guides,date-stamp,grain",

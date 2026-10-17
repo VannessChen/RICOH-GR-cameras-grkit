@@ -130,6 +130,10 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage) -> Result<String> {
         array(&mut result, "off_pixels", &off_pixels(), true);
         array(&mut result, "plugins_pixels", &plugins_pixels(), true);
         array(&mut result, "module_pixels", &module_tiles().concat(), true);
+        // The installer copies the menu text table after the picture scratch.
+        let text = grkit_core::menu_text::table()?;
+        writeln!(result, "#define MENU_TEXT_BYTES {}U", text.len())?;
+        array(&mut result, "menu_text", &text, true);
     }
     if let Some(native) = image_control {
         let tail: Vec<_> = native

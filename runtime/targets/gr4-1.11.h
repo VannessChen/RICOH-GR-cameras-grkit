@@ -77,6 +77,9 @@
 /* AdjModeController fields. GR IV adds two FunctionGuideViews before the list,
    which moves the list and the slot byte by 8. */
 #define ADJ_CANVAS 0x4
+/* The UI language byte of the static settings object 0x55084dd8 (reader
+   0x5329b068, +0x1497), with the GR III values. Not confirmed on a camera. */
+#define LANGUAGE_SETTING_BYTE 0x5508626f
 #define ADJ_TITLE 0x160
 #define ADJ_DETAIL 0x164
 #define ADJ_DETAIL_VALUE 0x168

@@ -1,6 +1,6 @@
 import { Suspense, useRef, useState } from 'react';
 import { CAMERAS, MODESET_TOKEN } from './cameras';
-import { loadCatalog } from './catalog';
+import { loadCatalog, siteUrl } from './catalog';
 import { EffectsSection } from './components/EffectsSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RichText } from './components/RichText';
@@ -9,7 +9,7 @@ import { ALL_MODULES, MODULES, planModules, type ModuleKey } from './modules';
 import { buildPackage, save } from './package';
 
 const DEFAULT_SELECTION = ['portra-400-endura-v1', 'vision3-250d-2383-v1'];
-const REPOSITORY = 'https://github.com/ahonn/GRKit';
+const REPOSITORY = 'https://github.com/ahonn/grkit';
 
 type Build = { state: 'idle' } | { state: 'building' } | { state: 'ready' } | { state: 'failed' };
 
@@ -69,7 +69,7 @@ export function App() {
       const effects = plan.includeEffects
         ? (await loadCatalog(support.target)).effects.filter((effect) => selection.has(effect.id))
         : [];
-      const blob = await buildPackage(support.target, camera.id, effects, plan.hidden);
+      const blob = await buildPackage(support.target, camera.id, effects, plan.hidden, language);
       if (run === buildRun.current) {
         save(blob, 'GRKit.zip');
         setBuild({ state: 'ready' });
@@ -165,7 +165,7 @@ export function App() {
                     onChange={() => toggleModule(module.key)}
                   />
                   <span className="module-text">
-                    <span className="module-name">{module.name}</span>
+                    <span className="module-name">{t.moduleNames[module.key]}</span>
                     <span className="module-description">
                       {module.key === 'framing' && support?.xpanOnly
                         ? t.framingXpanOnly
@@ -217,7 +217,7 @@ export function App() {
               <dd>
                 {plan.visible.length > 0
                   ? MODULES.filter((module) => plan.visible.includes(module.key))
-                      .map((module) => module.name)
+                      .map((module) => t.moduleNames[module.key])
                       .join(', ')
                   : '—'}
               </dd>
@@ -262,10 +262,16 @@ export function App() {
       </main>
 
       <footer className="footer">
-        <p>{t.footer}</p>
+        <div className="footer-notes">
+          <p>{t.footer}</p>
+          <p>{t.trademarks}</p>
+        </div>
         <div>
           <a href={`${REPOSITORY}/blob/main/effects/NOTICE.md`}>{t.licenses}</a>
-          <a href={`${REPOSITORY}/blob/main/resources/RECOVERY.md`}>{t.recovery}</a>
+          <a href={siteUrl('THIRD_PARTY_LICENSES.txt')}>{t.thirdParty}</a>
+          <a href={`${REPOSITORY}/blob/main/resources/RECOVERY${language === 'en' ? '' : `.${language}`}.md`}>
+            {t.recovery}
+          </a>
           <a href={REPOSITORY}>{t.source}</a>
         </div>
       </footer>

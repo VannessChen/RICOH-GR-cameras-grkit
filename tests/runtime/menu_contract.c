@@ -1,11 +1,36 @@
 #include <assert.h>
 #include <string.h>
+/* The build's label table, which the Rust test writes for this harness. */
+#include "menu_text.h"
 static unsigned framing_requests;
 #define MENU_FRAMING_REQUEST() (++framing_requests)
+/* Camera addresses of the menu text map to text_arena, relative to the text
+   start of the header, so the count of records can change during the test. */
+static const unsigned short *text_at(unsigned int address);
+#define MENU_TEXT(address) text_at(address)
+static unsigned test_language;
+#define MENU_LANGUAGE() test_language
 #include "menu.c"
-#include "menu_labels.h"
 
 static volatile u32 test_header[64];
+static u16 text_arena[GRKIT_TEXT_SIZE / 2];
+static const u16 *text_at(u32 address)
+{
+    u32 offset = address - GRKIT_TEXT(test_header);
+    assert(offset < GRKIT_TEXT_SIZE && !(offset & 1));
+    return text_arena + offset / 2;
+}
+/* A menu string equals an ASCII string. */
+static int same(const u16 *actual, const char *expected)
+{
+    u32 i = 0;
+    for (; expected[i]; ++i) if (actual[i] != (u8)expected[i]) return 0;
+    return actual[i] == 0;
+}
+static const char *const ratio_names[] = {"Off", "XPan 65:24", "16:9", "4:3"};
+static const char *const guide_names[] = {"Off", "Thirds", "Center", "Golden Ratio", "Diagonals"};
+static const char *const stamp_names[] = {"Off", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY"};
+static const char *const grain_names[] = {"Off", "Weak", "Medium", "Strong"};
 static u32 native_changes;
 static u32 native_events;
 volatile u32 *menu_header(void) { return test_header; }
@@ -18,36 +43,49 @@ void menu_changed_original(u32 controller) { (void)controller; ++native_changes;
 
 int main(void)
 {
-    volatile u32 text[2];
-    descriptor(text, plugins);
-    assert(text[0] == 0x106);
-    descriptor(text, off_summary);
-    assert(text[0] == 0x113);
-    {
-        u16 summary[GRKIT_SUMMARY_UNITS + 1];
-        const char *names[] = {"Ektar 100", "1234567890ABCDEF"};
-        for (u32 i = 0; i < 2; ++i) {
-            memset(summary, 0xff, sizeof(summary));
-            module_summary(summary, (const u8 *)names[i]);
-            const char *prefix = "Image Control: ";
-            u32 n = strlen(prefix), m = strlen(names[i]);
-            for (u32 j = 0; j < n; ++j) assert(summary[j] == prefix[j]);
-            for (u32 j = 0; j < m; ++j) assert(summary[n+j] == names[i][j]);
-            assert(summary[n+m] == 0);
-            assert(summary[GRKIT_SUMMARY_UNITS] == 0xffff);
-            descriptor(text, summary);
-            assert(text[0] == (0x100 | (n+m+1)));
-        }
-    }
+    volatile u32 slot[2];
+    assert(sizeof(menu_text_table) <= GRKIT_TEXT_SUMMARY);
+    memcpy(text_arena, menu_text_table, sizeof(menu_text_table));
+    descriptor(slot, plugins);
+    assert(slot[0] == 0x106);
     test_header[GRKIT_HOST_COUNT / 4] = 5;
     test_header[GRKIT_HOST_OFF_ICON / 4] = 0x59001000;
     test_header[GRKIT_HOST_PLUGINS_ICON / 4] = 0x59003000;
     test_header[GRKIT_HOST_RECORDS / 4] = 0x59005000;
     assert(selected_icon(test_header) == 0x7fff);
+    descriptor(slot, modules[0].summary(test_header));
+    assert(same(modules[0].summary(test_header), "Image Control: Off") && slot[0] == 0x113);
+    /* Each language reads its own strings, and an unknown language reads English. */
+    for (u32 language = 0; language < 4; ++language) {
+        u32 table = language < GRKIT_TEXT_LANGUAGES ? language : 0;
+        test_language = language;
+        for (u32 id = 0; id < GRKIT_TEXT_STRINGS; ++id)
+            assert(text(test_header, id) == text_arena + text_arena[table * GRKIT_TEXT_STRINGS + id] / 2);
+    }
+    test_language = 2;
+    assert(!same(text(test_header, TEXT_FRAMING), "Framing"));
+    /* The text hooks select the font of the text language. */
+    assert(menu_table_index() == 18);
+    test_language = 1;
+    assert(menu_table_index() == 19);
+    test_language = 7;
+    assert(menu_table_index() == 1);
+    test_language = 0;
+    assert(menu_table_index() == 1);
     assert(menu_viewfinder_icon_select(0x166, 0) == 0x166);
     assert(menu_viewfinder_icon_select(0, 0) == 0);
     test_header[GRKIT_HOST_ACTIVE / 4] = 0x59005000 + 3 * GRKIT_RECORD_SIZE;
     assert(selected_icon(test_header) == 0x8003);
+    /* The summary of record 3 is its slot in the menu language. */
+    for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language) {
+        test_language = language;
+        assert(modules[0].summary(test_header) ==
+               text_arena + (GRKIT_TEXT_SUMMARY + (language * GRKIT_TEXT_RECORDS + 3) * GRKIT_SUMMARY_UNITS * 2) / 2);
+    }
+    test_language = 0;
+    /* x * 2260 >> 16 equals x / 29 for each record offset / 64. */
+    for (u32 index = 0; index < GRKIT_TEXT_RECORDS; ++index)
+        assert(((index * GRKIT_RECORD_SIZE) >> 6) * 2260U >> 16 == index);
     assert(menu_viewfinder_icon_select(0x166, 0) == 0x8003);
     assert(menu_viewfinder_icon_select(0x166, 1) == 0x166);
     test_header[GRKIT_HOST_ACTIVE / 4] += 4;
@@ -172,7 +210,7 @@ int main(void)
     test_header[9] = MENU_ROOT;
     test_header[10] = 1;
     assert(current_module(test_header) == &modules[1]);
-    assert(current_module(test_header)->summary(test_header) == frame_summaries[0]);
+    assert(same(current_module(test_header)->summary(test_header), "Framing: Off"));
     assert(modules[1].icon(test_header, 1) == FRAMING_ICON);
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 2;
     assert(modules[1].icon(test_header, 1) == FRAMING_RATIO_ICON(2));
@@ -180,7 +218,7 @@ int main(void)
     menu_confirm(test_header);
     assert(test_header[9] == MENU_MODULE && test_header[10] == 2);
     assert(count(test_header) == 4);
-    assert(current_module(test_header)->title(test_header) == framing);
+    assert(same(current_module(test_header)->title(test_header), "Framing"));
     for (u32 row = 0; row < 4; ++row) {
         test_header[10] = row;
         menu_confirm(test_header);
@@ -189,7 +227,7 @@ int main(void)
         assert(framing_requests == row + 1);
         assert(current_module(test_header)->checked(test_header, row));
         assert(!current_module(test_header)->checked(test_header, (row + 1) % 4));
-        assert(current_module(test_header)->label(test_header, row) == ratio_labels[row]);
+        assert(same(current_module(test_header)->label(test_header, row), ratio_names[row]));
         assert(current_module(test_header)->icon(test_header, row) == (row ? FRAMING_RATIO_ICON(row) : 0x7fff));
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
     }
@@ -218,11 +256,11 @@ int main(void)
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 3;
     test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] = 0;
     assert(!menu_back(test_header));
-    assert(current_module(test_header)->summary(test_header) == frame_summaries[3]);
+    assert(same(current_module(test_header)->summary(test_header), "Framing: 4:3"));
     /* Guides opens at the committed style and commits only its own setting. */
     test_header[9] = MENU_ROOT;
     test_header[10] = 2;
-    assert(current_module(test_header)->summary(test_header) == guide_summaries[0]);
+    assert(same(current_module(test_header)->summary(test_header), "Guides: Off"));
     assert(modules[2].icon(test_header, 2) == GUIDES_ICON);
     test_header[GRKIT_HOST_GUIDE / 4] = 3;
     assert(modules[2].icon(test_header, 2) == GUIDE_STYLE_ICON(3));
@@ -232,14 +270,14 @@ int main(void)
         assert(test_header[9] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == GUIDES_MODULE);
         assert(test_header[10] == 3);
         assert(count(test_header) == 5);
-        assert(current_module(test_header)->title(test_header) == guides);
+        assert(same(current_module(test_header)->title(test_header), "Guides"));
         for (u32 row = 0; row < 5; ++row) {
             test_header[10] = row;
             menu_confirm(test_header);
             assert(test_header[GRKIT_HOST_GUIDE / 4] == row);
             assert(current_module(test_header)->checked(test_header, row));
             assert(!current_module(test_header)->checked(test_header, (row + 1) % 5));
-            assert(current_module(test_header)->label(test_header, row) == guide_labels[row]);
+            assert(same(current_module(test_header)->label(test_header, row), guide_names[row]));
             assert(current_module(test_header)->icon(test_header, row) == (row ? GUIDE_STYLE_ICON(row) : 0x7fff));
             assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 3);
             assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
@@ -285,20 +323,20 @@ int main(void)
     /* Date Stamp lists its styles, opens at the committed one, and changes nothing else. */
     test_header[9] = MENU_ROOT;
     test_header[10] = 3;
-    assert(current_module(test_header)->summary(test_header) == stamp_summaries[0]);
+    assert(same(current_module(test_header)->summary(test_header), "Date Stamp: Off"));
     assert(modules[3].icon(test_header, 3) == STAMP_ICON);
     test_header[GRKIT_HOST_STAMP / 4] = 2;
     assert(modules[3].icon(test_header, 3) == STAMP_STYLE_ICON(2));
     menu_confirm(test_header);
     assert(test_header[9] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
     assert(test_header[10] == 2 && count(test_header) == 5);
-    assert(current_module(test_header)->title(test_header) == date_stamp);
+    assert(same(current_module(test_header)->title(test_header), "Date Stamp"));
     for (u32 row = 0; row < 5; ++row) {
         test_header[10] = row;
         menu_confirm(test_header);
         assert(test_header[GRKIT_HOST_STAMP / 4] == row);
         assert(current_module(test_header)->checked(test_header, row));
-        assert(current_module(test_header)->label(test_header, row) == stamp_labels[row]);
+        assert(same(current_module(test_header)->label(test_header, row), stamp_names[row]));
         assert(current_module(test_header)->icon(test_header, row) == (row ? STAMP_STYLE_ICON(row) : 0x7fff));
         assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 3 && test_header[GRKIT_HOST_GUIDE / 4] == 0);
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
@@ -307,7 +345,7 @@ int main(void)
     frame_preview(test_header, 0x5c000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 4 && test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 0);
     assert(menu_back(test_header) && test_header[10] == 3);
-    assert(current_module(test_header)->summary(test_header) == stamp_summaries[4]);
+    assert(same(current_module(test_header)->summary(test_header), "Date Stamp: D M 'YY"));
     test_header[GRKIT_HOST_STAMP / 4] = 999;
     assert(stamp_style(test_header) == 0);
     test_header[GRKIT_HOST_STAMP / 4] = 0;
@@ -315,26 +353,26 @@ int main(void)
     /* Grain lists its levels, opens at the committed one, and changes nothing else. */
     test_header[9] = MENU_ROOT;
     test_header[10] = 4;
-    assert(current_module(test_header)->summary(test_header) == grain_summaries[0]);
+    assert(same(current_module(test_header)->summary(test_header), "Grain: Off"));
     assert(modules[GRAIN_MODULE].icon(test_header, 4) == GRAIN_ICON);
     test_header[GRKIT_HOST_GRAIN / 4] = 2;
     assert(modules[GRAIN_MODULE].icon(test_header, 4) == GRAIN_LEVEL_ICON(2));
     menu_confirm(test_header);
     assert(test_header[9] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == GRAIN_MODULE);
     assert(test_header[10] == 2 && count(test_header) == 4);
-    assert(current_module(test_header)->title(test_header) == grain);
+    assert(same(current_module(test_header)->title(test_header), "Grain"));
     for (u32 row = 0; row < 4; ++row) {
         test_header[10] = row;
         menu_confirm(test_header);
         assert(test_header[GRKIT_HOST_GRAIN / 4] == row);
         assert(current_module(test_header)->checked(test_header, row));
-        assert(current_module(test_header)->label(test_header, row) == grain_labels[row]);
+        assert(same(current_module(test_header)->label(test_header, row), grain_names[row]));
         assert(current_module(test_header)->icon(test_header, row) == (row ? GRAIN_LEVEL_ICON(row) : 0x7fff));
         assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 3 && test_header[GRKIT_HOST_STAMP / 4] == 0);
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
     }
     assert(menu_back(test_header) && test_header[10] == 4);
-    assert(current_module(test_header)->summary(test_header) == grain_summaries[3]);
+    assert(same(current_module(test_header)->summary(test_header), "Grain: Strong"));
     test_header[GRKIT_HOST_GRAIN / 4] = 999;
     assert(grain_level(test_header) == 0);
     test_header[GRKIT_HOST_GRAIN / 4] = 0;
@@ -420,7 +458,7 @@ int main(void)
     assert(current_module(test_header) == &modules[0]);
     test_header[10] = 2;
     assert(current_module(test_header) == &modules[STAMP_MODULE]);
-    assert(current_module(test_header)->summary(test_header) == stamp_summaries[0]);
+    assert(same(current_module(test_header)->summary(test_header), "Date Stamp: Off"));
     menu_confirm(test_header);
     assert(test_header[9] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
     assert(menu_back(test_header));

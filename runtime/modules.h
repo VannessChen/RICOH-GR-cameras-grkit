@@ -40,10 +40,16 @@ typedef struct {
     u32 (*committed)(volatile u32 *);
 } Module;
 
-static const u16 *image_title(volatile u32 *h) { (void)h; return image_control; }
+static const u16 *image_title(volatile u32 *h) { return text(h,TEXT_IMAGE_CONTROL); }
+/* The installer writes each record's summary in each language (runtime/abi.h). */
 static const u16 *image_summary(volatile u32 *h) {
-    return selected_icon(h)==0x7fff ? off_summary :
-        (const u16 *)(h[GRKIT_HOST_ACTIVE/4]+GRKIT_RECORD_SUMMARY);
+    u32 index;
+    if(selected_icon(h)==0x7fff) return text(h,TEXT_IMAGE_OFF_SUMMARY);
+    /* Records are 0x740 = 64 * 29 bytes apart. For these multiples, x * 2260 >> 16
+       equals x / 29 and needs no division helper. */
+    index=((h[GRKIT_HOST_ACTIVE/4]-h[GRKIT_HOST_RECORDS/4])>>6)*2260U>>16;
+    return MENU_TEXT(GRKIT_TEXT(h)+GRKIT_TEXT_SUMMARY+
+        (menu_language()*GRKIT_TEXT_RECORDS+index)*GRKIT_SUMMARY_UNITS*2);
 }
 static u32 image_rows(volatile u32 *h) { return h[GRKIT_HOST_COUNT/4]+1; }
 /* Row 0 is Off and has no record. */
@@ -51,7 +57,8 @@ static u32 image_record(volatile u32 *h,u32 row) {
     return row ? h[GRKIT_HOST_RECORDS/4]+(row-1)*GRKIT_RECORD_SIZE : 0;
 }
 static const u16 *image_label(volatile u32 *h,u32 row) {
-    return row ? (const u16 *)(h[GRKIT_HOST_RECORDS/4]+(row-1)*GRKIT_RECORD_SIZE+GRKIT_RECORD_NAME) : off;
+    return row ? (const u16 *)(h[GRKIT_HOST_RECORDS/4]+(row-1)*GRKIT_RECORD_SIZE+GRKIT_RECORD_NAME) :
+        text(h,TEXT_OFF);
 }
 static u32 image_icon(volatile u32 *h,u32 row) {
     return h[9]==MENU_ROOT ? selected_icon(h) : row ? 0x8000+row-1 : 0x7fff;
@@ -77,26 +84,15 @@ static void image_preview(volatile u32 *h) {
     h[GRKIT_HOST_PREVIEW/4]=record ? record : 1;
 }
 
-static const u16 framing[] = {'F','r','a','m','i','n','g',0};
-/* 65:24 is named after the XPan panoramic format. */
-static const u16 ratio_labels[][11] = {
-    {'O','f','f',0}, {'X','P','a','n',' ','6','5',':','2','4',0},
-    {'1','6',':','9',0}, {'4',':','3',0}
-};
-static const u16 frame_summaries[][15] = {
-    {'F','r','a','m','i','n','g',':',' ','O','f','f',0},
-    {'F','r','a','m','i','n','g',':',' ','X','P','a','n',0},
-    {'F','r','a','m','i','n','g',':',' ','1','6',':','9',0},
-    {'F','r','a','m','i','n','g',':',' ','4',':','3',0}
-};
 static u32 frame_ratio(volatile u32 *h) {
     u32 value=h[GRKIT_HOST_FRAME_RATIO/4];
     return value<FRAMING_RATIO_COUNT ? value : 0;
 }
-static const u16 *frame_title(volatile u32 *h) { (void)h; return framing; }
-static const u16 *frame_summary(volatile u32 *h) { return frame_summaries[frame_ratio(h)]; }
+static const u16 *frame_title(volatile u32 *h) { return text(h,TEXT_FRAMING); }
+static const u16 *frame_summary(volatile u32 *h) { return text(h,TEXT_FRAMING_SUMMARY+frame_ratio(h)); }
 static u32 frame_rows(volatile u32 *h) { (void)h; return FRAMING_RATIO_COUNT; }
-static const u16 *frame_label(volatile u32 *h,u32 row) { (void)h; return ratio_labels[row]; }
+/* 65:24 is named after the XPan panoramic format. */
+static const u16 *frame_label(volatile u32 *h,u32 row) { return text(h,row ? TEXT_RATIO+row-1 : TEXT_OFF); }
 /* The root tile shows the selected ratio, like Image Control shows its effect. */
 static u32 frame_icon(volatile u32 *h,u32 row) {
     if(h[9]==MENU_ROOT) return frame_ratio(h) ? FRAMING_RATIO_ICON(frame_ratio(h)) : FRAMING_ICON;
@@ -108,26 +104,16 @@ static void frame_apply(volatile u32 *h,u32 row) {
     MENU_FRAMING_REQUEST();
 }
 
-static const u16 guides[] = {'G','u','i','d','e','s',0};
-static const u16 guide_labels[][13] = {
-    {'O','f','f',0}, {'T','h','i','r','d','s',0}, {'C','e','n','t','e','r',0},
-    {'G','o','l','d','e','n',' ','R','a','t','i','o',0}, {'D','i','a','g','o','n','a','l','s',0}
-};
-static const u16 guide_summaries[][21] = {
-    {'G','u','i','d','e','s',':',' ','O','f','f',0},
-    {'G','u','i','d','e','s',':',' ','T','h','i','r','d','s',0},
-    {'G','u','i','d','e','s',':',' ','C','e','n','t','e','r',0},
-    {'G','u','i','d','e','s',':',' ','G','o','l','d','e','n',' ','R','a','t','i','o',0},
-    {'G','u','i','d','e','s',':',' ','D','i','a','g','o','n','a','l','s',0}
-};
+/* Off, thirds, center, golden ratio, and diagonals. */
+#define GUIDE_STYLE_COUNT 5U
 static u32 guide_style(volatile u32 *h) {
     u32 value=h[GRKIT_HOST_GUIDE/4];
-    return value<ARRAY_COUNT(guide_labels) ? value : 0;
+    return value<GUIDE_STYLE_COUNT ? value : 0;
 }
-static const u16 *guide_title(volatile u32 *h) { (void)h; return guides; }
-static const u16 *guide_summary(volatile u32 *h) { return guide_summaries[guide_style(h)]; }
-static u32 guide_rows(volatile u32 *h) { (void)h; return ARRAY_COUNT(guide_labels); }
-static const u16 *guide_label(volatile u32 *h,u32 row) { (void)h; return guide_labels[row]; }
+static const u16 *guide_title(volatile u32 *h) { return text(h,TEXT_GUIDES); }
+static const u16 *guide_summary(volatile u32 *h) { return text(h,TEXT_GUIDES_SUMMARY+guide_style(h)); }
+static u32 guide_rows(volatile u32 *h) { (void)h; return GUIDE_STYLE_COUNT; }
+static const u16 *guide_label(volatile u32 *h,u32 row) { return text(h,row ? TEXT_GUIDE+row-1 : TEXT_OFF); }
 /* The root tile shows the selected style, like Framing shows its ratio. */
 static u32 guide_icon(volatile u32 *h,u32 row) {
     if(h[9]==MENU_ROOT) return guide_style(h) ? GUIDE_STYLE_ICON(guide_style(h)) : GUIDES_ICON;
@@ -136,26 +122,16 @@ static u32 guide_icon(volatile u32 *h,u32 row) {
 static u32 guide_checked(volatile u32 *h,u32 row) { return row==guide_style(h); }
 static void guide_apply(volatile u32 *h,u32 row) { h[GRKIT_HOST_GUIDE/4]=row; }
 
-static const u16 date_stamp[] = {'D','a','t','e',' ','S','t','a','m','p',0};
-static const u16 stamp_labels[][13] = {
-    {'O','f','f',0}, {'\'','Y','Y',' ','M',' ','D',0}, {'\'','Y','Y',' ','M',' ','D',' ','H',':','M','M',0},
-    {'M',' ','D',' ','\'','Y','Y',0}, {'D',' ','M',' ','\'','Y','Y',0}
-};
-static const u16 stamp_summaries[][25] = {
-    {'D','a','t','e',' ','S','t','a','m','p',':',' ','O','f','f',0},
-    {'D','a','t','e',' ','S','t','a','m','p',':',' ','\'','Y','Y',' ','M',' ','D',0},
-    {'D','a','t','e',' ','S','t','a','m','p',':',' ','\'','Y','Y',' ','M',' ','D',' ','H',':','M','M',0},
-    {'D','a','t','e',' ','S','t','a','m','p',':',' ','M',' ','D',' ','\'','Y','Y',0},
-    {'D','a','t','e',' ','S','t','a','m','p',':',' ','D',' ','M',' ','\'','Y','Y',0}
-};
+/* Off and four date styles. */
+#define STAMP_STYLE_COUNT 5U
 static u32 stamp_style(volatile u32 *h) {
     u32 value=h[GRKIT_HOST_STAMP/4];
-    return value<ARRAY_COUNT(stamp_labels) ? value : 0;
+    return value<STAMP_STYLE_COUNT ? value : 0;
 }
-static const u16 *stamp_title(volatile u32 *h) { (void)h; return date_stamp; }
-static const u16 *stamp_summary(volatile u32 *h) { return stamp_summaries[stamp_style(h)]; }
-static u32 stamp_rows(volatile u32 *h) { (void)h; return ARRAY_COUNT(stamp_labels); }
-static const u16 *stamp_label(volatile u32 *h,u32 row) { (void)h; return stamp_labels[row]; }
+static const u16 *stamp_title(volatile u32 *h) { return text(h,TEXT_DATE_STAMP); }
+static const u16 *stamp_summary(volatile u32 *h) { return text(h,TEXT_STAMP_SUMMARY+stamp_style(h)); }
+static u32 stamp_rows(volatile u32 *h) { (void)h; return STAMP_STYLE_COUNT; }
+static const u16 *stamp_label(volatile u32 *h,u32 row) { return text(h,row ? TEXT_STAMP+row-1 : TEXT_OFF); }
 static u32 stamp_icon(volatile u32 *h,u32 row) {
     if(h[9]==MENU_ROOT) return stamp_style(h) ? STAMP_STYLE_ICON(stamp_style(h)) : STAMP_ICON;
     return row ? STAMP_STYLE_ICON(row) : 0x7fff;
@@ -164,24 +140,16 @@ static u32 stamp_checked(volatile u32 *h,u32 row) { return row==stamp_style(h); 
 /* Recorded pictures only: the encode hook prints the capture date. */
 static void stamp_apply(volatile u32 *h,u32 row) { h[GRKIT_HOST_STAMP/4]=row; }
 
-static const u16 grain[] = {'G','r','a','i','n',0};
-static const u16 grain_labels[][7] = {
-    {'O','f','f',0}, {'W','e','a','k',0}, {'M','e','d','i','u','m',0}, {'S','t','r','o','n','g',0}
-};
-static const u16 grain_summaries[][14] = {
-    {'G','r','a','i','n',':',' ','O','f','f',0},
-    {'G','r','a','i','n',':',' ','W','e','a','k',0},
-    {'G','r','a','i','n',':',' ','M','e','d','i','u','m',0},
-    {'G','r','a','i','n',':',' ','S','t','r','o','n','g',0}
-};
+/* Off, weak, medium, and strong. */
+#define GRAIN_LEVEL_COUNT 4U
 static u32 grain_level(volatile u32 *h) {
     u32 value=h[GRKIT_HOST_GRAIN/4];
-    return value<ARRAY_COUNT(grain_labels) ? value : 0;
+    return value<GRAIN_LEVEL_COUNT ? value : 0;
 }
-static const u16 *grain_title(volatile u32 *h) { (void)h; return grain; }
-static const u16 *grain_summary(volatile u32 *h) { return grain_summaries[grain_level(h)]; }
-static u32 grain_rows(volatile u32 *h) { (void)h; return ARRAY_COUNT(grain_labels); }
-static const u16 *grain_label(volatile u32 *h,u32 row) { (void)h; return grain_labels[row]; }
+static const u16 *grain_title(volatile u32 *h) { return text(h,TEXT_GRAIN); }
+static const u16 *grain_summary(volatile u32 *h) { return text(h,TEXT_GRAIN_SUMMARY+grain_level(h)); }
+static u32 grain_rows(volatile u32 *h) { (void)h; return GRAIN_LEVEL_COUNT; }
+static const u16 *grain_label(volatile u32 *h,u32 row) { return text(h,row ? TEXT_GRAIN_LEVEL+row-1 : TEXT_OFF); }
 static u32 grain_icon(volatile u32 *h,u32 row) {
     if(h[9]==MENU_ROOT) return grain_level(h) ? GRAIN_LEVEL_ICON(grain_level(h)) : GRAIN_ICON;
     return row ? GRAIN_LEVEL_ICON(row) : 0x7fff;

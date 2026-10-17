@@ -103,10 +103,6 @@ pub const RUNTIME_SOURCES: &[(&str, &[u8])] = &[
     ("picture.c", include_bytes!("../../../runtime/picture.c")),
     ("picture.S", include_bytes!("../../../runtime/picture.S")),
     (
-        "menu_labels.h",
-        include_bytes!("../../../runtime/menu_labels.h"),
-    ),
-    (
         "processing.S",
         include_bytes!("../../../runtime/processing.S"),
     ),

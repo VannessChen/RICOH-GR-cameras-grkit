@@ -58,6 +58,9 @@ enum Command {
         /// The camera that the package enables SD scripts on.
         #[arg(long, default_value = "gr3", value_parser = grkit_core::camera::CAMERAS.map(|camera| camera.id))]
         camera: String,
+        /// The language of a second installation guide next to the English one.
+        #[arg(long, default_value = "en", value_parser = packaging::Language::ALL.map(packaging::Language::code))]
+        language: String,
         #[arg(long)]
         out: PathBuf,
     },
@@ -218,6 +221,7 @@ fn run(command: Command) -> Result<Value> {
             effects,
             hide,
             camera,
+            language,
             out,
         } => {
             let (runtime, manifest) = storage::load_build(&build)?;
@@ -227,12 +231,16 @@ fn run(command: Command) -> Result<Value> {
             };
             let hidden = Hidden::from_names(hide.iter().map(String::as_str))?;
             let camera = grkit_core::camera::find(&camera)?;
-            let bytes = packaging::assemble(&runtime, &manifest, &effects, hidden, camera)?;
+            let language = packaging::Language::parse(&language)?;
+            let bytes = packaging::assemble_localized(
+                &runtime, &manifest, &effects, hidden, camera, language,
+            )?;
             let verified = packaging::verify_package(&bytes)?;
             storage::write_new(&out, &bytes)?;
             Ok(
                 json!({"path": out, "sha256": packaging::sha256(&bytes), "camera": verified["camera"],
-                "entries": verified["entries"], "hidden_modules": verified["hidden_modules"]}),
+                "entries": verified["entries"], "hidden_modules": verified["hidden_modules"],
+                "language": verified["language"]}),
             )
         }
         Command::Verify { archive } => {
@@ -242,7 +250,7 @@ fn run(command: Command) -> Result<Value> {
             Ok(
                 json!({"valid": true, "camera": verified["camera"], "target": verified["target"],
                 "effects": verified["effect_ids"].as_array().map_or(0, Vec::len),
-                "hidden_modules": verified["hidden_modules"]}),
+                "hidden_modules": verified["hidden_modules"], "language": verified["language"]}),
             )
         }
         Command::Site { build, out } => {
