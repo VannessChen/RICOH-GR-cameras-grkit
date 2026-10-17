@@ -24,6 +24,8 @@ Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-
 - **Date Stamp:** select a date style. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.
 
+Highlight the last row, GRK, to see the GRKit version.
+
 Press MENU to go back one level. GRKit keeps your settings after power-off.
 
 ## Remove or recover

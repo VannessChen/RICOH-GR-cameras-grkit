@@ -1,5 +1,8 @@
 use super::*;
 
+/// The version of headers that tests pin, so a new GRKit version keeps the pins.
+const TEST_VERSION: &str = "0.0.0";
+
 fn synthetic_firmware() -> firmware::FirmwareImage {
     let gr3 = &target::GR3_210;
     let mut image = firmware::FirmwareImage {
@@ -244,6 +247,7 @@ fn synthetic_arm_build_is_reproducible() -> Result<()> {
     assert_eq!(first.manifest, second.manifest);
     assert_eq!(first.manifest["startup_activation"], "Off");
     assert_eq!(first.manifest["profile"], "production");
+    assert_eq!(first.manifest["version"], env!("CARGO_PKG_VERSION"));
     assert!(first.manifest["source_revision"].is_null());
     assert!(first.manifest["source_dirty"].is_null());
     assert!(!serde_json::to_string(&first.manifest)?.contains(directory.path().to_str().unwrap()));
@@ -498,10 +502,10 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
         relocations: vec![(0, 0)],
     };
     validate_plan(&plan)?;
-    let header = loader::header(&plan, &synthetic_firmware())?;
+    let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
     assert_eq!(
         sha256(header.as_bytes()),
-        "d2f60bc5d0934f14ab83ab3af02087829f89f8d06a0f6557a3ab4c0578f71ebe"
+        "50ca23f4f46324c4b28577a2258ea6b37a6b067cea1998f11c73ffdfc0abc685"
     );
     Ok(())
 }
@@ -525,7 +529,7 @@ fn generated_header_marks_only_rtos_tail_patches_as_unchecked() -> Result<()> {
         ],
         relocations: vec![(0, 0)],
     };
-    let header = loader::header(&plan, &synthetic_firmware())?;
+    let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
     assert!(header.contains("{0x53002080,8,0,before_0,after_0},"));
     assert!(header.contains("{0x540b6000,4,1,before_1,after_1},"));
     Ok(())
@@ -572,7 +576,7 @@ fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
         }],
         relocations: vec![],
     };
-    let header = loader::header(&plan, &synthetic_firmware())?;
+    let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
     assert!(header.contains("{0x540b6000,4,1,before_0,after_0},"));
     // Code in the tail belongs to no extension point. Image Control needs the
     // menu, tuning, and picture encode points (bits 0, 1, and 4).

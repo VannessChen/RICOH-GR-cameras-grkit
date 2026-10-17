@@ -1,0 +1,91 @@
+name: Release PR
+
+# Keeps one pull request from the release branch open while change files are
+# pending. knope sets the version and writes CHANGELOG.md from the change
+# files. Merging the pull request starts the Release workflow.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: true
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KNOPE_VERSION: 0.23.0
+      KNOPE_SHA256: 76a970a5e237344abc14be3de37ed50c021b659a9b66b3f54afc77e6d48ac501
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Look for change files
+        id: changes
+        run: |
+          if compgen -G '.changeset/*.md' > /dev/null; then
+            echo pending=true >> "$GITHUB_OUTPUT"
+          else
+            echo pending=false >> "$GITHUB_OUTPUT"
+          fi
+      # Merging the release pull request deletes each change file and closes the
+      # pull request. This step matters only when change files were deleted by hand.
+      - name: Close a release pull request with nothing to release
+        if: steps.changes.outputs.pending == 'false'
+        run: |
+          number=$(gh pr list --head release --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr close "$number" --delete-branch --comment 'No change files are pending.'
+          fi
+      - name: Install knope
+        if: steps.changes.outputs.pending == 'true'
+        run: |
+          name="knope-x86_64-unknown-linux-musl"
+          curl --fail --location --silent --show-error --retry 3 -o "$RUNNER_TEMP/$name.tgz" \
+            "https://github.com/knope-dev/knope/releases/download/knope/v$KNOPE_VERSION/$name.tgz"
+          echo "$KNOPE_SHA256  $RUNNER_TEMP/$name.tgz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$name.tgz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      - if: steps.changes.outputs.pending == 'true'
+        run: rustup toolchain install 1.92.0 --profile minimal && rustup default 1.92.0
+      - name: Prepare the release commit
+        id: prepare
+        if: steps.changes.outputs.pending == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C release
+          # knope updates the versions and CHANGELOG.md, deletes the change files,
+          # and adds these changes to the index.
+          knope prepare-release
+          # Reject a Cargo.lock that does not match the new versions.
+          cargo metadata --format-version 1 --locked > /dev/null
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)
+          test -n "$version"
+          git commit -m "chore(release): version $version"
+          # The release branch belongs to this workflow, and each run makes it again from main.
+          git push --force origin release
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Open or update the release pull request
+        if: steps.changes.outputs.pending == 'true'
+        env:
+          VERSION: ${{ steps.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Merging this pull request tags v$VERSION, builds the release, and creates a draft GitHub release."
+            echo "After a device test, start the Deploy workflow with the tag v$VERSION."
+            echo
+            sh .github/scripts/changelog-section.sh "$VERSION"
+          } > "$RUNNER_TEMP/body.md"
+          number=$(gh pr list --head release --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "Release v$VERSION" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --head release --base main --title "Release v$VERSION" --body-file "$RUNNER_TEMP/body.md"
+          fi

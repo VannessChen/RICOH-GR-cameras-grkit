@@ -19,6 +19,8 @@ GRKit adds a sixth entry, GRK, to the ADJ menu. It has five modules:
 - **Date Stamp**: an orange date on the photo, like a film camera's data back.
 - **Grain**: film grain on the photo, in three strengths.
 
+The last row shows the GRKit version.
+
 You select the modules when you make a package. The menu shows only those modules.
 
 ## Supported cameras

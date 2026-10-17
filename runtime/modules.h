@@ -2,22 +2,26 @@
 #define GRKIT_MODULES_H
 /* The menu host's plugin registry. Each plugin owns its page
    (runtime/plugins/<id>/page.h) and its settings. Registry order is the order
-   of grkit_core::modules::NAMES and of PLUGINS.TXT bits. */
+   of grkit_core::modules::NAMES and of PLUGINS.TXT bits. The core About row
+   (runtime/about.h) follows the plugin rows. */
 #include "plugins/image-control/page.h"
 #include "plugins/framing/page.h"
 #include "plugins/guides/page.h"
 #include "plugins/date-stamp/page.h"
 #include "plugins/grain/page.h"
+#include "about.h"
 
 #define IMAGE_CONTROL_MODULE 0U
 #define FRAMING_MODULE 1U
 #define GUIDES_MODULE 2U
 #define STAMP_MODULE 3U
 #define GRAIN_MODULE 4U
+#define ABOUT_MODULE 5U
+_Static_assert(ABOUT_MODULE==PLUGIN_COUNT, "About follows the plugin rows");
 #define ARRAY_COUNT(a) (sizeof(a)/sizeof((a)[0]))
 
 static const Module modules[] = {
-    IMAGE_CONTROL_PAGE, FRAMING_PAGE, GUIDES_PAGE, DATE_STAMP_PAGE, GRAIN_PAGE
+    IMAGE_CONTROL_PAGE, FRAMING_PAGE, GUIDES_PAGE, DATE_STAMP_PAGE, GRAIN_PAGE, ABOUT_PAGE
 };
 
 /* Plugin artwork is contiguous and ends below the GRKit tile (0x7ffe): the
@@ -56,14 +60,13 @@ static void frame_preview(volatile u32 *h,u32 canvas,u32 movie) {
 }
 
 /* Visible modules as a bit mask in registry order: the installed plugins
-   (PLUGINS.TXT). Image Control also needs effects. With nothing visible, the
-   installer installs no menu hook, so this fallback to Image Control with Off
-   only is for an inconsistent header. */
+   (PLUGINS.TXT), then About, which always shows. Image Control also needs
+   effects. With no plugin installed, the installer installs no menu hook, so
+   only an inconsistent header shows About alone. */
 static u32 visible_modules(volatile u32 *h) {
-    u32 all=(1U<<ARRAY_COUNT(modules))-1;
-    u32 mask=h[GRKIT_HOST_PLUGINS/4]&all;
+    u32 mask=h[GRKIT_HOST_PLUGINS/4]&((1U<<PLUGIN_COUNT)-1);
     if(!h[GRKIT_HOST_COUNT/4]) mask&=~1U;
-    return mask ? mask : 1;
+    return mask | 1U<<ABOUT_MODULE;
 }
 /* The module of a root row, or of the last row for a row past the end. */
 static u32 root_module(volatile u32 *h,u32 row) {
@@ -81,8 +84,6 @@ static u32 root_row(volatile u32 *h,u32 module) {
     return row;
 }
 static u32 root_count(volatile u32 *h) { return root_row(h,ARRAY_COUNT(modules)); }
-/* With one visible module, ADJ opens its page directly and has no root level. */
-static u32 single_module(volatile u32 *h) { return root_count(h)==1; }
 /* The module of the current row: the row's module at the root, else the open page. */
 static u32 current_index(volatile u32 *h) {
     return h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]) : h[GRKIT_HOST_MODULE/4];
@@ -112,23 +113,27 @@ static void menu_open(volatile u32 *h,u32 module) {
     h[GRKIT_HOST_MENU_LEVEL/4]=MENU_MODULE;
     h[GRKIT_HOST_MENU_CURSOR/4]=modules[module].committed(h);
 }
+/* ADJ opens at the root. About always shows there, so the root has a row even
+   when no plugin is visible. */
 static void menu_start(volatile u32 *h) {
     h[GRKIT_HOST_MENU_LEVEL/4]=MENU_ROOT;
     h[GRKIT_HOST_MENU_CURSOR/4]=0;
     h[GRKIT_HOST_MODULE/4]=0;
-    if(single_module(h)) menu_open(h,root_module(h,0));
 }
 static void menu_normalize(volatile u32 *h) {
     u32 module=h[GRKIT_HOST_MODULE/4];
     if(h[GRKIT_HOST_MENU_LEVEL/4]<MENU_ROOT || h[GRKIT_HOST_MENU_LEVEL/4]>MENU_MODULE || module>=ARRAY_COUNT(modules) ||
-       (h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && !(visible_modules(h)>>module&1)) ||
-       (h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT && single_module(h)))
+       (h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && (!(visible_modules(h)>>module&1) || !modules[module].rows(h))))
         menu_start(h);
     if(h[GRKIT_HOST_MENU_CURSOR/4]>=count(h)) h[GRKIT_HOST_MENU_CURSOR/4]=0;
 }
+/* OK on a root row opens its page. A row without a page, such as About, does nothing. */
 static void menu_confirm(volatile u32 *h) {
     menu_normalize(h);
-    if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT) menu_open(h,root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]));
+    if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT) {
+        u32 module=root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]);
+        if(modules[module].rows(h)) menu_open(h,module);
+    }
     else current_module(h)->apply(h,h[GRKIT_HOST_MENU_CURSOR/4]);
 }
 /* Return false at the top level so the caller can restore the stock ADJ page. */
@@ -136,7 +141,7 @@ static u32 menu_back(volatile u32 *h) {
     /* Leaving a level without OK restores the committed effect in the live view. */
     h[GRKIT_HOST_PREVIEW/4]=0;
     menu_normalize(h);
-    if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT || single_module(h)) return 0;
+    if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT) return 0;
     h[GRKIT_HOST_MENU_LEVEL/4]=MENU_ROOT;
     h[GRKIT_HOST_MENU_CURSOR/4]=root_row(h,h[GRKIT_HOST_MODULE/4]);
     return 1;

@@ -45,9 +45,10 @@ typedef short s16;
 /* Private menu levels (GRKIT_HOST_MENU_LEVEL). */
 #define MENU_ROOT 1U
 #define MENU_MODULE 2U
-/* Icon results of a page: Off, the icon of effect n, or tile n of the
-   plugin's own artwork (tile 0 is its root tile). */
+/* Icon results of a page: Off, the GRKit tile of the ADJ toolbar, the icon of
+   effect n, or tile n of the plugin's own artwork (tile 0 is its root tile). */
 #define GRKIT_ICON_OFF 0x7fffU
+#define GRKIT_ICON_GRKIT 0x7ffeU
 #define GRKIT_ICON_EFFECT(n) (0x8000U+(n))
 #define GRKIT_ICON_TILE(n) (0x10000U+(n))
 

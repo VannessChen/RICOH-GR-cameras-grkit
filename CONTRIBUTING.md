@@ -50,6 +50,7 @@ For the web site, see [web/README.md](web/README.md).
 - Host tests and builds do not verify device behavior. State in the pull request what you tested on a camera.
 - Changes to cache synchronization or camera task lifetimes need a camera test.
 - Use conventional commits.
+- Add a change file in `.changeset/` for each change that a user can see. [docs/releasing.md](docs/releasing.md#record-a-change) describes the format.
 - Keep firmware, build outputs, archives, and local paths out of Git.
 - Keep third-party notices. Review each new effect input and its license.
 - Change the English, Simplified Chinese, and Traditional Chinese guides in `resources/` together. Keep their headings and steps in the same order. A test checks the camera phrase that the GR IIIx guide replaces.
@@ -61,4 +62,4 @@ For the web site, see [web/README.md](web/README.md).
 - For a new effect source, add its attribution and license to `effects/NOTICE.md`. Add its license text and its changes to `effects/sources/`.
 - Do not contribute an effect if its source license does not permit redistribution of derived data.
 
-Maintainers release the site as [docs/releasing.md](docs/releasing.md) describes.
+Maintainers release GRKit as [docs/releasing.md](docs/releasing.md) describes.

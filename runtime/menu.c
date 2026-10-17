@@ -200,7 +200,7 @@ static void toolbar(u32 controller) {
         CALL5(FW_LINE_VIEW_INIT)(widget,toolbar_x(5),5,50,50);
         CALL2(FW_LINE_VIEW_SET_STYLE)(widget,0x10);
         CALL5(FW_ICON_VIEW_INIT)(icon,toolbar_x(5)+5,10,40,40);
-        CALL2(FW_ICON_VIEW_SET_ICON)(icon,0x7ffe);
+        CALL2(FW_ICON_VIEW_SET_ICON)(icon,GRKIT_ICON_GRKIT);
         CALL2(FW_VIEW_SET_TOUCH)(icon,(u32)callback);
         CALL2(FW_VIEW_SET_TOUCHABLE)(icon,1);
         /* Use the same vector insertion as View::AddChild, at the marker. */
@@ -429,7 +429,6 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
         return 0;
     }
     if(kind==EV_LEFT || kind==EV_RIGHT) {
-        /* A single module has no root level: left leaves, as from the root. */
         if(h[GRKIT_HOST_MENU_LEVEL/4]>MENU_ROOT && kind==EV_LEFT && menu_back(h)) {
             render(controller); return 0;
         }
@@ -491,7 +490,7 @@ A32_ENTRY u32 menu_icon(u32 id) {
     /* Module tiles are contiguous from the first Framing tile. */
     if(id-FRAMING_ICON<MODULE_ICON_COUNT)
         return h[GRKIT_HOST_FRAMING_ICON/4]+(id-FRAMING_ICON)*GRKIT_ICON_STRIDE;
-    if(id==0x7ffe) return h[GRKIT_HOST_PLUGINS_ICON/4];
+    if(id==GRKIT_ICON_GRKIT) return h[GRKIT_HOST_PLUGINS_ICON/4];
     if(id==0x7fff) return h[GRKIT_HOST_OFF_ICON/4] ? h[GRKIT_HOST_OFF_ICON/4] : NATIVE_OFF_ICON();
     if(index>=h[GRKIT_HOST_COUNT/4]) return 0;
     return WORD(h[GRKIT_HOST_RECORDS/4]+index*GRKIT_RECORD_SIZE,GRKIT_RECORD_ICON);

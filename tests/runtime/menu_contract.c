@@ -11,7 +11,7 @@ static const unsigned short *text_at(unsigned int address);
 static unsigned test_language;
 #define MENU_LANGUAGE() test_language
 #include "menu.c"
-#define ALL_PLUGINS ((1U << ARRAY_COUNT(modules)) - 1)
+#define ALL_PLUGINS ((1U << PLUGIN_COUNT) - 1)
 /* The global icon layout of the plugin tiles, from FRAMING_ICON. */
 #define FRAMING_ICON_COUNT 4U
 #define FRAMING_RATIO_ICON(ratio) (FRAMING_ICON + (ratio))
@@ -196,8 +196,9 @@ int main(void)
     assert(advance_from_private(0xce, 1) == 0);
     assert(advance_from_private(0xcf, 2) == 0);
     assert(advance_from_private(0xce, 2) == 1);
+    /* The root lists the five plugins, then About. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = 1;
-    assert(count(test_header) == 5);
+    assert(count(test_header) == 6);
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = 2;
     assert(count(test_header) == 6);
     test_header[GRKIT_HOST_COUNT / 4] = 0;
@@ -465,12 +466,37 @@ int main(void)
     highlight(test_header);
     assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0);
 
+    /* About is the last root row. Its summary gives the version, and OK on it
+       opens no page and changes nothing. */
+    test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS;
+    test_header[GRKIT_HOST_COUNT / 4] = 5;
+    test_header[GRKIT_HOST_PREVIEW / 4] = 0;
+    menu_start(test_header);
+    assert(count(test_header) == 6 && root_module(test_header, 5) == ABOUT_MODULE);
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 5;
+    assert(same(current_module(test_header)->summary(test_header), "Version 0.0.0"));
+    assert(PAGE_ICON(ABOUT_MODULE, 5) == GRKIT_ICON_GRKIT);
+    {
+        u32 active = test_header[GRKIT_HOST_ACTIVE / 4], requests = framing_requests;
+        highlight(test_header);
+        menu_confirm(test_header);
+        assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 5);
+        assert(test_header[GRKIT_HOST_ACTIVE / 4] == active && framing_requests == requests);
+        assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0 && !parameters_row(test_header));
+        assert(!menu_back(test_header));
+    }
+    /* An About page cannot stay open: it has no rows. */
+    test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
+    test_header[GRKIT_HOST_MODULE / 4] = ABOUT_MODULE;
+    menu_normalize(test_header);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
+
     /* A plugin that is not installed has no root row. The others keep their order. */
     test_header[GRKIT_HOST_PREVIEW / 4] = 0;
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 0;
     test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS & ~(1U << GUIDES_MODULE);
     menu_start(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0 && count(test_header) == 4);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0 && count(test_header) == 5);
     assert(current_module(test_header) == &modules[0]);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
     assert(current_module(test_header) == &modules[STAMP_MODULE]);
@@ -490,49 +516,50 @@ int main(void)
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     /* Image Control that is not installed does not show, even with effects. */
     test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS & ~(1U | 1U << FRAMING_MODULE);
-    assert(visible_modules(test_header) == (1U << GUIDES_MODULE | 1U << STAMP_MODULE | 1U << GRAIN_MODULE));
+    assert(visible_modules(test_header) == (1U << GUIDES_MODULE | 1U << STAMP_MODULE | 1U << GRAIN_MODULE | 1U << ABOUT_MODULE));
     /* Without effects, Image Control does not show. */
     test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS;
     test_header[GRKIT_HOST_COUNT / 4] = 0;
     menu_start(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 4);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 5);
     assert(current_module(test_header) == &modules[FRAMING_MODULE]);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2);
-    /* One visible module opens at its committed row, and MENU leaves the private page. */
+    /* One installed plugin keeps the root level, because About follows it. */
     test_header[GRKIT_HOST_PLUGINS / 4] = 1U | 1U << STAMP_MODULE;
     test_header[GRKIT_HOST_STAMP / 4] = 3;
     menu_start(test_header);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 2);
+    assert(root_module(test_header, 0) == STAMP_MODULE && root_module(test_header, 1) == ABOUT_MODULE);
+    menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3 && count(test_header) == 5);
+    assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     assert(!menu_back(test_header));
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
-    /* That module has no root level. */
-    test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
-    menu_normalize(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
-    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
-    menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_STAMP / 4] == 1 && test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE);
     test_header[GRKIT_HOST_STAMP / 4] = 0;
-    /* With nothing visible, Image Control shows with Off only. The installer
-       installs no menu hook then, so only an inconsistent header gets here. */
+    /* With no plugin visible, the root shows About alone. The installer installs
+       no menu hook then, so only an inconsistent header gets here. */
     test_header[GRKIT_HOST_PLUGINS / 4] = 1U;
     menu_start(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == 0);
-    assert(count(test_header) == 1 && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
-    /* Image Control alone opens at the committed effect, where Fn applies. */
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 1);
+    assert(current_module(test_header) == &modules[ABOUT_MODULE]);
+    menu_confirm(test_header);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && !menu_back(test_header));
+    /* Image Control alone keeps the root level. Its page opens at the committed
+       effect, where Fn applies. */
     test_header[GRKIT_HOST_COUNT / 4] = 5;
     test_header[GRKIT_HOST_ACTIVE / 4] = 0x59005000 + 2 * GRKIT_RECORD_SIZE;
     menu_start(test_header);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 2);
+    menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == 0);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3 && parameters_row(test_header));
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     highlight(test_header);
     assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0x59005000);
-    assert(!menu_back(test_header));
-    assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0);
+    assert(menu_back(test_header));
+    assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0 && test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT);
     return 0;
 }

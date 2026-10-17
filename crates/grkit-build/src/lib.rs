@@ -87,6 +87,7 @@ pub const RUNTIME_SOURCES: &[(&str, &[u8])] = &[
         "targets/gr4-1.11.h",
         include_bytes!("../../../runtime/targets/gr4-1.11.h"),
     ),
+    ("about.h", include_bytes!("../../../runtime/about.h")),
     ("catalog.h", include_bytes!("../../../runtime/catalog.h")),
     (
         "selection.h",
@@ -285,7 +286,7 @@ fn build_image(
         relocations,
     };
     validate_plan(&plan)?;
-    let generated = loader::header(&plan, image)?;
+    let generated = loader::header(&plan, image, env!("CARGO_PKG_VERSION"))?;
     fs::write(objects.join("module_payload.h"), &generated)?;
     let source = runtime.join("installer.c");
     let object = objects.join("module.o");
@@ -339,7 +340,8 @@ fn build_image(
         fs::write(destination, bytes)?;
     }
     let manifest = json!({
-        "schema_version": 1, "target": image.target.name, "profile": "production", "startup_activation": "Off",
+        "schema_version": 1, "version": env!("CARGO_PKG_VERSION"), "target": image.target.name,
+        "profile": "production", "startup_activation": "Off",
         "toolchain": tools.manifest(), "source_revision": null, "source_dirty": null,
         "firmware_sha256": image.sha256, "decoded_firmware_sha256": image.decoded_sha256,
         "source_sha256": source_hashes(), "generated_header_sha256": sha256(generated.as_bytes()),

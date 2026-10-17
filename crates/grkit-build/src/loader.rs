@@ -34,7 +34,9 @@ fn words(output: &mut String, name: &str, values: impl IntoIterator<Item = u32>)
     output.push_str("};\n");
 }
 
-pub fn header(plan: &PatchPlan, body: &FirmwareImage) -> Result<String> {
+/// The generated installer header. `version` is the GRKit version that the
+/// About page of the menu shows.
+pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<String> {
     let target = body.target;
     let modules = target.layout.is_some();
     // A layout with processing hooks has Image Control and its native data.
@@ -128,7 +130,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage) -> Result<String> {
         array(&mut result, "plugins_pixels", &plugins_pixels(), true);
         array(&mut result, "module_pixels", &module_tiles().concat(), true);
         // The installer copies the menu text table after the picture scratch.
-        let text = grkit_core::menu_text::table()?;
+        let text = grkit_core::menu_text::table(version)?;
         writeln!(result, "#define MENU_TEXT_BYTES {}U", text.len())?;
         array(&mut result, "menu_text", &text, true);
     }

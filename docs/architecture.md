@@ -153,15 +153,17 @@ A private LineView draws the native translucent background before the shared sel
 
 The ADJ controller owns both objects. Exit hides them and restores the native geometry. Destruction unlinks and releases them. Movie mode keeps the five-entry layout.
 
-The registry in `runtime/modules.h` lists the page of each plugin, in the order of `grkit_core::modules::NAMES`.
+The registry in `runtime/modules.h` lists the page of each plugin, in the order of `grkit_core::modules::NAMES`. The core About row (`runtime/about.h`) follows the plugin rows.
 Each page owns its title, summary, rows, labels, icons, selection checks, activation, and committed row. A page opens at its committed row.
 A page returns its icons as tiles of its own artwork (`GRKIT_ICON_TILE`). The registry maps them to the global IDs from `0x7fec`, in registry order.
 
 Two page callbacks are optional. `highlight` receives each change of the highlighted row, and Image Control previews the row in the live view. `parameters` makes Fn apply the row and open the native parameter page.
 
-The root lists only the installed plugins (header `+56`), in registry order. Image Control also needs effects.
-If no plugin is installed, the installer installs no menu hook, so the GRKit entry does not appear. If one module is visible, ADJ opens its page directly, and MENU or left returns to native ADJ.
+The root lists only the installed plugins (header `+56`), in registry order, then About. Image Control also needs effects.
+If no plugin is installed, the installer installs no menu hook, so the GRKit entry does not appear. ADJ always opens at the root.
 Module state stays in the private host header.
+
+About is not a plugin, so `PLUGINS.TXT` does not select it. It uses the GRKit tile, and its summary gives the version, for example `Version 0.1.0`. It has no page: OK on it changes nothing.
 
 MENU returns one level. From the GRKit root it returns to the native ADJ items. The private menu restores the native list on its supported exit paths.
 List restoration suppresses the native selection callbacks.
@@ -169,10 +171,13 @@ List restoration suppresses the native selection callbacks.
 ### Menu text
 
 The menu text is in English, Simplified Chinese, and Traditional Chinese. The menu uses the camera language if it is one of them, and English otherwise. Effect names stay as their definitions give them.
-`grkit_core::menu_text` holds the strings and builds a label table: for each language, 40 u16 offsets, then NUL-terminated UTF-16 strings. The string IDs are in `runtime/abi.h`.
+`grkit_core::menu_text` holds the strings and builds a label table: for each language, 41 u16 offsets, then NUL-terminated UTF-16 strings. The string IDs are in `runtime/abi.h`.
+
+The build gives the table the workspace version for the About row. Tests build it with the version `0.0.0`, so a new version does not change the pinned header hash.
 
 The text is data, not menu code, because the menu region has little room. The script array has 8192 bytes of text after the picture scratch.
 The installer copies the label table to the start of that area. At offset 4096, it writes the Image Control summary of each record in each language: the prefix from the table, then the effect name.
+
 The menu finds the text from the record count, so the header needs no pointer. A summary slot comes from the record offset: `x * 2260 >> 16` equals `x / 29` for each record offset divided by 64, so no division helper is necessary.
 
 ## Image Control

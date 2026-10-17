@@ -202,6 +202,8 @@
 #define TEXT_GRAIN_SUMMARY 35
 /* The Image Control summary before an effect name, for the installer. */
 #define TEXT_IMAGE_PREFIX 39
-#define GRKIT_TEXT_STRINGS 40
+/* The About row: the GRKit version. */
+#define TEXT_VERSION 40
+#define GRKIT_TEXT_STRINGS 41
 
 #endif

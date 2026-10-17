@@ -1,8 +1,19 @@
 /// <reference types="vitest/config" />
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from 'vite';
+
+/**
+ * The GRKit version from the workspace Cargo.toml. The Release workflow builds the site
+ * and the runtimes from one commit, so the site shows the version of the runtime that it packages.
+ */
+function workspaceVersion(): string {
+  const manifest = readFileSync(resolve(import.meta.dirname, '../Cargo.toml'), 'utf8');
+  const version = /^\[workspace\.package\][^[]*?^version = "([^"]+)"/m.exec(manifest)?.[1];
+  if (!version) throw new Error('Cargo.toml has no [workspace.package] version');
+  return version;
+}
 
 /** The paths that CI writes into the site next to the web build. */
 const DATA_PATH = /^\/(runtime|effects)\//;
@@ -55,6 +66,7 @@ function woff2Only(): Plugin {
 
 export default defineConfig({
   plugins: [react(), woff2Only(), siteData(process.env.GRKIT_SITE_DATA ?? '../dist/site-data')],
+  define: { __GRKIT_VERSION__: JSON.stringify(workspaceVersion()) },
   build: {
     target: 'es2023',
     // The CSP allows fonts only from the site, so fonts stay files and never become data URLs.

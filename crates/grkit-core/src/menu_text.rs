@@ -16,7 +16,7 @@ pub const TEXT_SUMMARY: usize = 4096;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).
-pub const STRINGS: usize = 40;
+pub const STRINGS: usize = 41;
 /// The longest effect name in a record.
 const NAME_UNITS: usize = 16;
 
@@ -34,6 +34,8 @@ struct Words {
     guides: &'static str,
     date_stamp: &'static str,
     grain: &'static str,
+    /// Before the version in the About row.
+    version: &'static str,
     off: &'static str,
     ratios: [&'static str; 3],
     /// The ratios in a summary, which has less room than a row.
@@ -50,6 +52,7 @@ const ENGLISH: Words = Words {
     guides: "Guides",
     date_stamp: "Date Stamp",
     grain: "Grain",
+    version: "Version",
     off: "Off",
     ratios: ["XPan 65:24", "16:9", "4:3"],
     ratio_values: ["XPan", "16:9", "4:3"],
@@ -65,6 +68,7 @@ const SIMPLIFIED_CHINESE: Words = Words {
     guides: "辅助线",
     date_stamp: "加印日期",
     grain: "颗粒感",
+    version: "版本",
     off: "关闭",
     ratios: ["XPan 65:24", "16:9", "4:3"],
     ratio_values: ["XPan", "16:9", "4:3"],
@@ -80,6 +84,7 @@ const TRADITIONAL_CHINESE: Words = Words {
     guides: "輔助線",
     date_stamp: "加印日期",
     grain: "粒紋感",
+    version: "版本",
     off: "關閉",
     ratios: ["XPan 65:24", "16:9", "4:3"],
     ratio_values: ["XPan", "16:9", "4:3"],
@@ -134,6 +139,7 @@ pub const RUNS: &[Run] = &[
         1,
         "The Image Control summary before an effect name, for the installer.",
     ),
+    run("VERSION", 1, "The About row: the GRKit version."),
 ];
 
 /// The first string ID of each run, in table order.
@@ -145,8 +151,16 @@ pub fn ids() -> impl Iterator<Item = (&'static Run, usize)> {
     })
 }
 
-/// The strings of one run in one language.
-fn run_strings(w: &Words, name: &str) -> Vec<String> {
+/// The first string ID of a run.
+fn id(name: &str) -> usize {
+    ids()
+        .find(|(run, _)| run.name == name)
+        .map(|(_, id)| id)
+        .expect("a menu text run")
+}
+
+/// The strings of one run in one language. `version` is the GRKit version.
+fn run_strings(w: &Words, name: &str, version: &str) -> Vec<String> {
     let summary = |module: &str, value: &str| format!("{module}{}{value}", w.separator);
     let summaries = |module: &str, values: &[&str]| {
         std::iter::once(w.off)
@@ -172,15 +186,17 @@ fn run_strings(w: &Words, name: &str) -> Vec<String> {
         "STAMP_SUMMARY" => summaries(w.date_stamp, &w.stamp_styles),
         "GRAIN_SUMMARY" => summaries(w.grain, &w.grain_levels),
         "IMAGE_PREFIX" => vec![format!("{}{}", w.image_control, w.separator)],
+        "VERSION" => vec![format!("{} {version}", w.version)],
         _ => unreachable!("Unknown menu text run {name}"),
     }
 }
 
-/// The strings of one language in the ID order of `runtime/abi.h`.
-pub fn strings(language: Language) -> Vec<String> {
+/// The strings of one language in the ID order of `runtime/abi.h`. `version`
+/// is the GRKit version that the About row shows.
+pub fn strings(language: Language, version: &str) -> Vec<String> {
     let w = words(language);
     RUNS.iter()
-        .flat_map(|run| run_strings(w, run.name))
+        .flat_map(|run| run_strings(w, run.name, version))
         .collect()
 }
 
@@ -189,14 +205,19 @@ fn units(text: &str) -> Vec<u16> {
 }
 
 /// The label table: for each language, `STRINGS` u16 byte offsets from the
-/// table start, then the NUL-terminated UTF-16LE strings.
-pub fn table() -> Result<Vec<u8>> {
+/// table start, then the NUL-terminated UTF-16LE strings. `version` is the
+/// GRKit version that the About row shows.
+pub fn table(version: &str) -> Result<Vec<u8>> {
+    ensure!(
+        !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_graphic()),
+        "The version {version:?} is not printable ASCII"
+    );
     let languages = Language::ALL;
     let mut offsets = Vec::new();
     let mut strings_area: Vec<u16> = Vec::new();
     let strings_start = languages.len() * STRINGS * 2;
     for language in languages {
-        let list = strings(language);
+        let list = strings(language, version);
         ensure!(
             list.len() == STRINGS,
             "Menu text has {} strings",
@@ -213,7 +234,7 @@ pub fn table() -> Result<Vec<u8>> {
             strings_area.extend(encoded);
             strings_area.push(0);
         }
-        let prefix = units(list.last().unwrap()).len();
+        let prefix = units(&list[id("IMAGE_PREFIX")]).len();
         ensure!(
             prefix + NAME_UNITS < SUMMARY_UNITS,
             "The Image Control prefix leaves no room for an effect name"
@@ -232,11 +253,13 @@ pub fn table() -> Result<Vec<u8>> {
 mod tests {
     use super::*;
 
+    const VERSION: &str = "0.0.0";
+
     #[test]
     fn the_table_fits_and_points_at_each_string() {
-        let table = table().unwrap();
+        let table = table(VERSION).unwrap();
         for (index, language) in Language::ALL.into_iter().enumerate() {
-            for (id, expected) in strings(language).iter().enumerate() {
+            for (id, expected) in strings(language, VERSION).iter().enumerate() {
                 let at = index * STRINGS + id;
                 let offset = u16::from_le_bytes([table[at * 2], table[at * 2 + 1]]) as usize;
                 let read: Vec<u16> = table[offset..]
@@ -254,7 +277,7 @@ mod tests {
         for language in Language::ALL {
             for run in RUNS {
                 assert_eq!(
-                    run_strings(words(language), run.name).len(),
+                    run_strings(words(language), run.name, VERSION).len(),
                     run.count,
                     "{} in {language:?}",
                     run.name
@@ -266,10 +289,34 @@ mod tests {
 
     #[test]
     fn english_keeps_the_menu_text_of_earlier_builds() {
-        let english = strings(Language::English);
+        let english = strings(Language::English, VERSION);
         assert_eq!(english[1], "Framing");
         assert_eq!(english[22], "Framing: XPan");
         assert_eq!(english[20], "Image Control: Off");
         assert_eq!(english[39], "Image Control: ");
+    }
+
+    #[test]
+    fn the_about_row_shows_the_version_in_each_language() {
+        assert_eq!(
+            strings(Language::English, "1.2.3")[id("VERSION")],
+            "Version 1.2.3"
+        );
+        assert_eq!(
+            strings(Language::SimplifiedChinese, "1.2.3")[id("VERSION")],
+            "版本 1.2.3"
+        );
+        assert_eq!(
+            strings(Language::TraditionalChinese, "1.2.3")[id("VERSION")],
+            "版本 1.2.3"
+        );
+    }
+
+    #[test]
+    fn the_table_rejects_a_version_that_the_menu_cannot_show() {
+        assert!(table("").is_err());
+        assert!(table("1.0 beta").is_err());
+        assert!(table("1.0.0-测试").is_err());
+        assert!(table(&"9".repeat(SUMMARY_UNITS)).is_err());
     }
 }

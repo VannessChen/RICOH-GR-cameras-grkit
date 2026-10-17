@@ -1,0 +1,37 @@
+# Versions and CHANGELOG.md come only from change files in .changeset/, never
+# from commit messages. Write one with `knope document-change` or by hand:
+#
+#     ---
+#     default: patch
+#     ---
+#
+#     What changed, written for people who use GRKit.
+#
+# Below 1.0, `major` bumps the minor version and `minor` bumps the patch.
+# The Release PR workflow runs `prepare-release`. Merging that PR tags the
+# release and builds it. See docs/releasing.md.
+
+[package]
+versioned_files = [
+    "Cargo.toml",
+    { path = "Cargo.lock", dependency = "grkit-build" },
+    { path = "Cargo.lock", dependency = "grkit-cli" },
+    { path = "Cargo.lock", dependency = "grkit-core" },
+    { path = "Cargo.lock", dependency = "grkit-wasm" },
+]
+changelog = "CHANGELOG.md"
+
+[changes]
+ignore_conventional_commits = true
+
+[[workflows]]
+name = "document-change"
+
+[[workflows.steps]]
+type = "CreateChangeFile"
+
+[[workflows]]
+name = "prepare-release"
+
+[[workflows.steps]]
+type = "PrepareRelease"

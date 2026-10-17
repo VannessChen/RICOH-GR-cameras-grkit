@@ -466,7 +466,7 @@ fn native_menu_contract_preserves_events_icons_and_empty_catalog() {
     let temporary = tempfile::tempdir().unwrap();
     let executable = temporary.path().join("menu_contract");
     // The harness reads the label table that the installer copies.
-    let table = grkit_core::menu_text::table().unwrap();
+    let table = grkit_core::menu_text::table("0.0.0").unwrap();
     let bytes: Vec<String> = table.iter().map(u8::to_string).collect();
     fs::write(
         temporary.path().join("menu_text.h"),
