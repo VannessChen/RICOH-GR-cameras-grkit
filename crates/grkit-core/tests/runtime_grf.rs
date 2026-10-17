@@ -1,6 +1,6 @@
 //! Compare the portable decoder with the actual installer parser and C ABI.
 
-use grkit_core::{effects, runtime};
+use grkit_core::{effects, modules::Hidden, runtime, selective::Selective};
 use serde_json::{json, Value};
 use std::{
     env,
@@ -176,8 +176,9 @@ int main(int argc, char **argv) {
         (48, vec![b'x'; 17]),
         (55, vec![b'z']),
         (80, 2_u32.to_le_bytes().to_vec()),
-        // Bit 2 is undefined.
+        // The selective color bit without its field, and the removed glow bit.
         (84, vec![2]),
+        (84, vec![4]),
         (127, vec![1]),
         (146, vec![1]),
         (147, vec![1]),
@@ -209,6 +210,58 @@ int main(int argc, char **argv) {
             Some(false),
         ));
     }
+    let mut selective_effect = sample(false);
+    selective_effect["selective_color"] = Selective::from_definition(
+        &json!({"hue": 108.6, "lower": [20, 35], "higher": [6, 14], "chroma": [6, 16]}),
+    )
+    .unwrap()
+    .to_json();
+    let selective = effects::encode(&selective_effect, &vec![0; effects::ICON_SIZE]).unwrap();
+    corpus.push(("selective color".into(), selective.clone(), Some(true)));
+    let selective_fields: Vec<(&str, usize, Vec<u8>)> = vec![
+        ("short direction", 106, vec![0, 0, 0, 0]),
+        (
+            "long direction",
+            106,
+            [4096_u16, 4096]
+                .iter()
+                .flat_map(|v| v.to_le_bytes())
+                .collect(),
+        ),
+        (
+            "equal lower tangents",
+            110,
+            [93_u16, 93].iter().flat_map(|v| v.to_le_bytes()).collect(),
+        ),
+        (
+            "reversed higher tangents",
+            114,
+            [64_u16, 27].iter().flat_map(|v| v.to_le_bytes()).collect(),
+        ),
+        (
+            "outer tangent past 1024",
+            116,
+            1025_u16.to_le_bytes().to_vec(),
+        ),
+        ("equal chroma limits", 118, vec![16, 16]),
+        ("chroma limit past 181", 119, vec![182]),
+        ("reserved byte", 120, vec![1]),
+        ("monochrome flag", 80, 1_u32.to_le_bytes().to_vec()),
+    ];
+    for (description, offset, bytes) in selective_fields {
+        let mut changed = selective.clone();
+        changed[offset..offset + bytes.len()].copy_from_slice(&bytes);
+        repair_crc(&mut changed);
+        corpus.push((
+            format!("selective color: {description}"),
+            changed,
+            Some(false),
+        ));
+    }
+    let mut stray = color.clone();
+    stray[112] = 1;
+    repair_crc(&mut stray);
+    corpus.push(("selective field without its bit".into(), stray, Some(false)));
     let mut boundary_effect = sample(false);
     boundary_effect["effect_id"] = json!("a".repeat(31));
     boundary_effect["name"] = json!("x".repeat(16));
@@ -268,9 +321,10 @@ int main(int argc, char **argv) {
         state
     };
     for index in 0..512 {
-        let mut changed = match index % 3 {
+        let mut changed = match index % 4 {
             0 => boundary.clone(),
             1 => mono.clone(),
+            2 => selective.clone(),
             _ => extended.clone(),
         };
         let offset = (next() % changed.len() as u64) as usize;
@@ -326,9 +380,9 @@ _Static_assert(GRKIT_RECORD_NAME + 34 <= GRKIT_RECORD_MONOCHROME, "Name overlap"
 _Static_assert(GRKIT_RECORD_CODE + 2 <= GRKIT_RECORD_FEATURES, "Extension overlap");
 _Static_assert(GRKIT_RECORD_POST + 20 <= GRKIT_RECORD_SIZE, "Extension overflow");
 int main(void) {
-    printf("%u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE, GRKIT_ICON_STRIDE,
+    printf("%u %u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE, GRKIT_ICON_STRIDE,
            GRKIT_PICTURE_SCRATCH, GRKIT_HOST_COUNT, GRKIT_HOST_RECORDS, GRKIT_HOST_ACTIVE, GRKIT_HOST_STAMP,
-           GRKIT_HOST_GUIDE, GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE);
+           GRKIT_HOST_GUIDE, GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE, GRKIT_HOST_HIDDEN);
     return 0;
 }
 "#,
@@ -355,7 +409,8 @@ int main(void) {
             runtime::HOST_STAMP,
             runtime::HOST_GUIDE,
             runtime::HOST_FRAME_RATIO,
-            runtime::RECORD_CODE
+            runtime::RECORD_CODE,
+            runtime::HOST_HIDDEN
         ]
     );
 }
@@ -409,6 +464,31 @@ fn native_framing_contract_preserves_canvas_bounds_and_settings() {
 }
 
 #[test]
+fn native_selective_table_matches_the_site_preview() {
+    let Some(compiler) = compiler() else {
+        return;
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("selective_table");
+    compile(
+        &compiler,
+        &root().join("tests/runtime/selective_table.c"),
+        &executable,
+        &[],
+    );
+    for definition in [
+        json!({"hue": 108.6, "lower": [20, 35], "higher": [6, 14], "chroma": [6, 16]}),
+        json!({"hue": 250, "lower": [0, 75], "higher": [10, 11], "chroma": [0, 181]}),
+        json!({"hue": 0, "lower": [5, 40], "higher": [30, 60], "chroma": [40, 41]}),
+        json!({"hue": 359.9, "lower": [44.9, 45], "higher": [0.5, 2], "chroma": [1, 100]}),
+    ] {
+        let selective = Selective::from_definition(&definition).unwrap();
+        let output = checked(Command::new(&executable).arg(hex::encode(selective.to_bytes())));
+        assert_eq!(output.stdout, selective.table(), "{definition}");
+    }
+}
+
+#[test]
 fn native_picture_contract_applies_post_matrix_and_stamp() {
     let Some(compiler) = compiler() else {
         return;
@@ -422,4 +502,50 @@ fn native_picture_contract_applies_post_matrix_and_stamp() {
         &[],
     );
     checked(&mut Command::new(&executable));
+}
+
+#[test]
+fn rust_and_installer_c_read_the_same_module_files() {
+    let Some(compiler) = compiler() else {
+        return;
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("visibility_contract");
+    compile(
+        &compiler,
+        &root().join("tests/runtime/visibility_contract.c"),
+        &executable,
+        &[],
+    );
+    // 256 bytes is the largest file the installer reads.
+    let long = format!("{}framing", " ".repeat(249));
+    let cases: [&[u8]; 16] = [
+        b"",
+        b"\n",
+        b"framing\n",
+        b"guides\ndate-stamp\n",
+        b"date-stamp framing guides",
+        b" \tguides\r\n",
+        b"framing\nframing\n",
+        b"image-control\n",
+        b"Framing\n",
+        b"framingx\n",
+        b"frame\n",
+        b"framing,guides\n",
+        b"framing\0\n",
+        b"\xff\n",
+        long.as_bytes(),
+        &[b' '; 257],
+    ];
+    for case in cases {
+        let output = checked(Command::new(&executable).arg(hex::encode(case)));
+        let native = String::from_utf8(output.stdout).unwrap();
+        let expected = match Hidden::parse(case) {
+            Ok(hidden) => format!("{}\n", hidden.mask()),
+            Err(_) => "invalid\n".to_owned(),
+        };
+        assert_eq!(native, expected, "{:?}", String::from_utf8_lossy(case));
+    }
+    assert_eq!(Hidden::parse(b"guides date-stamp").unwrap().mask(), 0b1100);
+    assert!(Hidden::parse(long.as_bytes()).is_ok());
 }

@@ -8,7 +8,11 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use zip::{write::SimpleFileOptions, CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
-use crate::{effects, runtime, Files};
+use crate::{
+    effects,
+    modules::{self, Hidden},
+    runtime, Files,
+};
 
 pub const RUNTIME_PATHS: [&str; 5] = [
     "SCRIPT/STARTUP.TTL",
@@ -117,6 +121,45 @@ pub fn validate_runtime(files: &Files) -> Result<()> {
     Ok(())
 }
 
+/// Checks a runtime build against its `build.json` and returns the runtime files and manifest.
+///
+/// `files` holds every file of the build's `sd/` tree, keyed by its path in that tree.
+/// The file set must equal the manifest list, and each file must match its size and SHA-256.
+pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<(Files, Value)> {
+    let manifest = read_manifest(manifest)?;
+    ensure!(
+        manifest["profile"] == "production"
+            && manifest["target"] == "gr3-2.10"
+            && manifest["startup_activation"] == "Off",
+        "Expected a production GR III 2.10 build that starts in Off"
+    );
+    let mut runtime = Files::new();
+    for item in manifest["files"]
+        .as_array()
+        .context("Expected a manifest file list")?
+    {
+        let name = item["path"].as_str().context("Expected a runtime path")?;
+        ensure!(
+            RUNTIME_PATHS.contains(&name) && !runtime.contains_key(name),
+            "Invalid runtime manifest entries"
+        );
+        let bytes = files
+            .get(name)
+            .context("Runtime directory differs from its manifest")?;
+        ensure!(
+            item["size"].as_u64() == Some(bytes.len() as u64) && item["sha256"] == sha256(bytes),
+            "Runtime hash or size mismatch: {name}"
+        );
+        runtime.insert(name.to_owned(), bytes.clone());
+    }
+    ensure!(
+        runtime.len() == files.len(),
+        "Runtime directory differs from its manifest"
+    );
+    validate_runtime(&runtime)?;
+    Ok((runtime, manifest))
+}
+
 fn is_effect_path(name: &str) -> bool {
     let Some(stem) = name
         .strip_prefix("SD_ROOT/SCRIPT/PLUGINS/EFFECTS/")
@@ -130,7 +173,8 @@ fn is_effect_path(name: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
-pub fn validate_contents(contents: &Files) -> Result<Vec<String>> {
+/// Checks the package entries and returns the effect IDs and the hidden modules.
+pub fn validate_contents(contents: &Files) -> Result<(Vec<String>, Hidden)> {
     ensure!(contents.len() <= MAX_ENTRIES, "Too many package entries");
     let mut paths = BTreeSet::new();
     let mut total = 0usize;
@@ -172,6 +216,8 @@ pub fn validate_contents(contents: &Files) -> Result<Vec<String>> {
         .collect();
     validate_runtime(&runtime)?;
     let mut ids = BTreeSet::new();
+    let mut hidden = Hidden::default();
+    let modules_path = format!("SD_ROOT/{}", modules::PATH);
     for (name, blob) in contents
         .iter()
         .filter(|(name, _)| !mandatory.contains(*name))
@@ -184,6 +230,8 @@ pub fn validate_contents(contents: &Files) -> Result<Vec<String>> {
                 "Profile filename does not match its stable ID"
             );
             ensure!(ids.insert(id.to_owned()), "Duplicate effect ID");
+        } else if *name == modules_path {
+            hidden = Hidden::parse(blob)?;
         } else {
             bail!("Package contains unexpected files: {name}");
         }
@@ -192,7 +240,11 @@ pub fn validate_contents(contents: &Files) -> Result<Vec<String>> {
         ids.len() <= runtime::MAX_COUNT,
         "Target effect capacity exceeded"
     );
-    Ok(ids.into_iter().collect())
+    ensure!(
+        !hidden.hides_everything(ids.len()),
+        "The package shows no module: it has no effects and hides every other module"
+    );
+    Ok((ids.into_iter().collect(), hidden))
 }
 
 fn checksum_list(contents: &Files) -> Vec<u8> {
@@ -204,7 +256,13 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
         .into_bytes()
 }
 
-pub fn assemble(runtime: &Files, build: &Value, effects: &Files) -> Result<Vec<u8>> {
+/// Builds the package ZIP. `hidden` names the modules that the camera menu hides.
+pub fn assemble(
+    runtime: &Files,
+    build: &Value,
+    effects: &Files,
+    hidden: Hidden,
+) -> Result<Vec<u8>> {
     ensure!(
         build.get("profile") == Some(&json!("production"))
             && build.get("target") == Some(&json!("gr3-2.10"))
@@ -226,6 +284,9 @@ pub fn assemble(runtime: &Files, build: &Value, effects: &Files) -> Result<Vec<u
             format!("SD_ROOT/SCRIPT/PLUGINS/EFFECTS/{}", safe_path(name)?),
             blob.clone(),
         );
+    }
+    if let Some(file) = hidden.file() {
+        contents.insert(format!("SD_ROOT/{}", modules::PATH), file);
     }
     contents.insert(
         "INSTALLATION.md".into(),
@@ -297,12 +358,15 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
         );
         contents.insert(name, blob);
     }
-    let ids = validate_contents(&contents)?;
+    let (ids, hidden) = validate_contents(&contents)?;
     ensure!(
         contents["SHA256SUMS"] == checksum_list(&contents),
         "SHA256SUMS differs from package"
     );
-    Ok(json!({"target": "gr3-2.10", "effect_ids": ids, "entries": contents.len()}))
+    Ok(
+        json!({"target": "gr3-2.10", "effect_ids": ids, "hidden_modules": hidden.names(),
+            "entries": contents.len()}),
+    )
 }
 
 fn declared_entry_count(bytes: &[u8]) -> Result<usize> {

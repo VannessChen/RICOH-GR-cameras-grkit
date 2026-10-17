@@ -58,9 +58,9 @@ fn basename(path: &Path) -> Result<&str> {
         .context("Expected a UTF-8 filename")
 }
 
-pub fn compile_directory(source: &Path) -> Result<Files> {
-    let mut files = Files::new();
-    let mut ids = BTreeSet::new();
+/// Reads each `ID/effect.json` under `source`. Each directory name must match its effect ID.
+pub fn read_definitions(source: &Path) -> Result<Vec<Value>> {
+    let mut definitions = Vec::new();
     for directory in directory_entries(source)? {
         let metadata = fs::symlink_metadata(&directory)?;
         ensure!(
@@ -75,7 +75,6 @@ pub fn compile_directory(source: &Path) -> Result<Files> {
             continue;
         }
         let definition = effects::parse_json(&read_regular(&path)?)?;
-        let blob = effects::compile_definition(&definition)?;
         let id = definition["effect_id"]
             .as_str()
             .context("Expected an effect ID")?;
@@ -83,6 +82,17 @@ pub fn compile_directory(source: &Path) -> Result<Files> {
             basename(&directory)? == id,
             "Effect directory must match its stable ID"
         );
+        definitions.push(definition);
+    }
+    Ok(definitions)
+}
+
+pub fn compile_directory(source: &Path) -> Result<Files> {
+    let mut files = Files::new();
+    let mut ids = BTreeSet::new();
+    for definition in read_definitions(source)? {
+        let blob = effects::compile_definition(&definition)?;
+        let id = definition["effect_id"].as_str().unwrap();
         let name = effects::filename(id)?;
         ensure!(
             ids.insert(id.to_owned()) && !files.contains_key(&name),
@@ -151,46 +161,50 @@ fn collect_files(root: &Path, relative: &Path, files: &mut BTreeSet<String>) -> 
     Ok(())
 }
 
-pub fn load_build(directory: &Path) -> Result<(Files, Value)> {
+/// Reads a build directory's `build.json` bytes and every file under its `sd/` tree.
+fn read_build(directory: &Path) -> Result<(Vec<u8>, Files)> {
     ensure!(
         fs::symlink_metadata(directory)?.is_dir(),
         "Expected a regular build directory"
     );
-    let manifest = packaging::read_manifest(&read_regular(&directory.join("build.json"))?)?;
-    ensure!(
-        manifest["profile"] == "production"
-            && manifest["target"] == "gr3-2.10"
-            && manifest["startup_activation"] == "Off",
-        "Expected a production GR III 2.10 build that starts in Off"
-    );
+    let manifest = read_regular(&directory.join("build.json"))?;
     let sd = directory.join("sd");
-    let mut actual = BTreeSet::new();
-    collect_files(&sd, Path::new(""), &mut actual)?;
-    let allowed = runtime::runtime_files(&[]);
+    let mut names = BTreeSet::new();
+    collect_files(&sd, Path::new(""), &mut names)?;
     let mut files = Files::new();
-    for item in manifest["files"]
-        .as_array()
-        .context("Expected a manifest file list")?
-    {
-        let name = item["path"].as_str().context("Expected a runtime path")?;
-        ensure!(
-            allowed.contains_key(name) && !files.contains_key(name),
-            "Invalid runtime manifest entries"
-        );
-        let bytes = read_regular(&sd.join(name))?;
-        ensure!(
-            item["size"].as_u64() == Some(bytes.len() as u64)
-                && item["sha256"] == packaging::sha256(&bytes),
-            "Runtime hash or size mismatch: {name}"
-        );
-        files.insert(name.to_owned(), bytes);
+    for name in names {
+        let bytes = read_regular(&sd.join(&name))?;
+        files.insert(name, bytes);
     }
-    ensure!(
-        actual == files.keys().cloned().collect(),
-        "Runtime directory differs from its manifest"
+    Ok((manifest, files))
+}
+
+pub fn load_build(directory: &Path) -> Result<(Files, Value)> {
+    let (manifest, files) = read_build(directory)?;
+    packaging::load_runtime(&manifest, &files)
+}
+
+/// Writes a verified build into a new site directory as `runtime/<target>/`.
+///
+/// The copy holds only `build.json` and `sd/`, so it is itself a valid `--build` input.
+/// `objects/` stays out because its generated header holds firmware bytes.
+pub fn export_runtime(build: &Path, site: &Path) -> Result<(String, usize)> {
+    let (manifest, files) = read_build(build)?;
+    let (runtime, parsed) = packaging::load_runtime(&manifest, &files)?;
+    let target = parsed["target"]
+        .as_str()
+        .context("Expected a build target")?
+        .to_owned();
+    validate_output(site)?;
+    let mut tree = Files::from([("build.json".to_owned(), manifest)]);
+    tree.extend(
+        runtime
+            .into_iter()
+            .map(|(name, bytes)| (format!("sd/{name}"), bytes)),
     );
-    packaging::validate_runtime(&files)?;
-    Ok((files, manifest))
+    let count = tree.len();
+    write_directory(&site.join("runtime").join(&target), &tree)?;
+    Ok((target, count))
 }
 
 // Resolve existing ancestors too, so symlink aliases cannot conceal nested outputs.

@@ -8,6 +8,11 @@ Menu, processing, and Framing hooks run in the camera's RTOS domain.
 - `grkit-core` implements artwork, GRF formats, effect compilation, runtime templates, and deterministic ZIP assembly. It does not read files or start processes.
 - `grkit-build` checks firmware, generates patches, and invokes Clang and LLD.
 - `grkit-cli` exposes commands and enforces filesystem rules.
+- `grkit-wasm` assembles packages in the browser. It takes a runtime build as `grkit build` writes it (`build.json` and `sd/`) and compiled effects, and it uses the `grkit-core` checks that the CLI uses.
+- `web/` is the static site. It fetches the runtime, the effect catalog, and the selected effects, and calls `grkit-wasm` to build `GRKit.zip` in the browser.
+
+The site preview applies one 33 x 33 x 33 table for each effect. `grkit effects publish` computes each table from the fit model: it undoes the Standard rendering of an sRGB input, then renders the result with the effect.
+An effect equal to Standard maps each input to itself. The preview assumes that the input is a Standard JPEG. The long highlight shoulder of the base gamma can exaggerate the change of other bright, saturated colors.
 
 Native sources live under `runtime/`, and package documents live under `resources/`. The CLI embeds both, so it works outside the checkout.
 Rust tests pin GRF bytes, artwork, generated headers, and loader scripts. Host C tests check the GRF parser, the effect catalog, the menu, and Framing.
@@ -23,6 +28,10 @@ It returns not-ready statuses while the camera initializes, and the loader repea
 
 An unusable effect file does not stop the other effects or Framing. Unusable files include names outside the `NAME.GRF` 8.3 rule, symbolic links, unreadable files, and invalid records.
 The `._` companions that macOS writes are therefore ignored.
+
+INSTALL also reads `SCRIPT/PLUGINS/MODULES.TXT`, which names the modules that the menu hides (`runtime/visibility.h`). A missing file hides nothing.
+An unknown or repeated name stops the installation with status 43, and a read error with status 44. The installer stores the result in header `+56`.
+Hidden modules keep their hooks. Each one stays inactive at Off.
 
 With more than 20 effects, the installer keeps the 20 smallest effect IDs.
 For a duplicate ID, the file with the smallest name wins. The result does not depend on directory order. Directory read errors stop the installation.
@@ -40,6 +49,8 @@ It keeps one decimal integer in `SCRIPT/PLUGINS/STATE.TXT`: `code + 65536 * (rat
 
 The loader checks the state every 2 s and writes the file only after a change. It writes through the camera's own file system, as photos do, never from Linux while the camera may write photos.
 An unreadable or out-of-range file restores nothing. An effect that is no longer installed stays Off, and its file entry stays until the next change.
+
+A hidden module restores Off, because no menu can turn it off. The script has no bit operators, so it reads header `+56` by division.
 A power loss during the write can lose the last change.
 
 ## Menu
@@ -51,6 +62,9 @@ The ADJ controller owns both objects. Exit hides them and restores the native ge
 
 The compiled registry in `runtime/modules.h` contains Image Control, Framing, Guides, and Date Stamp.
 Each descriptor owns its title, summary, rows, labels, icons, selection checks, activation, and committed row. A module page opens at its committed row.
+
+The root lists only the visible modules, in registry order. Image Control is visible when effects are installed. Each other module is visible unless header `+56` has its bit.
+If no module is visible, Image Control shows with only Off. If one module is visible, ADJ opens its page directly, and MENU or left returns to native ADJ.
 Module state stays in the private host header.
 
 MENU returns one level. From the GRKit root it returns to the native ADJ items. The private menu restores the native list on its supported exit paths.
@@ -139,12 +153,14 @@ In-camera Crop, Resize, Digital Filter, and RAW development do not know the 65:2
 ## Effect extension
 
 Bytes 84..127 of a GRFX0001 file hold an optional extension.
-It holds u32 features at 84 and an i16[9] signed Q13 post matrix at 88. Bytes 106..127 are reserved and zero.
-Each feature bit owns its field, and a field without its bit stays zero. A monochrome effect cannot have a post matrix. An effect without features has zeros in the whole extension.
+It holds u32 features at 84, an i16[9] signed Q13 post matrix at 88 (bit 1), and selective color parameters at 106 (bit 2). Bytes 120..127 are reserved and zero.
+Each feature bit owns its field, and a field without its bit stays zero. A monochrome effect has no features.
 
-The installer copies the extension to record `+0x700`. Records are 0x740 bytes.
+An effect without features has zeros in the whole extension. Bit 4 is reserved, and the parsers reject it.
 
-The processing region has little room left, so the extension hooks link into the Framing region (`runtime/picture.*`). The live-view diff hook moved there too.
+The installer copies the extension to record `+0x700`: features at `+0x700`, the post matrix at `+0x704`, and selective color at `+0x716`. Records are 0x740 bytes.
+
+The processing region has little room left, so the extension hooks and the live-view diff hook link into the Framing region (`runtime/picture.*`).
 
 ### Post matrix
 
@@ -154,12 +170,33 @@ The hook multiplies the result by the effect's post matrix P: `CSP' = CSP x P`. 
 The coefficients are 9-bit two's complement with 256 = 1.0. The register writer packs 9 bits without saturation, so the hook sign-extends each one and saturates the products to -256..255.
 The live-view diff also sets the YCbCr stage flag (`+7`) when the live-view record changes. Its stage runs before the gamma hook, so the post matrix changes one update later.
 
+### Selective color
+
+Selective color keeps the chroma of one hue range in recorded pictures and removes it elsewhere. The hue is the angle of (Cb - 128, Cr - 128).
+The parameters are an i16 Q12 direction (cos and sin of the target hue), then u16 Q8 tangents and a u8 chroma gate.
+Each side of the target has an inner and an outer half width. Inside the inner one a pair keeps all of its chroma, and outside the outer one none.
+Between them, the weight falls linearly in tan(offset).
+
+The side toward larger angles is separate, because skin lies only on that side of red. The gate fades out pairs whose chroma along the target is low.
+
+The effect compiler converts degrees to these integers, so the runtime needs no trigonometry. The parsers require a direction of length 0.95 to 1.03, inner < outer <= 1024, and c0 < c1 <= 181.
+
+For each picture, `picture_encode` builds a 128 x 128 weight table in the picture scratch with the shift-subtract division. One cell covers a 2 x 2 block of Cb and Cr values.
+Then each pair costs one lookup and two multiplies: 22 A32 instructions in the loop.
+`grkit_core::selective` computes the same table, and a test compares the two byte for byte. Site previews use it.
+
+The live view shows the effect in monochrome. `picture_post` reads the tuning context byte at `settings + 0x82ac` through the Make's third argument (`settings + 0x120`): 1 is ImageTuningLiveview and 0 a still build.
+For a live-view build of a selective effect it clears the Cb and Cr rows of the YCbCr matrix. The viewfinder then shows the luma that the removed hues keep in the picture, and the target hue is gray too.
+Still builds keep the whole matrix, and their encode applies selective color. The encode time on a camera is not measured.
+
 ## Recorded pictures
 
 `JpegEncodeMacroProcess::Execute` (`0x535047d4`) receives four image descriptors at configuration `+0x3c`.
 They are the main picture, the 720 x 480 screennail, the 160 x 120 thumbnail, and a second full-size encode of the main planes.
 Each descriptor holds Y at `+4`, CbCr at `+8`, and u16 width, height, and shared pitch at `+0x10`. The CbCr plane interleaves Cb and Cr for each pixel pair, in full rows (4:2:2) or half rows (4:2:0).
-The entry hook processes each plane set once, before the encode is submitted. It cleans and invalidates the data cache for the planes before and after (`0x5383c8a8`), because the image hardware writes and reads them.
+
+The entry hook processes each plane set once, before the encode is submitted.
+It applies selective color first and then the date stamp, so the stamp keeps its color. It cleans and invalidates the data cache for the planes before and after (`0x5383c8a8`), because the image hardware writes and reads them.
 
 The screennail and the thumbnail have black bars that depend on the capture aspect. The hook uses the visible area from the GetResolution inset tables and the Framing insets.
 
@@ -193,5 +230,3 @@ Picture code divides with its own shift-subtract routine, once per picture for e
 The Framing range follows the decoded RTOS image, which ends at `0x540b55c0`. The RTOS maps it read-only and executable up to `0x55000000`, and no firmware code refers to it.
 BOOT loads only the image, so the range can keep the previous session's code after a restart. The installer therefore overwrites it without a stock-byte check.
 All other patches keep that check. The builder rejects overflow, occupied reservations, changed hook instructions, and overlapping patches.
-
-Cache synchronization and camera task lifetimes need device testing whenever their implementation changes.

@@ -19,16 +19,48 @@ The compiler writes self-contained GRFX0001 files with a 40 x 40 icon. CRC32 det
 | `icon` | Yes | `label` and `shape` (`film`, `filter`, or `plain`) |
 | `attribution` | Yes | An object with the origin, source, and license |
 | `post_matrix` | No | Nine signed Q13 coefficients, row-major, after the tone curves |
+| `selective_color` | No | `hue` in degrees (0 to 360), `lower` and `higher` `[inner, outer]` half widths in degrees (0 to 75), and `chroma` `[c0, c1]` (c0 < c1 <= 181) |
 
-A monochrome effect cannot have `post_matrix`.
+A monochrome effect cannot have `post_matrix` or `selective_color`.
 
-## Starter effects
+`selective_color` keeps the chroma of one hue in recorded pictures and removes it elsewhere. A pair keeps all of its chroma inside the inner half width, and none outside the outer one. `lower` is the side toward smaller hue angles (from red, toward magenta), and `higher` the side toward larger angles (toward orange and skin). Pairs with chroma below `c0` lose it, and pairs above `c1` keep it. The hue is the angle of (Cb - 128, Cr - 128): sRGB red is at 108.6 degrees. The viewfinder shows the effect in monochrome, because selective color applies only to recorded pictures.
 
-- Mono Orange and Everyday Neg are original definitions with editable curve knots.
-- Ektar 100, Pro 400H, and Vision3 250D are imported fits with all 768 curve samples.
+## Effect catalog
 
-`sources/` stores the exact fit inputs, hashes, and upstream notices. `import_fit()` reproduces the imported matrices and curves.
-Attribution and licenses are in [NOTICE.md](NOTICE.md). The installation guide in each package links to it.
+The site and the release packages publish every effect in this directory:
+
+| Effect | ID | Target |
+|---|---|---|
+| Portra 400 | `portra-400-endura-v1` | Kodak Portra 400 on Portra Endura paper |
+| Gold 200 | `gold-200-premier-v1` | Kodak Gold 200 on Endura Premier paper |
+| Ektar 100 | `ektar-100-edge-v1` | Kodak Ektar 100 on Ektacolor Edge paper |
+| Pro 400H | `pro-400h-crystal-v1` | Fujifilm Pro 400H on Crystal Archive Type II paper |
+| X-Tra 400 | `xtra-400-crystal-v1` | Fujifilm X-Tra 400 on Crystal Archive Type II paper |
+| Vision3 250D | `vision3-250d-2383-v1` | Kodak Vision3 250D on Vision 2383 print film |
+| Vision3 500T | `vision3-500t-2393-v1` | Kodak Vision3 500T on Vision Premier 2393 print film |
+| Portra 800 +2 | `portra-800-push2-v1` | Kodak Portra 800 pushed two stops, on Portra Endura paper |
+| Kodachrome 64 | `kodachrome-64-v1` | Kodak Kodachrome 64 slide film, scanned |
+| Velvia 100 | `velvia-100-v1` | Fujifilm Velvia 100 slide film, scanned |
+| Portra 160 | `portra-160-ultra-v1` | Kodak Portra 160 on Ultra Endura paper |
+| Tri-X 400 | `trix-400-mono-v1` | Kodak Tri-X 400 on Polymax Fine-Art paper, grade 2 |
+| Tri-X 400 Red | `red-filter-mono-v1` | Tri-X 400 behind a Wratten 25 red filter, on Polymax Fine-Art paper |
+| FP-100C | `fp-100c-v1` | Fujifilm FP-100C instant film |
+| Aerocolor IV | `aerocolor-iv-v1` | Kodak Aerocolor IV 2460 aerial negative on Portra Endura paper |
+| EXR 200T | `exr-200t-2383-v1` | Kodak EXR 200T 5293 on Vision 2383 print film |
+
+Each effect is a fit of one film simulation LUT. Their menu names are the names of the simulated films. [NOTICE.md](NOTICE.md) gives the attribution, the licenses, and the trademark notice.
+
+The first eleven LUTs come from [spektrafilm](https://github.com/andreavolpato/spektrafilm) 0.3.4. The other five come from [Spectral Film LUT](https://github.com/JanLohse/spectral_film_lut). `sources/` holds the scripts that bake each LUT, the upstream notices, and `manifest.json`, which records the SHA-256 of each LUT. The LUTs themselves are not in the repository.
+
+To refit an effect:
+
+1. Install the generator at the revision in `sources/manifest.json`.
+2. Run `python sources/bake_spektrafilm.py LUTS` or `python sources/bake_spectral_film_lut.py LUTS`.
+3. Compare the SHA-256 of `LUTS/ID.cube` with the manifest. Floating-point results can differ on another platform.
+4. Run `grkit effects import --input vlog` with the effect's ID, name, label, and shape.
+5. Copy `license`, `target`, and `generator` from the old `attribution`.
+
+The two monochrome fits have identical matrix rows and curves. Set `flags` to 1 for them.
 
 ## Processing domain
 
@@ -36,7 +68,7 @@ Effects run on the camera's look matrix before Standard base gamma. RGB curves i
 They are not display-sRGB JPEG transforms. Imported fits assume 18% gray at base-gamma index 7.8.
 
 The optional post-curve matrix (`post_matrix`) acts on gamma-encoded RGB after the tone curves. The runtime multiplies the YCbCr matrix by it.
-Effects add no grain, glow, or hue-sector correction.
+Effects add no grain or glow. Only `selective_color` changes color by hue, and only in recorded pictures.
 
 ## Import a .cube preset
 
@@ -59,10 +91,10 @@ grkit effects import --cube look.cube --firmware fwdc239b.bin --input srgb \
 6. Add the license of the LUT to `attribution`. Then run `grkit effects build`.
 
 If `OUT/ID` exists, the command stops and writes nothing.
-The command checks the ID, name, label, and shape before the fit. Labels use the characters `EFGHMNOV01245`.
+The command checks the ID, name, label, and shape before the fit. Labels have one to four capitals or digits.
 The command checks the firmware SHA-256 and the shape of the base gamma table. If a check fails, the command stops.
 
-The fit follows `cube_fit.py`, `joint_fit.py`, and `lab_fit.py` of gr3-film-mods (MIT):
+The fit follows `cube_fit.py`, `joint_fit.py`, and `lab_fit.py` of [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)):
 
 - The model is `Curve_c(BaseGamma(K (M L)_c)) / 16384`, then the post matrix `P` on the gamma-encoded result.
 - `BaseGamma` is the still-path Standard base gamma from the firmware. `K` puts 18% gray at base-gamma index 7.8. This index is an assumption.

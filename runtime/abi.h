@@ -15,6 +15,10 @@
 #define GRKIT_HOST_GUIDE_PREVIEW 48
 /* Date stamp style: 0 Off, 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY. */
 #define GRKIT_HOST_STAMP 52
+/* Modules that MODULES.TXT hides from the menu: bit n is module n of
+   runtime/modules.h. Bit 0 stays clear, because Image Control shows exactly
+   when effects are installed. */
+#define GRKIT_HOST_HIDDEN 56
 /* Words 24..43 belong to the menu: two text descriptors (96..111) and a
    16-word event ring (112..175). */
 #define GRKIT_HOST_PLUGINS_ICON 176
@@ -62,9 +66,15 @@
 /* GRF extension, zero for an effect without features. */
 #define GRKIT_RECORD_FEATURES 0x700
 #define GRKIT_FEATURE_POST 1U
+#define GRKIT_FEATURE_SELECTIVE 2U
 /* i16[9] signed Q13 RGB matrix after the tone curves, applied through the YCbCr
-   matrix. Bytes 0x716 and 0x717 are reserved and zero. */
+   matrix. */
 #define GRKIT_RECORD_POST 0x704
+/* Selective color for recorded pictures: i16 cos and sin of the target hue (Q12),
+   u16 inner and outer tangents toward smaller hue angles, then toward larger
+   ones (Q8), and u8 chroma gate c0 and c1. Bytes 0x724..0x72b are reserved and
+   zero. */
+#define GRKIT_RECORD_SELECTIVE 0x716
 #define GRKIT_ICON_STRIDE 6408
 /* Picture scratch after the records: the date stamp core and halo masks. */
 #define GRKIT_PICTURE_SCRATCH 141376

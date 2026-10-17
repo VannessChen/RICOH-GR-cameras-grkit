@@ -13,6 +13,11 @@ fn fixture() -> Value {
         "matrix": [8192, 0, 0, 0, 8192, 0, 0, 0, 8192], "curves": [&curve, &curve, &curve]})
 }
 
+/// A selective color definition that keeps only red. No published effect uses the feature.
+fn keep_red() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/keep-red.json")
+}
+
 fn read_json(path: impl AsRef<std::path::Path>) -> Value {
     effects::parse_json(&fs::read(path).unwrap()).unwrap()
 }
@@ -75,38 +80,45 @@ fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
 
 #[test]
 fn user_definition_preserves_edited_name_and_creative_curve() {
-    let mut definition = read_json(root().join("ektar-100-endura-v3/effect.json"));
-    definition["name"] = json!("My Ektar");
+    let mut definition = read_json(root().join("portra-400-endura-v1/effect.json"));
+    definition["name"] = json!("My Portrait");
     definition["curves"][0][100] = json!(0);
     let (compiled, _) =
         effects::decode(&effects::compile_definition(&definition).unwrap()).unwrap();
-    assert_eq!(compiled["name"], "My Ektar");
+    assert_eq!(compiled["name"], "My Portrait");
     assert_eq!(compiled["curves"], definition["curves"]);
     assert_eq!(compiled["matrix"], definition["matrix"]);
     assert_eq!(compiled["effect_id"], definition["effect_id"]);
 }
 
 #[test]
-fn real_fit_imports_reproduce_editable_definitions() {
+fn cube_fits_record_their_pinned_luts() {
+    let manifest = read_json(root().join("sources/manifest.json"));
+    let luts = manifest["luts"].as_object().unwrap();
+    let mut used = Vec::new();
     for entry in fs::read_dir(root()).unwrap() {
         let path = entry.unwrap().path().join("effect.json");
         if !path.is_file() {
             continue;
         }
         let definition = read_json(path);
-        if definition["attribution"]["origin"] != "derived-fit" {
+        let attribution = &definition["attribution"];
+        if attribution["origin"] != "cube-fit" {
             continue;
         }
-        let fit = read_json(
-            root()
-                .join("sources")
-                .join(definition["attribution"]["source"].as_str().unwrap()),
-        );
+        let source = attribution["source"].as_str().unwrap();
         assert_eq!(
-            effects::import_fit(&fit).unwrap(),
-            json!({"matrix": definition["matrix"], "curves": definition["curves"]})
+            source,
+            format!("{}.cube", definition["effect_id"].as_str().unwrap())
         );
+        let lut = &luts[source];
+        assert_eq!(lut["sha256"], attribution["source_sha256"], "{source}");
+        let generator = &manifest["generators"][lut["generator"].as_str().unwrap()];
+        assert_eq!(generator["license"], attribution["license"], "{source}");
+        used.push(source.to_owned());
     }
+    used.sort();
+    assert_eq!(used, luts.keys().cloned().collect::<Vec<_>>());
 }
 
 #[test]
@@ -247,27 +259,14 @@ fn knots_validate_and_round_ties_even() {
 }
 
 #[test]
-fn fit_quantization_rounds_ties_even_and_rejects_extra_stages() {
-    let mut fit = read_json(root().join("sources/ektar_b2n3.json"));
-    fit["matrix"][0] = json!([1, -1.5 / 8192.0, 0.5 / 8192.0]);
-    let converted = effects::import_fit(&fit).unwrap();
-    assert_eq!(
-        &converted["matrix"].as_array().unwrap()[..3],
-        &[json!(8194), json!(-2), json!(0)]
-    );
-    fit["post_matrix"] = json!([]);
-    assert!(effects::import_fit(&fit).is_err());
-}
-
-#[test]
 fn compiler_rejects_ambiguous_definitions_and_invalid_artwork() {
-    let mut definition = read_json(root().join("mono-orange-v1/effect.json"));
+    let mut definition = read_json(root().join("red-filter-mono-v1/effect.json"));
     definition["curves"] = json!([]);
     definition["curve_knots"] = json!(vec![[[0, 0], [255, 16320]]; 3]);
     assert!(effects::compile_definition(&definition).is_err());
     for (label, shape) in [
         ("", "film"),
-        ("X", "film"),
+        ("x", "film"),
         ("XXXXX", "plain"),
         ("MO", "other"),
         ("é", "film"),
@@ -292,4 +291,55 @@ fn pinned_source_inputs_match_their_manifest() {
             "{name}"
         );
     }
+}
+
+#[test]
+fn selective_color_compiles_to_kernel_integers_and_round_trips() {
+    let definition = read_json(keep_red());
+    let blob = effects::compile_definition(&definition).unwrap();
+    assert_eq!(&blob[84..88], &effects::FEATURE_SELECTIVE.to_le_bytes());
+    // cos and sin of 108.6 degrees in Q12, Q8 tangents of 20/35 and 6/14 degrees,
+    // then the chroma gate. The runtime test uses the same integers.
+    assert_eq!(
+        blob[106..120],
+        [0xe6, 0xfa, 0x2a, 0x0f, 93, 0, 179, 0, 27, 0, 64, 0, 6, 16]
+    );
+    assert!(blob[120..128].iter().all(|v| *v == 0));
+    let (effect, icon) = effects::decode(&blob).unwrap();
+    assert_eq!(
+        effect["selective_color"],
+        json!({"direction_q12": [-1306, 3882], "lower_tan_q8": [93, 179],
+               "higher_tan_q8": [27, 64], "chroma": [6, 16]})
+    );
+    assert_eq!(effects::encode(&effect, &icon).unwrap(), blob);
+}
+
+#[test]
+fn selective_color_rejects_invalid_parameters() {
+    let base = read_json(keep_red());
+    let invalid = [
+        json!({"hue": 360, "lower": [20, 35], "higher": [6, 14], "chroma": [6, 16]}),
+        json!({"hue": -1, "lower": [20, 35], "higher": [6, 14], "chroma": [6, 16]}),
+        json!({"hue": 108.6, "lower": [20, 20], "higher": [6, 14], "chroma": [6, 16]}),
+        json!({"hue": 108.6, "lower": [20, 35], "higher": [6, 76], "chroma": [6, 16]}),
+        json!({"hue": 108.6, "lower": [-1, 35], "higher": [6, 14], "chroma": [6, 16]}),
+        json!({"hue": 108.6, "lower": [20, 20.05], "higher": [6, 14], "chroma": [6, 16]}),
+        json!({"hue": 108.6, "lower": [20, 35], "higher": [6, 14], "chroma": [16, 6]}),
+        json!({"hue": 108.6, "lower": [20, 35], "higher": [6, 14], "chroma": [6, 182]}),
+        json!({"hue": 108.6, "lower": [20, 35], "higher": [6, 14], "chroma": [6.5, 16]}),
+        json!({"hue": 108.6, "lower": [20, 35], "higher": [6, 14], "chroma": [6, 16], "x": 1}),
+        json!({"hue": 108.6, "lower": [20, 35], "higher": [6, 14]}),
+        json!({"direction_q12": [-1306, 3882], "lower_tan_q8": [93, 179],
+               "higher_tan_q8": [27, 64], "chroma": [6, 16]}),
+    ];
+    for value in invalid {
+        let mut definition = base.clone();
+        definition["selective_color"] = value.clone();
+        assert!(effects::compile_definition(&definition).is_err(), "{value}");
+    }
+    // Selective color needs the chroma that a monochrome effect removes.
+    let mut mono = read_json(root().join("red-filter-mono-v1/effect.json"));
+    mono["selective_color"] = base["selective_color"].clone();
+    let error = effects::compile_definition(&mono).unwrap_err().to_string();
+    assert!(error.contains("selective"), "{error}");
 }

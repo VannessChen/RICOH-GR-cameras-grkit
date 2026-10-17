@@ -29,9 +29,17 @@ fn source() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../effects")
 }
 
+/// The number of effect definitions in `effects/`.
+fn source_count() -> usize {
+    fs::read_dir(source())
+        .unwrap()
+        .filter(|entry| entry.as_ref().unwrap().path().join("effect.json").is_file())
+        .count()
+}
+
 fn write_definition(root: &Path, id: &str) {
     let mut definition: Value =
-        serde_json::from_slice(&fs::read(source().join("mono-orange-v1/effect.json")).unwrap())
+        serde_json::from_slice(&fs::read(source().join("red-filter-mono-v1/effect.json")).unwrap())
             .unwrap();
     definition["effect_id"] = json!(id);
     let directory = root.join(id);
@@ -98,8 +106,8 @@ fn exports_effects_without_overwriting() {
         text(&output),
     ];
     let result = success(&args);
-    assert_eq!(result["effects"], 5);
-    assert_eq!(fs::read_dir(&output).unwrap().count(), 5);
+    assert_eq!(result["effects"], source_count());
+    assert_eq!(fs::read_dir(&output).unwrap().count(), source_count());
     assert!(!run(&args).status.success());
 }
 
@@ -206,10 +214,10 @@ fn compiled_directory_extras_and_changed_runtime_bytes_are_rejected() {
 fn symlink_definitions_and_compiled_effects_are_rejected() {
     use std::os::unix::fs::symlink;
     let tmp = tempfile::tempdir().unwrap();
-    let input = tmp.path().join("input/mono-orange-v1");
+    let input = tmp.path().join("input/red-filter-mono-v1");
     fs::create_dir_all(&input).unwrap();
     symlink(
-        source().join("mono-orange-v1/effect.json"),
+        source().join("red-filter-mono-v1/effect.json"),
         input.join("effect.json"),
     )
     .unwrap();
@@ -256,8 +264,9 @@ fn package_roundtrip_and_output_ownership() {
         text(&zip),
     ];
     let packaged = success(&args);
-    assert_eq!(packaged["entries"], 14);
-    assert_eq!(success(&["verify", text(&zip)])["effects"], 5);
+    // Nine runtime and document entries, then one per effect.
+    assert_eq!(packaged["entries"], 9 + source_count());
+    assert_eq!(success(&["verify", text(&zip)])["effects"], source_count());
     let before = fs::read(&zip).unwrap();
     assert!(!run(&args).status.success());
     assert_eq!(fs::read(&zip).unwrap(), before);
@@ -275,6 +284,63 @@ fn package_roundtrip_and_output_ownership() {
     .status
     .success());
     assert!(!rejected.exists());
+}
+
+#[test]
+fn package_hides_modules_and_may_omit_effects() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (build, effects) = fixture(tmp.path());
+    let zip = tmp.path().join("hidden.zip");
+    let packaged = success(&[
+        "package",
+        "--build",
+        text(&build),
+        "--effects",
+        text(&effects),
+        "--hide",
+        "guides,date-stamp",
+        "--out",
+        text(&zip),
+    ]);
+    // The module file is one more entry.
+    assert_eq!(packaged["entries"], 10 + source_count());
+    assert_eq!(packaged["hidden_modules"], json!(["guides", "date-stamp"]));
+    let verified = success(&["verify", text(&zip)]);
+    assert_eq!(verified["hidden_modules"], json!(["guides", "date-stamp"]));
+
+    // Without effects, Image Control is hidden, so one module must stay.
+    let framing_only = tmp.path().join("framing.zip");
+    let packaged = success(&[
+        "package",
+        "--build",
+        text(&build),
+        "--hide",
+        "guides",
+        "--hide",
+        "date-stamp",
+        "--out",
+        text(&framing_only),
+    ]);
+    assert_eq!(packaged["entries"], 10);
+    assert_eq!(success(&["verify", text(&framing_only)])["effects"], 0);
+    for hide in [
+        "framing,guides,date-stamp",
+        "image-control",
+        "guides,guides",
+    ] {
+        let rejected = tmp.path().join("rejected.zip");
+        let output = run(&[
+            "package",
+            "--build",
+            text(&build),
+            "--hide",
+            hide,
+            "--out",
+            text(&rejected),
+        ]);
+        assert!(!output.status.success(), "{hide}");
+        assert!(!rejected.exists(), "{hide}");
+    }
 }
 
 #[test]
@@ -508,4 +574,117 @@ fn imports_a_cube_into_a_buildable_effect_without_overwriting() {
     let name = effects::filename("warm-v1").unwrap();
     let (effect, _) = effects::decode(&fs::read(compiled.join(name)).unwrap()).unwrap();
     assert_eq!(effect["matrix"], definition["matrix"]);
+}
+
+#[test]
+fn site_export_publishes_only_the_verified_runtime() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (build, effects) = fixture(tmp.path());
+    fs::create_dir(build.join("objects")).unwrap();
+    fs::write(build.join("objects/module_payload.h"), b"firmware bytes").unwrap();
+    let site = tmp.path().join("site");
+    let result = success(&["site", "--build", text(&build), "--out", text(&site)]);
+    assert_eq!(result["target"], "gr3-2.10");
+    assert_eq!(result["files"], 6);
+
+    let exported = site.join("runtime/gr3-2.10");
+    assert_eq!(
+        fs::read(exported.join("build.json")).unwrap(),
+        fs::read(build.join("build.json")).unwrap()
+    );
+    assert!(!exported.join("objects").exists());
+    let mut entries: Vec<_> = fs::read_dir(&exported)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect();
+    entries.sort();
+    assert_eq!(entries, ["build.json", "sd"]);
+
+    // The exported tree is itself a valid build input.
+    let package = tmp.path().join("package.zip");
+    success(&[
+        "package",
+        "--build",
+        text(&exported),
+        "--effects",
+        text(&effects),
+        "--out",
+        text(&package),
+    ]);
+    assert!(
+        !run(&["site", "--build", text(&build), "--out", text(&site)])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn site_export_rejects_changed_runtime_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (build, _) = fixture(tmp.path());
+    fs::write(build.join("sd/SCRIPT/STARTUP.TTL"), b"changed").unwrap();
+    let site = tmp.path().join("site");
+    let result = run(&["site", "--build", text(&build), "--out", text(&site)]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("Runtime hash or size mismatch"));
+    assert!(!site.exists());
+}
+
+#[test]
+fn effect_publish_rejects_unknown_firmware_before_writing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let firmware = tmp.path().join("fwdc239b.bin");
+    fs::write(&firmware, b"not firmware").unwrap();
+    let out = tmp.path().join("site/effects/gr3-2.10");
+    let output = run(&[
+        "effects",
+        "publish",
+        "--source",
+        text(&source()),
+        "--firmware",
+        text(&firmware),
+        "--out",
+        text(&out),
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("does not match GR III 2.10"));
+    assert!(!out.exists());
+}
+
+/// End to end with the official firmware, which the repository cannot contain.
+#[test]
+fn effect_publish_writes_the_site_catalog() {
+    let Ok(firmware) = std::env::var("GRKIT_TEST_FIRMWARE") else {
+        eprintln!("SKIPPED effect publish: set GRKIT_TEST_FIRMWARE to GR III 2.10 firmware");
+        return;
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("site/effects/gr3-2.10");
+    let effects_source = source();
+    let args = [
+        "effects",
+        "publish",
+        "--source",
+        text(&effects_source),
+        "--firmware",
+        &firmware,
+        "--out",
+        text(&out),
+    ];
+    let result = success(&args);
+    assert_eq!(result["target"], "gr3-2.10");
+    assert_eq!(result["effects"], source_count());
+    let catalog = effects::parse_json(&fs::read(out.join("catalog.json")).unwrap()).unwrap();
+    let compiled = tmp.path().join("compiled");
+    compile(&source(), &compiled);
+    for entry in catalog["effects"].as_array().unwrap() {
+        let file = entry["file"].as_str().unwrap();
+        assert_eq!(
+            fs::read(out.join(file)).unwrap(),
+            fs::read(compiled.join(file)).unwrap()
+        );
+        let preview = fs::read(out.join(entry["preview"].as_str().unwrap())).unwrap();
+        assert_eq!(preview.len(), 33 * 33 * 33 * 3);
+    }
+    assert!(!run(&args).status.success(), "an existing output is kept");
 }
