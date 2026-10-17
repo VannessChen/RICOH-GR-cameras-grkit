@@ -1,6 +1,8 @@
 //! Compare the portable decoder with the actual installer parser and C ABI.
 
-use grkit_core::{effects, menu_text, modules::Hidden, packaging, runtime, selective::Selective};
+use grkit_core::{
+    effects, menu_text, modules::Selection, packaging, runtime, selective::Selective,
+};
 use serde_json::{json, Value};
 use std::{
     env,
@@ -415,7 +417,7 @@ _Static_assert(GRKIT_RECORD_POST + 20 <= GRKIT_RECORD_SIZE, "Extension overflow"
 int main(void) {
     printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE, GRKIT_ICON_STRIDE,
            GRKIT_PICTURE_SCRATCH, GRKIT_HOST_COUNT, GRKIT_HOST_RECORDS, GRKIT_HOST_ACTIVE, GRKIT_HOST_STAMP,
-           GRKIT_HOST_GUIDE, GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE, GRKIT_HOST_HIDDEN, GRKIT_TEXT_SIZE,
+           GRKIT_HOST_GUIDE, GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE, GRKIT_HOST_PLUGINS, GRKIT_TEXT_SIZE,
            GRKIT_TEXT_SUMMARY, GRKIT_TEXT_STRINGS, GRKIT_TEXT_LANGUAGES, GRKIT_TEXT_RECORDS, GRKIT_SUMMARY_UNITS, GRKIT_TAIL_SIZE);
     return 0;
 }
@@ -444,7 +446,7 @@ int main(void) {
             runtime::HOST_GUIDE,
             runtime::HOST_FRAME_RATIO,
             runtime::RECORD_CODE,
-            runtime::HOST_HIDDEN,
+            grkit_core::abi::HOST_PLUGINS,
             menu_text::TEXT_SIZE,
             menu_text::TEXT_SUMMARY,
             menu_text::STRINGS,
@@ -597,21 +599,21 @@ fn runtime_c_sources_compile_for_each_target() {
 }
 
 #[test]
-fn rust_and_installer_c_read_the_same_module_files() {
+fn rust_and_installer_c_read_the_same_plugin_files() {
     let Some(compiler) = compiler() else {
         return;
     };
     let temporary = tempfile::tempdir().unwrap();
-    let executable = temporary.path().join("visibility_contract");
+    let executable = temporary.path().join("selection_contract");
     compile(
         &compiler,
-        &root().join("tests/runtime/visibility_contract.c"),
+        &root().join("tests/runtime/selection_contract.c"),
         &executable,
         &[],
     );
     // 256 bytes is the largest file the installer reads.
     let long = format!("{}framing", " ".repeat(249));
-    let cases: [&[u8]; 16] = [
+    let cases: [&[u8]; 17] = [
         b"",
         b"\n",
         b"framing\n",
@@ -620,6 +622,7 @@ fn rust_and_installer_c_read_the_same_module_files() {
         b" \tguides\r\n",
         b"framing\nframing\n",
         b"image-control\n",
+        b"grain image-control",
         b"Framing\n",
         b"framingx\n",
         b"frame\n",
@@ -632,12 +635,50 @@ fn rust_and_installer_c_read_the_same_module_files() {
     for case in cases {
         let output = checked(Command::new(&executable).arg(hex::encode(case)));
         let native = String::from_utf8(output.stdout).unwrap();
-        let expected = match Hidden::parse(case) {
-            Ok(hidden) => format!("{}\n", hidden.mask()),
+        let expected = match Selection::parse(case) {
+            Ok(selection) => format!("{}\n", selection.mask()),
             Err(_) => "invalid\n".to_owned(),
         };
         assert_eq!(native, expected, "{:?}", String::from_utf8_lossy(case));
     }
-    assert_eq!(Hidden::parse(b"guides date-stamp").unwrap().mask(), 0b1100);
-    assert!(Hidden::parse(long.as_bytes()).is_ok());
+    assert_eq!(
+        Selection::parse(b"guides date-stamp").unwrap().mask(),
+        0b1100
+    );
+    assert!(Selection::parse(long.as_bytes()).is_ok());
+}
+
+/// Plugins are target neutral: each plugin file includes only the plugin
+/// interface and names no firmware symbol or address.
+#[test]
+fn plugins_hold_no_firmware_detail() {
+    let mut checked = 0;
+    for plugin in fs::read_dir(root().join("runtime/plugins")).unwrap() {
+        for file in fs::read_dir(plugin.unwrap().path()).unwrap() {
+            let path = file.unwrap().path();
+            let text = fs::read_to_string(&path).unwrap();
+            let name = path.display();
+            for line in text.lines().map(str::trim) {
+                if line.starts_with("#include") {
+                    assert_eq!(line, "#include \"../../plugin.h\"", "{name}");
+                }
+            }
+            for symbol in ["FW_", "HOOK_", "firmware.h", "LIVEVIEW_", "ADJ_"] {
+                assert!(!text.contains(symbol), "{name} names {symbol}");
+            }
+            // RTOS code and data addresses: 0x53000000..0x56000000.
+            for (at, _) in text.match_indices("0x5") {
+                let digits: String = text[at + 2..]
+                    .chars()
+                    .take_while(char::is_ascii_hexdigit)
+                    .collect();
+                assert!(
+                    digits.len() < 8 || !matches!(&digits[..2], "53" | "54" | "55"),
+                    "{name} has an address 0x{digits}"
+                );
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked >= 8, "Expected the plugin pages and handlers");
 }

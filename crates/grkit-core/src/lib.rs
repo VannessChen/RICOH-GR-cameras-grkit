@@ -1,5 +1,6 @@
 //! Portable effect formats and SD package rules. All platform I/O lives outside this crate.
 
+pub mod abi;
 pub mod artwork;
 pub mod camera;
 pub mod cube;

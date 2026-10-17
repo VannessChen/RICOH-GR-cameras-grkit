@@ -60,6 +60,8 @@ static void reset(void)
     memset((void *)header, 0, sizeof(header));
     header[GRKIT_HOST_COUNT / 4] = 3;
     header[GRKIT_HOST_RECORDS / 4] = RECORDS;
+    /* Every plugin is installed. */
+    header[GRKIT_HOST_PLUGINS / 4] = (1U << PLUGIN_COUNT) - 1;
 }
 static uint32_t record(uint32_t index) { return RECORDS + index * GRKIT_RECORD_SIZE; }
 static void post(uint32_t r, const short *matrix)
@@ -462,6 +464,14 @@ int main(void)
         picture_encode(0, MESSAGE);
         assert((changes(0, 0).lit != 0) == (k < 2));
     }
+    /* A plugin that PLUGINS.TXT does not install encodes nothing. */
+    encode_setup();
+    fill_planes(40, 128, 128);
+    header[GRKIT_HOST_STAMP / 4] = 1;
+    header[GRKIT_HOST_PLUGINS / 4] &= ~(1U << PLUGIN_DATE_STAMP);
+    picture_encode(0, MESSAGE);
+    assert(flushes == 0);
+    for (u32 i = 0; i < 3; ++i) assert(changes(i, 0).lit == 0);
     /* Division helper used for reciprocals. */
     for (u32 n = 0; n < 70000; n += 37) for (u32 d = 1; d < 400; d += 13) assert(divide(n, d) == n / d);
     return 0;

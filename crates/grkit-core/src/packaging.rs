@@ -11,7 +11,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, DateTime, ZipArchive, Zip
 use crate::{
     camera::{self, Camera},
     effects,
-    modules::{self, Hidden},
+    modules::{self, Selection},
     runtime, Files,
 };
 
@@ -275,7 +275,8 @@ pub struct Contents {
     /// The camera whose ModeSet file the package has.
     pub camera: &'static Camera,
     pub effect_ids: Vec<String>,
-    pub hidden: Hidden,
+    /// The plugins that the installer installs.
+    pub plugins: Selection,
     /// The language of the translated guide, or English if the package has none.
     pub language: Language,
 }
@@ -335,9 +336,9 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         .collect();
     validate_runtime(&runtime, camera.target)?;
     let mut ids = BTreeSet::new();
-    let mut hidden = Hidden::default();
+    let mut plugins = Selection::ALL;
     let mut language = Language::English;
-    let modules_path = format!("SD_ROOT/{}", modules::PATH);
+    let plugins_path = format!("SD_ROOT/{}", modules::PATH);
     for (name, blob) in contents
         .iter()
         .filter(|(name, _)| !mandatory.contains(*name))
@@ -350,8 +351,8 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
                 "Profile filename does not match its stable ID"
             );
             ensure!(ids.insert(id.to_owned()), "Duplicate effect ID");
-        } else if *name == modules_path {
-            hidden = Hidden::parse(blob)?;
+        } else if *name == plugins_path {
+            plugins = Selection::parse(blob)?;
         } else if let Some(translated) = Language::ALL
             .into_iter()
             .find(|other| *other != Language::English && other.guide_path() == name)
@@ -375,13 +376,21 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         camera.name
     );
     ensure!(
-        !hidden.hides_everything(ids.len(), camera.modules),
-        "The package shows no module: it has no effects and hides every other module"
+        plugins
+            .names()
+            .iter()
+            .all(|name| camera.plugins.contains(name)),
+        "{} has no runtime for each selected plugin",
+        camera.name
+    );
+    ensure!(
+        !plugins.shows_nothing(ids.len(), camera.plugins),
+        "The package shows no plugin: select a plugin other than Image Control, or add effects"
     );
     Ok(Contents {
         camera,
         effect_ids: ids.into_iter().collect(),
-        hidden,
+        plugins,
         language,
     })
 }
@@ -427,16 +436,16 @@ pub const LICENSES: &str = concat!(
     "```\n",
 );
 
-/// Builds the package ZIP for one camera with the English guide only. `hidden`
-/// names the modules that the camera menu hides.
+/// Builds the package ZIP for one camera with the English guide only. `plugins`
+/// names the plugins that the installer installs.
 pub fn assemble(
     runtime: &Files,
     build: &Value,
     effects: &Files,
-    hidden: Hidden,
+    plugins: Selection,
     camera: &Camera,
 ) -> Result<Vec<u8>> {
-    assemble_localized(runtime, build, effects, hidden, camera, Language::English)
+    assemble_localized(runtime, build, effects, plugins, camera, Language::English)
 }
 
 /// Builds the package ZIP for one camera. A `language` other than English adds
@@ -445,7 +454,7 @@ pub fn assemble_localized(
     runtime: &Files,
     build: &Value,
     effects: &Files,
-    hidden: Hidden,
+    plugins: Selection,
     camera: &Camera,
     language: Language,
 ) -> Result<Vec<u8>> {
@@ -476,7 +485,7 @@ pub fn assemble_localized(
             blob.clone(),
         );
     }
-    if let Some(file) = hidden.file() {
+    if let Some(file) = plugins.file() {
         contents.insert(format!("SD_ROOT/{}", modules::PATH), file);
     }
     contents.insert(
@@ -562,7 +571,7 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
     let Contents {
         camera,
         effect_ids,
-        hidden,
+        plugins,
         language,
     } = validate_contents(&contents)?;
     ensure!(
@@ -571,7 +580,7 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
     );
     Ok(
         json!({"camera": camera.id, "target": camera.target, "effect_ids": effect_ids,
-            "hidden_modules": hidden.names(), "language": language.code(),
+            "plugins": plugins.names(), "language": language.code(),
             "entries": contents.len()}),
     )
 }

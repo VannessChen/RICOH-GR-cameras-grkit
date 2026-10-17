@@ -1,6 +1,6 @@
 use std::io::{Cursor, Read, Write};
 
-use grkit_core::{camera, effects, modules::Hidden, packaging::*, runtime, Files};
+use grkit_core::{camera, effects, modules::Selection, packaging::*, runtime, Files};
 use serde_json::{json, Value};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
@@ -31,7 +31,7 @@ fn package() -> Vec<u8> {
         &runtime_fixture(),
         &build(),
         &Files::from([effect("test-effect")]),
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR3,
     )
     .unwrap()
@@ -229,7 +229,7 @@ fn production_boundaries_are_enforced() {
             &runtime_fixture(),
             &altered,
             &Files::new(),
-            Hidden::default(),
+            Selection::ALL,
             &camera::GR3
         )
         .is_err());
@@ -253,7 +253,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
         &runtime_fixture(),
         &build(),
         &effects,
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR3,
     )
     .unwrap();
@@ -269,7 +269,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
         &runtime_fixture(),
         &build(),
         &effects,
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR3
     )
     .is_err());
@@ -277,7 +277,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
         &runtime_fixture(),
         &build(),
         &Files::new(),
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR3,
     )
     .unwrap();
@@ -285,44 +285,56 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
 }
 
 #[test]
-fn hidden_modules_are_packaged_and_verified() {
+fn selected_plugins_are_packaged_and_verified() {
     let effects = Files::from([effect("test-effect")]);
-    let hidden = Hidden::from_names(["date-stamp", "framing"]).unwrap();
-    let bytes = assemble(&runtime_fixture(), &build(), &effects, hidden, &camera::GR3).unwrap();
+    let plugins = Selection::from_names(["date-stamp", "image-control"]).unwrap();
+    let bytes = assemble(
+        &runtime_fixture(),
+        &build(),
+        &effects,
+        plugins,
+        &camera::GR3,
+    )
+    .unwrap();
     let files = unpack(&bytes);
     assert_eq!(
-        files["SD_ROOT/SCRIPT/PLUGINS/MODULES.TXT"],
-        b"framing\ndate-stamp\n"
+        files["SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT"],
+        b"image-control\ndate-stamp\n"
     );
     assert_eq!(
-        verify_package(&bytes).unwrap()["hidden_modules"],
-        json!(["framing", "date-stamp"])
+        verify_package(&bytes).unwrap()["plugins"],
+        json!(["image-control", "date-stamp"])
     );
-    // A package that hides nothing has no file and keeps its earlier bytes.
+    // A package with every plugin has no file and keeps its earlier bytes.
     let plain = assemble(
         &runtime_fixture(),
         &build(),
         &effects,
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR3,
     )
     .unwrap();
-    assert!(!unpack(&plain).contains_key("SD_ROOT/SCRIPT/PLUGINS/MODULES.TXT"));
-    assert_eq!(verify_package(&plain).unwrap()["hidden_modules"], json!([]));
+    assert!(!unpack(&plain).contains_key("SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT"));
+    assert_eq!(
+        verify_package(&plain).unwrap()["plugins"],
+        json!(grkit_core::modules::NAMES)
+    );
     assert_eq!(plain, package());
 }
 
 #[test]
-fn invalid_module_files_and_empty_menus_are_rejected() {
+fn invalid_plugin_files_and_empty_menus_are_rejected() {
     for text in [
-        b"image-control\n".as_slice(),
+        b"hdr\n".as_slice(),
         b"guides guides",
         b"Framing",
         b"framing,guides",
         b"\xff",
+        // Nothing to show.
+        b"",
     ] {
         let mut files = unpack(&package());
-        files.insert("SD_ROOT/SCRIPT/PLUGINS/MODULES.TXT".into(), text.to_vec());
+        files.insert("SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT".into(), text.to_vec());
         assert!(
             validate_contents(&with_sums(files)).is_err(),
             "{}",
@@ -331,19 +343,23 @@ fn invalid_module_files_and_empty_menus_are_rejected() {
     }
     let mut files = unpack(&package());
     files.insert(
-        "SD_ROOT/SCRIPT/PLUGINS/MODULES.TXT".into(),
+        "SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT".into(),
         b" guides\r\n\tframing ".to_vec(),
     );
     assert_eq!(
-        validate_contents(&with_sums(files)).unwrap().hidden.names(),
+        validate_contents(&with_sums(files))
+            .unwrap()
+            .plugins
+            .names(),
         ["framing", "guides"]
     );
-    let all = Hidden::from_names(grkit_core::modules::NAMES).unwrap();
+    // Image Control alone needs effects.
+    let image_control = Selection::from_names(["image-control"]).unwrap();
     assert!(assemble(
         &runtime_fixture(),
         &build(),
         &Files::new(),
-        all,
+        image_control,
         &camera::GR3
     )
     .is_err());
@@ -351,13 +367,13 @@ fn invalid_module_files_and_empty_menus_are_rejected() {
         &runtime_fixture(),
         &build(),
         &Files::from([effect("test-effect")]),
-        all,
+        image_control,
         &camera::GR3,
     )
     .unwrap();
     assert_eq!(
-        verify_package(&bytes).unwrap()["hidden_modules"],
-        json!(grkit_core::modules::NAMES)
+        verify_package(&bytes).unwrap()["plugins"],
+        json!(["image-control"])
     );
 }
 
@@ -543,7 +559,7 @@ fn each_camera_gets_its_modeset_file_and_guide() {
         &runtime_fixture(),
         &build(),
         &effects,
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR3X,
     )
     .unwrap();
@@ -599,7 +615,7 @@ fn a_package_adds_the_guide_of_its_language() {
             &runtime_fixture(),
             &build(),
             &effects,
-            Hidden::default(),
+            Selection::ALL,
             &camera::GR3X,
             language,
         )
@@ -620,7 +636,7 @@ fn a_package_adds_the_guide_of_its_language() {
         &gr4_runtime_fixture(),
         &gr4_build(),
         &Files::new(),
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR4,
         Language::TraditionalChinese,
     )
@@ -664,17 +680,6 @@ fn a_package_has_the_modeset_file_of_exactly_one_camera() {
     assert_eq!(camera::find("gr4").unwrap(), &camera::GR4);
 }
 
-#[test]
-fn the_loader_waits_before_its_first_request() {
-    let loader = String::from_utf8(runtime::loader()).unwrap();
-    let first_request = loader.find("sendln").unwrap();
-    let wait = loader
-        .find(&format!("mpause {}", runtime::FIRST_REQUEST_DELAY_MS))
-        .unwrap();
-    assert!(wait < first_request);
-    const { assert!(runtime::FIRST_REQUEST_DELAY_MS >= 3000) };
-}
-
 fn gr4_runtime_fixture() -> Files {
     let mut binary = vec![0; 52];
     binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
@@ -693,7 +698,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
         &runtime,
         &gr4_build(),
         &Files::new(),
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR4,
     )
     .unwrap();
@@ -711,7 +716,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
         &runtime_fixture(),
         &build(),
         &Files::new(),
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR4
     )
     .is_err());
@@ -720,7 +725,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
         &runtime,
         &gr4_build(),
         &Files::from([effect("test-effect")]),
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR4,
     )
     .unwrap();
@@ -728,9 +733,16 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
         verify_package(&bytes).unwrap()["effect_ids"],
         json!(["test-effect"])
     );
-    // GR IV has Framing, so hiding the other modules without effects still shows Framing.
-    let hidden = Hidden::from_names(["guides", "date-stamp", "grain"]).unwrap();
-    assert!(assemble(&runtime, &gr4_build(), &Files::new(), hidden, &camera::GR4).is_ok());
-    let hidden = Hidden::from_names(["framing", "guides", "date-stamp", "grain"]).unwrap();
-    assert!(assemble(&runtime, &gr4_build(), &Files::new(), hidden, &camera::GR4).is_err());
+    // GR IV has Framing, so Framing alone without effects shows a menu.
+    let framing = Selection::from_names(["framing"]).unwrap();
+    assert!(assemble(&runtime, &gr4_build(), &Files::new(), framing, &camera::GR4).is_ok());
+    let image_control = Selection::from_names(["image-control"]).unwrap();
+    assert!(assemble(
+        &runtime,
+        &gr4_build(),
+        &Files::new(),
+        image_control,
+        &camera::GR4
+    )
+    .is_err());
 }

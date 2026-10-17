@@ -1,5 +1,5 @@
-#include "abi.h"
 #include "firmware.h"
+#include "abi.h"
 #include "hooks.h"
 .syntax unified
 .arm
@@ -7,7 +7,7 @@
 /* The installer relocates this literal to the private host header. */
 .global framing_header
 framing_header:
-    ldr r0, =0x58012340
+    ldr r0, =GRKIT_HEADER_REFERENCE
     bx lr
 #ifdef HOOK_FRAMING_CAPTURE_REQUEST_HOOK
 /* Replaces `ldrb r1, [r4]` in the still aspect property handler. r1 returns
@@ -64,7 +64,7 @@ framing_children:
 #endif
 /* r12 = 1 when id 2 means 65:24. Clobbers only r12 and the flags. */
 xpan_active:
-    ldr r12, =0x58012340
+    ldr r12, =GRKIT_HEADER_REFERENCE
     ldrb r12, [r12, #GRKIT_HOST_FRAME_FILE]
     cmp r12, #0
     beq 1f
@@ -72,7 +72,7 @@ xpan_active:
     moveq r12, #1
     movne r12, #0
     bx lr
-1:  ldr r12, =0x58012340
+1:  ldr r12, =GRKIT_HEADER_REFERENCE
     ldr r12, [r12, #GRKIT_HOST_FRAME_RATIO]
     cmp r12, #1
     moveq r12, #1
@@ -144,7 +144,7 @@ framing_classify:
     push {r0-r3,lr}
     bl xpan_size
     pop {r0-r3,lr}
-    ldr r2, =0x58012340
+    ldr r2, =GRKIT_HEADER_REFERENCE
     cmp r12, #0
     blt 5f
     mov r3, #2

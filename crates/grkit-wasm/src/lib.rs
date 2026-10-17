@@ -8,7 +8,7 @@ use anyhow::{ensure, Context, Result};
 use grkit_core::{
     camera::{self, Camera},
     effects,
-    modules::Hidden,
+    modules::Selection,
     packaging, runtime, Files,
 };
 use wasm_bindgen::prelude::*;
@@ -19,7 +19,7 @@ pub struct Builder {
     paths: Vec<String>,
     runtime: Files,
     effects: Files,
-    hidden: Vec<String>,
+    plugins: Selection,
     camera: &'static Camera,
     language: packaging::Language,
 }
@@ -44,7 +44,7 @@ impl Builder {
             paths,
             runtime: Files::new(),
             effects: Files::new(),
-            hidden: Vec::new(),
+            plugins: Selection::ALL,
             camera: &camera::GR3,
             language: packaging::Language::English,
         })
@@ -90,13 +90,13 @@ impl Builder {
         Ok(id)
     }
 
-    /// Hides one module from the camera menu: `framing`, `guides`, `date-stamp`, or `grain`.
-    /// Image Control shows exactly when the package has effects.
-    pub fn hide_module(&mut self, name: &str) -> Result<()> {
-        let mut hidden = self.hidden.clone();
-        hidden.push(name.to_owned());
-        Hidden::from_names(hidden.iter().map(String::as_str))?;
-        self.hidden = hidden;
+    /// Leaves one plugin out of the package: `image-control`, `framing`, `guides`,
+    /// `date-stamp`, or `grain`. The installer changes no firmware for it.
+    /// Without effects, the installer leaves out Image Control by itself.
+    pub fn omit_plugin(&mut self, name: &str) -> Result<()> {
+        let plugins = self.plugins.without(name)?;
+        ensure!(plugins != self.plugins, "Plugin omitted twice: {name}");
+        self.plugins = plugins;
         Ok(())
     }
 
@@ -117,12 +117,11 @@ impl Builder {
     /// Verifies the runtime against its manifest and returns the verified package ZIP.
     pub fn build(&self) -> Result<Vec<u8>> {
         let (runtime, manifest) = packaging::load_runtime(&self.manifest, &self.runtime)?;
-        let hidden = Hidden::from_names(self.hidden.iter().map(String::as_str))?;
         packaging::assemble_localized(
             &runtime,
             &manifest,
             &self.effects,
-            hidden,
+            self.plugins,
             self.camera,
             self.language,
         )
@@ -161,10 +160,11 @@ impl Package {
         self.0.add_effect(blob).map_err(js_error)
     }
 
-    /// Hides one module from the camera menu: `framing`, `guides`, `date-stamp`, or `grain`.
-    #[wasm_bindgen(js_name = hideModule)]
-    pub fn hide_module(&mut self, name: &str) -> Result<(), JsError> {
-        self.0.hide_module(name).map_err(js_error)
+    /// Leaves one plugin out of the package: `image-control`, `framing`, `guides`,
+    /// `date-stamp`, or `grain`.
+    #[wasm_bindgen(js_name = omitPlugin)]
+    pub fn omit_plugin(&mut self, name: &str) -> Result<(), JsError> {
+        self.0.omit_plugin(name).map_err(js_error)
     }
 
     /// Selects the camera: `gr3` (the default), `gr3x`, or `gr4`.

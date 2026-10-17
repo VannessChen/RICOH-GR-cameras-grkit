@@ -67,6 +67,15 @@ pub fn elf_text(blob: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u32>)> {
         }
     }
     let text_index = text_index.context("ARM ELF has no .text section")?;
+    // The private code is .text only (with .rodata linked into it). Static
+    // variables in .data or .bss would be dropped without this check.
+    for section in &sections {
+        let name = string(names, section[0] as usize)?;
+        ensure!(
+            section[2] & 2 == 0 || section[5] == 0 || name == ".text",
+            "Section {name} is not part of the private code: use no writable static data"
+        );
+    }
     ensure!(
         !sections
             .iter()

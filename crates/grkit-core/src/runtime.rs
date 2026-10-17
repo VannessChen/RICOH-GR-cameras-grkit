@@ -6,8 +6,12 @@ use serde_json::{json, Value};
 
 use crate::{camera::Camera, Files};
 
-pub const HEADER_SIZE: usize = 256;
-pub const RECORD_SIZE: usize = 0x740;
+pub use crate::abi::{
+    HEADER_REFERENCE, HOST_ACTIVE, HOST_COUNT, HOST_FRAME_RATIO, HOST_GRAIN, HOST_GUIDE,
+    HOST_HEADER_SIZE as HEADER_SIZE, HOST_PLUGINS, HOST_RECORDS, HOST_STAMP, PICTURE_SCRATCH,
+    RECORD_CODE, RECORD_SIZE, TAIL_SIZE,
+};
+
 /// The icon slot of GR III 2.10: an 8-byte native descriptor, then 40 x 40 RGBA.
 pub const ICON_STRIDE: usize = 6408;
 
@@ -27,37 +31,77 @@ pub const ICONS_PER_CHUNK: usize = 40;
 pub const HOST_ICON_COUNT: usize = 20;
 /// Product limit for private Image Control effects.
 pub const MAX_COUNT: usize = 20;
-/// Picture scratch after the records (`GRKIT_PICTURE_SCRATCH`): the date stamp
-/// core and halo masks (141,376 bytes), then the shot ring (a write count, a
-/// pad word, and eight {key, record} entries).
-pub const PICTURE_SCRATCH: usize = 141376 + 8 + 8 * 8;
-/// Everything after the records: the picture scratch, then the menu text
-/// (`crate::menu_text`).
-pub const TAIL_SIZE: usize = PICTURE_SCRATCH + crate::menu_text::TEXT_SIZE;
 // One script array holds the header, every record, the scratch, and the text: at most 65536 words.
 const _: () = assert!(HEADER_SIZE + MAX_COUNT * RECORD_SIZE + TAIL_SIZE <= 65536 * 4);
 const _: () = assert!(PICTURE_SCRATCH.is_multiple_of(4) && TAIL_SIZE.is_multiple_of(4));
 pub const MAX_CHUNKS: usize = (MAX_COUNT + HOST_ICON_COUNT).div_ceil(ICONS_PER_CHUNK);
 const _: () = assert!(MAX_COUNT + HOST_ICON_COUNT <= ICONS_PER_CHUNK);
-pub const HEADER_REFERENCE: u32 = 0x58012340;
-/// Header and record offsets that the loader script reads and writes. They
-/// match `runtime/abi.h`, which a native test checks.
-pub const HOST_COUNT: usize = 0;
-pub const HOST_RECORDS: usize = 4;
-pub const HOST_ACTIVE: usize = 8;
-pub const HOST_STAMP: usize = 52;
-pub const HOST_GRAIN: usize = 72;
-/// Modules that `MODULES.TXT` hides: bit n is module n of `runtime/modules.h`.
-pub const HOST_HIDDEN: usize = 56;
-pub const HOST_GUIDE: usize = 204;
-pub const HOST_FRAME_RATIO: usize = 208;
-pub const RECORD_CODE: usize = 0x6f8;
 /// Selections kept across power-off, written by the resident loader through the
 /// camera's own file system, never from Linux while the camera may write photos.
 pub const STATE_FILE: &str = "STATE.TXT";
+/// The new state file before it replaces `STATE_FILE`.
+pub const STATE_TEMPORARY: &str = "STATE.TMP";
+/// The largest state file that the loader reads.
+pub const STATE_MAX_BYTES: usize = 512;
+
+/// A selection that `STATE.TXT` keeps. The file holds two lines for each key:
+/// the key ID (`state_key_id`), then the value, both in decimal.
+pub struct StateKey {
+    /// `<module>.<key>`.
+    pub name: &'static str,
+    /// The header word that holds the value, or `None` for the Image Control
+    /// effect, which the file keeps as the ImageTone code of the record.
+    pub word: Option<usize>,
+    pub max: u32,
+    /// The bit of the plugin in `HOST_PLUGINS`. A plugin that is not
+    /// installed restores 0.
+    pub module: u32,
+}
+
+pub const STATE_KEYS: &[StateKey] = &[
+    StateKey {
+        name: "image-control.effect",
+        word: None,
+        max: 0xffff,
+        module: 0,
+    },
+    StateKey {
+        name: "framing.ratio",
+        word: Some(HOST_FRAME_RATIO),
+        max: 3,
+        module: 1,
+    },
+    StateKey {
+        name: "guides.style",
+        word: Some(HOST_GUIDE),
+        max: 4,
+        module: 2,
+    },
+    StateKey {
+        name: "date-stamp.style",
+        word: Some(HOST_STAMP),
+        max: 4,
+        module: 3,
+    },
+    StateKey {
+        name: "grain.level",
+        word: Some(HOST_GRAIN),
+        max: 3,
+        module: 4,
+    },
+];
+
+/// The most digits of a number in the state file. The loader parses the digits
+/// itself, and 9 digits cannot overflow its 32-bit integers.
+pub const STATE_DIGITS: usize = 9;
+
+/// The ID of a state key in the file: the CRC-32 of its name, modulo 10^9, so
+/// it has at most `STATE_DIGITS` digits.
+pub fn state_key_id(name: &str) -> u32 {
+    crc32fast::hash(name.as_bytes()) % 1_000_000_000
+}
+
 pub const LINUX_DIRECTORY: &str = "/media/storage1/SCRIPT/PLUGINS";
-/// The wait of the loader before its first `lcmd` request. See `loader`.
-pub const FIRST_REQUEST_DELAY_MS: u32 = 3000;
 
 pub fn layout(count: usize) -> Result<Value> {
     ensure!(count <= MAX_COUNT, "Expected 0..{MAX_COUNT} effects");
@@ -85,11 +129,6 @@ pub fn activation_files(camera: &Camera) -> Files {
 /// `lcmd` requests are synchronous: each returns after the Linux command ends,
 /// or with NG when Linux is not ready. The loader checks the result file after
 /// each request and repeats it after a short pause.
-///
-/// The first `lcmd` creates the firmware's host-interface command factory. During
-/// the first second after power-on, that creation took a data abort in the Script
-/// task in some starts, so the loader waits before its first request. Linux mounts
-/// the card about 5 s after power-on, so the wait does not delay the installation.
 pub fn loader() -> Vec<u8> {
     loader_for(ICON_STRIDE)
 }
@@ -98,10 +137,7 @@ pub fn loader() -> Vec<u8> {
 pub fn loader_for(icon_stride: usize) -> Vec<u8> {
     let path = |name: &str| format!("C:\\SCRIPT\\PLUGINS\\{name}");
     let (plan, done, failed) = (path("MODULE.BIN"), path("INSTALL.OK"), path("INSTALL.ERR"));
-    let mut lines: Vec<String> = vec![
-        format!("mpause {FIRST_REQUEST_DELAY_MS}"),
-        "sendln 'lcmd_resp on'".into(),
-    ];
+    let mut lines: Vec<String> = vec!["sendln 'lcmd_resp on'".into()];
     for name in [
         "MODULE.BIN",
         "MODULE.TMP",
@@ -181,118 +217,7 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         "if attempts > 60 mpause 9500".into(),
         "goto install".into(),
     ]);
-    // The private header is the `registry` array, so the script reads and
-    // writes it directly. The state is one integer:
-    // code + 65536 * (ratio + 4 * (guide + 8 * (stamp + 8 * grain))), code 0
-    // for Off. A file from before Grain has grain 0.
-    let word = |offset: usize| format!("registry[{}]", offset / 4);
-    let state = path(STATE_FILE);
-    lines.extend([
-        ":resident".into(),
-        "call restore".into(),
-        ":watch".into(),
-        "mpause 2000".into(),
-        "call snapshot".into(),
-        "if state = saved goto watch".into(),
-        // `filecreate` keeps the old bytes after the new text, so a shorter
-        // number would end with digits of the previous one. Delete the file first.
-        format!("filedelete '{state}'"),
-        format!("filecreate sfh '{state}'"),
-        "if sfh < 0 goto watch".into(),
-        "int2str line state".into(),
-        "filewrite sfh line".into(),
-        "fileclose sfh".into(),
-        "saved = state".into(),
-        "goto watch".into(),
-        ":snapshot".into(),
-        format!("active = {}", word(HOST_ACTIVE)),
-        "code = 0".into(),
-        "if active = 0 goto snapshot_values".into(),
-        format!("index = (active - {}) / {RECORD_SIZE}", word(HOST_RECORDS)),
-        format!(
-            "code = registry[{} + index * {} + {}]",
-            HEADER_SIZE / 4,
-            RECORD_SIZE / 4,
-            RECORD_CODE / 4
-        ),
-        ":snapshot_values".into(),
-        format!(
-            "state = code + 65536 * ({} + 4 * ({} + 8 * ({} + 8 * {})))",
-            word(HOST_FRAME_RATIO),
-            word(HOST_GUIDE),
-            word(HOST_STAMP),
-            word(HOST_GRAIN)
-        ),
-        "return".into(),
-        // An unreadable or out-of-range file restores nothing. An effect that is
-        // no longer installed stays Off. `fileopen` creates a missing file, and a
-        // read of an empty file stops the interpreter, so check the size first.
-        ":restore".into(),
-        "size = 0".into(),
-        format!("filestat '{state}' size"),
-        "if size < 1 goto restore_end".into(),
-        "if size > 10 goto restore_end".into(),
-        format!("fileopen sfh '{state}' 0"),
-        "if sfh < 0 goto restore_end".into(),
-        "fileread sfh size line".into(),
-        "fileclose sfh".into(),
-        "str2int stored line".into(),
-        "if result = 0 goto restore_end".into(),
-        "if stored < 0 goto restore_end".into(),
-        "rest = stored / 65536".into(),
-        "code = stored - rest * 65536".into(),
-        "upper = rest / 4".into(),
-        "ratio = rest - upper * 4".into(),
-        "rest = upper / 8".into(),
-        "guide = upper - rest * 8".into(),
-        "if guide > 4 goto restore_end".into(),
-        "grain = rest / 8".into(),
-        "stamp = rest - grain * 8".into(),
-        "if stamp > 4 goto restore_end".into(),
-        "if grain > 3 goto restore_end".into(),
-        // A hidden module has no menu to turn it off, so it restores Off. The
-        // script has no bit operators. Bit 0 is Image Control, which is never hidden.
-        format!("hidden = {} / 2", word(HOST_HIDDEN)),
-    ]);
-    for value in ["ratio", "guide", "stamp", "grain"] {
-        lines.extend([
-            "higher = hidden / 2".into(),
-            "hiddenbit = hidden - higher * 2".into(),
-            format!("if hiddenbit = 1 {value} = 0"),
-            "hidden = higher".into(),
-        ]);
-    }
-    lines.extend([
-        format!("{} = ratio", word(HOST_FRAME_RATIO)),
-        format!("{} = guide", word(HOST_GUIDE)),
-        format!("{} = stamp", word(HOST_STAMP)),
-        format!("{} = grain", word(HOST_GRAIN)),
-        "index = 0".into(),
-        ":restore_find".into(),
-        "if code = 0 goto restore_end".into(),
-        format!("if index >= {} goto restore_end", word(HOST_COUNT)),
-        format!(
-            "if registry[{} + index * {} + {}] <> code goto restore_next",
-            HEADER_SIZE / 4,
-            RECORD_SIZE / 4,
-            RECORD_CODE / 4
-        ),
-        format!(
-            "{} = {} + index * {RECORD_SIZE}",
-            word(HOST_ACTIVE),
-            word(HOST_RECORDS)
-        ),
-        "goto restore_end".into(),
-        ":restore_next".into(),
-        "index = index + 1".into(),
-        "goto restore_find".into(),
-        // Write only after the next change, so a missing effect keeps its file entry
-        // until the user selects something else.
-        ":restore_end".into(),
-        "call snapshot".into(),
-        "saved = state".into(),
-        "return".into(),
-    ]);
+    lines.extend(state_script());
     lines.extend(
         [
             ":reject_close",
@@ -317,6 +242,234 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
     (lines.join("\r\n") + "\r\n").into_bytes()
 }
 
+/// The resident part of the loader: it restores the selections, then saves them
+/// after each change.
+///
+/// The private header is the `registry` array, so the script reads and writes
+/// it directly. A runtime error ends the script, and the interpreter then frees
+/// the arrays that the hooks use. So each array index is checked before use,
+/// and no expression divides by a value from the card or from the header.
+fn state_script() -> Vec<String> {
+    let state = format!("C:\\SCRIPT\\PLUGINS\\{STATE_FILE}");
+    let temporary = format!("C:\\SCRIPT\\PLUGINS\\{STATE_TEMPORARY}");
+    let word = |offset: usize| format!("registry[{}]", offset / 4);
+    let code_word = |index: &str| {
+        format!(
+            "registry[{} + {index} * {} + {}]",
+            HEADER_SIZE / 4,
+            RECORD_SIZE / 4,
+            RECORD_CODE / 4
+        )
+    };
+    let keys = STATE_KEYS.iter().enumerate();
+    let mut lines: Vec<String> = vec![":resident".into(), "call restore".into()];
+
+    // Save after a change. `filerename` cannot replace a file, and its result
+    // is 0 for success and failure, so each step checks the files. If power
+    // fails between the steps, the restore reads STATE.TMP.
+    lines.extend([
+        ":watch".into(),
+        "mpause 2000".into(),
+        "call snapshot".into(),
+        "call save".into(),
+        "goto watch".into(),
+        ":save".into(),
+        "changed = 0".into(),
+    ]);
+    for (i, _) in keys.clone() {
+        lines.push(format!("if value{i} <> saved{i} changed = 1"));
+    }
+    lines.extend([
+        "if changed = 0 goto save_end".into(),
+        format!("filedelete '{temporary}'"),
+        format!("filecreate sfh '{temporary}'"),
+        "if sfh < 0 goto save_end".into(),
+    ]);
+    for (i, key) in keys.clone() {
+        lines.extend([
+            format!("filewriteln sfh '{}'", state_key_id(key.name)),
+            format!("int2str line value{i}"),
+            "filewriteln sfh line".into(),
+        ]);
+    }
+    lines.extend([
+        "fileclose sfh".into(),
+        format!("filesearch '{temporary}'"),
+        "if result = 0 goto save_end".into(),
+        format!("filedelete '{state}'"),
+        format!("filesearch '{state}'"),
+        "if result != 0 goto save_end".into(),
+        format!("filerename '{temporary}' '{state}'"),
+        format!("filesearch '{state}'"),
+        "if result = 0 goto save_end".into(),
+    ]);
+    for (i, _) in keys.clone() {
+        lines.push(format!("saved{i} = value{i}"));
+    }
+    lines.extend([":save_end".into(), "return".into()]);
+
+    // The current selections. The effect is the ImageTone code of the active
+    // record, or 0 for Off and for any pointer that is not a record.
+    lines.extend([
+        ":snapshot".into(),
+        "value0 = 0".into(),
+        format!("count = {}", word(HOST_COUNT)),
+        "if count < 1 goto snapshot_values".into(),
+        format!("if count > {MAX_COUNT} goto snapshot_values"),
+        format!("offset = {} - {}", word(HOST_ACTIVE), word(HOST_RECORDS)),
+        "if offset < 0 goto snapshot_values".into(),
+        format!("rest = offset % {RECORD_SIZE}"),
+        "if rest != 0 goto snapshot_values".into(),
+        format!("index = offset / {RECORD_SIZE}"),
+        "if index >= count goto snapshot_values".into(),
+        format!("value0 = {} and 65535", code_word("index")),
+        ":snapshot_values".into(),
+    ]);
+    for (i, key) in keys.clone() {
+        if let Some(offset) = key.word {
+            lines.push(format!("value{i} = {}", word(offset)));
+        }
+    }
+    lines.push("return".into());
+
+    // Restore. A missing, empty, or too large file restores nothing. `fileopen`
+    // creates a missing file, so the loader searches for it first.
+    //
+    // A read past the end of the file blocks the interpreter, and so does a
+    // `filereadln` of a last line without a newline. The loader therefore reads
+    // the file byte by byte, up to the size that `filestat` gives, and parses
+    // the decimal lines itself. CR and LF end a line. A line with another
+    // character, or with more than 9 digits, is invalid. Lines form key and
+    // value pairs. A pair with an invalid line, an unknown key, or an
+    // out-of-range value is skipped.
+    lines.push(":restore".into());
+    for (i, _) in keys.clone() {
+        lines.push(format!("stored{i} = 0"));
+    }
+    lines.extend([
+        format!("statefile = '{state}'"),
+        "filesearch statefile".into(),
+        "if result != 0 goto restore_open".into(),
+        format!("statefile = '{temporary}'"),
+        "filesearch statefile".into(),
+        "if result = 0 goto restore_apply".into(),
+        ":restore_open".into(),
+        "size = 0".into(),
+        "filestat statefile size".into(),
+        "if size < 1 goto restore_apply".into(),
+        format!("if size > {STATE_MAX_BYTES} goto restore_apply"),
+        "fileopen sfh statefile 0".into(),
+        "if sfh < 0 goto restore_apply".into(),
+        "position = 0".into(),
+        "ended = 0".into(),
+        "expecting = 0".into(),
+        "key = 0".into(),
+        "keyinvalid = 0".into(),
+        "token = 0".into(),
+        "digits = 0".into(),
+        "invalid = 0".into(),
+        ":restore_byte".into(),
+        "if position >= size goto restore_last".into(),
+        "fileread sfh 1 octet".into(),
+        "if result != 0 goto restore_close".into(),
+        "position = position + 1".into(),
+        "str2code character octet".into(),
+        "if character = 13 goto restore_token".into(),
+        "if character = 10 goto restore_token".into(),
+        "if character < 48 invalid = 1".into(),
+        "if character > 57 invalid = 1".into(),
+        format!("if digits >= {STATE_DIGITS} invalid = 1"),
+        "if invalid = 1 goto restore_byte".into(),
+        "token = token * 10 + character - 48".into(),
+        "digits = digits + 1".into(),
+        "goto restore_byte".into(),
+        ":restore_last".into(),
+        "ended = 1".into(),
+        // A line ends. Empty lines, as between CR and LF, are not tokens.
+        ":restore_token".into(),
+        "filled = digits + invalid".into(),
+        "if filled = 0 goto restore_continue".into(),
+        "if expecting = 1 goto restore_value".into(),
+        "key = token".into(),
+        "keyinvalid = invalid".into(),
+        "expecting = 1".into(),
+        "goto restore_reset".into(),
+        ":restore_value".into(),
+        "expecting = 0".into(),
+        "bad = keyinvalid + invalid".into(),
+        "if bad != 0 goto restore_reset".into(),
+    ]);
+    for (i, key) in keys.clone() {
+        lines.push(format!(
+            "if key = {} goto restore_key{i}",
+            state_key_id(key.name)
+        ));
+    }
+    lines.push("goto restore_reset".into());
+    for (i, key) in keys.clone() {
+        lines.extend([
+            format!(":restore_key{i}"),
+            format!("if token > {} goto restore_reset", key.max),
+            format!("stored{i} = token"),
+            "goto restore_reset".into(),
+        ]);
+    }
+    lines.extend([
+        ":restore_reset".into(),
+        "token = 0".into(),
+        "digits = 0".into(),
+        "invalid = 0".into(),
+        ":restore_continue".into(),
+        "if ended = 0 goto restore_byte".into(),
+    ]);
+    lines.extend([
+        ":restore_close".into(),
+        "fileclose sfh".into(),
+        ":restore_apply".into(),
+        // A plugin that is not installed has no menu to turn it off, so it
+        // restores 0.
+        format!("plugins = {}", word(HOST_PLUGINS)),
+    ]);
+    for (i, key) in keys.clone() {
+        lines.extend([
+            format!("bit = (plugins >> {}) and 1", key.module),
+            format!("if bit = 0 stored{i} = 0"),
+        ]);
+        if let Some(offset) = key.word {
+            lines.push(format!("{} = stored{i}", word(offset)));
+        }
+    }
+    // An effect that is no longer installed stays Off.
+    lines.extend([
+        format!("count = {}", word(HOST_COUNT)),
+        format!("if count > {MAX_COUNT} count = 0"),
+        "index = 0".into(),
+        ":restore_find".into(),
+        "if stored0 = 0 goto restore_end".into(),
+        "if index >= count goto restore_end".into(),
+        format!("code = {} and 65535", code_word("index")),
+        "if code != stored0 goto restore_next".into(),
+        format!(
+            "{} = {} + index * {RECORD_SIZE}",
+            word(HOST_ACTIVE),
+            word(HOST_RECORDS)
+        ),
+        "goto restore_end".into(),
+        ":restore_next".into(),
+        "index = index + 1".into(),
+        "goto restore_find".into(),
+        // Write only after the next change, so a missing effect keeps its file
+        // entry until the user selects something else.
+        ":restore_end".into(),
+        "call snapshot".into(),
+    ]);
+    for (i, _) in keys {
+        lines.push(format!("saved{i} = value{i}"));
+    }
+    lines.push("return".into());
+    lines
+}
+
 pub fn runtime_files(binary: &[u8]) -> Files {
     runtime_files_for(binary, ICON_STRIDE)
 }
@@ -335,4 +488,63 @@ pub fn runtime_files_for(binary: &[u8], icon_stride: usize) -> Files {
         ("SCRIPT/PLUGINS/SCAN.SH".into(), wrapper("scan")),
         ("SCRIPT/PLUGINS/INSTALL.SH".into(), wrapper("install")),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_keys_have_distinct_positive_ids() {
+        let mut ids: Vec<_> = STATE_KEYS
+            .iter()
+            .map(|key| state_key_id(key.name))
+            .collect();
+        assert!(ids
+            .iter()
+            .all(|id| *id > 0 && id.to_string().len() <= STATE_DIGITS));
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), STATE_KEYS.len());
+        assert!(STATE_KEYS[0].word.is_none());
+        assert!(STATE_KEYS[1..].iter().all(|key| key.word.is_some()));
+    }
+
+    /// A runtime error ends the script and frees the arrays, so the resident
+    /// part must not index outside the header or divide by a variable.
+    #[test]
+    fn the_resident_script_cannot_stop_on_its_own_arithmetic() {
+        let script = state_script().join("\n");
+        let record_code = format!(
+            "{} + index * {} + {}",
+            HEADER_SIZE / 4,
+            RECORD_SIZE / 4,
+            RECORD_CODE / 4
+        );
+        for (at, _) in script.match_indices("registry[") {
+            let index = &script[at + 9..];
+            let index = &index[..index.find(']').unwrap()];
+            match index.parse::<usize>() {
+                Ok(word) => assert!(word < HEADER_SIZE / 4, "registry[{word}]"),
+                // The only computed index is the code of a record below `count`.
+                Err(_) => assert_eq!(index, record_code),
+            }
+        }
+        for line in script.lines() {
+            for operator in [" / ", " % "] {
+                if let Some(at) = line.find(operator) {
+                    let divisor = line[at + 3..].split_whitespace().next().unwrap();
+                    assert!(
+                        divisor.parse::<u32>().is_ok_and(|value| value > 0),
+                        "{line}"
+                    );
+                }
+            }
+        }
+        // A `filereadln` of a last line without a newline blocks the interpreter.
+        assert!(!script.contains("filereadln"));
+        // Each computed record index is below `count`, which is at most MAX_COUNT.
+        assert!(script.contains(&format!("if count > {MAX_COUNT} goto snapshot_values")));
+        assert!(script.contains(&format!("if count > {MAX_COUNT} count = 0")));
+    }
 }

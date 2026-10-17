@@ -8,15 +8,14 @@ use crate::{
 use anyhow::{ensure, Context, Result};
 use std::{collections::BTreeMap, fs, path::Path};
 
-pub const PROCESSING_BASE: u32 = 0x53002080;
-// The translation table starts at 0x53004000. Both components must fit below it.
-pub const MENU_BASE: u32 = 0x53002340;
-// Framing lives after the decoded RTOS image (0x540b55c0). The RTOS maps this
-// tail read-only and executable up to 0x55000000, and no firmware code refers
-// to it. BOOT does not reload it, so the installer overwrites any earlier
-// GRKit code there instead of requiring zeros.
-pub const FRAMING_BASE: u32 = 0x540b6000;
-pub const FRAMING_END: u32 = 0x540be000;
+// All private code lives in the tail after the decoded RTOS image (GR III
+// 0x540b55c0). The RTOS maps the tail read-only and executable up to
+// 0x55000000, and no firmware code refers to it. BOOT does not reload it, and
+// nothing clears it: after power-on, a GR III held the noise of uninitialized
+// DRAM there. The installer overwrites it without a stock-byte check. The
+// guards detect a firmware that extends the image into it.
+pub const TAIL_BASE: u32 = 0x540b6000;
+pub const TAIL_END: u32 = 0x540be000;
 const RTOS_EXECUTABLE_END: u32 = 0x55000000;
 pub const CONTEXTS: &[(u32, &str)] = &[
     (0x536dc124, "abfdffeb"),
@@ -150,14 +149,120 @@ pub type Hook = (u32, &'static str, &'static str, bool);
 /// An in-place change: (address, stock bytes, new bytes).
 pub type InstructionPatch = (u32, &'static str, &'static str);
 
+/// An extension point: the firmware changes that a group of plugins needs.
+/// The installer applies the patches of a point only when a selected plugin
+/// needs it, so a plugin that is not installed changes no firmware.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Point {
+    /// The private ADJ entry, its list, text, and icons.
+    MenuPage,
+    /// Image Control: private processing records, the effect tag, and the
+    /// native Image Control pages.
+    Tuning,
+    /// Drawing over the still live view.
+    ViewfinderOverlay,
+    /// The capture aspect and the recorded picture geometry.
+    CaptureAspect,
+    /// Changes to the JPEG planes of a recorded picture.
+    PictureEncode,
+    /// The native grain stage of recorded pictures.
+    PipelineGrain,
+}
+
+impl Point {
+    pub const ALL: [Point; 6] = [
+        Point::MenuPage,
+        Point::Tuning,
+        Point::ViewfinderOverlay,
+        Point::CaptureAspect,
+        Point::PictureEncode,
+        Point::PipelineGrain,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Point::MenuPage => "menu.page",
+            Point::Tuning => "tuning",
+            Point::ViewfinderOverlay => "viewfinder.overlay",
+            Point::CaptureAspect => "capture.aspect",
+            Point::PictureEncode => "picture.encode",
+            Point::PipelineGrain => "pipeline.grain",
+        }
+    }
+
+    pub fn bit(self) -> u32 {
+        1 << self as u32
+    }
+
+    /// The point of a hook symbol. A new hook must be given a point here.
+    pub fn of(symbol: &str) -> Result<Point> {
+        const TUNING: &[&str] = &[
+            "menu_native_adj_apply",
+            "menu_native_dialog_apply",
+            "menu_native_page_event",
+            "menu_native_page_exit",
+            "menu_viewfinder_icon",
+            "menu_playback_icon",
+            "menu_playback_detail",
+            "picture_post",
+            "picture_capture_tone",
+        ];
+        const OVERLAY: &[&str] = &[
+            "framing_update",
+            "framing_exit",
+            "framing_destroy",
+            "framing_canvas",
+            "framing_children",
+        ];
+        Ok(
+            if TUNING.contains(&symbol) || symbol.starts_with("module_") {
+                Point::Tuning
+            } else if OVERLAY.contains(&symbol) {
+                Point::ViewfinderOverlay
+            } else if symbol.starts_with("menu_") {
+                Point::MenuPage
+            } else if symbol.starts_with("framing_") {
+                Point::CaptureAspect
+            } else if symbol == "picture_encode_entry" {
+                Point::PictureEncode
+            } else if symbol.starts_with("grain_") {
+                Point::PipelineGrain
+            } else {
+                anyhow::bail!("Hook {symbol} has no extension point")
+            },
+        )
+    }
+}
+
+/// The extension points that each plugin of `grkit_core::modules::NAMES` needs.
+/// Each plugin with a menu needs `MenuPage`.
+pub const PLUGIN_POINTS: [(&str, &[Point]); 5] = [
+    (
+        "image-control",
+        &[Point::MenuPage, Point::Tuning, Point::PictureEncode],
+    ),
+    (
+        "framing",
+        &[
+            Point::MenuPage,
+            Point::ViewfinderOverlay,
+            Point::CaptureAspect,
+        ],
+    ),
+    ("guides", &[Point::MenuPage, Point::ViewfinderOverlay]),
+    ("date-stamp", &[Point::MenuPage, Point::PictureEncode]),
+    ("grain", &[Point::MenuPage, Point::PipelineGrain]),
+];
+
 /// Where a target's components live and where they hook the firmware.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Layout {
     /// The preprocessor definition that selects `runtime/targets/<target>.h`
     /// in `runtime/firmware.h`.
     pub define: &'static str,
-    /// Module bits (`GRKIT_HOST_HIDDEN`) that the target does not implement.
-    pub hidden: u32,
+    /// The tail reservation after the decoded RTOS image. Each code region lies
+    /// inside it. Its first 256 bytes stay unused.
+    pub tail: (u32, u32),
     /// Image Control processing, if the target has it: its region and its
     /// assembly source.
     pub processing: Option<(u32, u32)>,
@@ -183,11 +288,11 @@ pub struct Layout {
 
 pub const GR3_LAYOUT: Layout = Layout {
     define: "-DGRKIT_TARGET_GR3_210",
-    hidden: 0,
-    processing: Some((PROCESSING_BASE, MENU_BASE)),
+    tail: (TAIL_BASE, TAIL_END),
+    processing: Some((0x540b6100, 0x540b6900)),
     processing_source: include_str!("../../../runtime/processing.S"),
-    menu: (MENU_BASE, 0x53004000),
-    framing: Some((FRAMING_BASE, FRAMING_END)),
+    menu: (0x540b6900, 0x540b9000),
+    framing: Some((0x540b9000, TAIL_END)),
     contexts: CONTEXTS,
     processing_hooks: PROCESSING_HOOKS,
     menu_hooks: MENU_HOOKS,
@@ -200,8 +305,7 @@ pub const GR3_LAYOUT: Layout = Layout {
     guards: GR3_GUARDS,
 };
 
-/// GR IV 1.11 menu hooks. The menu code follows the GR IV boot
-/// header, which ends at 0x530021a8.
+/// GR IV 1.11 menu hooks.
 const GR4_MENU_HOOKS: &[(u32, &str, &str)] = &[
     (0x531bf9d8, "menu_native_touch_0", "fc31d0e5"),
     (0x531bf9ec, "menu_native_touch_1", "fc31d0e5"),
@@ -313,13 +417,12 @@ const GR4_GUARDS: &[(u32, &str)] = &[
 
 pub const GR4_LAYOUT: Layout = Layout {
     define: "-DGRKIT_TARGET_GR4_111",
-    hidden: 0,
-    // After the Framing region.
-    processing: Some((0x543db000, 0x543dc000)),
-    processing_source: include_str!("../../../runtime/targets/gr4-1.11-processing.S"),
-    menu: (0x530021c0, 0x53004000),
     // After the decoded RTOS image (0x543d2ac0), like GR III.
-    framing: Some((0x543d3000, 0x543db000)),
+    tail: (0x543d3000, 0x543dc000),
+    processing: Some((0x543d3100, 0x543d3900)),
+    processing_source: include_str!("../../../runtime/targets/gr4-1.11-processing.S"),
+    menu: (0x543d3900, 0x543d6000),
+    framing: Some((0x543d6000, 0x543dc000)),
     contexts: GR4_CONTEXTS,
     processing_hooks: GR4_PROCESSING_HOOKS,
     menu_hooks: GR4_MENU_HOOKS,
@@ -333,7 +436,7 @@ pub const GR4_LAYOUT: Layout = Layout {
 };
 
 /// Every hook of a layout: (address, symbol).
-fn hook_sites(layout: &Layout) -> impl Iterator<Item = (u32, &'static str)> + '_ {
+pub(crate) fn hook_sites(layout: &Layout) -> impl Iterator<Item = (u32, &'static str)> + '_ {
     layout
         .processing_hooks
         .iter()
@@ -378,11 +481,18 @@ pub fn hooks_header(body: &FirmwareImage) -> Result<String> {
     Ok(result)
 }
 
+/// Stack frame limits of the private C code, which runs on the stacks of
+/// firmware tasks. The largest frame is `blur_line` of `picture.c` (1344 bytes).
+const MENU_FRAME_LIMIT: &str = "-Wframe-larger-than=256";
+const FRAMING_FRAME_LIMIT: &str = "-Wframe-larger-than=1536";
+
 pub struct Component {
     pub patches: Vec<Patch>,
     pub relocations: Vec<usize>,
     pub symbols: BTreeMap<String, u32>,
     pub code_size: usize,
+    /// The size of the reserved code region.
+    pub limit: usize,
 }
 
 fn code_component(
@@ -398,22 +508,12 @@ fn code_component(
         code.len(),
         end - base
     );
+    // The decoded image does not contain the tail (see `TAIL_BASE`).
     let image_end = crate::target::RTOS_BASE + body.body.len() as u32;
-    if base >= image_end {
-        // The decoded image does not contain the tail, and the installer does
-        // not compare it: BOOT loads only the image, so the tail can hold the
-        // previous session's code. This check uses the GR III executable
-        // mapping, which is not confirmed on other targets.
-        ensure!(
-            end <= RTOS_EXECUTABLE_END,
-            "Private component is outside the RTOS executable mapping"
-        );
-    } else {
-        ensure!(
-            body.read(base, code.len())?.iter().all(|b| *b == 0),
-            "Private component reservation is occupied"
-        );
-    }
+    ensure!(
+        base >= image_end && end <= RTOS_EXECUTABLE_END,
+        "Private component is outside the RTOS tail"
+    );
     let relocations: Vec<_> = code
         .chunks_exact(4)
         .enumerate()
@@ -424,12 +524,14 @@ fn code_component(
     Ok(Component {
         patches: vec![Patch {
             address: base,
+            points: 0,
             before: vec![0; code_size],
             after: code,
         }],
         relocations,
         symbols,
         code_size,
+        limit: (end - base) as usize,
     })
 }
 
@@ -457,12 +559,9 @@ pub fn processing(
         })
         .collect::<Vec<_>>()
         .join("\n    ");
-    let assembly = format!(
-        ".equ HEADER, 0x{HEADER_REFERENCE:x}\n{}",
-        layout
-            .processing_source
-            .replace("@ ORIGINAL_PROCESSING", &original)
-    );
+    let assembly = layout
+        .processing_source
+        .replace("@ ORIGINAL_PROCESSING", &original);
     let source = directory.join("module-processing.S");
     let object = directory.join("module-processing.o");
     fs::write(&source, assembly)?;
@@ -499,6 +598,7 @@ pub fn processing(
         }
         component.patches.push(Patch {
             address,
+            points: Point::of(name)?.bit(),
             before: body.read(address, 4)?.to_vec(),
             after: instruction.to_le_bytes().to_vec(),
         });
@@ -531,6 +631,8 @@ pub fn menu(
             "-fno-stack-protector",
             "-fno-unwind-tables",
             "-fno-asynchronous-unwind-tables",
+            MENU_FRAME_LIMIT,
+            "-Werror=frame-larger-than",
             "-c",
             path(&runtime.join("menu.c"))?,
             "-o",
@@ -574,7 +676,7 @@ pub fn menu(
         &mut component,
         body,
         base,
-        layout.instruction_patches,
+        (Point::Tuning, layout.instruction_patches),
         hooks,
     )?;
     Ok(component)
@@ -610,6 +712,8 @@ pub fn framing(
                 "-fno-stack-protector",
                 "-fno-unwind-tables",
                 "-fno-asynchronous-unwind-tables",
+                FRAMING_FRAME_LIMIT,
+                "-Werror=frame-larger-than",
                 "-I",
                 path(runtime)?,
                 "-c",
@@ -636,7 +740,7 @@ pub fn framing(
         &mut component,
         body,
         base,
-        layout.framing_patches,
+        (Point::CaptureAspect, layout.framing_patches),
         layout
             .framing_hooks
             .iter()
@@ -688,7 +792,7 @@ fn add_patches<'a>(
     component: &mut Component,
     body: &FirmwareImage,
     base: u32,
-    instructions: &[(u32, &str, &str)],
+    instructions: (Point, &[(u32, &str, &str)]),
     hooks: impl Iterator<Item = (u32, &'a str, &'a str, bool)>,
 ) -> Result<()> {
     for (address, name, expected, link) in hooks {
@@ -711,10 +815,12 @@ fn add_patches<'a>(
         }
         component.patches.push(Patch {
             address,
+            points: Point::of(name)?.bit(),
             before,
             after: instruction.to_le_bytes().to_vec(),
         });
     }
+    let (point, instructions) = instructions;
     for &(address, before, after) in instructions {
         let before = hex::decode(before)?;
         ensure!(
@@ -723,6 +829,7 @@ fn add_patches<'a>(
         );
         component.patches.push(Patch {
             address,
+            points: point.bit(),
             before,
             after: hex::decode(after)?,
         });

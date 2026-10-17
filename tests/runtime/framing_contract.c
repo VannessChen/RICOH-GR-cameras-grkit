@@ -68,6 +68,8 @@ static void reset(void)
     HALF(TEST_BITMAP, 0x1e)=480;
     WORD(TEST_BITMAP, 4)=TEST_STRIDE*480*4;
     WORD(TEST_BITMAP, 8)=TEST_PIXELS;
+    /* Every plugin is installed. */
+    header[GRKIT_HOST_PLUGINS/4]=(1U<<PLUGIN_COUNT)-1;
     header[GRKIT_HOST_ACTIVE/4]=0x59001000;
     header[GRKIT_HOST_FRAME_RATIO/4]=1;
     native_aspect=0;
@@ -187,6 +189,21 @@ int main(void)
         assert(header[GRKIT_HOST_FRAME_DRAWS/4]==(ratio!=0));
         assert(header[GRKIT_HOST_ACTIVE/4]==0x59001000);
     }
+    /* A plugin that PLUGINS.TXT does not install paints nothing. Without
+       Framing, the guides use the full 3:2 area. */
+    reset();
+    header[GRKIT_HOST_FRAME_RATIO/4]=2;
+    header[GRKIT_HOST_GUIDE/4]=1;
+    header[GRKIT_HOST_PLUGINS/4]&=~(1U<<PLUGIN_FRAMING);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert_guides(0,1,0);
+    reset();
+    header[GRKIT_HOST_GUIDE/4]=1;
+    header[GRKIT_HOST_PLUGINS/4]=0;
+    framing_prepare(TEST_CANVAS);
+    assert(BYTE(TEST_CANVAS,0xa0)==0);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert_untouched();
     /* Badge replacement erases old characters even before a native full clear. */
     reset();
     const u32 transitions[]={1,2,3,1,3,2};

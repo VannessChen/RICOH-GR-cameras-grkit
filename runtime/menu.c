@@ -18,6 +18,8 @@ extern u32 menu_destroy_original(u32);
 #define CALL3(a) ((u32 (*)(u32,u32,u32))(a))
 #define WORD(a,o) (*(u32 *)((a)+(o)))
 #define BYTE(a,o) (*(u8 *)((a)+(o)))
+/* The plugin interface, before the services that it declares. */
+#include "plugin.h"
 #define PAGE 6U
 /* Menu C is Thumb-2 for size. Firmware hooks and thunks enter with A32 B/BL,
    which cannot change state, so their targets stay A32. */
@@ -95,7 +97,7 @@ static u32 back_event(volatile u32 *h,u32 kind,u32 enabled) {
 }
 /* MENU closes native ADJ with its switch event (5) followed by the OK confirm. */
 static u32 after_menu_switch(volatile u32 *h) {
-    return (h[28+((h[19]-2)&15)]&0xffff)==EV_SWITCH;
+    return (h[GRKIT_HOST_MENU_EVENT_RING/4+((h[GRKIT_HOST_MENU_EVENTS/4]-2)&(GRKIT_HOST_MENU_EVENT_RING_WORDS-1))]&0xffff)==EV_SWITCH;
 }
 static u32 native_action_release(u32 action,u32 active) {
     return action==10 && active;
@@ -121,19 +123,24 @@ A32_ENTRY u32 menu_viewfinder_icon_select(u32 native_icon,u32 movie) {
 /* The first full ADJ draw follows the toolbar creation. */
 #define TOOLBAR_CREATED(widget,icon) ((void)0)
 #endif
+/* Plugin services (runtime/plugin.h). */
+/* The Image Control summary of effect n. The installer writes one for each
+   record in each language (runtime/abi.h). */
+static const u16 *effect_summary(volatile u32 *h,u32 n) {
+    return MENU_TEXT(GRKIT_TEXT(h)+GRKIT_TEXT_SUMMARY+
+        (menu_language()*GRKIT_TEXT_RECORDS+n)*GRKIT_SUMMARY_UNITS*2);
+}
+static u32 framing_ratios(void) { return FRAMING_RATIO_COUNT; }
+static void request_native_aspect(void) { MENU_FRAMING_REQUEST(); }
 #include "modules.h"
 static u32 private_mode(u32 controller) {
     volatile u32 *h=menu_header();
-    return h[8] == controller && h[9] != 0;
+    return h[GRKIT_HOST_MENU_CONTROLLER/4] == controller && h[GRKIT_HOST_MENU_LEVEL/4] != 0;
 }
 /* A native Image Control preview lasts while its ADJ slot has focus. */
 static void native_focus(u32 controller) {
     if(CALL2(FW_ADJ_SLOT_TYPE)(controller,BYTE(controller,ADJ_SLOT))!=ADJ_IC_SLOT_TYPE)
         menu_header()[GRKIT_HOST_PREVIEW/4]=0;
-}
-/* Fn applies to effect rows of GRKit Image Control. Off has no adjustments. */
-static u32 parameters_row(volatile u32 *h) {
-    return h[9]==MENU_MODULE && !h[GRKIT_HOST_MODULE/4] && h[10];
 }
 /* Fn opens the native Standard parameters from an effect row in the still
    context. The native Fn hint shows only where this works. */
@@ -256,26 +263,27 @@ static void render(u32 controller) {
     u32 view=WORD(controller,ADJ_LIST);
     const Module *module;
     menu_normalize(h);
-    cursor=h[10]; start=page_start(cursor); n=count(h)-start;
+    cursor=h[GRKIT_HOST_MENU_CURSOR/4]; start=page_start(cursor); n=count(h)-start;
     module=current_module(h);
     if(n>PAGE)n=PAGE;
     /* Suppress the native list callback while replacing private rows. */
-    h[15]=1;
+    h[GRKIT_HOST_MENU_REBUILDING/4]=1;
     CALL2(FW_LIST_SET_COUNT)(view,n);
     for(i=0;i<n;++i) {
         u32 row=CALL2(FW_LIST_ROW)(view,i);
         u32 index=start+i;
         /* Private icon IDs are resolved by the host's guarded icon adapter. */
-        u32 icon=h[9]==MENU_ROOT ? modules[root_module(h,index)].icon(h,index) : module->icon(h,index);
+        u32 owner=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? root_module(h,index) : h[GRKIT_HOST_MODULE/4];
+        u32 icon=module_icon(owner,modules[owner].icon(h,index));
         CALL2(FW_ROW_SET_ICON)(row,icon);
-        CALL2(FW_ROW_SET_CHECK)(row,h[9]!=MENU_ROOT && module->checked(h,index));
+        CALL2(FW_ROW_SET_CHECK)(row,h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_ROOT && module->checked(h,index));
     }
     CALL2(FW_LIST_SET_CURSOR)(view,cursor-start);
-    descriptor(h+24,h[9]==MENU_ROOT ? plugins : module->title(h));
-    descriptor(h+26,h[9]==MENU_ROOT ? module->summary(h) : module->label(h,cursor));
+    descriptor(h+GRKIT_HOST_MENU_TITLE/4,h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? plugins : module->title(h));
+    descriptor(h+GRKIT_HOST_MENU_DETAIL/4,h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? module->summary(h) : module->label(h,cursor));
     label(WORD(controller,ADJ_TITLE));
     /* The summary ends before the list at x=620; native labels use 400 pixels. */
-    detail_width(controller,h[9]==1 ? 620 : 400);
+    detail_width(controller,h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? 620 : 400);
     label(WORD(controller,ADJ_DETAIL));
     /* Native detail controls do not describe private modules, except the Fn
        hint (+0x1ac) where Fn opens the native parameters. */
@@ -284,27 +292,27 @@ static void render(u32 controller) {
     toolbar(controller);
     /* Slot zero's canvas is at +4, as in the live view. */
     frame_preview(h,WORD(controller,ADJ_CANVAS),ADJ_MOVIE(controller)==1);
-    h[15]=0;
+    h[GRKIT_HOST_MENU_REBUILDING/4]=0;
 }
 static void leave(u32 controller) {
     volatile u32 *h=menu_header();
     if(!private_mode(controller)) return;
-    h[9]=0; h[15]=1;
+    h[GRKIT_HOST_MENU_LEVEL/4]=0; h[GRKIT_HOST_MENU_REBUILDING/4]=1;
     h[GRKIT_HOST_PREVIEW/4]=0;
     detail_width(controller,400);
     /* Rebuild the original list before its exit callback saves a cursor. */
     CALL1(FW_ADJ_REFRESH)(controller);
     CALL2(FW_VIEW_SET_VISIBLE)(WORD(controller,ADJ_FRAME),1);
-    CALL3(FW_LIST_RESTORE)(WORD(controller,ADJ_LIST),h[16],h[17]);
-    h[8]=0; h[15]=0;
+    CALL3(FW_LIST_RESTORE)(WORD(controller,ADJ_LIST),h[GRKIT_HOST_MENU_LIST/4],h[GRKIT_HOST_MENU_LIST/4+1]);
+    h[GRKIT_HOST_MENU_CONTROLLER/4]=0; h[GRKIT_HOST_MENU_REBUILDING/4]=0;
 }
 static void enter(u32 controller,u32 edge) {
     volatile u32 *h=menu_header();
     u32 view=WORD(controller,ADJ_LIST);
-    h[8]=controller; menu_start(h);
-    h[11]=BYTE(controller,ADJ_SLOT); h[22]=edge;
+    h[GRKIT_HOST_MENU_CONTROLLER/4]=controller; menu_start(h);
+    h[GRKIT_HOST_MENU_SLOT/4]=BYTE(controller,ADJ_SLOT); h[GRKIT_HOST_MENU_EDGE/4]=edge;
     h[GRKIT_HOST_PREVIEW/4]=0;
-    CALL3(FW_LIST_SAVE)(view,(u32)(h+16),(u32)(h+17));
+    CALL3(FW_LIST_SAVE)(view,(u32)(h+GRKIT_HOST_MENU_LIST/4),(u32)(h+GRKIT_HOST_MENU_LIST/4+1));
     render(controller);
 }
 static void plugin_touch(u32 controller) {
@@ -356,7 +364,7 @@ A32_ENTRY u32 menu_destroy(u32 controller) {
         CALL2(WORD(WORD(widget,0),0x2c))(widget,0);
         CALL2(FW_VIEW_SET_PARENT)(widget+0xf0,0);
     }
-    if(h[8]==controller) { h[8]=0; h[9]=0; }
+    if(h[GRKIT_HOST_MENU_CONTROLLER/4]==controller) { h[GRKIT_HOST_MENU_CONTROLLER/4]=0; h[GRKIT_HOST_MENU_LEVEL/4]=0; }
     h[GRKIT_HOST_PREVIEW/4]=0;
     h[GRKIT_HOST_FRAME_PREVIEW/4]=0;
     h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=0;
@@ -367,10 +375,10 @@ A32_ENTRY u32 menu_destroy(u32 controller) {
 A32_ENTRY void menu_changed(u32 controller) {
     volatile u32 *h=menu_header();
     /* Restoration sets the level to native before rebuilding the list. */
-    if(h[15]) return;
-    if(h[8]==controller && h[9]) {
-        u32 next=page_start(h[10])+CALL1(FW_LIST_CURSOR)(WORD(controller,ADJ_LIST));
-        if(next<count(h)) { h[10]=next; image_preview(h); render(controller); }
+    if(h[GRKIT_HOST_MENU_REBUILDING/4]) return;
+    if(h[GRKIT_HOST_MENU_CONTROLLER/4]==controller && h[GRKIT_HOST_MENU_LEVEL/4]) {
+        u32 next=page_start(h[GRKIT_HOST_MENU_CURSOR/4])+CALL1(FW_LIST_CURSOR)(WORD(controller,ADJ_LIST));
+        if(next<count(h)) { h[GRKIT_HOST_MENU_CURSOR/4]=next; highlight(h); render(controller); }
         return;
     }
     menu_changed_original(controller);
@@ -378,9 +386,9 @@ A32_ENTRY void menu_changed(u32 controller) {
 A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
     volatile u32 *h=menu_header();
     u32 kind=*event, back;
-    h[28+(h[19]&15)]=kind | ((kind==EV_FN || kind==EV_SWITCH || kind==EV_SWITCH_END) ? ((u32)*(u8 *)WORD((u32)event,4)<<16) :
+    h[GRKIT_HOST_MENU_EVENT_RING/4+(h[GRKIT_HOST_MENU_EVENTS/4]&(GRKIT_HOST_MENU_EVENT_RING_WORDS-1))]=kind | ((kind==EV_FN || kind==EV_SWITCH || kind==EV_SWITCH_END) ? ((u32)*(u8 *)WORD((u32)event,4)<<16) :
         kind==EV_TOUCH ? (u32)BYTE(WORD((u32)event,4),0x50)<<16 : 0);
-    ++h[19];
+    ++h[GRKIT_HOST_MENU_EVENTS/4];
     if(kind==EV_SWITCH && !menu_press(BYTE(WORD((u32)event,4),0),WORD(WORD((u32)event,4),4))) return 0;
     back=back_event(h,kind,private_mode(controller));
     if(back==2) return 0;
@@ -414,19 +422,19 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
     /* On an effect row, commit the highlighted row, then adjust its parameters.
        Fn on Off does nothing. */
     if(kind==EV_FN && *(u8 *)WORD((u32)event,4)==2 &&
-       h[9]==MENU_MODULE && !h[GRKIT_HOST_MODULE/4]) {
+       h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && current_module(h)->parameters) {
         if(!parameters_row(h)) return 0;
-        image_apply(h,h[10]);
+        current_module(h)->apply(h,h[GRKIT_HOST_MENU_CURSOR/4]);
         if(!open_parameters(controller)) render(controller);
         return 0;
     }
     if(kind==EV_LEFT || kind==EV_RIGHT) {
         /* A single module has no root level: left leaves, as from the root. */
-        if(h[9]>MENU_ROOT && kind==EV_LEFT && menu_back(h)) {
+        if(h[GRKIT_HOST_MENU_LEVEL/4]>MENU_ROOT && kind==EV_LEFT && menu_back(h)) {
             render(controller); return 0;
         }
         {
-            u32 edge=h[22], advance=advance_from_private(kind,edge);
+            u32 edge=h[GRKIT_HOST_MENU_EDGE/4], advance=advance_from_private(kind,edge);
             leave(controller);
             if(edge==3) {
                 u32 i;
@@ -443,9 +451,9 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
     }
     if(kind==EV_UP || kind==EV_DIAL_UP || kind==EV_DOWN || kind==EV_DIAL_DOWN) {
         u32 n=count(h);
-        if(kind==EV_UP || kind==EV_DIAL_UP) h[10]=h[10] ? h[10]-1 : n-1;
-        else { ++h[10]; if(h[10]==n) h[10]=0; }
-        image_preview(h);
+        if(kind==EV_UP || kind==EV_DIAL_UP) h[GRKIT_HOST_MENU_CURSOR/4]=h[GRKIT_HOST_MENU_CURSOR/4] ? h[GRKIT_HOST_MENU_CURSOR/4]-1 : n-1;
+        else { ++h[GRKIT_HOST_MENU_CURSOR/4]; if(h[GRKIT_HOST_MENU_CURSOR/4]==n) h[GRKIT_HOST_MENU_CURSOR/4]=0; }
+        highlight(h);
         render(controller); return 0;
     }
     /* Confirm is 0xd8. Press and release events do not activate a profile. */

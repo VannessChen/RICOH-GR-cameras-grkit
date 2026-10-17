@@ -33,7 +33,7 @@ static const char plan_tmp[] = PLAN_TMP_PATH;
 static const char lock_path[] = LOCK_PATH;
 static const char done_path[] = DONE_PATH;
 static const char failed_path[] = FAILED_PATH;
-static const char modules_path[] = MODULES_PATH;
+static const char plugins_path[] = PLUGINS_PATH;
 static volatile u8 *at(u32 physical) { return mapping + physical - MAP_BASE; }
 static u32 get32(const u8 *p) { return p[0] | p[1] << 8 | p[2] << 16 | (u32)p[3] << 24; }
 static void put32(u8 *p, u32 v) { for (u32 i=0; i<4; ++i) p[i] = v >> (i*8); }
@@ -59,7 +59,7 @@ static void number(u32 value)
 #define GRKIT_GRF_EMBEDDED
 #include "grf.c"
 #include "catalog.h"
-#include "visibility.h"
+#include "selection.h"
 static char names[MAX_COUNT][CATALOG_NAME_SIZE];
 static int read_file(const char *path, u8 *buffer, u32 wanted)
 {
@@ -75,14 +75,15 @@ static int read_file(const char *path, u8 *buffer, u32 wanted)
     syscall6(6,fd,0,0,0,0,0);
     return have==wanted && got==0;
 }
-/* A missing MODULES.TXT hides nothing. An unreadable or invalid one stops the
-   installation, so a card never shows a menu that its file does not describe. */
-static int read_hidden(u32 *hidden)
+/* A missing PLUGINS.TXT selects every plugin. An unreadable or invalid one
+   stops the installation, so a card never installs what its file does not
+   describe. */
+static int read_selection(u32 *selected)
 {
-    u8 text[VISIBILITY_FILE_MAX + 1];
+    u8 text[SELECTION_FILE_MAX + 1];
     u32 have = 0; long got = 0;
-    long fd = syscall6(5, (u32)modules_path, 0x8800, 0, 0, 0, 0);
-    *hidden = 0;
+    long fd = syscall6(5, (u32)plugins_path, 0x8800, 0, 0, 0, 0);
+    *selected = SELECTION_ALL;
     if (fd == -2) return 0;
     if (fd < 0) return 44;
     while (have < sizeof(text)) {
@@ -92,7 +93,7 @@ static int read_hidden(u32 *hidden)
     }
     syscall6(6, fd, 0, 0, 0, 0, 0);
     if (got < 0) return 44;
-    if (have > VISIBILITY_FILE_MAX || !visibility_parse(text, have, hidden)) return 43;
+    if (have > SELECTION_FILE_MAX || !selection_parse(text, have, selected)) return 43;
     return 0;
 }
 static int discover(void)
@@ -204,6 +205,12 @@ static int heap(u32 p, u32 n)
 {
     return !(p & 3) && p >= HEAP_MIN && n <= HEAP_END - HEAP_MIN && p <= HEAP_END - n;
 }
+/* The extension points of the selected plugins. Only their patches change
+   the firmware. */
+static u32 needed_points;
+/* patch_points[i]: the extension points that need patch i, or 0 for code that
+   each installation publishes. */
+static int applies(u32 i) { return !patch_points[i] || (patch_points[i] & needed_points); }
 static void publish(struct patch *p, const u8 *bytes)
 {
     if (p->size == 4) store(p->address, get32(bytes));
@@ -212,10 +219,15 @@ static void publish(struct patch *p, const u8 *bytes)
 }
 static int install(void)
 {
-    u32 hidden;
+    u32 selected;
     int status = discover();
     if (status) return status;
-    if ((status = read_hidden(&hidden))) return status;
+    if ((status = read_selection(&selected))) return status;
+    /* Image Control without effects has nothing to show. */
+    if (!count) selected &= ~1U;
+    needed_points = 0;
+    for (u32 i = 0; i < SELECTION_PLUGINS; ++i)
+        if (selected >> i & 1) needed_points |= plugin_points[i];
     layout();
     if (!read_file(plan_path, plan, 20 + count * 8192) || get32(plan) != 0x314d5247 ||
         get32(plan + 4) != count || get32(plan + 8) != size / 4 ||
@@ -240,6 +252,10 @@ static int install(void)
     for (u32 i = 0; i < GUARD_COUNT; ++i)
         if (!equal(at(guards[i].address), guards[i].bytes, guards[i].size)) return 45;
 #endif
+    /* The tail after the RTOS image has no stock bytes to check. On a camera it
+       holds the noise of uninitialized DRAM after power-on, or the code of an
+       earlier GRKit session, so its content cannot show that it is free. The
+       guards above detect a firmware that extends the image into it. */
 #ifndef GRKIT_NO_MODULES
     if (word(ENGLISH_SLOT) != ORIGINAL_ENGLISH) return 12;
 #ifndef GRKIT_NO_IMAGE_CONTROL
@@ -253,7 +269,7 @@ static int install(void)
        overwritten. Every other patch must still find its stock bytes. */
 #endif
     for (u32 i = 0; i < PATCH_COUNT; ++i)
-        if (!patches[i].kind && !equal(at(patches[i].address), patches[i].before, patches[i].size)) return 16;
+        if (!patches[i].kind && applies(i) && !equal(at(patches[i].address), patches[i].before, patches[i].size)) return 16;
 #ifndef GRKIT_NO_MODULES
 #ifndef GRKIT_NO_IMAGE_CONTROL
     for (u32 i = 0; i < 3; ++i)
@@ -279,13 +295,9 @@ static int install(void)
 #endif
 #endif
     zero(at(base), size);
-    store(base, count); store(base + 4, base + GRKIT_HOST_HEADER_SIZE);
-    store(base + 16, 0x314d5247); store(base + 20, 1);
-#ifdef TARGET_HIDDEN
-    /* Modules that the target does not implement yet stay hidden. */
-    hidden |= TARGET_HIDDEN;
-#endif
-    store(base + GRKIT_HOST_HIDDEN, hidden);
+    store(base + GRKIT_HOST_COUNT, count); store(base + GRKIT_HOST_RECORDS, base + GRKIT_HOST_HEADER_SIZE);
+    store(base + GRKIT_HOST_MAGIC, GRKIT_HOST_MAGIC_VALUE); store(base + GRKIT_HOST_VERSION, GRKIT_HOST_VERSION_VALUE);
+    store(base + GRKIT_HOST_PLUGINS, selected);
 #ifndef GRKIT_NO_MODULES
     for (u32 i = 0; i < icon_chunks; ++i) {
         zero(at(icon_bases[i]), chunk_count(i) * ICON_STRIDE);
@@ -357,12 +369,14 @@ static int install(void)
     /* Publish payloads before entry branches. Cross-domain coherence needs device validation. */
     u32 installed = 0;
     for (; installed < PATCH_COUNT; ++installed) {
+        if (!applies(installed)) continue;
         publish(&patches[installed], patches[installed].after);
         if (!sync_alias(patches[installed].address, patches[installed].size)) break;
     }
     if (installed != PATCH_COUNT) {
         int rollback_ok = 1;
         for (u32 i = installed + 1; i > 0; --i) {
+            if (!applies(i - 1)) continue;
             publish(&patches[i - 1], patches[i - 1].before);
             if (!sync_alias(patches[i - 1].address, patches[i - 1].size)) rollback_ok = 0;
         }
@@ -376,8 +390,8 @@ static int install(void)
 static int select_profile(const char *id)
 {
     u32 base = word(ARRAY_TABLE + 4);
-    if (!heap(base, GRKIT_HOST_HEADER_SIZE) || word(base + 16) != 0x314d5247 || word(base + 20) != 1) return 41;
-    u32 n = word(base), records = word(base + 4), selected = 0;
+    if (!heap(base, GRKIT_HOST_HEADER_SIZE) || word(base + GRKIT_HOST_MAGIC) != GRKIT_HOST_MAGIC_VALUE || word(base + GRKIT_HOST_VERSION) != GRKIT_HOST_VERSION_VALUE) return 41;
+    u32 n = word(base + GRKIT_HOST_COUNT), records = word(base + GRKIT_HOST_RECORDS), selected = 0;
     if (n > MAX_COUNT || records != base + GRKIT_HOST_HEADER_SIZE || !heap(base, GRKIT_HOST_HEADER_SIZE + n * GRKIT_RECORD_SIZE + GRKIT_TAIL_SIZE)) return 41;
     if (!text_equal(id, "off")) {
         for (u32 i = 0; i < n; ++i) {
@@ -386,7 +400,7 @@ static int select_profile(const char *id)
         }
         if (!selected) return 42;
     }
-    store(base + 8, selected);
+    store(base + GRKIT_HOST_ACTIVE, selected);
     if (!sync_alias(base, GRKIT_HOST_HEADER_SIZE)) return 21;
     print("GR_MODULE_SELECTED "); print(id); print("\n");
     return 0;

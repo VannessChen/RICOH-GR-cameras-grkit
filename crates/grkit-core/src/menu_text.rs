@@ -96,9 +96,57 @@ fn words(language: Language) -> &'static Words {
     }
 }
 
-/// The strings of one language in the ID order of `runtime/abi.h`.
-pub fn strings(language: Language) -> Vec<String> {
-    let w = words(language);
+/// A run of consecutive string IDs. `runtime/abi.h` defines `TEXT_<name>` as
+/// the first ID of each run.
+pub struct Run {
+    pub name: &'static str,
+    pub count: usize,
+    pub doc: &'static str,
+}
+
+const fn run(name: &'static str, count: usize, doc: &'static str) -> Run {
+    Run { name, count, doc }
+}
+
+/// The string IDs in table order.
+pub const RUNS: &[Run] = &[
+    run("IMAGE_CONTROL", 1, ""),
+    run("FRAMING", 1, ""),
+    run("GUIDES", 1, ""),
+    run("DATE_STAMP", 1, ""),
+    run("GRAIN", 1, ""),
+    run("OFF", 1, ""),
+    run("RATIO", 3, "Framing rows 1..3: XPan 65:24, 16:9, 4:3."),
+    run(
+        "GUIDE",
+        4,
+        "Guides rows 1..4: thirds, center, golden ratio, diagonals.",
+    ),
+    run("STAMP", 4, "Date Stamp rows 1..4: the date styles."),
+    run("GRAIN_LEVEL", 3, "Grain rows 1..3: weak, medium, strong."),
+    run("IMAGE_OFF_SUMMARY", 1, ""),
+    run("FRAMING_SUMMARY", 4, "Summaries for each value, Off first."),
+    run("GUIDES_SUMMARY", 5, ""),
+    run("STAMP_SUMMARY", 5, ""),
+    run("GRAIN_SUMMARY", 4, ""),
+    run(
+        "IMAGE_PREFIX",
+        1,
+        "The Image Control summary before an effect name, for the installer.",
+    ),
+];
+
+/// The first string ID of each run, in table order.
+pub fn ids() -> impl Iterator<Item = (&'static Run, usize)> {
+    RUNS.iter().scan(0, |next, run| {
+        let id = *next;
+        *next += run.count;
+        Some((run, id))
+    })
+}
+
+/// The strings of one run in one language.
+fn run_strings(w: &Words, name: &str) -> Vec<String> {
     let summary = |module: &str, value: &str| format!("{module}{}{value}", w.separator);
     let summaries = |module: &str, values: &[&str]| {
         std::iter::once(w.off)
@@ -106,27 +154,34 @@ pub fn strings(language: Language) -> Vec<String> {
             .map(|value| summary(module, value))
             .collect::<Vec<_>>()
     };
-    let mut out: Vec<String> = [
-        w.image_control,
-        w.framing,
-        w.guides,
-        w.date_stamp,
-        w.grain,
-        w.off,
-    ]
-    .map(str::to_owned)
-    .to_vec();
-    out.extend(w.ratios.map(str::to_owned));
-    out.extend(w.guide_styles.map(str::to_owned));
-    out.extend(w.stamp_styles.map(str::to_owned));
-    out.extend(w.grain_levels.map(str::to_owned));
-    out.push(summary(w.image_control, w.off));
-    out.extend(summaries(w.framing, &w.ratio_values));
-    out.extend(summaries(w.guides, &w.guide_styles));
-    out.extend(summaries(w.date_stamp, &w.stamp_styles));
-    out.extend(summaries(w.grain, &w.grain_levels));
-    out.push(format!("{}{}", w.image_control, w.separator));
-    out
+    let words = |values: &[&str]| values.iter().map(|value| value.to_string()).collect();
+    match name {
+        "IMAGE_CONTROL" => words(&[w.image_control]),
+        "FRAMING" => words(&[w.framing]),
+        "GUIDES" => words(&[w.guides]),
+        "DATE_STAMP" => words(&[w.date_stamp]),
+        "GRAIN" => words(&[w.grain]),
+        "OFF" => words(&[w.off]),
+        "RATIO" => words(&w.ratios),
+        "GUIDE" => words(&w.guide_styles),
+        "STAMP" => words(&w.stamp_styles),
+        "GRAIN_LEVEL" => words(&w.grain_levels),
+        "IMAGE_OFF_SUMMARY" => vec![summary(w.image_control, w.off)],
+        "FRAMING_SUMMARY" => summaries(w.framing, &w.ratio_values),
+        "GUIDES_SUMMARY" => summaries(w.guides, &w.guide_styles),
+        "STAMP_SUMMARY" => summaries(w.date_stamp, &w.stamp_styles),
+        "GRAIN_SUMMARY" => summaries(w.grain, &w.grain_levels),
+        "IMAGE_PREFIX" => vec![format!("{}{}", w.image_control, w.separator)],
+        _ => unreachable!("Unknown menu text run {name}"),
+    }
+}
+
+/// The strings of one language in the ID order of `runtime/abi.h`.
+pub fn strings(language: Language) -> Vec<String> {
+    let w = words(language);
+    RUNS.iter()
+        .flat_map(|run| run_strings(w, run.name))
+        .collect()
 }
 
 fn units(text: &str) -> Vec<u16> {
@@ -192,6 +247,21 @@ mod tests {
                 assert_eq!(String::from_utf16(&read).unwrap(), *expected);
             }
         }
+    }
+
+    #[test]
+    fn each_run_has_its_declared_number_of_strings() {
+        for language in Language::ALL {
+            for run in RUNS {
+                assert_eq!(
+                    run_strings(words(language), run.name).len(),
+                    run.count,
+                    "{} in {language:?}",
+                    run.name
+                );
+            }
+        }
+        assert_eq!(RUNS.iter().map(|run| run.count).sum::<usize>(), STRINGS);
     }
 
     #[test]

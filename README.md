@@ -59,7 +59,7 @@ grkit verify dist/GRKit.zip
 
 - GR IIIx: add `--camera gr3x` to `grkit package`. The runtime is the same as for GR III.
 - GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4`.
-- Fewer modules: add `--hide framing,guides,date-stamp,grain`. Without `--effects`, the package has no Image Control.
+- Fewer plugins: add `--plugins` with the plugins to install, for example `--plugins framing,guides`. The installer makes no firmware change for the other plugins. Without `--effects`, the package has no Image Control.
 - Guide language: add `--language zh-Hans` or `--language zh-Hant`. The package then has the guide in that language, next to the English guide.
 
 ## Repository layout

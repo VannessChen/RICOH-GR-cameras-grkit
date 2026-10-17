@@ -2,19 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { ALL_MODULES, planModules, type ModuleKey } from './modules';
 
 describe('planModules', () => {
-  it('hides nothing by default', () => {
+  it('omits nothing by default', () => {
     expect(planModules(ALL_MODULES, 2)).toEqual({
       includeEffects: true,
-      hidden: [],
+      omitted: [],
       visible: ['imageControl', 'framing', 'guides', 'dateStamp', 'grain'],
     });
   });
 
-  it('turns Image Control off by leaving the effects out', () => {
+  it('turns Image Control off by omitting it and leaving the effects out', () => {
     const enabled = new Set<ModuleKey>(['framing', 'dateStamp']);
     expect(planModules(enabled, 2)).toEqual({
       includeEffects: false,
-      hidden: ['guides', 'grain'],
+      omitted: ['image-control', 'guides', 'grain'],
       visible: ['framing', 'dateStamp'],
     });
   });
@@ -24,8 +24,8 @@ describe('planModules', () => {
     expect(planModules(new Set<ModuleKey>(['imageControl']), 1).visible).toEqual(['imageControl']);
   });
 
-  it('hides every optional module when only Image Control is on', () => {
-    expect(planModules(new Set<ModuleKey>(['imageControl']), 1).hidden).toEqual([
+  it('omits every other plugin when only Image Control is on', () => {
+    expect(planModules(new Set<ModuleKey>(['imageControl']), 1).omitted).toEqual([
       'framing',
       'guides',
       'date-stamp',
@@ -33,16 +33,16 @@ describe('planModules', () => {
     ]);
   });
 
-  it('plans only the modules that the camera has', () => {
+  it('plans only the plugins that the camera has', () => {
     const partial: ModuleKey[] = ['guides', 'dateStamp'];
     expect(planModules(ALL_MODULES, 2, partial)).toEqual({
       includeEffects: false,
-      hidden: [],
+      omitted: [],
       visible: ['guides', 'dateStamp'],
     });
     expect(planModules(new Set<ModuleKey>(['imageControl', 'framing', 'guides']), 2, partial)).toEqual({
       includeEffects: false,
-      hidden: ['date-stamp'],
+      omitted: ['date-stamp'],
       visible: ['guides'],
     });
   });

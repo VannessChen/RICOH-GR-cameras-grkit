@@ -61,22 +61,22 @@ fn a_package_without_effects_is_valid() {
 }
 
 #[test]
-fn hidden_modules_are_written_and_checked() {
+fn omitted_plugins_are_written_and_checked() {
     let mut builder = builder_with_runtime(&runtime_files());
-    builder.hide_module("framing").unwrap();
-    assert!(error(builder.hide_module("framing")).contains("Module listed twice"));
-    assert!(error(builder.hide_module("image-control")).contains("Unknown module"));
-    builder.hide_module("guides").unwrap();
+    builder.omit_plugin("framing").unwrap();
+    assert!(error(builder.omit_plugin("framing")).contains("Plugin omitted twice"));
+    assert!(error(builder.omit_plugin("hdr")).contains("Unknown plugin"));
+    builder.omit_plugin("guides").unwrap();
     let package = builder.build().unwrap();
     assert_eq!(
-        packaging::verify_package(&package).unwrap()["hidden_modules"],
-        json!(["framing", "guides"])
+        packaging::verify_package(&package).unwrap()["plugins"],
+        json!(["image-control", "date-stamp", "grain"])
     );
-    // Without effects, hiding every other module leaves no module to show.
-    builder.hide_module("date-stamp").unwrap();
+    // Without effects, omitting every other plugin leaves nothing to show.
+    builder.omit_plugin("date-stamp").unwrap();
     builder.build().unwrap();
-    builder.hide_module("grain").unwrap();
-    assert!(error(builder.build()).contains("shows no module"));
+    builder.omit_plugin("grain").unwrap();
+    assert!(error(builder.build()).contains("shows no plugin"));
     builder.add_effect(&effect("test-a")).unwrap();
     builder.build().unwrap();
 }

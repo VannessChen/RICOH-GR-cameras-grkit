@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
 
-use grkit_core::{camera, effects, modules::Hidden, packaging::*, runtime, Files};
+use grkit_core::{camera, effects, modules::Selection, packaging::*, runtime, Files};
 use serde_json::{json, Value};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
@@ -21,7 +21,7 @@ fn package() -> Vec<u8> {
             effects::filename("test-effect").unwrap(),
             effects::encode(&effect, &vec![0; 6400]).unwrap(),
         )]),
-        Hidden::default(),
+        Selection::ALL,
         &camera::GR3,
     )
     .unwrap()

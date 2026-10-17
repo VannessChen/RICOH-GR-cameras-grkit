@@ -1,48 +1,58 @@
-//! Package-time module visibility.
+//! Package-time plugin selection.
 //!
-//! `SCRIPT/PLUGINS/MODULES.TXT` names the ADJ modules that the camera menu hides,
+//! `SCRIPT/PLUGINS/PLUGINS.TXT` names the plugins that the installer installs,
 //! separated by ASCII whitespace. The installer parses it with the same rules
-//! (`runtime/visibility.h`). A package without the file hides nothing.
-//! Image Control is not listed: it shows exactly when the package has effects.
+//! (`runtime/selection.h`). A package without the file installs every plugin,
+//! and an empty file installs none. The installer changes no firmware for a
+//! plugin that is not installed. Image Control also needs effects: without
+//! them, the installer treats it as not installed.
 
 use anyhow::{bail, ensure, Result};
 
 /// The path of the file in the SD tree.
-pub const PATH: &str = "SCRIPT/PLUGINS/MODULES.TXT";
+pub const PATH: &str = "SCRIPT/PLUGINS/PLUGINS.TXT";
 /// The largest file that the installer reads.
 pub const MAX_FILE_SIZE: usize = 256;
-/// Modules that a package can hide, in menu order. Name n is module n + 1 of
-/// `runtime/modules.h`, after Image Control.
-pub const NAMES: [&str; 4] = ["framing", "guides", "date-stamp", "grain"];
+/// The plugins in menu order. Name n is module n of `runtime/modules.h`.
+pub const NAMES: [&str; 5] = ["image-control", "framing", "guides", "date-stamp", "grain"];
 
-/// A set of hidden modules. Bit n hides module n of `runtime/modules.h`, as the
-/// installer stores it in the private header.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Hidden(u32);
+/// A set of plugins. Bit n is plugin n of `NAMES`, as the installer stores it
+/// in the private header (`GRKIT_HOST_PLUGINS`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Selection(u32);
 
-impl Hidden {
-    /// Hides the named modules. Unknown and repeated names are errors.
+impl Default for Selection {
+    fn default() -> Self {
+        Self::ALL
+    }
+}
+
+impl Selection {
+    pub const ALL: Self = Self((1 << NAMES.len()) - 1);
+    pub const NONE: Self = Self(0);
+
+    /// Selects the named plugins. Unknown and repeated names are errors.
     pub fn from_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Result<Self> {
         let mut mask = 0;
         for name in names {
             let Some(index) = NAMES.iter().position(|known| *known == name) else {
                 bail!(
-                    "Unknown module {name:?}. Expected one of: {}",
+                    "Unknown plugin {name:?}. Expected one of: {}",
                     NAMES.join(", ")
                 );
             };
-            let bit = 2 << index;
-            ensure!(mask & bit == 0, "Module listed twice: {name}");
+            let bit = 1 << index;
+            ensure!(mask & bit == 0, "Plugin listed twice: {name}");
             mask |= bit;
         }
         Ok(Self(mask))
     }
 
-    /// Reads the contents of `MODULES.TXT`.
+    /// Reads the contents of `PLUGINS.TXT`.
     pub fn parse(file: &[u8]) -> Result<Self> {
         ensure!(
             file.len() <= MAX_FILE_SIZE,
-            "MODULES.TXT exceeds {MAX_FILE_SIZE} bytes"
+            "PLUGINS.TXT exceeds {MAX_FILE_SIZE} bytes"
         );
         let names = file
             .split(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
@@ -51,10 +61,10 @@ impl Hidden {
         Self::from_names(names)
     }
 
-    /// The contents of `MODULES.TXT`, one name for each line, or `None` when
-    /// nothing is hidden. A package then omits the file.
+    /// The contents of `PLUGINS.TXT`, one name for each line, or `None` when
+    /// every plugin is selected. A package then omits the file.
     pub fn file(self) -> Option<Vec<u8>> {
-        (!self.is_empty()).then(|| {
+        (self != Self::ALL).then(|| {
             self.names()
                 .iter()
                 .map(|name| format!("{name}\n"))
@@ -63,28 +73,67 @@ impl Hidden {
         })
     }
 
-    /// The hidden module names, in menu order.
+    /// The selected plugin names, in menu order.
     pub fn names(self) -> Vec<&'static str> {
         NAMES
             .iter()
             .enumerate()
-            .filter(|(index, _)| self.0 & 2 << index != 0)
+            .filter(|(index, _)| self.0 & 1 << index != 0)
             .map(|(_, name)| *name)
             .collect()
+    }
+
+    /// The selection without the named plugin. Unknown names are errors.
+    pub fn without(self, name: &str) -> Result<Self> {
+        let Self(bit) = Self::from_names([name])?;
+        Ok(Self(self.0 & !bit))
     }
 
     pub fn mask(self) -> u32 {
         self.0
     }
 
-    pub fn is_empty(self) -> bool {
-        self.0 == 0
+    /// True when the camera menu would show no plugin for this many effects.
+    /// `available` names the plugins that the runtime has.
+    pub fn shows_nothing(self, effects: usize, available: &[&str]) -> bool {
+        self.names()
+            .iter()
+            .filter(|name| available.contains(name))
+            .all(|name| *name == NAMES[0] && effects == 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_file_selects_everything_and_an_empty_file_nothing() {
+        assert_eq!(Selection::default(), Selection::ALL);
+        assert_eq!(Selection::ALL.file(), None);
+        assert_eq!(Selection::parse(b"").unwrap(), Selection::NONE);
+        assert_eq!(Selection::NONE.file(), Some(Vec::new()));
+        let selection = Selection::parse(b" grain\r\nframing\t").unwrap();
+        assert_eq!(selection.names(), ["framing", "grain"]);
+        assert_eq!(selection.file().unwrap(), b"framing\ngrain\n");
+        assert_eq!(selection.mask(), 0b10010);
+        assert!(Selection::parse(b"framing framing").is_err());
+        assert!(Selection::parse(b"hdr").is_err());
+        assert!(Selection::parse(&[b' '; MAX_FILE_SIZE + 1]).is_err());
+        assert_eq!(
+            Selection::ALL.without("guides").unwrap().names(),
+            ["image-control", "framing", "date-stamp", "grain"]
+        );
     }
 
-    /// True when the camera menu would show no module for this many effects.
-    /// `available` names the modules that the runtime has.
-    pub fn hides_everything(self, effects: usize, available: &[&str]) -> bool {
-        let hidden = self.names();
-        effects == 0 && available.iter().all(|name| hidden.contains(name))
+    #[test]
+    fn image_control_alone_shows_nothing_without_effects() {
+        let image_control = Selection::from_names(["image-control"]).unwrap();
+        assert!(image_control.shows_nothing(0, &NAMES));
+        assert!(!image_control.shows_nothing(1, &NAMES));
+        assert!(Selection::NONE.shows_nothing(3, &NAMES));
+        assert!(!Selection::ALL.shows_nothing(0, &NAMES));
+        let grain = Selection::from_names(["grain"]).unwrap();
+        assert!(grain.shows_nothing(0, &NAMES[..4]));
     }
 }

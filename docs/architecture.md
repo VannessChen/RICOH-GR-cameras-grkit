@@ -45,15 +45,13 @@ The GR IV Standard look matrix differs from the GR III one.
 GR IV icon descriptors have 12 bytes, and GR IV draws icons from a copy of the icon pixels. The installer reads the base of that copy from the icon drawer.
 
 Native sources live under `runtime/`, and package documents live under `resources/`. The CLI embeds both, so it works outside the checkout.
-Rust tests pin GRF bytes, artwork, generated headers, and loader scripts. Host C tests check the GRF parser, the effect catalog, the menu, and Framing on GR III, and the picture code on both targets. A syntax check compiles the C sources of each target.
+Rust tests pin GRF bytes, artwork, generated headers, and loader scripts.
+
+The build rejects writable static data in the private code. It also limits the stack frame of each C function to 256 bytes in the menu and 1536 bytes in the Framing component. Host C tests check the GRF parser, the effect catalog, the menu, and Framing on GR III, and the picture code on both targets. A syntax check compiles the C sources of each target.
 
 ## Loading
 
-The loader script starts at power-on and polls. `lcmd` requests return NG until Linux mounts the card, so the loader repeats SCAN until the allocation plan appears.
-
-The loader waits 3 s before its first `lcmd`. The first request creates the firmware's host-interface command factory.
-In some starts, that creation took a data abort in the Script task during the first second.
-Linux mounts the card about 5 s after power-on, so the wait does not delay the installation.
+The loader script starts at power-on and polls. `lcmd` requests return NG until Linux mounts the card, about 5 s after power-on, so the loader repeats SCAN until the allocation plan appears.
 
 SCAN selects the effect catalog and writes the plan. The startup script allocates the arrays and stays resident, so they remain allocated.
 
@@ -69,12 +67,25 @@ A statically patched firmware that extends the RTOS image changes them. Its addi
 One such GR IV firmware extends the image from `0x543d2ac0` to `0x5440eac0`, over the Framing and processing regions.
 That firmware also changes three GRKit hook sites, so the hook check (status 16) would stop it too. A patched firmware that changes no hook site passes that check, but not the guards.
 
+The tail reservation itself has no content that INSTALL can check. On a GR III camera after power-on, it holds the noise of uninitialized DRAM. No word of it was zero, and most bytes were `0x55` or `0xd5`. After a restart, it can hold the code of an earlier GRKit session. The guards are therefore the check for a firmware that uses the tail.
+
 An unusable effect file does not stop the other effects or Framing. Unusable files include names outside the `NAME.GRF` 8.3 rule, symbolic links, unreadable files, and invalid records.
 The `._` companions that macOS writes are therefore ignored.
 
-INSTALL also reads `SCRIPT/PLUGINS/MODULES.TXT`, which names the modules that the menu hides (`runtime/visibility.h`). A missing file hides nothing.
-An unknown or repeated name stops the installation with status 43, and a read error with status 44. The installer stores the result in header `+56`.
-Hidden modules keep their hooks. Each one stays inactive at Off.
+INSTALL also reads `SCRIPT/PLUGINS/PLUGINS.TXT`, which names the plugins to install (`runtime/selection.h`, `grkit_core::modules`). A missing file installs each plugin, and an empty file installs none.
+An unknown or repeated name stops the installation with status 43, and a read error with status 44. Image Control without effects counts as not installed. The installer stores the result in header `+56` (`GRKIT_HOST_PLUGINS`).
+
+Each hook and in-place patch belongs to one extension point (`components::Point`), and each plugin needs a set of points (`components::PLUGIN_POINTS`):
+
+| Plugin | Extension points |
+| --- | --- |
+| Image Control | `menu.page`, `tuning`, `picture.encode` |
+| Framing | `menu.page`, `viewfinder.overlay`, `capture.aspect` |
+| Guides | `menu.page`, `viewfinder.overlay` |
+| Date Stamp | `menu.page`, `picture.encode` |
+| Grain | `menu.page`, `pipeline.grain` |
+
+INSTALL checks and publishes only the patches of the points that the installed plugins need. A plugin that is not installed therefore changes no firmware, and an empty `PLUGINS.TXT` installs no hook. The code in the tail is always published, because nothing calls it without a hook. `build.json` gives the number of patches of each point.
 
 With more than 20 effects, the installer keeps the 20 smallest effect IDs.
 For a duplicate ID, the file with the smallest name wins. The result does not depend on directory order. Directory read errors stop the installation.
@@ -86,19 +97,54 @@ The scratch has 141,376 bytes for the date stamp masks, then the 72-byte shot ri
 Off, GRKit, and the eighteen module tiles (four Framing, five Guides, five Date Stamp, four Grain) use twenty host icon records outside that capacity. With 20 effects, they fill the 40-icon chunk.
 The module tiles are contiguous from icon ID `0x7fec` to `0x7ffd`, below the GRKit tile (`0x7ffe`) and Off (`0x7fff`). The menu derives each one from the first Framing tile.
 
+`grkit_core::abi` defines the header, the records, and the scratch. Each of the 64 header words has a name, and a test checks that each byte belongs to exactly one field.
+`runtime/abi.h` is generated from these tables, and a test fails if the checked-in file differs. The C code, the assembly, and the loader take their offsets from these names.
+
 ### Saved selections
 
 After `INSTALL.OK`, the resident loader restores and saves the effect, the Framing ratio, the Guides style, the Date Stamp style, and the Grain level.
 The private header is the loader's `registry` array, so the script reads and writes it directly.
-It keeps one decimal integer in `SCRIPT/PLUGINS/STATE.TXT`: `code + 65536 * (ratio + 4 * (guide + 8 * (stamp + 8 * grain)))`, where `code` is the effect's ImageTone code and 0 is Off.
-A file from before Grain decodes with grain 0.
+
+`SCRIPT/PLUGINS/STATE.TXT` holds two decimal lines for each key: the key ID, then the value.
+The key ID is the CRC-32 of the key name modulo 10^9 (`runtime::state_key_id`), so each number has at most 9 digits. `runtime::STATE_KEYS` gives each key, its header word, and its largest value.
+The Image Control key holds the ImageTone code of the effect, and 0 is Off. A file in the earlier single-integer format restores nothing.
 
 The loader checks the state every 2 s and writes the file only after a change. It writes through the camera's own file system, as photos do, never from Linux while the camera may write photos.
-An unreadable or out-of-range file restores nothing. An effect that is no longer installed stays Off, and its file entry stays until the next change.
+A missing, empty, or too large file restores nothing. A pair with an unknown key or an out-of-range value is skipped. An effect that is no longer installed stays Off, and its file entry stays until the next change.
 
-A hidden module restores Off, because no menu can turn it off. The script has no bit operators, so it reads header `+56` by division.
-The camera's `filecreate` does not truncate an existing file. The writes `33603290`, `48858`, and `0` leave `08858290`.
-The loader therefore deletes the file before it writes the state. A power loss between the two steps can lose the last change.
+The camera's `filecreate` does not truncate an existing file, and `filerename` cannot replace one. The loader writes the state in these steps:
+
+1. Delete `STATE.TMP`, then write the state to it.
+2. Delete `STATE.TXT`.
+3. Rename `STATE.TMP` to `STATE.TXT`.
+
+The loader checks each file with `filesearch`, because `filerename` gives result 0 for success and failure. If only `STATE.TMP` exists, the restore reads it. A plugin that is not installed restores Off, because no menu can turn it off.
+
+A runtime error ends the script, and the interpreter then frees the arrays that the hooks use. The resident script therefore checks each computed array index, and it divides only by constants. A test checks both rules.
+
+A read past the end of a file blocks the interpreter. A `filereadln` of a last line without a newline also blocks it. The restore therefore reads the file byte by byte, up to the size that `filestat` gives, and parses the digits itself. CR and LF end a line. A line with another character or with more than 9 digits is invalid, and its pair is skipped.
+
+## Plugins
+
+The core is `runtime/`: the hooks, the installer, the menu host, and the hosts of the extension points. The five features are plugins under `runtime/plugins/<id>/`.
+A plugin includes only `runtime/plugin.h`. That file holds the page and handler types and the core services that a plugin can call. A test checks that no plugin file names a firmware symbol or an RTOS address.
+
+The build links each plugin into the core statically. `runtime/plugin.h` is therefore a set of C declarations, not a table of function pointers, and the build checks each call.
+
+| Plugin | Files | Extension points |
+| --- | --- | --- |
+| Image Control | `page.h`, `selective.c` | `menu.page`, `tuning`, `picture.encode` |
+| Framing | `page.h`, `framing.c` | `menu.page`, `viewfinder.overlay`, `capture.aspect` |
+| Guides | `page.h`, `guides.c` | `menu.page`, `viewfinder.overlay` |
+| Date Stamp | `page.h`, `stamp.c` | `menu.page`, `picture.encode` |
+| Grain | `page.h` | `menu.page`, `pipeline.grain` |
+
+The hosts call plugins in two ways:
+
+- A point with several plugins has a table of handlers in a fixed order. `runtime/framing.c` paints the overlay layers: the Framing mask, the guides, then the Framing badge. `runtime/picture.c` runs the encoders: selective color, then the date stamp. A host calls only the handlers of installed plugins (`PLUGIN_INSTALLED`).
+- A point with one plugin is assembly in the core that reads the plugin's value from its header word. `pipeline.grain` reads the Grain level, and `capture.aspect` reads the Framing ratio. The `tuning` hooks read the active record of Image Control.
+
+The Framing ratio is also the capture area of the other plugins. The overlay host gives the guides the photo area of that ratio. The encode host gives the date stamp the visible area of each plane.
 
 ## Menu
 
@@ -107,11 +153,14 @@ A private LineView draws the native translucent background before the shared sel
 
 The ADJ controller owns both objects. Exit hides them and restores the native geometry. Destruction unlinks and releases them. Movie mode keeps the five-entry layout.
 
-The compiled registry in `runtime/modules.h` contains Image Control, Framing, Guides, Date Stamp, and Grain.
-Each descriptor owns its title, summary, rows, labels, icons, selection checks, activation, and committed row. A module page opens at its committed row.
+The registry in `runtime/modules.h` lists the page of each plugin, in the order of `grkit_core::modules::NAMES`.
+Each page owns its title, summary, rows, labels, icons, selection checks, activation, and committed row. A page opens at its committed row.
+A page returns its icons as tiles of its own artwork (`GRKIT_ICON_TILE`). The registry maps them to the global IDs from `0x7fec`, in registry order.
 
-The root lists only the visible modules, in registry order. Image Control is visible when effects are installed. Each other module is visible unless header `+56` has its bit.
-If no module is visible, Image Control shows with only Off. If one module is visible, ADJ opens its page directly, and MENU or left returns to native ADJ.
+Two page callbacks are optional. `highlight` receives each change of the highlighted row, and Image Control previews the row in the live view. `parameters` makes Fn apply the row and open the native parameter page.
+
+The root lists only the installed plugins (header `+56`), in registry order. Image Control also needs effects.
+If no plugin is installed, the installer installs no menu hook, so the GRKit entry does not appear. If one module is visible, ADJ opens its page directly, and MENU or left returns to native ADJ.
 Module state stays in the private host header.
 
 MENU returns one level. From the GRKit root it returns to the native ADJ items. The private menu restores the native list on its supported exit paths.
@@ -326,15 +375,19 @@ Every encode that passes through the hook gets the stamp, including in-camera RA
 
 ## Code areas
 
-| Component | Range | Notes |
-| --- | --- | --- |
-| Processing | `0x53002080`–`0x53002340` | A32 assembly |
-| Menu | `0x53002340`–`0x53004000` | Thumb-2 C at `-Oz`, A32 entry points |
-| Framing | `0x540b6000`–`0x540be000` | A32 C at `-Os` and assembly: Framing, Guides, and the effect extension and picture hooks |
+All private code lives in the tail reservation after the decoded RTOS image. GRKit changes no byte of the image except the hook sites and the in-place patches.
 
-The translation table starts at `0x53004000` and must remain untouched. The freestanding link has no division helpers, so menu C must not divide.
+| Component | GR III 2.10 | GR IV 1.11 | Notes |
+| --- | --- | --- | --- |
+| Unused | `0x540b6000`–`0x540b6100` | `0x543d3000`–`0x543d3100` | Not written |
+| Processing | `0x540b6100`–`0x540b6900` | `0x543d3100`–`0x543d3900` | A32 assembly |
+| Menu | `0x540b6900`–`0x540b9000` | `0x543d3900`–`0x543d6000` | Thumb-2 C at `-Oz`, A32 entry points |
+| Framing | `0x540b9000`–`0x540be000` | `0x543d6000`–`0x543dc000` | A32 C at `-Os` and assembly: Framing, Guides, and the effect extension and picture hooks |
+
+`build.json` gives the size and the limit of each component. The freestanding link has no division helpers, so menu C must not divide.
 Picture code divides with its own shift-subtract routine, once per picture for each reciprocal.
 
-The Framing range follows the decoded RTOS image, which ends at `0x540b55c0`. The RTOS maps it read-only and executable up to `0x55000000`, and no firmware code refers to it.
-BOOT loads only the image, so the range can keep the previous session's code after a restart. The installer therefore overwrites it without a stock-byte check.
-All other patches keep that check. The builder rejects overflow, occupied reservations, changed hook instructions, and overlapping patches.
+The decoded RTOS image ends at `0x540b55c0` on GR III and `0x543d2ac0` on GR IV. The RTOS maps the tail read-only and executable up to `0x55000000`, and no firmware code refers to it. On GR IV, a camera test has not confirmed this mapping.
+
+BOOT loads only the image, so the tail can keep the previous session's code after a restart. The installer therefore overwrites the tail without a stock-byte check.
+All other patches keep that check. The builder rejects overflow, code outside the tail, changed hook instructions, and overlapping patches.

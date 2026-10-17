@@ -1,8 +1,7 @@
 // Private Image Control processing hooks for the pinned GR III 2.10 image.
-// HEADER +0..12: count, record base, active record, last applied record.
-// HEADER +24/+28: last processing context flags and normalization call count.
+// The header fields are those of abi.h.
 // Records are immutable, contiguous GRKIT_RECORD_SIZE allocations retained until reboot.
-// The live-view dirty hook lives in picture.S: this region has no room left.
+// The live-view dirty hook lives in picture.S.
 #include "abi.h"
 .syntax unified
 .arm
@@ -11,9 +10,9 @@
 // Return Z=1 only for an owned record pointer. Preserve all registers.
 .Lowned_record:
     push {r0-r3, lr}
-    ldr r1, =HEADER
-    ldr r2, [r1]
-    ldr r1, [r1, #4]
+    ldr r1, =GRKIT_HEADER_REFERENCE
+    ldr r2, [r1, #GRKIT_HOST_COUNT]
+    ldr r1, [r1, #GRKIT_HOST_RECORDS]
     cmp r2, #0
     beq owned_no
 owned_loop:
@@ -40,10 +39,10 @@ owned_done:
     ldrb r2, [r5, #0x2ac]
     cmp r2, #1
     beq shot_done
-    ldr r1, =HEADER
+    ldr r1, =GRKIT_HEADER_REFERENCE
     str r0, [r1, #GRKIT_HOST_STILL]
-    ldr r2, [r1]
-    ldr r3, [r1, #4]
+    ldr r2, [r1, #GRKIT_HOST_COUNT]
+    ldr r3, [r1, #GRKIT_HOST_RECORDS]
     mov r12, #GRKIT_RECORD_SIZE
     mla r3, r2, r12, r3
     add r3, r3, #0x22800
@@ -67,20 +66,20 @@ shot_done:
 // contexts use the native normalizer and cannot accidentally inherit a plugin.
 module_parameters:
     push {r0-r3, r12, lr}
-    ldr r0, =HEADER
+    ldr r0, =GRKIT_HEADER_REFERENCE
     ldr r2, [r5, #0x2ac]
-    str r2, [r0, #24]
-    ldr r3, [r0, #28]
+    str r2, [r0, #GRKIT_HOST_PROCESSING_CONTEXT]
+    ldr r3, [r0, #GRKIT_HOST_PROCESSING_CALLS]
     add r3, r3, #1
-    str r3, [r0, #28]
-    ldr r0, [r0, #8]
+    str r3, [r0, #GRKIT_HOST_PROCESSING_CALLS]
+    ldr r0, [r0, #GRKIT_HOST_ACTIVE]
     // Context 1 is observed on ImageTuningLiveview; 0 is the still path.
     ldrb r2, [r5, #0x2ac]
     cmp r2, #1
     bhi parameters_stock
     // Menu previews change only the live view. Still captures keep the committed record.
     bne parameters_committed
-    ldr r3, =HEADER
+    ldr r3, =GRKIT_HEADER_REFERENCE
     ldr r3, [r3, #GRKIT_HOST_PREVIEW]
     cmp r3, #0
     movne r0, r3
@@ -150,8 +149,8 @@ module_packet:
     ldr r0, [r4, #8]
     .word 0xeb000000 | (((.Lowned_record - . - 8) >> 2) & 0x00ffffff)
     bne packet_stock
-    ldr r1, =HEADER
-    str r0, [r1, #12]
+    ldr r1, =GRKIT_HEADER_REFERENCE
+    str r0, [r1, #GRKIT_HOST_LAST_APPLIED]
     ldr r1, [r0, #GRKIT_RECORD_MONOCHROME]
     and r1, r1, #1
     strb r1, [r4, #0x79]

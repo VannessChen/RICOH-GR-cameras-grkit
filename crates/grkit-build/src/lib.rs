@@ -24,6 +24,9 @@ pub use toolchain::Toolchain;
 #[derive(Debug, Clone)]
 pub struct Patch {
     pub address: u32,
+    /// The extension points (`components::Point::bit`) that need the patch,
+    /// or 0 for code that each installation publishes.
+    pub points: u32,
     pub before: Vec<u8>,
     pub after: Vec<u8>,
 }
@@ -86,8 +89,8 @@ pub const RUNTIME_SOURCES: &[(&str, &[u8])] = &[
     ),
     ("catalog.h", include_bytes!("../../../runtime/catalog.h")),
     (
-        "visibility.h",
-        include_bytes!("../../../runtime/visibility.h"),
+        "selection.h",
+        include_bytes!("../../../runtime/selection.h"),
     ),
     ("grf.c", include_bytes!("../../../runtime/grf.c")),
     ("grf.h", include_bytes!("../../../runtime/grf.h")),
@@ -98,6 +101,43 @@ pub const RUNTIME_SOURCES: &[(&str, &[u8])] = &[
     ("menu.S", include_bytes!("../../../runtime/menu.S")),
     ("menu.c", include_bytes!("../../../runtime/menu.c")),
     ("modules.h", include_bytes!("../../../runtime/modules.h")),
+    ("plugin.h", include_bytes!("../../../runtime/plugin.h")),
+    (
+        "plugins/image-control/page.h",
+        include_bytes!("../../../runtime/plugins/image-control/page.h"),
+    ),
+    (
+        "plugins/image-control/selective.c",
+        include_bytes!("../../../runtime/plugins/image-control/selective.c"),
+    ),
+    (
+        "plugins/framing/page.h",
+        include_bytes!("../../../runtime/plugins/framing/page.h"),
+    ),
+    (
+        "plugins/framing/framing.c",
+        include_bytes!("../../../runtime/plugins/framing/framing.c"),
+    ),
+    (
+        "plugins/guides/page.h",
+        include_bytes!("../../../runtime/plugins/guides/page.h"),
+    ),
+    (
+        "plugins/guides/guides.c",
+        include_bytes!("../../../runtime/plugins/guides/guides.c"),
+    ),
+    (
+        "plugins/date-stamp/page.h",
+        include_bytes!("../../../runtime/plugins/date-stamp/page.h"),
+    ),
+    (
+        "plugins/date-stamp/stamp.c",
+        include_bytes!("../../../runtime/plugins/date-stamp/stamp.c"),
+    ),
+    (
+        "plugins/grain/page.h",
+        include_bytes!("../../../runtime/plugins/grain/page.h"),
+    ),
     ("framing.c", include_bytes!("../../../runtime/framing.c")),
     ("framing.S", include_bytes!("../../../runtime/framing.S")),
     ("picture.c", include_bytes!("../../../runtime/picture.c")),
@@ -137,6 +177,14 @@ pub fn source_hashes() -> BTreeMap<String, String> {
             "runtime.rs",
             include_bytes!("../../grkit-core/src/runtime.rs").as_slice(),
         ),
+        (
+            "abi.rs",
+            include_bytes!("../../grkit-core/src/abi.rs").as_slice(),
+        ),
+        (
+            "menu_text.rs",
+            include_bytes!("../../grkit-core/src/menu_text.rs").as_slice(),
+        ),
     ] {
         sources.insert(format!("crates/grkit-core/src/{name}"), sha256(bytes));
     }
@@ -168,9 +216,12 @@ pub fn source_hashes() -> BTreeMap<String, String> {
 }
 
 pub fn materialize_runtime(directory: &Path) -> Result<()> {
-    fs::create_dir_all(directory.join("targets"))?;
     for (name, bytes) in RUNTIME_SOURCES {
-        fs::write(directory.join(name), bytes)?;
+        let path = directory.join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, bytes)?;
     }
     Ok(())
 }
@@ -293,7 +344,12 @@ fn build_image(
         "firmware_sha256": image.sha256, "decoded_firmware_sha256": image.decoded_sha256,
         "source_sha256": source_hashes(), "generated_header_sha256": sha256(generated.as_bytes()),
         "components": built.iter().map(|(name, component)| (name.to_string(),
-            json!({"sha256": sha256(&component.patches[0].after), "size": component.code_size})))
+            json!({"sha256": sha256(&component.patches[0].after), "size": component.code_size, "limit": component.limit})))
+            .collect::<serde_json::Map<_, _>>(),
+        // The firmware changes of each extension point, which a package
+        // without its plugins does not make.
+        "points": components::Point::ALL.iter().map(|point| (point.name().to_owned(),
+            json!(plan.patches.iter().filter(|patch| patch.points == point.bit()).count())))
             .collect::<serde_json::Map<_, _>>(),
         "files": files.iter().map(|(path, bytes)| json!({"path": path, "size": bytes.len(), "sha256": sha256(bytes)})).collect::<Vec<_>>()
     });

@@ -1,89 +1,157 @@
+/* Generated from crates/grkit-core/src/abi.rs. Do not edit: change the tables
+   there, then run GRKIT_UPDATE_ABI=1 cargo test -p grkit-core --test abi. */
 #ifndef GRKIT_ABI_H
 #define GRKIT_ABI_H
 
-/* Version 1 private memory layout, shared by the loader and ARM hooks. */
+/* The private header: the start of the registry array. ARM code addresses it
+   through the literal GRKIT_HEADER_REFERENCE, which the installer relocates. */
+#define GRKIT_HEADER_REFERENCE 0x58012340
 #define GRKIT_HOST_HEADER_SIZE 256
+#define GRKIT_HOST_MAGIC_VALUE 0x314d5247
+#define GRKIT_HOST_VERSION_VALUE 1
+/* Number of Image Control records. */
 #define GRKIT_HOST_COUNT 0
+/* Address of record 0. The records follow the header without gaps. */
 #define GRKIT_HOST_RECORDS 4
+/* Selected record, or 0 for native processing. */
 #define GRKIT_HOST_ACTIVE 8
+/* Record of the last private processing packet. A diagnostic. */
 #define GRKIT_HOST_LAST_APPLIED 12
+/* GRKIT_HOST_MAGIC_VALUE after the installer writes the header. */
 #define GRKIT_HOST_MAGIC 16
+/* GRKIT_HOST_VERSION_VALUE. */
 #define GRKIT_HOST_VERSION 20
-#define GRKIT_HOST_OFF_ICON 84
-#define GRKIT_HOST_BACK_PENDING 92
-/* Guide style previewed on the ADJ canvas while GRKIT_HOST_FRAME_PREVIEW is set. */
+/* Context word (+0x2ac) of the last parameter build. A diagnostic. */
+#define GRKIT_HOST_PROCESSING_CONTEXT 24
+/* Number of parameter builds. A diagnostic. */
+#define GRKIT_HOST_PROCESSING_CALLS 28
+/* ADJ controller that shows the private menu, or 0. */
+#define GRKIT_HOST_MENU_CONTROLLER 32
+/* Private menu level: 0 native, MENU_ROOT, or MENU_MODULE (runtime/modules.h). */
+#define GRKIT_HOST_MENU_LEVEL 36
+/* Highlighted row of the private menu. */
+#define GRKIT_HOST_MENU_CURSOR 40
+/* Native ADJ slot when the private menu opened. A diagnostic. */
+#define GRKIT_HOST_MENU_SLOT 44
+/* Guide style previewed on the ADJ canvas while GRKIT_HOST_FRAME_PREVIEW is
+   set. */
 #define GRKIT_HOST_GUIDE_PREVIEW 48
 /* Date stamp style: 0 Off, 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY. */
 #define GRKIT_HOST_STAMP 52
+/* Installed plugins: bit n is plugin n of grkit_core::modules::NAMES and
+   module n of runtime/modules.h. Image Control is set only with effects. */
+#define GRKIT_HOST_PLUGINS 56
+/* Nonzero while the menu rebuilds the native list. The list callback and the
+   native Image Control preview ignore the changes. */
+#define GRKIT_HOST_MENU_REBUILDING 60
+/* Native list position, saved when the private menu opens. */
+#define GRKIT_HOST_MENU_LIST 64
+#define GRKIT_HOST_MENU_LIST_WORDS 2
 /* Grain level: 0 Off, 1 weak, 2 medium, 3 strong. The native grain stage of
    recorded pictures uses it instead of the native grain settings. */
 #define GRKIT_HOST_GRAIN 72
-/* Modules that MODULES.TXT hides from the menu: bit n is module n of
-   runtime/modules.h. Bit 0 stays clear, because Image Control shows exactly
-   when effects are installed. */
-#define GRKIT_HOST_HIDDEN 56
-/* Words 24..43 belong to the menu: two text descriptors (96..111) and a
-   16-word event ring (112..175). */
+/* Number of ADJ events. GRKIT_HOST_MENU_EVENT_RING holds the last ones. */
+#define GRKIT_HOST_MENU_EVENTS 76
+/* Number of Image Control selections. A diagnostic. */
+#define GRKIT_HOST_MENU_APPLIES 80
+/* Icon of Off, or 0 for the native icon. */
+#define GRKIT_HOST_OFF_ICON 84
+/* How the private menu opened: 1 or 2 across an edge of the native slots, 3 by
+   touch or on the return from the native parameters. */
+#define GRKIT_HOST_MENU_EDGE 88
+/* MENU was pressed, and its confirm event has not arrived yet. */
+#define GRKIT_HOST_BACK_PENDING 92
+/* Text descriptor of the ADJ title: (length + 1) | 0x100, then the address. */
+#define GRKIT_HOST_MENU_TITLE 96
+#define GRKIT_HOST_MENU_TITLE_WORDS 2
+/* Text descriptor of the ADJ detail line. */
+#define GRKIT_HOST_MENU_DETAIL 104
+#define GRKIT_HOST_MENU_DETAIL_WORDS 2
+/* The last ADJ events: kind | argument << 16. */
+#define GRKIT_HOST_MENU_EVENT_RING 112
+#define GRKIT_HOST_MENU_EVENT_RING_WORDS 16
+/* Icon of the GRKit tile. */
 #define GRKIT_HOST_PLUGINS_ICON 176
+/* Private toolbar cell, or 0. */
 #define GRKIT_HOST_TOOLBAR_WIDGET 180
+/* ADJ controller of the private toolbar cell. */
 #define GRKIT_HOST_TOOLBAR_OWNER 184
+/* Module that the private menu shows at MENU_MODULE. */
 #define GRKIT_HOST_MODULE 188
-/* One icon chunk pointer: the runtime capacity fits a single chunk. */
+/* Icon chunk addresses: chunk n holds icon slots 40 n to 40 n + 39. */
 #define GRKIT_HOST_ICON_CHUNKS 192
 /* Aspect id 2 variant for the photo shown in playback: 0 none (shooting uses
    the Framing ratio), 1 not 65:24, 2 65:24. */
 #define GRKIT_HOST_FRAME_FILE 196
-/* Record of the last live-view build: an owned record, or 0 for native processing. */
+/* Record of the last live-view build: an owned record, or 0 for native
+   processing. */
 #define GRKIT_HOST_LIVE_RECORD 200
-/* Committed composition guide style: 0 Off, 1 thirds, 2 center, 3 golden ratio, 4 diagonals. */
+/* Committed composition guide style: 0 Off, 1 thirds, 2 center, 3 golden
+   ratio, 4 diagonals. */
 #define GRKIT_HOST_GUIDE 204
+/* Framing ratio: 0 native, then the Framing rows. */
 #define GRKIT_HOST_FRAME_RATIO 208
 /* ADJ Framing page preview: 0 none, else the highlighted ratio + 1. */
 #define GRKIT_HOST_FRAME_PREVIEW 212
+/* Number of Framing paints. A diagnostic. */
 #define GRKIT_HOST_FRAME_DRAWS 216
 /* ADJ canvas of the preview. It stays set until a full draw erases the mask. */
 #define GRKIT_HOST_FRAME_PREVIEW_CANVAS 220
-/* First module tile: the Framing tiles, then the Guides tiles, contiguous. */
+/* Icon of the first module tile: the Framing tiles, then the Guides tiles,
+   contiguous. */
 #define GRKIT_HOST_FRAMING_ICON 224
+/* Live view controller that Framing draws on, or 0. */
 #define GRKIT_HOST_FRAME_OWNER 228
+/* Canvas of that controller. */
 #define GRKIT_HOST_FRAME_CANVAS 232
+/* Bitmap of the last Framing paint, or 0 when nothing is drawn. */
 #define GRKIT_HOST_FRAME_BITMAP 236
+/* Number of paints without a bitmap. A diagnostic. */
 #define GRKIT_HOST_FRAME_SKIPPED 240
 /* Live-view-only override: 0 none, 1 native processing, else an owned record. */
 #define GRKIT_HOST_PREVIEW 244
 /* Record applied by the last non-live-view parameter build, or 0. A
    diagnostic: capture metadata and the encode read the shot ring. */
 #define GRKIT_HOST_STILL 248
-/* Return to GRKit Image Control after the native parameter page: 1 opening, 2 away. */
+/* Return to GRKit Image Control after the native parameter page: 1 opening, 2
+   away. */
 #define GRKIT_HOST_RETURN 252
 
+/* An Image Control record. The records follow the header. */
 #define GRKIT_RECORD_SIZE 0x740
-#define GRKIT_RECORD_COEFFICIENTS 84
+/* The native processing record: a prefix, then the tone curves. */
+#define GRKIT_RECORD_COEFFICIENTS 0x54
+/* UTF-16 effect name with its NUL. */
 #define GRKIT_RECORD_NAME 0x668
+/* Nonzero for a monochrome effect. */
 #define GRKIT_RECORD_MONOCHROME 0x690
+/* Address of the effect icon. */
 #define GRKIT_RECORD_ICON 0x694
+/* Effect ID with its NUL. */
 #define GRKIT_RECORD_ID 0x698
-/* The longest menu string, with its NUL: an Image Control summary is a prefix
-   and a 16-character effect name. */
-#define GRKIT_SUMMARY_UNITS 32
 /* u16 ImageTone code recorded in photos: 0x8000 | hash of the effect ID. */
 #define GRKIT_RECORD_CODE 0x6f8
 /* GRF extension, zero for an effect without features. */
 #define GRKIT_RECORD_FEATURES 0x700
+/* i16[9] signed Q13 RGB matrix after the tone curves, applied through the
+   YCbCr matrix. */
+#define GRKIT_RECORD_POST 0x704
+/* Selective color for recorded pictures: i16 cos and sin of the target hue
+   (Q12), u16 inner and outer tangents toward smaller hue angles, then toward
+   larger ones (Q8), and u8 chroma gate c0 and c1. Bytes 0x724..0x72b are
+   reserved and zero. */
+#define GRKIT_RECORD_SELECTIVE 0x716
 #define GRKIT_FEATURE_POST 1U
 #define GRKIT_FEATURE_SELECTIVE 2U
-/* i16[9] signed Q13 RGB matrix after the tone curves, applied through the YCbCr
-   matrix. */
-#define GRKIT_RECORD_POST 0x704
-/* Selective color for recorded pictures: i16 cos and sin of the target hue (Q12),
-   u16 inner and outer tangents toward smaller hue angles, then toward larger
-   ones (Q8), and u8 chroma gate c0 and c1. Bytes 0x724..0x72b are reserved and
-   zero. */
-#define GRKIT_RECORD_SELECTIVE 0x716
-/* GR III 2.10. A target header can define a larger slot (see runtime/targets). */
+/* The longest menu string, with its NUL: an Image Control summary is a prefix
+   and a 16-character effect name. */
+#define GRKIT_SUMMARY_UNITS 32
+/* Icon slot of GR III 2.10. A target header can define a larger slot (see
+   runtime/targets). */
 #ifndef GRKIT_ICON_STRIDE
 #define GRKIT_ICON_STRIDE 6408
 #endif
+
 /* Picture scratch after the records: the date stamp core and halo masks, then
    the shot ring. */
 #define GRKIT_PICTURE_MASKS 141376
@@ -93,9 +161,9 @@
    before an earlier one is written, so a single "last build" word is not
    enough. Word 0 counts the writes, and entry n is {key, record} at 8 + 8 n.
    The assembly computes the offset as 0x22800 + 0x40. */
-#define GRKIT_SHOT_RING GRKIT_PICTURE_MASKS
+#define GRKIT_SHOT_RING 141376
 #define GRKIT_SHOT_ENTRIES 8
-#define GRKIT_PICTURE_SCRATCH (GRKIT_PICTURE_MASKS + 8 + 8 * GRKIT_SHOT_ENTRIES)
+#define GRKIT_PICTURE_SCRATCH 141448
 
 /* Menu text after the picture scratch, in each menu language: 0 English, 1
    Simplified Chinese, 2 Traditional Chinese. The installer copies the label
@@ -104,9 +172,8 @@
    GRKIT_TEXT_SUMMARY, the installer writes the Image Control summary of each
    record in each language, GRKIT_SUMMARY_UNITS units each, language-major. */
 #define GRKIT_TEXT_SIZE 8192
-/* Everything after the records: the script array must hold it
-   (grkit_core::runtime::TAIL_SIZE). */
-#define GRKIT_TAIL_SIZE (GRKIT_PICTURE_SCRATCH + GRKIT_TEXT_SIZE)
+/* Everything after the records: the script array must hold it. */
+#define GRKIT_TAIL_SIZE 149640
 #define GRKIT_TEXT_SUMMARY 4096
 #define GRKIT_TEXT_LANGUAGES 3
 #define GRKIT_TEXT_RECORDS 20

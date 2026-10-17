@@ -59,7 +59,7 @@ grkit verify dist/GRKit.zip
 
 - GR IIIx：在 `grkit package` 后加 `--camera gr3x`。它和 GR III 使用同一个运行时。
 - GR IV：用 `fwdc248b.bin` 和 `--target gr4-1.11` 构建，再用 `--camera gr4` 打包。
-- 减少模块：加 `--hide framing,guides,date-stamp,grain`。不加 `--effects` 时，安装包中没有 Image Control。
+- 减少插件：用 `--plugins` 列出要安装的插件，例如 `--plugins framing,guides`。安装器不会为其他插件修改固件。不加 `--effects` 时，安装包中没有 Image Control。
 - 指南语言：加 `--language zh-Hans` 或 `--language zh-Hant`。安装包会在英文指南旁加入对应语言的指南。
 
 ## 仓库结构

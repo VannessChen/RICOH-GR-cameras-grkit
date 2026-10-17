@@ -109,6 +109,7 @@ fn patch_and_branch_validation() {
     assert!(arm::elf_text(&[0; 64]).is_err());
     let patch = Patch {
         address: 0x1000,
+        points: 0,
         before: vec![0; 4],
         after: target::HEADER_REFERENCE.to_le_bytes().to_vec(),
     };
@@ -198,6 +199,16 @@ fn elf_parser_rejects_unresolved_text_and_invalid_section_ranges() -> Result<()>
         .unwrap_err()
         .to_string()
         .contains("symbol entry size"));
+    // An allocated, writable section (as .data or .bss would be).
+    section(
+        &mut blob,
+        3,
+        [17, 1, 3, 0, text_offset as u32, 4, 0, 0, 4, 0],
+    );
+    assert!(arm::elf_text(&blob)
+        .unwrap_err()
+        .to_string()
+        .contains("not part of the private code"));
     Ok(())
 }
 
@@ -379,21 +390,21 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
     for (component, base, end, expected, instructions) in [
         (
             &processing,
-            0x53002080,
-            0x53002340u32,
+            0x540b6100,
+            0x540b6900u32,
             processing_hooks.as_slice(),
             [].as_slice(),
         ),
         (
             &menu,
-            0x53002340,
-            0x53004000u32,
+            0x540b6900,
+            0x540b9000u32,
             menu_hooks.as_slice(),
             menu_instructions.as_slice(),
         ),
         (
             &framing,
-            0x540b6000,
+            0x540b9000,
             0x540be000u32,
             framing_hooks.as_slice(),
             framing_instructions.as_slice(),
@@ -473,11 +484,13 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
         patches: vec![
             Patch {
                 address: 0x53002080,
+                points: 0,
                 before: vec![0; 8],
                 after: hex::decode("4023015801020304")?,
             },
             Patch {
                 address: 0x531a48f0,
+                points: 0,
                 before: hex::decode("f431d0e5")?,
                 after: hex::decode("000000ea")?,
             },
@@ -488,7 +501,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     let header = loader::header(&plan, &synthetic_firmware())?;
     assert_eq!(
         sha256(header.as_bytes()),
-        "2123d0c8678316e3e18be36e1ff991e2540d855402880f46407d9dc694a0a894"
+        "d2f60bc5d0934f14ab83ab3af02087829f89f8d06a0f6557a3ab4c0578f71ebe"
     );
     Ok(())
 }
@@ -499,11 +512,13 @@ fn generated_header_marks_only_rtos_tail_patches_as_unchecked() -> Result<()> {
         patches: vec![
             Patch {
                 address: 0x53002080,
+                points: 0,
                 before: vec![0; 8],
                 after: hex::decode("4023015801020304")?,
             },
             Patch {
-                address: components::FRAMING_BASE,
+                address: components::TAIL_BASE,
+                points: 0,
                 before: vec![0; 4],
                 after: vec![1, 2, 3, 4],
             },
@@ -513,6 +528,56 @@ fn generated_header_marks_only_rtos_tail_patches_as_unchecked() -> Result<()> {
     let header = loader::header(&plan, &synthetic_firmware())?;
     assert!(header.contains("{0x53002080,8,0,before_0,after_0},"));
     assert!(header.contains("{0x540b6000,4,1,before_1,after_1},"));
+    Ok(())
+}
+
+#[test]
+fn every_code_region_lies_in_the_tail() {
+    for (target, layout) in [
+        (&target::GR3_210, &components::GR3_LAYOUT),
+        (&target::GR4_111, &components::GR4_LAYOUT),
+    ] {
+        let (tail, end) = layout.tail;
+        // The decoded image ends where the startup .data copy source ends.
+        assert!(
+            tail >= target.data_source + target.data_size,
+            "{}",
+            target.name
+        );
+        let mut regions: Vec<_> = [layout.processing, Some(layout.menu), layout.framing]
+            .into_iter()
+            .flatten()
+            .collect();
+        regions.sort();
+        let mut next = tail;
+        for (start, stop) in regions {
+            assert!(
+                start >= next && start < stop && stop <= end,
+                "{}",
+                target.name
+            );
+            next = stop;
+        }
+    }
+}
+
+#[test]
+fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
+    let plan = PatchPlan {
+        patches: vec![Patch {
+            address: components::TAIL_BASE,
+            points: 0,
+            before: vec![0; 4],
+            after: vec![1, 2, 3, 4],
+        }],
+        relocations: vec![],
+    };
+    let header = loader::header(&plan, &synthetic_firmware())?;
+    assert!(header.contains("{0x540b6000,4,1,before_0,after_0},"));
+    // Code in the tail belongs to no extension point. Image Control needs the
+    // menu, tuning, and picture encode points (bits 0, 1, and 4).
+    assert!(header.contains("static const u32 patch_points[] = {0x0};"));
+    assert!(header.contains("static const u32 plugin_points[] = {0x13,0xd,0x5,0x11,0x21};"));
     Ok(())
 }
 
@@ -547,7 +612,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/PLUGINS/PLUGINS.TTL",
-            "ff782c8ab938013424fc2e8dd0d910b1c7bc9f877d8716bacbca7c5175c1a213",
+            "c10a9981ea3bef553cf970e88b72ff7e38129ac6213e2dc38538294899014326",
         ),
         (
             "SCRIPT/PLUGINS/INSTALL.BIN",
@@ -594,16 +659,41 @@ fn each_camera_offers_what_its_runtime_has() {
         let target = target::find(camera.target).unwrap();
         let layout = target.layout.unwrap();
         assert_eq!(layout.processing.is_some(), camera.effects, "{}", camera.id);
-        // The installer hides the modules that the layout lacks (bit n + 1 of
-        // the hidden mask is module name n).
-        for (index, name) in grkit_core::modules::NAMES.iter().enumerate() {
-            let absent = layout.hidden & (2 << index) != 0;
-            assert_eq!(
-                absent,
-                !camera.modules.contains(name),
-                "{} {name}",
-                camera.id
-            );
+        // Each point of each plugin that the camera offers has hooks.
+        let points: Vec<_> = components::hook_sites(layout)
+            .map(|(_, symbol)| components::Point::of(symbol).unwrap())
+            .collect();
+        for (name, needed) in components::PLUGIN_POINTS {
+            if camera.plugins.contains(&name) {
+                for point in needed {
+                    assert!(points.contains(point), "{} {name} {point:?}", camera.id);
+                }
+            }
         }
     }
+}
+
+#[test]
+fn plugins_and_points_follow_the_selection_order() {
+    let names: Vec<_> = components::PLUGIN_POINTS
+        .iter()
+        .map(|(name, _)| *name)
+        .collect();
+    assert_eq!(names, grkit_core::modules::NAMES);
+    let selection = include_str!("../../../runtime/selection.h");
+    assert!(selection
+        .contains("{\"image-control\", \"framing\", \"guides\", \"date-stamp\", \"grain\"}"));
+    // The hooks of each point. The in-place patches add 1 to tuning, and on
+    // GR III 5 to capture.aspect (build.json "points" counts both).
+    for (layout, expected) in [
+        (&components::GR3_LAYOUT, [16, 15, 5, 9, 1, 2]),
+        (&components::GR4_LAYOUT, [15, 16, 5, 8, 1, 4]),
+    ] {
+        let mut counts = [0; 6];
+        for (_, symbol) in components::hook_sites(layout) {
+            counts[components::Point::of(symbol).unwrap() as usize] += 1;
+        }
+        assert_eq!(counts, expected);
+    }
+    assert!(components::Point::of("unknown_hook").is_err());
 }

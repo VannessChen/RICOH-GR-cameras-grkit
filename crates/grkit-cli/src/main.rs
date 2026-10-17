@@ -4,7 +4,7 @@ mod storage;
 
 use anyhow::{ensure, Context, Result};
 use clap::{Parser, Subcommand};
-use grkit_core::{effects, fit, modules::Hidden, packaging, site, Files};
+use grkit_core::{effects, fit, modules::Selection, packaging, site, Files};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -49,12 +49,13 @@ enum Command {
     Package {
         #[arg(long)]
         build: PathBuf,
-        /// Compiled effects. Without effects, the camera menu hides Image Control.
+        /// Compiled effects. Without effects, the installer does not install Image Control.
         #[arg(long)]
         effects: Option<PathBuf>,
-        /// Modules that the camera menu hides: framing, guides, date-stamp, grain.
+        /// The plugins to install: image-control, framing, guides, date-stamp,
+        /// grain. Without this option, the package installs each plugin.
         #[arg(long, value_delimiter = ',')]
-        hide: Vec<String>,
+        plugins: Option<Vec<String>>,
         /// The camera that the package enables SD scripts on.
         #[arg(long, default_value = "gr3", value_parser = grkit_core::camera::CAMERAS.map(|camera| camera.id))]
         camera: String,
@@ -219,7 +220,7 @@ fn run(command: Command) -> Result<Value> {
         Command::Package {
             build,
             effects,
-            hide,
+            plugins,
             camera,
             language,
             out,
@@ -229,17 +230,20 @@ fn run(command: Command) -> Result<Value> {
                 Some(directory) => storage::read_effects(&directory)?,
                 None => Files::new(),
             };
-            let hidden = Hidden::from_names(hide.iter().map(String::as_str))?;
+            let plugins = match plugins {
+                Some(names) => Selection::from_names(names.iter().map(String::as_str))?,
+                None => Selection::ALL,
+            };
             let camera = grkit_core::camera::find(&camera)?;
             let language = packaging::Language::parse(&language)?;
             let bytes = packaging::assemble_localized(
-                &runtime, &manifest, &effects, hidden, camera, language,
+                &runtime, &manifest, &effects, plugins, camera, language,
             )?;
             let verified = packaging::verify_package(&bytes)?;
             storage::write_new(&out, &bytes)?;
             Ok(
                 json!({"path": out, "sha256": packaging::sha256(&bytes), "camera": verified["camera"],
-                "entries": verified["entries"], "hidden_modules": verified["hidden_modules"],
+                "entries": verified["entries"], "plugins": verified["plugins"],
                 "language": verified["language"]}),
             )
         }
@@ -250,7 +254,7 @@ fn run(command: Command) -> Result<Value> {
             Ok(
                 json!({"valid": true, "camera": verified["camera"], "target": verified["target"],
                 "effects": verified["effect_ids"].as_array().map_or(0, Vec::len),
-                "hidden_modules": verified["hidden_modules"], "language": verified["language"]}),
+                "plugins": verified["plugins"], "language": verified["language"]}),
             )
         }
         Command::Site { build, out } => {

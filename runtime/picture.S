@@ -1,17 +1,17 @@
-#include "abi.h"
 #include "firmware.h"
+#include "abi.h"
 #include "hooks.h"
 .syntax unified
 .arm
 .text
 /* Picture processing hooks for effect extensions. They link into the Framing
-   region, because the processing region has no room left. */
+   region. */
 
 #ifdef HOOK_MODULE_GAMMA_DIRTY
 // Z=1 only for an owned record in r0. Preserves all registers.
 picture_owned:
     push {r0-r3, lr}
-    ldr r1, =0x58012340
+    ldr r1, =GRKIT_HEADER_REFERENCE
     ldr r2, [r1, #GRKIT_HOST_COUNT]
     ldr r1, [r1, #GRKIT_HOST_RECORDS]
     cmp r2, #0
@@ -37,7 +37,7 @@ module_gamma_dirty:
     // (+5, the monochrome weights) and the YCbCr matrix (+7, the post matrix)
     // on the next update: their stages have already run. This hook runs only
     // for ImageTuningLiveview.
-    ldr r1, =0x58012340
+    ldr r1, =GRKIT_HEADER_REFERENCE
     ldr r2, [r1, #GRKIT_HOST_LIVE_RECORD]
     str r0, [r1, #GRKIT_HOST_LIVE_RECORD]
     subs r2, r2, r0
@@ -71,7 +71,7 @@ dirty_resume:
 #if defined(HOOK_GRAIN_ENABLE) || defined(HOOK_GRAIN_PARTICLE)
 // r3 = the level minus 1, or a value above 2 for Off. Flags change.
 grain_level:
-    ldr r3, =0x58012340
+    ldr r3, =GRKIT_HEADER_REFERENCE
     ldr r3, [r3, #GRKIT_HOST_GRAIN]
     sub r3, r3, #1
     cmp r3, #2

@@ -346,59 +346,59 @@ fn package_targets_the_selected_camera() {
 }
 
 #[test]
-fn package_hides_modules_and_may_omit_effects() {
+fn package_selects_plugins_and_may_omit_effects() {
     let tmp = tempfile::tempdir().unwrap();
     let (build, effects) = fixture(tmp.path());
-    let zip = tmp.path().join("hidden.zip");
+    let zip = tmp.path().join("selected.zip");
     let packaged = success(&[
         "package",
         "--build",
         text(&build),
         "--effects",
         text(&effects),
-        "--hide",
-        "guides,date-stamp",
+        "--plugins",
+        "image-control,framing,grain",
         "--out",
         text(&zip),
     ]);
-    // The module file is one more entry.
+    // The plugin file is one more entry.
     assert_eq!(packaged["entries"], 12 + source_count());
-    assert_eq!(packaged["hidden_modules"], json!(["guides", "date-stamp"]));
+    assert_eq!(
+        packaged["plugins"],
+        json!(["image-control", "framing", "grain"])
+    );
     let verified = success(&["verify", text(&zip)]);
-    assert_eq!(verified["hidden_modules"], json!(["guides", "date-stamp"]));
+    assert_eq!(
+        verified["plugins"],
+        json!(["image-control", "framing", "grain"])
+    );
 
-    // Without effects, Image Control is hidden, so one module must stay.
+    // Without effects, Image Control has nothing to show, so another plugin must stay.
     let framing_only = tmp.path().join("framing.zip");
     let packaged = success(&[
         "package",
         "--build",
         text(&build),
-        "--hide",
-        "guides",
-        "--hide",
-        "date-stamp,grain",
+        "--plugins",
+        "framing",
         "--out",
         text(&framing_only),
     ]);
     assert_eq!(packaged["entries"], 12);
     assert_eq!(success(&["verify", text(&framing_only)])["effects"], 0);
-    for hide in [
-        "framing,guides,date-stamp,grain",
-        "image-control",
-        "guides,guides",
-    ] {
+    for plugins in ["image-control", "hdr", "guides,guides"] {
         let rejected = tmp.path().join("rejected.zip");
         let output = run(&[
             "package",
             "--build",
             text(&build),
-            "--hide",
-            hide,
+            "--plugins",
+            plugins,
             "--out",
             text(&rejected),
         ]);
-        assert!(!output.status.success(), "{hide}");
-        assert!(!rejected.exists(), "{hide}");
+        assert!(!output.status.success(), "{plugins}");
+        assert!(!rejected.exists(), "{plugins}");
     }
 }
 

@@ -1,14 +1,15 @@
 /**
- * The ADJ modules and the package rules for them. Image Control shows on the
- * camera exactly when the package has effects. The other modules show unless
- * the package hides them (`MODULES.TXT`, through `Package.hideModule`).
+ * The plugins of the ADJ menu and the package rules for them. A plugin that the
+ * package omits (`PLUGINS.TXT`, through `Package.omitPlugin`) is not installed
+ * and changes no firmware. Image Control also needs effects: without them, the
+ * installer does not install it.
  */
 export const MODULES = [
-  { key: 'imageControl', name: 'Image Control', hide: null },
-  { key: 'framing', name: 'Framing', hide: 'framing' },
-  { key: 'guides', name: 'Guides', hide: 'guides' },
-  { key: 'dateStamp', name: 'Date Stamp', hide: 'date-stamp' },
-  { key: 'grain', name: 'Grain', hide: 'grain' },
+  { key: 'imageControl', name: 'Image Control', plugin: 'image-control' },
+  { key: 'framing', name: 'Framing', plugin: 'framing' },
+  { key: 'guides', name: 'Guides', plugin: 'guides' },
+  { key: 'dateStamp', name: 'Date Stamp', plugin: 'date-stamp' },
+  { key: 'grain', name: 'Grain', plugin: 'grain' },
 ] as const;
 
 export type ModuleKey = (typeof MODULES)[number]['key'];
@@ -18,15 +19,15 @@ export const ALL_MODULES: ReadonlySet<ModuleKey> = new Set(MODULES.map((module) 
 export interface ModulePlan {
   /** The package includes the selected effects only when Image Control is on. */
   includeEffects: boolean;
-  /** Names for `Package.hideModule`. */
-  hidden: string[];
-  /** The modules that the camera menu shows, in menu order. */
+  /** Names for `Package.omitPlugin`. */
+  omitted: string[];
+  /** The plugins that the camera menu shows, in menu order. */
   visible: ModuleKey[];
 }
 
 /**
- * `available` names the modules that the camera's runtime has, in menu order.
- * Modules outside it are neither shown nor listed in `MODULES.TXT`.
+ * `available` names the plugins that the camera's runtime has, in menu order.
+ * Plugins outside it are neither shown nor omitted.
  */
 export function planModules(
   enabled: ReadonlySet<ModuleKey>,
@@ -37,7 +38,7 @@ export function planModules(
   const includeEffects = available.includes('imageControl') && enabled.has('imageControl');
   return {
     includeEffects,
-    hidden: offered.flatMap((module) => (module.hide && !enabled.has(module.key) ? [module.hide] : [])),
+    omitted: offered.flatMap((module) => (enabled.has(module.key) ? [] : [module.plugin])),
     visible: offered
       .filter((module) =>
         module.key === 'imageControl' ? includeEffects && effectCount > 0 : enabled.has(module.key),

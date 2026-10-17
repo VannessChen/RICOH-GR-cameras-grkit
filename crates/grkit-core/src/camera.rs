@@ -28,9 +28,9 @@ pub struct Camera {
     pub experimental: bool,
     /// True when the runtime has Image Control, so a package can have effects.
     pub effects: bool,
-    /// The modules of `modules::NAMES` that the runtime has. The camera menu
-    /// never shows the others.
-    pub modules: &'static [&'static str],
+    /// The plugins of `modules::NAMES` that the runtime has. A package cannot
+    /// select the others.
+    pub plugins: &'static [&'static str],
 }
 
 pub const GR3: Camera = Camera {
@@ -41,7 +41,7 @@ pub const GR3: Camera = Camera {
     modeset: "00078350.588",
     experimental: false,
     effects: true,
-    modules: &modules::NAMES,
+    plugins: &modules::NAMES,
 };
 
 pub const GR3X: Camera = Camera {
@@ -52,7 +52,7 @@ pub const GR3X: Camera = Camera {
     modeset: "00078490.609",
     experimental: false,
     effects: true,
-    modules: &modules::NAMES,
+    plugins: &modules::NAMES,
 };
 
 /// GR IV and GR IV HDF run the same firmware and ModeSet file.
@@ -64,7 +64,7 @@ pub const GR4: Camera = Camera {
     modeset: "00078560.636",
     experimental: true,
     effects: true,
-    modules: &modules::NAMES,
+    plugins: &modules::NAMES,
 };
 
 pub const CAMERAS: [&Camera; 3] = [&GR3, &GR3X, &GR4];

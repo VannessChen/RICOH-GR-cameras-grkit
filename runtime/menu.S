@@ -1,4 +1,5 @@
 #include "firmware.h"
+#include "abi.h"
 #include "hooks.h"
 .syntax unified
 .arm
@@ -7,26 +8,26 @@
 .global menu_header
 .type menu_header, %function
 menu_header:
-    ldr r0, =0x58012340
+    ldr r0, =GRKIT_HEADER_REFERENCE
     bx lr
 .global menu_text_measure
 .type menu_text_measure, %function
 menu_text_measure:
     ldr r7, [r3, r7, lsl #2]
     push {r0-r3, lr}
-    ldr r0, =0x58012340
-    ldr r1, [r0, #36]
+    ldr r0, =GRKIT_HEADER_REFERENCE
+    ldr r1, [r0, #GRKIT_HOST_MENU_LEVEL]
     cmp r1, #0
     beq measure_done
-    ldr r1, [r0, #32]
+    ldr r1, [r0, #GRKIT_HOST_MENU_CONTROLLER]
     ldr r2, [r1, #ADJ_TITLE]
     cmp r5, r2
-    addeq r7, r0, #96
+    addeq r7, r0, #GRKIT_HOST_MENU_TITLE
     beq measure_language
     ldr r2, [r1, #ADJ_DETAIL]
     cmp r5, r2
     bne measure_done
-    add r7, r0, #104
+    add r7, r0, #GRKIT_HOST_MENU_DETAIL
 measure_language:
     /* r9 is the language table index, which selects the font. menu.c picks
        the index of the text language. r12 may be live after the hook. */
@@ -42,19 +43,19 @@ measure_done:
 menu_text_draw:
     ldr r3, [r3, r7, lsl #2]
     push {r1, r2, r12, lr}
-    ldr r12, =0x58012340
-    ldr r1, [r12, #36]
+    ldr r12, =GRKIT_HEADER_REFERENCE
+    ldr r1, [r12, #GRKIT_HOST_MENU_LEVEL]
     cmp r1, #0
     beq draw_done
-    ldr r1, [r12, #32]
+    ldr r1, [r12, #GRKIT_HOST_MENU_CONTROLLER]
     ldr r2, [r1, #ADJ_TITLE]
     cmp r4, r2
-    addeq r3, r12, #96
+    addeq r3, r12, #GRKIT_HOST_MENU_TITLE
     beq draw_language
     ldr r2, [r1, #ADJ_DETAIL]
     cmp r4, r2
     bne draw_done
-    add r3, r12, #104
+    add r3, r12, #GRKIT_HOST_MENU_DETAIL
 draw_language:
     /* r0 is the language table index, as at the measure hook. */
     push {r3, lr}
@@ -145,18 +146,18 @@ menu_icon_descriptor:
 
 #ifdef HOOK_MENU_NATIVE_ADJ_APPLY
 /* Native pages apply each highlighted Image Control immediately. Preview it in
-   the live view (+244 = 1) and keep the private selection until a native OK. */
+   the live view (GRKIT_HOST_PREVIEW = 1) and keep the private selection until a native OK. */
 .macro NATIVE_APPLY name, resume
 .global \name
 .type \name, %function
 \name:
     push {r0-r2, r12}
     mrs r12, cpsr
-    ldr r0, =0x58012340
-    ldr r1, [r0, #60]
+    ldr r0, =GRKIT_HEADER_REFERENCE
+    ldr r1, [r0, #GRKIT_HOST_MENU_REBUILDING]
     cmp r1, #0
     moveq r2, #1
-    streq r2, [r0, #244]
+    streq r2, [r0, #GRKIT_HOST_PREVIEW]
     msr APSR_nzcvq, r12
     pop {r0-r2, r12}
     mov r12, sp
@@ -173,10 +174,10 @@ menu_native_page_event:
     push {r0, r2}
     ldrh r2, [r1]
     cmp r2, #EV_CONFIRM
-    ldr r0, =0x58012340
+    ldr r0, =GRKIT_HEADER_REFERENCE
     moveq r2, #0
-    streq r2, [r0, #8]
-    streq r2, [r0, #244]
+    streq r2, [r0, #GRKIT_HOST_ACTIVE]
+    streq r2, [r0, #GRKIT_HOST_PREVIEW]
     pop {r0, r2}
     mov r12, sp
     ldr pc, =HOOK_MENU_NATIVE_PAGE_EVENT_RESUME
@@ -186,9 +187,9 @@ menu_native_page_event:
 .type menu_native_page_exit, %function
 menu_native_page_exit:
     push {r0}
-    ldr r12, =0x58012340
+    ldr r12, =GRKIT_HEADER_REFERENCE
     mov r0, #0
-    str r0, [r12, #244]
+    str r0, [r12, #GRKIT_HOST_PREVIEW]
     pop {r0}
     mov r12, sp
     ldr pc, =HOOK_MENU_NATIVE_PAGE_EXIT_RESUME

@@ -96,9 +96,6 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage) -> Result<String> {
         // The installer prepares the menu artwork but no effect records.
         result.push_str("#define GRKIT_NO_IMAGE_CONTROL 1\n");
     }
-    if let Some(layout) = target.layout.filter(|layout| layout.hidden != 0) {
-        writeln!(result, "#define TARGET_HIDDEN {:#x}U", layout.hidden)?;
-    }
     if target.name == target::GR4_111.name {
         // GR IV icon descriptors: width and a valid flag, height, pixel offset.
         result.push_str("#define GRKIT_ICON_DESCRIPTOR_12 1\n");
@@ -115,7 +112,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage) -> Result<String> {
         ("LOCK_PATH", "INSTALL.LCK"),
         ("DONE_PATH", "INSTALL.OK"),
         ("FAILED_PATH", "INSTALL.ERR"),
-        ("MODULES_PATH", "MODULES.TXT"),
+        ("PLUGINS_PATH", "PLUGINS.TXT"),
     ] {
         writeln!(
             result,
@@ -179,6 +176,14 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage) -> Result<String> {
     // Kind 1 marks a patch after the decoded RTOS image. The installer does
     // not require its stock bytes, because a restart keeps earlier GRKit code.
     let image_end = target::RTOS_BASE + body.body.len() as u32;
+    // The points of each plugin, in the order of runtime/selection.h.
+    words(
+        &mut result,
+        "plugin_points",
+        crate::components::PLUGIN_POINTS
+            .iter()
+            .map(|(_, points)| points.iter().fold(0, |mask, point| mask | point.bit())),
+    );
     result.push_str("static struct patch patches[] = {\n");
     for (i, patch) in plan.patches.iter().enumerate() {
         writeln!(
@@ -190,5 +195,12 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage) -> Result<String> {
         )?;
     }
     result.push_str("};\n");
+    // The extension points of each patch, in a separate table so the patch
+    // table keeps its format.
+    words(
+        &mut result,
+        "patch_points",
+        plan.patches.iter().map(|patch| patch.points),
+    );
     Ok(result)
 }
