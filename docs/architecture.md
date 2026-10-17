@@ -14,17 +14,60 @@ Menu, processing, and Framing hooks run in the camera's RTOS domain.
 The site preview applies one 33 x 33 x 33 table for each effect. `grkit effects publish` computes each table from the fit model: it undoes the Standard rendering of an sRGB input, then renders the result with the effect.
 An effect equal to Standard maps each input to itself. The preview assumes that the input is a Standard JPEG. The long highlight shoulder of the base gamma can exaggerate the change of other bright, saturated colors.
 
+## Cameras
+
+GR IIIx 1.60 runs the RTOS code of GR III 2.10. The two RTOS images have the same size and layout. They differ only in the model name, the version, the build time, the default year, the ModeSet numbers, and one byte of the model selection.
+None of these bytes is a patch site or a firmware input of GRKit. A runtime built from either firmware is therefore byte-identical, and both cameras run the `gr3-2.10` runtime.
+
+The cameras differ in the ModeSet file that enables SD scripts: `00078350.588` on GR III and `00078490.609` on GR IIIx. `grkit_core::camera` lists the cameras.
+A package holds the ModeSet file of one camera, and its installation guide names that camera and file. `grkit verify` identifies the camera from that file.
+
+GR IV 1.11 is a different build, with the target `gr4-1.11`. GR IV and GR IV HDF run the same firmware and ModeSet file, `00078560.636`.
+Its RTOS image is larger (0x13d2ac0 bytes), and its data, functions, and object layouts are at other addresses. `runtime/targets/<target>.h` holds these values for the C and assembly sources.
+
+The build defines `GRKIT_TARGET_<target>` (`components::Layout::define`), and `runtime/firmware.h` selects the header from it. Without a known definition, the compilation stops.
+`components::Layout` holds the regions and hooks of each target, and the build generates `hooks.h` from it.
+
+The GR IV runtime has the menu, Image Control, Framing, Guides, and Date Stamp. GR IV Framing offers only XPan, as a crop of native 16:9 (see Framing).
+GR IV processing hooks are in `runtime/targets/gr4-1.11-processing.S`, after the Framing region. GR IV reads the type tables through getters.
+A private record therefore sets the Standard index (11) where all type paths join, and the record store keeps the private record.
+
+The GR IV packet tail has no special type path. Its gamma object holds the built-curve flag at `+0x382c`. `target::ImageControl` holds the tables, the Standard record, and the settings offsets of each target.
+
+GR IV photos record the plugin effect as on GR III. The hooks are the ImageTone call `0x53810804`, the DISP icon `0x531916c0`, and the detail `0x533a7614`.
+GR IV extraction compares each native tag value, and its default case (`0x537d8a54`) keeps a non-native tag. GR IV also uses the native values `0x8100` to `0x8105`, so the installer skips codes `0x8100` to `0x81ff` there.
+The effects use the GR III fit model.
+
+Neither camera reads one fixed base gamma table. Each picture build computes the base from 15 ROM curves, the tone setting, and a gain. GR IV uses the GR III function (`0x5391dad4`) and the same curves.
+`grkit effects publish` reads the curve for tone 0 and the lowest gain (GR IV `0x5407f4b4`). The gain of real GR IV stills is not known, so their shadows can differ from the fit.
+The GR IV Standard look matrix differs from the GR III one.
+
+GR IV icon descriptors have 12 bytes, and GR IV draws icons from a copy of the icon pixels. The installer reads the base of that copy from the icon drawer.
+
 Native sources live under `runtime/`, and package documents live under `resources/`. The CLI embeds both, so it works outside the checkout.
-Rust tests pin GRF bytes, artwork, generated headers, and loader scripts. Host C tests check the GRF parser, the effect catalog, the menu, and Framing.
+Rust tests pin GRF bytes, artwork, generated headers, and loader scripts. Host C tests check the GRF parser, the effect catalog, the menu, and Framing on GR III, and the picture code on both targets. A syntax check compiles the C sources of each target.
 
 ## Loading
 
 The loader script starts at power-on and polls. `lcmd` requests return NG until Linux mounts the card, so the loader repeats SCAN until the allocation plan appears.
+
+The loader waits 3 s before its first `lcmd`. The first request creates the firmware's host-interface command factory.
+In some starts, that creation took a data abort in the Script task during the first second.
+Linux mounts the card about 5 s after power-on, so the wait does not delay the installation.
+
 SCAN selects the effect catalog and writes the plan. The startup script allocates the arrays and stays resident, so they remain allocated.
 
 INSTALL checks the allocations, prepares records and icons, then publishes code before entry hooks.
 It returns not-ready statuses while the camera initializes, and the loader repeats it. The result is `INSTALL.OK`, or `INSTALL.ERR` with the decimal status.
 `O_EXCL` files serialize overlapping attempts. The loader deletes stale result and lock files at startup.
+
+Before INSTALL writes anything, it compares the firmware guards (`components::Layout::guards`) with the running image. A difference stops it with status 45.
+The guards are the startup literals of the `.data` copy at `0x53000450`: source, destination, and size. Source plus size is the end of the RTOS image.
+On GR IV, the guards also include the icon catalog getter (`0x533ef604`).
+
+A statically patched firmware that extends the RTOS image changes them. Its additions can lie in the private regions after the image, which INSTALL would otherwise overwrite without a check.
+One such GR IV firmware extends the image from `0x543d2ac0` to `0x5440eac0`, over the Framing and processing regions.
+That firmware also changes three GRKit hook sites, so the hook check (status 16) would stop it too. A patched firmware that changes no hook site passes that check, but not the guards.
 
 An unusable effect file does not stop the other effects or Framing. Unusable files include names outside the `NAME.GRF` 8.3 rule, symbolic links, unreadable files, and invalid records.
 The `._` companions that macOS writes are therefore ignored.
@@ -37,7 +80,9 @@ With more than 20 effects, the installer keeps the 20 smallest effect IDs.
 For a duplicate ID, the file with the smallest name wins. The result does not depend on directory order. Directory read errors stop the installation.
 
 The 20-effect capacity is a product limit, not a GRF format limit. It fits one script array and one icon chunk.
-The script array holds the header, the records, and the 141,376-byte picture scratch for the date stamp masks.
+The script array holds the header, the records, and the picture scratch.
+The scratch has 141,376 bytes for the date stamp masks, then the 72-byte shot ring (see Recorded pictures).
+
 Off, GRKit, and the fourteen module tiles (four Framing, five Guides, five Date Stamp) use sixteen host icon records outside that capacity.
 The module tiles are contiguous, and the menu derives each one from the first Framing tile.
 
@@ -51,7 +96,8 @@ The loader checks the state every 2 s and writes the file only after a change. I
 An unreadable or out-of-range file restores nothing. An effect that is no longer installed stays Off, and its file entry stays until the next change.
 
 A hidden module restores Off, because no menu can turn it off. The script has no bit operators, so it reads header `+56` by division.
-A power loss during the write can lose the last change.
+The camera's `filecreate` does not truncate an existing file. The writes `33603290`, `48858`, and `0` leave `08858290`.
+The loader therefore deletes the file before it writes the state. A power loss between the two steps can lose the last change.
 
 ## Menu
 
@@ -93,6 +139,7 @@ It first refreshes the model snapshot with `0x531a0150`, because a cancel restor
 On return, header `+252` reopens GRKit Image Control at the committed row.
 
 Photos record the effect in the maker-note ImageTone tag (`0x4f`, hook `0x53608080`). Each record has a stable code at `+0x6f8`: `0x8000` plus 15 bits of an FNV-1a hash of the effect ID.
+The tag hook reads the record of its own shot from the shot ring (see Recorded pictures). A shot without an entry keeps the native tag.
 Native readers accept only 256 to 267, so in-camera RAW development falls back to Standard.
 
 Playback extraction keeps a non-native tag in metadata key `0x25` (instruction `0x535c251c`). The DISP icon hook (`0x53179b7c`) shows the effect icon.
@@ -150,6 +197,13 @@ The image aspect getter (`0x532b3ca0`) reports id 2 for 65:24 sizes.
 DNG files keep the full 6112x4064 sensor data, as native 1:1 does. DefaultCropOrigin and DefaultCropSize describe the crop.
 In-camera Crop, Resize, Digital Filter, and RAW development do not know the 65:24 variant.
 
+GR IV has native 4:3 and 16:9 live-view modes, so the GR III changes above would break them. GR IV Framing therefore offers Off and XPan, and XPan crops native 16:9 photos.
+GR IV has no capture request hook and no live-view changes. The GR IV sizes come from `ImageResolutionTranslatorKb636`. Its GetResolution (`0x538cfbfc`) has the id 2 height hooks, and slots 9 and 10 have the inset hooks.
+The `Kb588` class holds the GR III sizes and is not used. The GR IV size classifier (`0x533a2820`) keeps the width in `r6` and the class pointer in `r5`.
+
+GR IV 65:24 sizes are 6192x2288, 4944x1824, 3504x1296, and 1920x712. In native 16:9 the XPan mask uses the GR III XPan area. In native 3:2 XPan has no effect, and the viewfinder shows only the guides.
+The date stamp follows the same rule: it uses the XPan area of the screennail and the thumbnail only for a native 16:9 capture.
+
 ## Effect extension
 
 Bytes 84..127 of a GRFX0001 file hold an optional extension.
@@ -198,6 +252,28 @@ Each descriptor holds Y at `+4`, CbCr at `+8`, and u16 width, height, and shared
 The entry hook processes each plane set once, before the encode is submitted.
 It applies selective color first and then the date stamp, so the stamp keeps its color. It cleans and invalidates the data cache for the planes before and after (`0x5383c8a8`), because the image hardware writes and reads them.
 
+### Shot ring
+
+The tag and the encode of a shot read the record of its own build, not a single "last still build" word (header `+248`).
+The single word is correct only if no later shot builds its parameters before the tag and the encode of the earlier shot.
+In continuous shooting, each shot was built, encoded, and tagged before the next shot was built. The ring does not depend on that order, which is not established for every drive mode and timing.
+
+Each shot has two non-live-view parameter builds, before its encode. The ring keeps the second one.
+Both builds read the active record during the same capture, so they normally have the same record.
+A test gave the two builds different records. The picture had the effect of the first build, and the tag the effect of the second. The single word gives the same result.
+
+The parameter hook therefore stores the record of each non-live-view build in a ring.
+The key is the shot settings pointer of the build: `r7`, which is `[context + 0x82d0]` on GR IV.
+The maker-note setter holds the same pointer at `+0x18` (in `r2` at the ImageTone call), and the JPEG encode configuration at `+0x34`. Both targets use these offsets.
+
+The ring follows the date stamp masks in the picture scratch: a write count, a pad word, and eight `{key, record}` entries. A native build stores record 0.
+The writer clears the key, writes the record, then writes the key, with a `dmb ish` between the stores. A reader searches from the newest entry and reads the key again after the record.
+
+An entry leaves the ring after eight later builds. A reused shot settings pointer matches its newest entry. A photo whose own build has not run yet can therefore get the previous build of that pointer.
+Header `+248` still holds the last non-live-view record, as a diagnostic.
+
+### Screennail and thumbnail areas
+
 The screennail and the thumbnail have black bars that depend on the capture aspect. The hook uses the visible area from the GetResolution inset tables and the Framing insets.
 
 ### Date stamp
@@ -213,7 +289,7 @@ Only the largest plane of an encode renders the mask. The screennail and the thu
 Playback shows the screennail first and then the main picture. The stamp therefore keeps its position and total width, and only the strokes become sharper.
 If the largest plane has digits of 24 pixels or less, its mask has twice that size, and each pixel averages 2 x 2 cells.
 
-The masks use the picture scratch after the records. The blur line copy is on the stack (1280 bytes), because the code region is read-only.
+The masks use the picture scratch after the records, before the shot ring. The blur line copy is on the stack (1280 bytes), because the code region is read-only.
 Every encode that passes through the hook gets the stamp, including in-camera RAW development and edits. Those show the time of the edit.
 
 ## Code areas

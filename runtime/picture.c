@@ -1,4 +1,5 @@
 #include "abi.h"
+#include "firmware.h"
 /* Picture processing for effect extensions: the post-curve matrix, selective
    color, and the date stamp on recorded pictures. */
 typedef unsigned int u32;
@@ -16,7 +17,7 @@ typedef short s16;
 #endif
 #ifndef PICTURE_YCBCR_CALC
 /* YCbCrMatrix calc: object = hue rotation x BT.601, 9-bit coefficients, 256 = 1.0. */
-#define PICTURE_YCBCR_CALC(object,context) (((void (*)(u32,u32))0x536e4720)(object,context))
+#define PICTURE_YCBCR_CALC(object,context) (((void (*)(u32,u32))FW_YCBCR_CALC)(object,context))
 #endif
 extern volatile u32 *framing_header(void);
 
@@ -25,6 +26,7 @@ static u32 owned(volatile u32 *h,u32 record) {
     for(i=0;i<h[GRKIT_HOST_COUNT/4];++i) if(record==base+i*GRKIT_RECORD_SIZE) return 1;
     return 0;
 }
+#ifdef FW_YCBCR_CALC
 /* Features of an owned record, or 0 for a native one. */
 static u32 record_features(volatile u32 *h,u32 record) {
     return owned(h,record) ? WORD(record,GRKIT_RECORD_FEATURES) : 0;
@@ -58,6 +60,7 @@ void picture_post(u32 object,u32 context,u32 settings) {
     if((features&GRKIT_FEATURE_SELECTIVE) && BYTE(settings,PICTURE_LIVE_CONTEXT)==1)
         for(i=3;i<9;++i) WORD(object,i*4)=0;
 }
+#endif
 /* ---- Recorded pictures: the date stamp --------------------------------------
    JpegEncodeMacroProcess::Execute (0x535047d4) calls picture_encode before it
    submits the encode. Its image descriptors hold Y at +4, CbCr at +8, then u16
@@ -65,18 +68,35 @@ void picture_post(u32 object,u32 context,u32 settings) {
    Cb and Cr for each pair of pixels, in full rows (4:2:2) or half rows (4:2:0). */
 #ifndef PICTURE_CACHE_FLUSH
 /* Clean and invalidate the data cache for a range. */
-#define PICTURE_CACHE_FLUSH(address,length) (((void (*)(u32,u32))0x5383c8a8)(address,length))
+#define PICTURE_CACHE_FLUSH(address,length) (((void (*)(u32,u32))FW_CACHE_FLUSH)(address,length))
 #endif
 #ifndef PICTURE_DATE
 /* Local time as DateTime: u16 year, then month, day, hour, minute, second. */
-#define PICTURE_DATE(out) (((void (*)(u32,u32))0x536b6510)(WORD(((u32 (*)(void))0x536bd838)(),4),(u32)(out)))
+#define PICTURE_DATE(out) (((void (*)(u32,u32))FW_LOCAL_TIME)(WORD(((u32 (*)(void))FW_CLOCK)(),4),(u32)(out)))
 #endif
 #ifndef PICTURE_NATIVE_ASPECT
-#define PICTURE_NATIVE_ASPECT() (((u32 (*)(u32))0x53245260)(((u32 (*)(void))0x5320b31c)()))
+#define PICTURE_NATIVE_ASPECT() (((u32 (*)(u32))FW_STILL_ASPECT_GET)(((u32 (*)(void))FW_SETTINGS)()))
+#endif
+#ifndef PICTURE_NATIVE_ID
+/* Visible-area id of a native aspect. GR III offers only 3:2 (0) and 1:1 (3). */
+#define PICTURE_NATIVE_ID(native) ((native)==3 ? 3 : 0)
+#endif
+/* Visible-area id of the capture: 0 3:2, 1 4:3, 2 16:9, 3 1:1, 4 XPan. */
+#ifdef FRAMING_XPAN_NATIVE
+/* XPan crops native FRAMING_XPAN_NATIVE photos. Other native aspects ignore it. */
+#define PICTURE_AREA_ID(native,ratio) \
+    ((native)==FRAMING_XPAN_NATIVE && (ratio)==1 ? 4 : PICTURE_NATIVE_ID(native))
+#else
+/* Framing ratios (Off, XPan, 16:9, 4:3) apply only to native 3:2 captures. */
+#define PICTURE_AREA_ID(native,ratio) ((native) ? PICTURE_NATIVE_ID(native) : \
+    (ratio)==1 ? 4 : (ratio)==2 ? 2 : (ratio)==3 ? 1 : 0)
 #endif
 #ifndef PICTURE_SCRATCH
 /* Stamp masks after the header and the records, inside the loader's registry array. */
 #define PICTURE_SCRATCH(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE)
+#endif
+#ifndef PICTURE_BARRIER
+#define PICTURE_BARRIER() __asm__ volatile("dmb ish" ::: "memory")
 #endif
 #ifndef PICTURE_MAP
 #define PICTURE_MAP(address) ((u8 *)(address))
@@ -257,9 +277,9 @@ static u32 stamp(volatile u32 *h,const Plane *p,const char *text,u32 n,u32 mono,
         total=text_width(text,n,m);
         cw=total+((m*31)>>8)+1;
         mw=cw+2*pad; mh=m+2*pad;
-        if(mw<=BLUR_WIDTH && mw*mh*2<=GRKIT_PICTURE_SCRATCH) break;
+        if(mw<=BLUR_WIDTH && mw*mh*2<=GRKIT_PICTURE_MASKS) break;
     }
-    if(mw>BLUR_WIDTH || mh>BLUR_WIDTH || mw*mh*2>GRKIT_PICTURE_SCRATCH) return 0;
+    if(mw>BLUR_WIDTH || mh>BLUR_WIDTH || mw*mh*2>GRKIT_PICTURE_MASKS) return 0;
     margin=(size*45875)>>16;
     if((((mw-pad)*f)>>(ss-1))+margin>width || (((mh-pad)*f)>>(ss-1))+margin>height) return 0;
     halo=core+mw*mh;
@@ -461,7 +481,7 @@ static void visible_area(volatile u32 *h,Plane *p) {
     static const u8 thumbnail[5][2]={{0,8},{0,0},{0,16},{20,0},{0,30}};
     u32 ratio=h[GRKIT_HOST_FRAME_RATIO/4], native=PICTURE_NATIVE_ASPECT(), id;
     const u8 *inset=0;
-    id=native ? (native==3 ? 3 : 0) : ratio==1 ? 4 : ratio==2 ? 2 : ratio==3 ? 1 : 0;
+    id=PICTURE_AREA_ID(native,ratio);
     if(p->width==720 && p->height==480) inset=screennail[id];
     if(p->width==160 && p->height==120) inset=thumbnail[id];
     p->left=inset ? inset[0] : 0; p->top=inset ? inset[1] : 0;
@@ -477,11 +497,28 @@ static u32 plane_of(u32 image,u32 code,Plane *p) {
            p->y>=0x40000000U && p->y<0xc0000000U-p->pitch*p->height &&
            p->c>=0x40000000U && p->c<0xc0000000U-p->pitch*p->height;
 }
+/* The record that the still build of a shot applied, from the shot ring
+   (runtime/abi.h), or 0. Newer entries come first. The key is read again after
+   the record, because the build writes the ring from another task. */
+static u32 shot_record(volatile u32 *h,u32 shot) {
+    u32 ring=PICTURE_SCRATCH(h)+GRKIT_SHOT_RING, n=WORD(ring,0), i, entry, record;
+    for(i=1;shot && i<=GRKIT_SHOT_ENTRIES;++i) {
+        entry=ring+8+((n-i)&(GRKIT_SHOT_ENTRIES-1))*8;
+        if(WORD(entry,0)!=shot) continue;
+        record=WORD(entry,4);
+        PICTURE_BARRIER();
+        if(WORD(entry,0)==shot) return record;
+    }
+    return 0;
+}
+/* For picture_capture_tone: the record of a shot, or 0. */
+u32 picture_capture_record(u32 shot) { return shot_record(framing_header(),shot); }
 /* Selective color, then the stamp, once per plane set: the stamp keeps its own
    color. The second full-size image (descriptor 3) shares the main planes. */
 void picture_encode(u32 process,u32 message) {
     volatile u32 *h=framing_header();
-    u32 config=WORD(message,8), style=h[GRKIT_HOST_STAMP/4], record=h[GRKIT_HOST_STILL/4];
+    /* Configuration +0x34 holds the shot settings of the encoded pictures. */
+    u32 config=WORD(message,8), style=h[GRKIT_HOST_STAMP/4], record=shot_record(h,WORD(config,0x34));
     u32 mono=0, selective=0, done[4], count=0, i, j, n=0;
     u32 date[3];
     u8 *dt=(u8 *)date;

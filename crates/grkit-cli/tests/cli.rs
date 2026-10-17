@@ -287,6 +287,40 @@ fn package_roundtrip_and_output_ownership() {
 }
 
 #[test]
+fn package_targets_the_selected_camera() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (build, effects) = fixture(tmp.path());
+    let zip = tmp.path().join("gr3x.zip");
+    let packaged = success(&[
+        "package",
+        "--build",
+        text(&build),
+        "--effects",
+        text(&effects),
+        "--camera",
+        "gr3x",
+        "--out",
+        text(&zip),
+    ]);
+    assert_eq!(packaged["camera"], "gr3x");
+    let verified = success(&["verify", text(&zip)]);
+    assert_eq!(verified["camera"], "gr3x");
+    assert_eq!(verified["target"], "gr3-2.10");
+    let rejected = tmp.path().join("gr4.zip");
+    let output = run(&[
+        "package",
+        "--build",
+        text(&build),
+        "--camera",
+        "gr4",
+        "--out",
+        text(&rejected),
+    ]);
+    assert!(!output.status.success());
+    assert!(!rejected.exists());
+}
+
+#[test]
 fn package_hides_modules_and_may_omit_effects() {
     let tmp = tempfile::tempdir().unwrap();
     let (build, effects) = fixture(tmp.path());
@@ -487,8 +521,9 @@ fn cube_import_rejects_invalid_firmware_and_ids_before_output() {
 #[test]
 fn standard_base_gamma_is_read_and_checked() {
     use grkit_build::{firmware, target};
-    let offset = (firmware::STANDARD_BASE_GAMMA - target::RTOS_BASE) as usize;
+    let offset = (target::GR3_IMAGE_CONTROL.base_gamma - target::RTOS_BASE) as usize;
     let image = |table: &[u16; 256]| firmware::FirmwareImage {
+        target: &target::GR3_210,
         body: [
             vec![0; offset],
             table.iter().flat_map(|v| v.to_le_bytes()).collect(),
@@ -611,11 +646,13 @@ fn site_export_publishes_only_the_verified_runtime() {
         "--out",
         text(&package),
     ]);
+    // A second runtime for the same target is refused.
     assert!(
         !run(&["site", "--build", text(&build), "--out", text(&site)])
             .status
             .success()
     );
+    assert_eq!(fs::read_dir(site.join("runtime")).unwrap().count(), 1);
 }
 
 #[test]

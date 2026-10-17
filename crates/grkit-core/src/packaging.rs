@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use zip::{write::SimpleFileOptions, CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
 use crate::{
+    camera::{self, Camera},
     effects,
     modules::{self, Hidden},
     runtime, Files,
@@ -101,7 +102,8 @@ pub fn read_manifest(blob: &[u8]) -> Result<Value> {
     Ok(result)
 }
 
-pub fn validate_runtime(files: &Files) -> Result<()> {
+/// Checks the runtime files of a build for `target`.
+pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
     ensure!(
         files.len() == RUNTIME_PATHS.len() && RUNTIME_PATHS.iter().all(|p| files.contains_key(*p)),
         "Expected the complete production runtime file set"
@@ -115,7 +117,7 @@ pub fn validate_runtime(files: &Files) -> Result<()> {
         "Expected a production installer without diagnostic selection"
     );
     ensure!(
-        *files == runtime::runtime_files(binary),
+        *files == runtime::runtime_files_for(binary, runtime::icon_stride(target)?),
         "Runtime scripts differ from the production templates"
     );
     Ok(())
@@ -127,11 +129,15 @@ pub fn validate_runtime(files: &Files) -> Result<()> {
 /// The file set must equal the manifest list, and each file must match its size and SHA-256.
 pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<(Files, Value)> {
     let manifest = read_manifest(manifest)?;
+    let target = manifest["target"]
+        .as_str()
+        .context("Expected a runtime target")?
+        .to_owned();
     ensure!(
         manifest["profile"] == "production"
-            && manifest["target"] == "gr3-2.10"
+            && runtime::icon_stride(&target).is_ok()
             && manifest["startup_activation"] == "Off",
-        "Expected a production GR III 2.10 build that starts in Off"
+        "Expected a production build for a supported target that starts in Off"
     );
     let mut runtime = Files::new();
     for item in manifest["files"]
@@ -156,7 +162,7 @@ pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<(Files, Value)> {
         runtime.len() == files.len(),
         "Runtime directory differs from its manifest"
     );
-    validate_runtime(&runtime)?;
+    validate_runtime(&runtime, &target)?;
     Ok((runtime, manifest))
 }
 
@@ -173,8 +179,17 @@ fn is_effect_path(name: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
-/// Checks the package entries and returns the effect IDs and the hidden modules.
-pub fn validate_contents(contents: &Files) -> Result<(Vec<String>, Hidden)> {
+/// What a valid package holds besides the runtime.
+#[derive(Debug)]
+pub struct Contents {
+    /// The camera whose ModeSet file the package has.
+    pub camera: &'static Camera,
+    pub effect_ids: Vec<String>,
+    pub hidden: Hidden,
+}
+
+/// Checks the package entries.
+pub fn validate_contents(contents: &Files) -> Result<Contents> {
     ensure!(contents.len() <= MAX_ENTRIES, "Too many package entries");
     let mut paths = BTreeSet::new();
     let mut total = 0usize;
@@ -193,7 +208,14 @@ pub fn validate_contents(contents: &Files) -> Result<(Vec<String>, Hidden)> {
             .context("Package size overflow")?;
     }
     ensure!(total <= MAX_TOTAL_SIZE, "Package exceeds total size limit");
-    let activation = runtime::activation_files();
+    let cameras: Vec<_> = camera::CAMERAS
+        .into_iter()
+        .filter(|camera| contents.contains_key(&format!("SD_ROOT/{}", camera.modeset)))
+        .collect();
+    let [camera] = cameras[..] else {
+        bail!("Package must have the ModeSet file of exactly one camera");
+    };
+    let activation = runtime::activation_files(camera);
     let mut mandatory: BTreeSet<String> = RUNTIME_PATHS
         .iter()
         .map(|name| format!("SD_ROOT/{name}"))
@@ -207,14 +229,14 @@ pub fn validate_contents(contents: &Files) -> Result<(Vec<String>, Hidden)> {
     for (name, expected) in activation {
         ensure!(
             contents[&format!("SD_ROOT/{name}")] == expected,
-            "Activation resources differ from the target"
+            "Activation resources differ from the camera"
         );
     }
     let runtime = RUNTIME_PATHS
         .iter()
         .map(|name| ((*name).into(), contents[&format!("SD_ROOT/{name}")].clone()))
         .collect();
-    validate_runtime(&runtime)?;
+    validate_runtime(&runtime, camera.target)?;
     let mut ids = BTreeSet::new();
     let mut hidden = Hidden::default();
     let modules_path = format!("SD_ROOT/{}", modules::PATH);
@@ -241,10 +263,19 @@ pub fn validate_contents(contents: &Files) -> Result<(Vec<String>, Hidden)> {
         "Target effect capacity exceeded"
     );
     ensure!(
-        !hidden.hides_everything(ids.len()),
+        camera.effects || ids.is_empty(),
+        "{} has no Image Control yet, so a package for it cannot have effects",
+        camera.name
+    );
+    ensure!(
+        !hidden.hides_everything(ids.len(), camera.modules),
         "The package shows no module: it has no effects and hides every other module"
     );
-    Ok((ids.into_iter().collect(), hidden))
+    Ok(Contents {
+        camera,
+        effect_ids: ids.into_iter().collect(),
+        hidden,
+    })
 }
 
 fn checksum_list(contents: &Files) -> Vec<u8> {
@@ -256,26 +287,49 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
         .into_bytes()
 }
 
-/// Builds the package ZIP. `hidden` names the modules that the camera menu hides.
+/// The installation guide of a package. The main resource describes GR III.
+/// GR IIIx gets its name, firmware version, and ModeSet file. GR IV, which has
+/// fewer modules, has its own resource.
+pub fn installation_guide(camera: &Camera) -> Vec<u8> {
+    if camera.target == camera::GR4.target {
+        return include_bytes!("../../../resources/INSTALLATION-GR4.md").to_vec();
+    }
+    include_str!("../../../resources/INSTALLATION.md")
+        .replace(
+            &format!("{} firmware {}", camera::GR3.name, camera::GR3.firmware),
+            &format!("{} firmware {}", camera.name, camera.firmware),
+        )
+        .replace(camera::GR3.modeset, camera.modeset)
+        .into_bytes()
+}
+
+/// Builds the package ZIP for one camera. `hidden` names the modules that the
+/// camera menu hides.
 pub fn assemble(
     runtime: &Files,
     build: &Value,
     effects: &Files,
     hidden: Hidden,
+    camera: &Camera,
 ) -> Result<Vec<u8>> {
     ensure!(
         build.get("profile") == Some(&json!("production"))
-            && build.get("target") == Some(&json!("gr3-2.10"))
             && build.get("startup_activation") == Some(&json!("Off")),
         "Only production builds that start in Off can be packaged"
     );
-    validate_runtime(runtime)?;
+    ensure!(
+        build.get("target") == Some(&json!(camera.target)),
+        "{} runs the {} runtime, not this build",
+        camera.name,
+        camera.target
+    );
+    validate_runtime(runtime, camera.target)?;
     let mut contents: Files = runtime
         .iter()
         .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob.clone()))
         .collect();
     contents.extend(
-        runtime::activation_files()
+        runtime::activation_files(camera)
             .into_iter()
             .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob)),
     );
@@ -288,10 +342,7 @@ pub fn assemble(
     if let Some(file) = hidden.file() {
         contents.insert(format!("SD_ROOT/{}", modules::PATH), file);
     }
-    contents.insert(
-        "INSTALLATION.md".into(),
-        include_bytes!("../../../resources/INSTALLATION.md").to_vec(),
-    );
+    contents.insert("INSTALLATION.md".into(), installation_guide(camera));
     contents.insert("SHA256SUMS".into(), checksum_list(&contents));
     validate_contents(&contents)?;
     let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
@@ -358,14 +409,18 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
         );
         contents.insert(name, blob);
     }
-    let (ids, hidden) = validate_contents(&contents)?;
+    let Contents {
+        camera,
+        effect_ids,
+        hidden,
+    } = validate_contents(&contents)?;
     ensure!(
         contents["SHA256SUMS"] == checksum_list(&contents),
         "SHA256SUMS differs from package"
     );
     Ok(
-        json!({"target": "gr3-2.10", "effect_ids": ids, "hidden_modules": hidden.names(),
-            "entries": contents.len()}),
+        json!({"camera": camera.id, "target": camera.target, "effect_ids": effect_ids,
+            "hidden_modules": hidden.names(), "entries": contents.len()}),
     )
 }
 

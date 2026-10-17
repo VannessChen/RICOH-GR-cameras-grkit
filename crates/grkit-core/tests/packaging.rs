@@ -1,6 +1,6 @@
 use std::io::{Cursor, Read, Write};
 
-use grkit_core::{effects, modules::Hidden, packaging::*, runtime, Files};
+use grkit_core::{camera, effects, modules::Hidden, packaging::*, runtime, Files};
 use serde_json::{json, Value};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
@@ -32,6 +32,7 @@ fn package() -> Vec<u8> {
         &build(),
         &Files::from([effect("test-effect")]),
         Hidden::default(),
+        &camera::GR3,
     )
     .unwrap()
 }
@@ -209,7 +210,8 @@ fn production_boundaries_are_enforced() {
             &runtime_fixture(),
             &altered,
             &Files::new(),
-            Hidden::default()
+            Hidden::default(),
+            &camera::GR3
         )
         .is_err());
     }
@@ -219,7 +221,7 @@ fn production_boundaries_are_enforced() {
             .get_mut("SCRIPT/STARTUP.TTL")
             .unwrap()
             .extend_from_slice(suffix);
-        assert!(validate_runtime(&altered).is_err());
+        assert!(validate_runtime(&altered, "gr3-2.10").is_err());
     }
 }
 
@@ -228,7 +230,14 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
     let mut effects: Files = (0..runtime::MAX_COUNT)
         .map(|i| effect(&format!("effect-{i}")))
         .collect();
-    let bytes = assemble(&runtime_fixture(), &build(), &effects, Hidden::default()).unwrap();
+    let bytes = assemble(
+        &runtime_fixture(),
+        &build(),
+        &effects,
+        Hidden::default(),
+        &camera::GR3,
+    )
+    .unwrap();
     assert_eq!(
         verify_package(&bytes).unwrap()["effect_ids"]
             .as_array()
@@ -237,12 +246,20 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
         runtime::MAX_COUNT
     );
     effects.extend([effect("effect-overflow")]);
-    assert!(assemble(&runtime_fixture(), &build(), &effects, Hidden::default()).is_err());
+    assert!(assemble(
+        &runtime_fixture(),
+        &build(),
+        &effects,
+        Hidden::default(),
+        &camera::GR3
+    )
+    .is_err());
     let bytes = assemble(
         &runtime_fixture(),
         &build(),
         &Files::new(),
         Hidden::default(),
+        &camera::GR3,
     )
     .unwrap();
     assert_eq!(verify_package(&bytes).unwrap()["effect_ids"], json!([]));
@@ -252,7 +269,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
 fn hidden_modules_are_packaged_and_verified() {
     let effects = Files::from([effect("test-effect")]);
     let hidden = Hidden::from_names(["date-stamp", "framing"]).unwrap();
-    let bytes = assemble(&runtime_fixture(), &build(), &effects, hidden).unwrap();
+    let bytes = assemble(&runtime_fixture(), &build(), &effects, hidden, &camera::GR3).unwrap();
     let files = unpack(&bytes);
     assert_eq!(
         files["SD_ROOT/SCRIPT/PLUGINS/MODULES.TXT"],
@@ -263,7 +280,14 @@ fn hidden_modules_are_packaged_and_verified() {
         json!(["framing", "date-stamp"])
     );
     // A package that hides nothing has no file and keeps its earlier bytes.
-    let plain = assemble(&runtime_fixture(), &build(), &effects, Hidden::default()).unwrap();
+    let plain = assemble(
+        &runtime_fixture(),
+        &build(),
+        &effects,
+        Hidden::default(),
+        &camera::GR3,
+    )
+    .unwrap();
     assert!(!unpack(&plain).contains_key("SD_ROOT/SCRIPT/PLUGINS/MODULES.TXT"));
     assert_eq!(verify_package(&plain).unwrap()["hidden_modules"], json!([]));
     assert_eq!(plain, package());
@@ -292,16 +316,24 @@ fn invalid_module_files_and_empty_menus_are_rejected() {
         b" guides\r\n\tframing ".to_vec(),
     );
     assert_eq!(
-        validate_contents(&with_sums(files)).unwrap().1.names(),
+        validate_contents(&with_sums(files)).unwrap().hidden.names(),
         ["framing", "guides"]
     );
     let all = Hidden::from_names(grkit_core::modules::NAMES).unwrap();
-    assert!(assemble(&runtime_fixture(), &build(), &Files::new(), all).is_err());
+    assert!(assemble(
+        &runtime_fixture(),
+        &build(),
+        &Files::new(),
+        all,
+        &camera::GR3
+    )
+    .is_err());
     let bytes = assemble(
         &runtime_fixture(),
         &build(),
         &Files::from([effect("test-effect")]),
         all,
+        &camera::GR3,
     )
     .unwrap();
     assert_eq!(
@@ -351,11 +383,11 @@ fn runtime_layout_matches_target_capacity() {
     assert_eq!(runtime::MAX_COUNT, 20);
     assert_eq!(
         runtime::layout(0).unwrap(),
-        json!({"words": 35408, "icon_words": [25632]})
+        json!({"words": 35426, "icon_words": [25632]})
     );
     assert_eq!(
         runtime::layout(20).unwrap(),
-        json!({"words": 44688, "icon_words": [57672]})
+        json!({"words": 44706, "icon_words": [57672]})
     );
     assert!(runtime::layout(21).is_err());
 }
@@ -371,8 +403,8 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
             .iter()
             .map(|v| v.as_u64().unwrap() as usize)
             .collect();
-        // Picture scratch for the date stamp masks.
-        assert_eq!(words * 4, 256 + count * 0x740 + 141376, "count {count}");
+        // Picture scratch: the date stamp masks, then the shot ring.
+        assert_eq!(words * 4, 256 + count * 0x740 + 141376 + 72, "count {count}");
         assert_eq!(
             icons.iter().sum::<usize>() * 4,
             (count + 16) * 6408,
@@ -474,4 +506,135 @@ fn runtime_builds_must_match_their_manifest_exactly() {
         unknown.contains("Invalid runtime manifest entries"),
         "{unknown}"
     );
+}
+
+#[test]
+fn each_camera_gets_its_modeset_file_and_guide() {
+    let effects = Files::from([effect("test-effect")]);
+    let gr3 = unpack(&package());
+    assert_eq!(
+        gr3["INSTALLATION.md"],
+        include_bytes!("../../../resources/INSTALLATION.md")
+    );
+    let bytes = assemble(
+        &runtime_fixture(),
+        &build(),
+        &effects,
+        Hidden::default(),
+        &camera::GR3X,
+    )
+    .unwrap();
+    let verified = verify_package(&bytes).unwrap();
+    assert_eq!(verified["camera"], "gr3x");
+    assert_eq!(verified["target"], "gr3-2.10");
+    let gr3x = unpack(&bytes);
+    assert!(gr3x.contains_key("SD_ROOT/00078490.609"));
+    assert!(!gr3x.contains_key("SD_ROOT/00078350.588"));
+    let guide = String::from_utf8(gr3x["INSTALLATION.md"].clone()).unwrap();
+    assert!(guide.contains("For RICOH GR IIIx firmware 1.60 only."));
+    assert!(guide.contains("`00078490.609`") && !guide.contains("00078350.588"));
+    // Every runtime and effect file is the same for both cameras.
+    for (name, blob) in &gr3 {
+        if !name.ends_with(".588") && name != "INSTALLATION.md" && name != "SHA256SUMS" {
+            assert_eq!(&gr3x[name], blob, "{name}");
+        }
+    }
+}
+
+#[test]
+fn the_guide_names_the_camera_once_and_the_modeset_file_once() {
+    // installation_guide replaces these strings, so each must occur exactly once.
+    let guide = include_str!("../../../resources/INSTALLATION.md");
+    assert_eq!(guide.matches("GR III firmware 2.10").count(), 1);
+    assert_eq!(guide.matches(camera::GR3.modeset).count(), 1);
+}
+
+#[test]
+fn a_package_has_the_modeset_file_of_exactly_one_camera() {
+    let mut files = unpack(&package());
+    files.insert(
+        "SD_ROOT/00078490.609".into(),
+        files["SD_ROOT/00078350.588"].clone(),
+    );
+    assert!(validate_contents(&with_sums(files)).is_err());
+    let mut files = unpack(&package());
+    files.remove("SD_ROOT/00078350.588");
+    assert!(validate_contents(&with_sums(files)).is_err());
+    let mut files = unpack(&package());
+    files.insert("SD_ROOT/00078350.588".into(), b"changed".to_vec());
+    assert!(validate_contents(&with_sums(files)).is_err());
+    assert!(camera::find("gr2").is_err());
+    assert_eq!(camera::find("gr3x").unwrap(), &camera::GR3X);
+    assert_eq!(camera::find("gr4").unwrap(), &camera::GR4);
+}
+
+#[test]
+fn the_loader_waits_before_its_first_request() {
+    let loader = String::from_utf8(runtime::loader()).unwrap();
+    let first_request = loader.find("sendln").unwrap();
+    let wait = loader
+        .find(&format!("mpause {}", runtime::FIRST_REQUEST_DELAY_MS))
+        .unwrap();
+    assert!(wait < first_request);
+    const { assert!(runtime::FIRST_REQUEST_DELAY_MS >= 3000) };
+}
+
+fn gr4_runtime_fixture() -> Files {
+    let mut binary = vec![0; 52];
+    binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
+    binary[16..20].copy_from_slice(b"\x02\x00\x28\x00");
+    runtime::runtime_files_for(&binary, runtime::icon_stride("gr4-1.11").unwrap())
+}
+
+fn gr4_build() -> Value {
+    json!({"target": "gr4-1.11", "profile": "production", "startup_activation": "Off"})
+}
+
+#[test]
+fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
+    let runtime = gr4_runtime_fixture();
+    let bytes = assemble(
+        &runtime,
+        &gr4_build(),
+        &Files::new(),
+        Hidden::default(),
+        &camera::GR4,
+    )
+    .unwrap();
+    let verified = verify_package(&bytes).unwrap();
+    assert_eq!(verified["camera"], "gr4");
+    assert_eq!(verified["target"], "gr4-1.11");
+    let files = unpack(&bytes);
+    assert!(files.contains_key("SD_ROOT/00078560.636"));
+    assert_eq!(
+        files["INSTALLATION.md"],
+        include_bytes!("../../../resources/INSTALLATION-GR4.md")
+    );
+    // A GR III runtime does not run on GR IV.
+    assert!(assemble(
+        &runtime_fixture(),
+        &build(),
+        &Files::new(),
+        Hidden::default(),
+        &camera::GR4
+    )
+    .is_err());
+    // GR IV has Image Control.
+    let bytes = assemble(
+        &runtime,
+        &gr4_build(),
+        &Files::from([effect("test-effect")]),
+        Hidden::default(),
+        &camera::GR4,
+    )
+    .unwrap();
+    assert_eq!(
+        verify_package(&bytes).unwrap()["effect_ids"],
+        json!(["test-effect"])
+    );
+    // GR IV has Framing, so hiding the other two without effects still shows Framing.
+    let hidden = Hidden::from_names(["guides", "date-stamp"]).unwrap();
+    assert!(assemble(&runtime, &gr4_build(), &Files::new(), hidden, &camera::GR4).is_ok());
+    let hidden = Hidden::from_names(["framing", "guides", "date-stamp"]).unwrap();
+    assert!(assemble(&runtime, &gr4_build(), &Files::new(), hidden, &camera::GR4).is_err());
 }

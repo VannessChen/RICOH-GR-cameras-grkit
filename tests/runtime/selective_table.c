@@ -17,6 +17,8 @@ static void *mapped(uint32_t address, uint32_t bytes)
 #define WORD(p,o) (*(volatile uint32_t *)mapped((p)+(o),4))
 #define HALF(p,o) (*(volatile uint16_t *)mapped((p)+(o),2))
 #define BYTE(p,o) (*(volatile uint8_t *)mapped((p)+(o),1))
+/* The host compiler may not target ARM, and this test runs in one thread. */
+#define PICTURE_BARRIER() ((void)0)
 #include "picture.c"
 
 static volatile u32 header[64];

@@ -1,13 +1,24 @@
-//! The private GR III runtime layout and production loader templates.
+//! The private runtime layout and the production loader templates. The layout
+//! values are those of GR III 2.10 unless a function takes the target.
 
 use anyhow::{ensure, Result};
 use serde_json::{json, Value};
 
-use crate::Files;
+use crate::{camera::Camera, Files};
 
 pub const HEADER_SIZE: usize = 256;
 pub const RECORD_SIZE: usize = 0x740;
+/// The icon slot of GR III 2.10: an 8-byte native descriptor, then 40 x 40 RGBA.
 pub const ICON_STRIDE: usize = 6408;
+
+/// The icon slot size of a runtime target. GR IV 1.11 has 12-byte descriptors.
+pub fn icon_stride(target: &str) -> Result<usize> {
+    match target {
+        "gr3-2.10" => Ok(ICON_STRIDE),
+        "gr4-1.11" => Ok(6412),
+        _ => anyhow::bail!("Unknown runtime target {target:?}"),
+    }
+}
 pub const ICONS_PER_CHUNK: usize = 40;
 /// Off, GRKit, four Framing tiles, five Guides tiles, and five Date Stamp tiles.
 /// The menu addresses module tiles by offset, so they must stay contiguous in
@@ -16,8 +27,9 @@ pub const HOST_ICON_COUNT: usize = 16;
 /// Product limit for private Image Control effects.
 pub const MAX_COUNT: usize = 20;
 /// Picture scratch after the records (`GRKIT_PICTURE_SCRATCH`): the date stamp
-/// core and halo masks.
-pub const PICTURE_SCRATCH: usize = 141376;
+/// core and halo masks (141,376 bytes), then the shot ring (a write count, a
+/// pad word, and eight {key, record} entries).
+pub const PICTURE_SCRATCH: usize = 141376 + 8 + 8 * 8;
 // One script array holds the header, every record, and the scratch: at most 65536 words.
 const _: () = assert!(HEADER_SIZE + MAX_COUNT * RECORD_SIZE + PICTURE_SCRATCH <= 65536 * 4);
 const _: () = assert!(PICTURE_SCRATCH.is_multiple_of(4));
@@ -39,6 +51,8 @@ pub const RECORD_CODE: usize = 0x6f8;
 /// camera's own file system, never from Linux while the camera may write photos.
 pub const STATE_FILE: &str = "STATE.TXT";
 pub const LINUX_DIRECTORY: &str = "/media/storage1/SCRIPT/PLUGINS";
+/// The wait of the loader before its first `lcmd` request. See `loader`.
+pub const FIRST_REQUEST_DELAY_MS: u32 = 3000;
 
 pub fn layout(count: usize) -> Result<Value> {
     ensure!(count <= MAX_COUNT, "Expected 0..{MAX_COUNT} effects");
@@ -51,9 +65,10 @@ pub fn layout(count: usize) -> Result<Value> {
     )
 }
 
-pub fn activation_files() -> Files {
+/// The files that enable SD scripts when the camera starts with MENU held.
+pub fn activation_files(camera: &Camera) -> Files {
     Files::from([
-        ("00078350.588".into(), b"[SCRIPT_EN_MODE EN]\r\n".to_vec()),
+        (camera.modeset.into(), b"[SCRIPT_EN_MODE EN]\r\n".to_vec()),
         (
             "DEVELOP.MOD".into(),
             vec![7, 1, 44, 31, 16, 3, 30, 22, 5, 45],
@@ -65,10 +80,23 @@ pub fn activation_files() -> Files {
 /// `lcmd` requests are synchronous: each returns after the Linux command ends,
 /// or with NG when Linux is not ready. The loader checks the result file after
 /// each request and repeats it after a short pause.
+///
+/// The first `lcmd` creates the firmware's host-interface command factory. During
+/// the first second after power-on, that creation took a data abort in the Script
+/// task in some starts, so the loader waits before its first request. Linux mounts
+/// the card about 5 s after power-on, so the wait does not delay the installation.
 pub fn loader() -> Vec<u8> {
+    loader_for(ICON_STRIDE)
+}
+
+/// The loader for a target with `icon_stride`-byte icon slots.
+pub fn loader_for(icon_stride: usize) -> Vec<u8> {
     let path = |name: &str| format!("C:\\SCRIPT\\PLUGINS\\{name}");
     let (plan, done, failed) = (path("MODULE.BIN"), path("INSTALL.OK"), path("INSTALL.ERR"));
-    let mut lines: Vec<String> = vec!["sendln 'lcmd_resp on'".into()];
+    let mut lines: Vec<String> = vec![
+        format!("mpause {FIRST_REQUEST_DELAY_MS}"),
+        "sendln 'lcmd_resp on'".into(),
+    ];
     for name in [
         "MODULE.BIN",
         "MODULE.TMP",
@@ -128,7 +156,7 @@ pub fn loader() -> Vec<u8> {
                 i * ICONS_PER_CHUNK
             ),
             format!("if items > {ICONS_PER_CHUNK} items = {ICONS_PER_CHUNK}"),
-            format!("iconwords = items * {}", ICON_STRIDE / 4),
+            format!("iconwords = items * {}", icon_stride / 4),
             format!("intdim artwork{i} iconwords"),
         ]);
     }
@@ -160,6 +188,9 @@ pub fn loader() -> Vec<u8> {
         "mpause 2000".into(),
         "call snapshot".into(),
         "if state = saved goto watch".into(),
+        // `filecreate` keeps the old bytes after the new text, so a shorter
+        // number would end with digits of the previous one. Delete the file first.
+        format!("filedelete '{state}'"),
         format!("filecreate sfh '{state}'"),
         "if sfh < 0 goto watch".into(),
         "int2str line state".into(),
@@ -276,6 +307,11 @@ pub fn loader() -> Vec<u8> {
 }
 
 pub fn runtime_files(binary: &[u8]) -> Files {
+    runtime_files_for(binary, ICON_STRIDE)
+}
+
+/// The runtime files of a target with `icon_stride`-byte icon slots.
+pub fn runtime_files_for(binary: &[u8], icon_stride: usize) -> Files {
     let target = "C:\\SCRIPT\\PLUGINS\\PLUGINS.TTL";
     let startup = format!("filesearch '{target}'\r\nif result = 0 goto done\r\ninclude '{target}'\r\n:done\r\nend\r\n");
     let wrapper = |mode: &str| {
@@ -283,7 +319,7 @@ pub fn runtime_files(binary: &[u8]) -> Files {
     };
     Files::from([
         ("SCRIPT/STARTUP.TTL".into(), startup.into_bytes()),
-        ("SCRIPT/PLUGINS/PLUGINS.TTL".into(), loader()),
+        ("SCRIPT/PLUGINS/PLUGINS.TTL".into(), loader_for(icon_stride)),
         ("SCRIPT/PLUGINS/INSTALL.BIN".into(), binary.to_vec()),
         ("SCRIPT/PLUGINS/SCAN.SH".into(), wrapper("scan")),
         ("SCRIPT/PLUGINS/INSTALL.SH".into(), wrapper("install")),
