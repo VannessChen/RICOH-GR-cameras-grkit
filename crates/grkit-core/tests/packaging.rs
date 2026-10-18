@@ -54,7 +54,7 @@ fn unpack(bytes: &[u8]) -> Files {
         let mut entry = archive.by_index(index).unwrap();
         let mut bytes = Vec::new();
         entry.read_to_end(&mut bytes).unwrap();
-        files.insert(entry.name().into(), bytes);
+        files.insert(entry.name().unwrap().into_owned(), bytes);
     }
     files
 }
@@ -85,7 +85,8 @@ fn package_round_trip_is_deterministic_and_preserves_metadata() {
         let entry = archive.by_index(index).unwrap();
         assert_eq!(entry.compression(), CompressionMethod::Stored);
         assert_eq!(entry.last_modified().unwrap().year(), 2026);
-        let expected = if entry.name().ends_with(".BIN") || entry.name().ends_with(".SH") {
+        let name = entry.name().unwrap();
+        let expected = if name.ends_with(".BIN") || name.ends_with(".SH") {
             0o100755
         } else {
             0o100644

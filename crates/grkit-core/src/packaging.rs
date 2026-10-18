@@ -537,7 +537,8 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
     let mut total = 0u64;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index)?;
-        let name = safe_path(entry.name())?.to_owned();
+        let raw_name = entry.name().context("Invalid archive entry name")?;
+        let name = safe_path(&raw_name)?.to_owned();
         ensure!(
             !contents.contains_key(&name)
                 && !entry.is_dir()

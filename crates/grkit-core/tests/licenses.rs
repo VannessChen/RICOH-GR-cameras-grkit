@@ -34,7 +34,7 @@ fn unpack(bytes: &[u8]) -> Files {
             let mut entry = archive.by_index(index).unwrap();
             let mut blob = Vec::new();
             entry.read_to_end(&mut blob).unwrap();
-            (entry.name().to_owned(), blob)
+            (entry.name().unwrap().into_owned(), blob)
         })
         .collect()
 }
