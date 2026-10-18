@@ -76,82 +76,8 @@ pub fn validate_plan(plan: &PatchPlan) -> Result<()> {
     Ok(())
 }
 
-pub const RUNTIME_SOURCES: &[(&str, &[u8])] = &[
-    ("abi.h", include_bytes!("../../../runtime/abi.h")),
-    ("firmware.h", include_bytes!("../../../runtime/firmware.h")),
-    (
-        "targets/gr3-2.10.h",
-        include_bytes!("../../../runtime/targets/gr3-2.10.h"),
-    ),
-    (
-        "targets/gr4-1.11.h",
-        include_bytes!("../../../runtime/targets/gr4-1.11.h"),
-    ),
-    ("about.h", include_bytes!("../../../runtime/about.h")),
-    ("catalog.h", include_bytes!("../../../runtime/catalog.h")),
-    (
-        "selection.h",
-        include_bytes!("../../../runtime/selection.h"),
-    ),
-    ("grf.c", include_bytes!("../../../runtime/grf.c")),
-    ("grf.h", include_bytes!("../../../runtime/grf.h")),
-    (
-        "installer.c",
-        include_bytes!("../../../runtime/installer.c"),
-    ),
-    ("menu.S", include_bytes!("../../../runtime/menu.S")),
-    ("menu.c", include_bytes!("../../../runtime/menu.c")),
-    ("modules.h", include_bytes!("../../../runtime/modules.h")),
-    ("plugin.h", include_bytes!("../../../runtime/plugin.h")),
-    (
-        "plugins/image-control/page.h",
-        include_bytes!("../../../runtime/plugins/image-control/page.h"),
-    ),
-    (
-        "plugins/image-control/selective.c",
-        include_bytes!("../../../runtime/plugins/image-control/selective.c"),
-    ),
-    (
-        "plugins/framing/page.h",
-        include_bytes!("../../../runtime/plugins/framing/page.h"),
-    ),
-    (
-        "plugins/framing/framing.c",
-        include_bytes!("../../../runtime/plugins/framing/framing.c"),
-    ),
-    (
-        "plugins/guides/page.h",
-        include_bytes!("../../../runtime/plugins/guides/page.h"),
-    ),
-    (
-        "plugins/guides/guides.c",
-        include_bytes!("../../../runtime/plugins/guides/guides.c"),
-    ),
-    (
-        "plugins/date-stamp/page.h",
-        include_bytes!("../../../runtime/plugins/date-stamp/page.h"),
-    ),
-    (
-        "plugins/date-stamp/stamp.c",
-        include_bytes!("../../../runtime/plugins/date-stamp/stamp.c"),
-    ),
-    (
-        "plugins/grain/page.h",
-        include_bytes!("../../../runtime/plugins/grain/page.h"),
-    ),
-    ("framing.c", include_bytes!("../../../runtime/framing.c")),
-    ("framing.S", include_bytes!("../../../runtime/framing.S")),
-    ("picture.c", include_bytes!("../../../runtime/picture.c")),
-    ("picture.S", include_bytes!("../../../runtime/picture.S")),
-    (
-        "processing.S",
-        include_bytes!("../../../runtime/processing.S"),
-    ),
-    (
-        "targets/gr4-1.11-processing.S",
-        include_bytes!("../../../runtime/targets/gr4-1.11-processing.S"),
-    ),
-];
+// Every file under runtime/, from build.rs.
+include!(concat!(env!("OUT_DIR"), "/runtime_sources.rs"));
 
 pub fn source_hashes() -> BTreeMap<String, String> {
     let mut sources: BTreeMap<_, _> = RUNTIME_SOURCES
@@ -185,6 +111,10 @@ pub fn source_hashes() -> BTreeMap<String, String> {
         (
             "menu_text.rs",
             include_bytes!("../../grkit-core/src/menu_text.rs").as_slice(),
+        ),
+        (
+            "plugins.rs",
+            include_bytes!("../../grkit-core/src/plugins.rs").as_slice(),
         ),
     ] {
         sources.insert(format!("crates/grkit-core/src/{name}"), sha256(bytes));

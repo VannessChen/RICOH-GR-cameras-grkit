@@ -1,35 +1,21 @@
 #ifndef GRKIT_MODULES_H
 #define GRKIT_MODULES_H
-/* The menu host's plugin registry. Each plugin owns its page
-   (runtime/plugins/<id>/page.h) and its settings. Registry order is the order
-   of grkit_core::modules::NAMES and of PLUGINS.TXT bits. The core About row
+/* The menu modules: the page of each plugin (generated/pages.h), in plugin
+   order, so module n is plugin n (PLUGIN_<ID>). The core About row
    (runtime/about.h) follows the plugin rows. */
-#include "plugins/image-control/page.h"
-#include "plugins/framing/page.h"
-#include "plugins/guides/page.h"
-#include "plugins/date-stamp/page.h"
-#include "plugins/grain/page.h"
+#include "generated/pages.h"
 #include "about.h"
 
-#define IMAGE_CONTROL_MODULE 0U
-#define FRAMING_MODULE 1U
-#define GUIDES_MODULE 2U
-#define STAMP_MODULE 3U
-#define GRAIN_MODULE 4U
-#define ABOUT_MODULE 5U
-_Static_assert(ABOUT_MODULE==PLUGIN_COUNT, "About follows the plugin rows");
+#define ABOUT_MODULE PLUGIN_COUNT
 #define ARRAY_COUNT(a) (sizeof(a)/sizeof((a)[0]))
 
-static const Module modules[] = {
-    IMAGE_CONTROL_PAGE, FRAMING_PAGE, GUIDES_PAGE, DATE_STAMP_PAGE, GRAIN_PAGE, ABOUT_PAGE
-};
+static const Module modules[] = {PLUGIN_PAGES, ABOUT_PAGE};
 
-/* Plugin artwork is contiguous and ends below the GRKit tile (0x7ffe): the
-   tiles of each plugin in registry order, from FRAMING_ICON. The installer
-   copies grkit_core::artwork::module_tiles in the same order. */
-#define FRAMING_ICON 0x7fecU
-#define MODULE_ICON_COUNT 18U
-/* The tiles of the registry. A host test compares it with MODULE_ICON_COUNT. */
+/* Plugin artwork is contiguous and ends below the GRKit tile: the tiles of
+   each plugin in plugin order, from PLUGIN_ICON. The installer copies
+   grkit_core::plugins::tiles in the same order. */
+#define PLUGIN_ICON (GRKIT_ICON_GRKIT-PLUGIN_TILES)
+/* The tiles of the pages. A host test compares it with PLUGIN_TILES. */
 GRKIT_MAYBE_UNUSED static u32 module_icon_count(void) {
     u32 i, n=0;
     for(i=0;i<ARRAY_COUNT(modules);++i) n+=modules[i].tiles;
@@ -37,7 +23,7 @@ GRKIT_MAYBE_UNUSED static u32 module_icon_count(void) {
 }
 /* The global icon ID of a page's icon result. */
 static u32 module_icon(u32 module,u32 icon) {
-    u32 i, first=FRAMING_ICON;
+    u32 i, first=PLUGIN_ICON;
     if(icon<GRKIT_ICON_TILE(0)) return icon;
     for(i=0;i<module;++i) first+=modules[i].tiles;
     return first+icon-GRKIT_ICON_TILE(0);
@@ -49,9 +35,9 @@ static u32 module_icon(u32 module,u32 icon) {
    ends the drawing, and the canvas stays until a full draw has erased it. */
 static void frame_preview(volatile u32 *h,u32 canvas,u32 movie) {
     u32 module=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE ? h[GRKIT_HOST_MODULE/4] : 0;
-    u32 page=module==FRAMING_MODULE || module==GUIDES_MODULE;
-    u32 ratio=module==FRAMING_MODULE ? h[GRKIT_HOST_MENU_CURSOR/4] : frame_ratio(h);
-    u32 style=module==GUIDES_MODULE ? h[GRKIT_HOST_MENU_CURSOR/4] : guide_style(h);
+    u32 page=module==PLUGIN_FRAMING || module==PLUGIN_GUIDES;
+    u32 ratio=module==PLUGIN_FRAMING ? h[GRKIT_HOST_MENU_CURSOR/4] : frame_ratio(h);
+    u32 style=module==PLUGIN_GUIDES ? h[GRKIT_HOST_MENU_CURSOR/4] : guide_style(h);
     if(movie) { h[GRKIT_HOST_FRAME_PREVIEW/4]=0; return; }
     h[GRKIT_HOST_GUIDE_PREVIEW/4]=style;
     /* A highlighted Off keeps the canvas for the next row. */
@@ -59,13 +45,13 @@ static void frame_preview(volatile u32 *h,u32 canvas,u32 movie) {
     h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=canvas;
 }
 
-/* Visible modules as a bit mask in registry order: the installed plugins
-   (PLUGINS.TXT), then About, which always shows. Image Control also needs
-   effects. With no plugin installed, the installer installs no menu hook, so
-   only an inconsistent header shows About alone. */
+/* Visible modules as a bit mask in plugin order: the installed plugins
+   (PLUGINS.TXT), then About, which always shows. A plugin that needs effects
+   shows only with effects. With no plugin installed, the installer installs no
+   menu hook, so only an inconsistent header shows About alone. */
 static u32 visible_modules(volatile u32 *h) {
     u32 mask=h[GRKIT_HOST_PLUGINS/4]&((1U<<PLUGIN_COUNT)-1);
-    if(!h[GRKIT_HOST_COUNT/4]) mask&=~1U;
+    if(!h[GRKIT_HOST_COUNT/4]) mask&=~PLUGIN_NEEDS_EFFECTS;
     return mask | 1U<<ABOUT_MODULE;
 }
 /* The module of a root row, or of the last row for a row past the end. */

@@ -41,9 +41,10 @@ For the web site, see [web/README.md](web/README.md).
 
 - Keep filesystem and process access out of `grkit-core`.
 - Put target addresses in the target definition or its native adapter. Check the hook bytes before you patch them.
-- Do not edit `runtime/abi.h`. Change the layout tables in `crates/grkit-core/src/abi.rs`, then run `GRKIT_UPDATE_ABI=1 cargo test -p grkit-core --test abi`.
+- Do not edit `runtime/abi.h`, `runtime/generated/`, or `web/src/generated/`. Change the layout tables in `crates/grkit-core/src/abi.rs` or the plugin registry in `crates/grkit-core/src/plugins.rs`. Then run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
+- To add a plugin, follow [Add a plugin](docs/architecture.md#add-a-plugin).
 - Keep firmware details in the core. A plugin under `runtime/plugins/<id>/` includes only `runtime/plugin.h`. If a plugin needs a firmware function, add a core service to `runtime/plugin.h`.
-- Give each new hook an extension point in `components::Point::of`. A hook without a point fails the build.
+- Give each new hook an extension point in `components::point_of`. A hook without a point fails the build.
 - Keep processing records valid while camera tasks use them.
 - Do not change persistent native camera settings.
 - Add focused tests for new behavior. Keep GRF bytes unchanged in compatible refactors.

@@ -319,16 +319,6 @@ pub fn grain_tiles() -> Vec<Vec<u8>> {
     tiles
 }
 
-/// Module artwork in runtime order. The menu addresses each tile by its
-/// offset from the first Framing tile.
-pub fn module_tiles() -> Vec<Vec<u8>> {
-    let mut tiles = framing_tiles();
-    tiles.extend(guides_tiles());
-    tiles.extend(stamp_tiles());
-    tiles.extend(grain_tiles());
-    tiles
-}
-
 pub fn plugins_pixels() -> Vec<u8> {
     let mut rgba = background();
     text(&mut rgba, "GRK", LABEL_SIZE, LABEL_WIDTH, 20.0, 255);

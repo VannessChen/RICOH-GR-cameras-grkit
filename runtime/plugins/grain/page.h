@@ -2,7 +2,7 @@
    pipeline.grain hooks read the level (GRKIT_HOST_GRAIN). */
 #include "../../plugin.h"
 
-#define GRAIN_LEVEL_COUNT 4U
+#define GRAIN_LEVEL_COUNT (GRAIN_LEVEL_MAX+1U)
 static u32 grain_level(volatile u32 *h) {
     u32 value=h[GRKIT_HOST_GRAIN/4];
     return value<GRAIN_LEVEL_COUNT ? value : 0;
@@ -21,4 +21,4 @@ static void grain_apply(volatile u32 *h,u32 row) { h[GRKIT_HOST_GRAIN/4]=row; }
 
 /* The module tile, then the three levels. */
 #define GRAIN_PAGE {grain_title,grain_summary,grain_rows,grain_label,grain_icon, \
-    grain_checked,grain_apply,grain_level,0,0,4}
+    grain_checked,grain_apply,grain_level,0,0,GRAIN_TILES}

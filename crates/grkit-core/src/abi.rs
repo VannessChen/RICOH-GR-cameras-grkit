@@ -1,6 +1,6 @@
 //! The private memory layout that the loader, the installer, and the ARM code
 //! share. These tables are its only source: `header()` generates
-//! `runtime/abi.h`, and a test keeps the checked-in file current.
+//! `runtime/abi.h`, and the `generated` test keeps the checked-in file current.
 
 use std::fmt::Write;
 
@@ -65,8 +65,8 @@ fields!(HEADER_FIELDS {
     HOST_GUIDE_PREVIEW = 48, 4;
     /// Date stamp style: 0 Off, 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY.
     HOST_STAMP = 52, 4;
-    /// Installed plugins: bit n is plugin n of grkit_core::modules::NAMES and
-    /// module n of runtime/modules.h. Image Control is set only with effects.
+    /// Installed plugins: bit n is plugin n of grkit_core::plugins::PLUGINS and
+    /// module n of the menu. A plugin that needs effects is set only with effects.
     HOST_PLUGINS = 56, 4;
     /// Nonzero while the menu rebuilds the native list. The list callback and the
     /// native Image Control preview ignore the changes.
@@ -119,9 +119,9 @@ fields!(HEADER_FIELDS {
     HOST_FRAME_DRAWS = 216, 4;
     /// ADJ canvas of the preview. It stays set until a full draw erases the mask.
     HOST_FRAME_PREVIEW_CANVAS = 220, 4;
-    /// Icon of the first module tile: the Framing tiles, then the Guides tiles,
-    /// contiguous.
-    HOST_FRAMING_ICON = 224, 4;
+    /// Icon of the first plugin tile. The tiles of each plugin follow in plugin
+    /// order (grkit_core::plugins::tiles).
+    HOST_TILE_ICON = 224, 4;
     /// Live view controller that Framing draws on, or 0.
     HOST_FRAME_OWNER = 228, 4;
     /// Canvas of that controller.
@@ -184,7 +184,7 @@ const _: () = assert!(
 );
 
 /// Wraps `text` into a C comment.
-fn comment(out: &mut String, text: &str) {
+pub(crate) fn comment(out: &mut String, text: &str) {
     let words: Vec<&str> = text.split_whitespace().collect();
     if words.is_empty() {
         return;
@@ -236,7 +236,8 @@ pub fn header() -> String {
     comment(
         &mut out,
         "Generated from crates/grkit-core/src/abi.rs. Do not edit: change the \
-         tables there, then run GRKIT_UPDATE_ABI=1 cargo test -p grkit-core --test abi.",
+         tables there, then run GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core \
+         --test generated.",
     );
     out.push_str("#ifndef GRKIT_ABI_H\n#define GRKIT_ABI_H\n\n");
 

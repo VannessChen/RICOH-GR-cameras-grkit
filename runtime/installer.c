@@ -223,10 +223,10 @@ static int install(void)
     int status = discover();
     if (status) return status;
     if ((status = read_selection(&selected))) return status;
-    /* Image Control without effects has nothing to show. */
-    if (!count) selected &= ~1U;
+    /* A plugin that needs effects has nothing to show without them. */
+    if (!count) selected &= ~PLUGIN_NEEDS_EFFECTS;
     needed_points = 0;
-    for (u32 i = 0; i < SELECTION_PLUGINS; ++i)
+    for (u32 i = 0; i < PLUGIN_COUNT; ++i)
         if (selected >> i & 1) needed_points |= plugin_points[i];
     layout();
     if (!read_file(plan_path, plan, 20 + count * 8192) || get32(plan) != 0x314d5247 ||
@@ -355,8 +355,8 @@ static int install(void)
         ICON_HEADER(icon);
         const u8 *artwork = i >= 2 ? module_pixels + (i - 2) * 6400 : i ? plugins_pixels : off_pixels;
         copy(at(icon + ICON_PIXELS), artwork, 6400);
-        /* The menu derives the other module tiles from the first Framing tile. */
-        if (i <= 2) store(base + (i == 2 ? GRKIT_HOST_FRAMING_ICON : i ? GRKIT_HOST_PLUGINS_ICON : GRKIT_HOST_OFF_ICON), icon);
+        /* The menu derives the other plugin tiles from the first one. */
+        if (i <= 2) store(base + (i == 2 ? GRKIT_HOST_TILE_ICON : i ? GRKIT_HOST_PLUGINS_ICON : GRKIT_HOST_OFF_ICON), icon);
     }
 #endif
     for (u32 i = 0; i < CODE_RELOCATION_COUNT; ++i) {

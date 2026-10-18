@@ -25,4 +25,4 @@ static void frame_apply(volatile u32 *h,u32 row) {
 
 /* The module tile, then XPan, 16:9, and 4:3. */
 #define FRAMING_PAGE {frame_title,frame_summary,frame_rows,frame_label,frame_icon, \
-    frame_checked,frame_apply,frame_ratio,0,0,4}
+    frame_checked,frame_apply,frame_ratio,0,0,FRAMING_TILES}

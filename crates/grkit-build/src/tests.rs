@@ -665,12 +665,17 @@ fn each_camera_offers_what_its_runtime_has() {
         assert_eq!(layout.processing.is_some(), camera.effects, "{}", camera.id);
         // Each point of each plugin that the camera offers has hooks.
         let points: Vec<_> = components::hook_sites(layout)
-            .map(|(_, symbol)| components::Point::of(symbol).unwrap())
+            .map(|(_, symbol)| components::point_of(symbol).unwrap())
             .collect();
-        for (name, needed) in components::PLUGIN_POINTS {
-            if camera.plugins.contains(&name) {
-                for point in needed {
-                    assert!(points.contains(point), "{} {name} {point:?}", camera.id);
+        for plugin in &grkit_core::plugins::PLUGINS {
+            if camera.plugins.contains(&plugin.id) {
+                for point in plugin.points {
+                    assert!(
+                        points.contains(point),
+                        "{} {} {point:?}",
+                        camera.id,
+                        plugin.id
+                    );
                 }
             }
         }
@@ -678,15 +683,7 @@ fn each_camera_offers_what_its_runtime_has() {
 }
 
 #[test]
-fn plugins_and_points_follow_the_selection_order() {
-    let names: Vec<_> = components::PLUGIN_POINTS
-        .iter()
-        .map(|(name, _)| *name)
-        .collect();
-    assert_eq!(names, grkit_core::modules::NAMES);
-    let selection = include_str!("../../../runtime/selection.h");
-    assert!(selection
-        .contains("{\"image-control\", \"framing\", \"guides\", \"date-stamp\", \"grain\"}"));
+fn each_point_has_its_hooks() {
     // The hooks of each point. The in-place patches add 1 to tuning, and on
     // GR III 5 to capture.aspect (build.json "points" counts both).
     for (layout, expected) in [
@@ -695,9 +692,9 @@ fn plugins_and_points_follow_the_selection_order() {
     ] {
         let mut counts = [0; 6];
         for (_, symbol) in components::hook_sites(layout) {
-            counts[components::Point::of(symbol).unwrap() as usize] += 1;
+            counts[components::point_of(symbol).unwrap() as usize] += 1;
         }
         assert_eq!(counts, expected);
     }
-    assert!(components::Point::of("unknown_hook").is_err());
+    assert!(components::point_of("unknown_hook").is_err());
 }

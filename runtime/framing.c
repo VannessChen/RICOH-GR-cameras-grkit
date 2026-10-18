@@ -36,15 +36,11 @@ extern volatile u32 *framing_header(void);
 /* Plugin services (runtime/plugin.h). */
 static u32 framing_ratios(void) { return FRAMING_RATIO_COUNT; }
 
-#include "plugins/framing/framing.c"
-#include "plugins/guides/guides.c"
+/* The plugin handler files and PLUGIN_LAYERS. */
+#include "generated/layers.h"
 
-/* The layers in painting order. The badge covers the guides that cross it. */
-static const Layer layers[]={
-    {PLUGIN_FRAMING,framing_value,framing_mask,0},
-    {PLUGIN_GUIDES,guides_value,guides_paint,0},
-    {PLUGIN_FRAMING,framing_value,framing_badge,1},
-};
+/* The layers in painting order (Layer.order in the registry). */
+static const Layer layers[]={PLUGIN_LAYERS};
 #define LAYER_COUNT (sizeof(layers)/sizeof(layers[0]))
 /* The committed value of a layer, or 0 for Off and for a plugin that
    PLUGINS.TXT does not install. */
@@ -152,7 +148,7 @@ static void preview_paint(volatile u32 *h,u32 canvas,u32 bitmap) {
     u32 preview=h[GRKIT_HOST_FRAME_PREVIEW/4],style=h[GRKIT_HOST_GUIDE_PREVIEW/4],data,area,i;
     Surface surface;
     if(!preview) { h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=0; return; }
-    if(preview>4 || style>GUIDE_LAST || (preview<2 && !style)) return;
+    if(preview>FRAMING_RATIO_MAX+1U || style>GUIDES_STYLE_MAX || (preview<2 && !style)) return;
     data=canvas_pixels(canvas,bitmap);
     area=preview-1;
     SHOWN_AREA(data,area);

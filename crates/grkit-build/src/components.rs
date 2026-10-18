@@ -149,110 +149,46 @@ pub type Hook = (u32, &'static str, &'static str, bool);
 /// An in-place change: (address, stock bytes, new bytes).
 pub type InstructionPatch = (u32, &'static str, &'static str);
 
-/// An extension point: the firmware changes that a group of plugins needs.
-/// The installer applies the patches of a point only when a selected plugin
-/// needs it, so a plugin that is not installed changes no firmware.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Point {
-    /// The private ADJ entry, its list, text, and icons.
-    MenuPage,
-    /// Image Control: private processing records, the effect tag, and the
-    /// native Image Control pages.
-    Tuning,
-    /// Drawing over the still live view.
-    ViewfinderOverlay,
-    /// The capture aspect and the recorded picture geometry.
-    CaptureAspect,
-    /// Changes to the JPEG planes of a recorded picture.
-    PictureEncode,
-    /// The native grain stage of recorded pictures.
-    PipelineGrain,
-}
+pub use grkit_core::plugins::Point;
 
-impl Point {
-    pub const ALL: [Point; 6] = [
-        Point::MenuPage,
-        Point::Tuning,
-        Point::ViewfinderOverlay,
-        Point::CaptureAspect,
-        Point::PictureEncode,
-        Point::PipelineGrain,
+/// The extension point of a hook symbol. A new hook must be given a point here.
+pub fn point_of(symbol: &str) -> Result<Point> {
+    const TUNING: &[&str] = &[
+        "menu_native_adj_apply",
+        "menu_native_dialog_apply",
+        "menu_native_page_event",
+        "menu_native_page_exit",
+        "menu_viewfinder_icon",
+        "menu_playback_icon",
+        "menu_playback_detail",
+        "picture_post",
+        "picture_capture_tone",
     ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Point::MenuPage => "menu.page",
-            Point::Tuning => "tuning",
-            Point::ViewfinderOverlay => "viewfinder.overlay",
-            Point::CaptureAspect => "capture.aspect",
-            Point::PictureEncode => "picture.encode",
-            Point::PipelineGrain => "pipeline.grain",
-        }
-    }
-
-    pub fn bit(self) -> u32 {
-        1 << self as u32
-    }
-
-    /// The point of a hook symbol. A new hook must be given a point here.
-    pub fn of(symbol: &str) -> Result<Point> {
-        const TUNING: &[&str] = &[
-            "menu_native_adj_apply",
-            "menu_native_dialog_apply",
-            "menu_native_page_event",
-            "menu_native_page_exit",
-            "menu_viewfinder_icon",
-            "menu_playback_icon",
-            "menu_playback_detail",
-            "picture_post",
-            "picture_capture_tone",
-        ];
-        const OVERLAY: &[&str] = &[
-            "framing_update",
-            "framing_exit",
-            "framing_destroy",
-            "framing_canvas",
-            "framing_children",
-        ];
-        Ok(
-            if TUNING.contains(&symbol) || symbol.starts_with("module_") {
-                Point::Tuning
-            } else if OVERLAY.contains(&symbol) {
-                Point::ViewfinderOverlay
-            } else if symbol.starts_with("menu_") {
-                Point::MenuPage
-            } else if symbol.starts_with("framing_") {
-                Point::CaptureAspect
-            } else if symbol == "picture_encode_entry" {
-                Point::PictureEncode
-            } else if symbol.starts_with("grain_") {
-                Point::PipelineGrain
-            } else {
-                anyhow::bail!("Hook {symbol} has no extension point")
-            },
-        )
-    }
+    const OVERLAY: &[&str] = &[
+        "framing_update",
+        "framing_exit",
+        "framing_destroy",
+        "framing_canvas",
+        "framing_children",
+    ];
+    Ok(
+        if TUNING.contains(&symbol) || symbol.starts_with("module_") {
+            Point::Tuning
+        } else if OVERLAY.contains(&symbol) {
+            Point::ViewfinderOverlay
+        } else if symbol.starts_with("menu_") {
+            Point::MenuPage
+        } else if symbol.starts_with("framing_") {
+            Point::CaptureAspect
+        } else if symbol == "picture_encode_entry" {
+            Point::PictureEncode
+        } else if symbol.starts_with("grain_") {
+            Point::PipelineGrain
+        } else {
+            anyhow::bail!("Hook {symbol} has no extension point")
+        },
+    )
 }
-
-/// The extension points that each plugin of `grkit_core::modules::NAMES` needs.
-/// Each plugin with a menu needs `MenuPage`.
-pub const PLUGIN_POINTS: [(&str, &[Point]); 5] = [
-    (
-        "image-control",
-        &[Point::MenuPage, Point::Tuning, Point::PictureEncode],
-    ),
-    (
-        "framing",
-        &[
-            Point::MenuPage,
-            Point::ViewfinderOverlay,
-            Point::CaptureAspect,
-        ],
-    ),
-    ("guides", &[Point::MenuPage, Point::ViewfinderOverlay]),
-    ("date-stamp", &[Point::MenuPage, Point::PictureEncode]),
-    ("grain", &[Point::MenuPage, Point::PipelineGrain]),
-];
 
 /// Where a target's components live and where they hook the firmware.
 #[derive(Debug, PartialEq, Eq)]
@@ -598,7 +534,7 @@ pub fn processing(
         }
         component.patches.push(Patch {
             address,
-            points: Point::of(name)?.bit(),
+            points: point_of(name)?.bit(),
             before: body.read(address, 4)?.to_vec(),
             after: instruction.to_le_bytes().to_vec(),
         });
@@ -815,7 +751,7 @@ fn add_patches<'a>(
         }
         component.patches.push(Patch {
             address,
-            points: Point::of(name)?.bit(),
+            points: point_of(name)?.bit(),
             before,
             after: instruction.to_le_bytes().to_vec(),
         });

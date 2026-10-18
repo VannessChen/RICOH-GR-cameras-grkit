@@ -284,7 +284,7 @@ int main(void)
     /* Unknown styles draw nothing. */
     reset();
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
-    header[GRKIT_HOST_GUIDE/4]=GUIDE_LAST+1;
+    header[GRKIT_HOST_GUIDE/4]=GUIDES_STYLE_MAX+1;
     framing_prepare(TEST_CANVAS);
     assert(BYTE(TEST_CANVAS,0xa0)==0);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
@@ -304,7 +304,7 @@ int main(void)
     assert_guides(2,4,0);
     assert(header[GRKIT_HOST_FRAME_DRAWS/4]==0);
     for(u32 i=0; i<sizeof(pixels)/sizeof(pixels[0]); ++i) pixels[i]=SENTINEL;
-    header[GRKIT_HOST_GUIDE_PREVIEW/4]=GUIDE_LAST+1;
+    header[GRKIT_HOST_GUIDE_PREVIEW/4]=GUIDES_STYLE_MAX+1;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
     /* Native 3:2 requests record the Framing ratio; other native ratios pass. */

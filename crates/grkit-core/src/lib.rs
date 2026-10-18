@@ -9,6 +9,7 @@ pub mod fit;
 pub mod menu_text;
 pub mod modules;
 pub mod packaging;
+pub mod plugins;
 pub mod runtime;
 pub mod selective;
 pub mod site;

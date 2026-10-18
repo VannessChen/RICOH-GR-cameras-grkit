@@ -28,7 +28,7 @@ pub struct Camera {
     pub experimental: bool,
     /// True when the runtime has Image Control, so a package can have effects.
     pub effects: bool,
-    /// The plugins of `modules::NAMES` that the runtime has. A package cannot
+    /// The plugins of `plugins::NAMES` that the runtime has. A package cannot
     /// select the others.
     pub plugins: &'static [&'static str],
 }

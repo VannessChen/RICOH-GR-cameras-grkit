@@ -1,7 +1,7 @@
 use crate::{firmware::FirmwareImage, target, PatchPlan};
 use anyhow::{ensure, Context, Result};
 use grkit_core::{
-    artwork::{module_tiles, off_pixels, plugins_pixels},
+    artwork::{off_pixels, plugins_pixels},
     runtime::{
         icon_stride, HOST_ICON_COUNT, ICONS_PER_CHUNK, LINUX_DIRECTORY, MAX_CHUNKS, MAX_COUNT,
     },
@@ -128,7 +128,12 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         }
         array(&mut result, "off_pixels", &off_pixels(), true);
         array(&mut result, "plugins_pixels", &plugins_pixels(), true);
-        array(&mut result, "module_pixels", &module_tiles().concat(), true);
+        array(
+            &mut result,
+            "module_pixels",
+            &grkit_core::plugins::tiles().concat(),
+            true,
+        );
         // The installer copies the menu text table after the picture scratch.
         let text = grkit_core::menu_text::table(version)?;
         writeln!(result, "#define MENU_TEXT_BYTES {}U", text.len())?;
@@ -178,13 +183,13 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
     // Kind 1 marks a patch after the decoded RTOS image. The installer does
     // not require its stock bytes, because a restart keeps earlier GRKit code.
     let image_end = target::RTOS_BASE + body.body.len() as u32;
-    // The points of each plugin, in the order of runtime/selection.h.
+    // The points of each plugin, in plugin order.
     words(
         &mut result,
         "plugin_points",
-        crate::components::PLUGIN_POINTS
+        grkit_core::plugins::PLUGINS
             .iter()
-            .map(|(_, points)| points.iter().fold(0, |mask, point| mask | point.bit())),
+            .map(grkit_core::plugins::Plugin::point_mask),
     );
     result.push_str("static struct patch patches[] = {\n");
     for (i, patch) in plan.patches.iter().enumerate() {

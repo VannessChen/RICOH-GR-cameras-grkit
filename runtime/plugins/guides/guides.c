@@ -2,11 +2,10 @@
    the capture area. */
 #include "../../plugin.h"
 
-#define GUIDE_LAST 4U
 /* The committed style, with an unknown value treated as Off. */
 static u32 guides_value(volatile u32 *h) {
     u32 style=h[GRKIT_HOST_GUIDE/4];
-    return style<=GUIDE_LAST ? style : 0;
+    return style<=GUIDES_STYLE_MAX ? style : 0;
 }
 /* Opaque gray is the same pixel with straight or premultiplied alpha. */
 #define GUIDE_COLOR 0xffc0c0c0U

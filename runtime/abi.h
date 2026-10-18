@@ -1,5 +1,6 @@
 /* Generated from crates/grkit-core/src/abi.rs. Do not edit: change the tables
-   there, then run GRKIT_UPDATE_ABI=1 cargo test -p grkit-core --test abi. */
+   there, then run GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test
+   generated. */
 #ifndef GRKIT_ABI_H
 #define GRKIT_ABI_H
 
@@ -38,8 +39,8 @@
 #define GRKIT_HOST_GUIDE_PREVIEW 48
 /* Date stamp style: 0 Off, 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY. */
 #define GRKIT_HOST_STAMP 52
-/* Installed plugins: bit n is plugin n of grkit_core::modules::NAMES and
-   module n of runtime/modules.h. Image Control is set only with effects. */
+/* Installed plugins: bit n is plugin n of grkit_core::plugins::PLUGINS and
+   module n of the menu. A plugin that needs effects is set only with effects. */
 #define GRKIT_HOST_PLUGINS 56
 /* Nonzero while the menu rebuilds the native list. The list callback and the
    native Image Control preview ignore the changes. */
@@ -97,9 +98,9 @@
 #define GRKIT_HOST_FRAME_DRAWS 216
 /* ADJ canvas of the preview. It stays set until a full draw erases the mask. */
 #define GRKIT_HOST_FRAME_PREVIEW_CANVAS 220
-/* Icon of the first module tile: the Framing tiles, then the Guides tiles,
-   contiguous. */
-#define GRKIT_HOST_FRAMING_ICON 224
+/* Icon of the first plugin tile. The tiles of each plugin follow in plugin
+   order (grkit_core::plugins::tiles). */
+#define GRKIT_HOST_TILE_ICON 224
 /* Live view controller that Framing draws on, or 0. */
 #define GRKIT_HOST_FRAME_OWNER 228
 /* Canvas of that controller. */

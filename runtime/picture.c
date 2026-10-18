@@ -114,8 +114,8 @@ static void flush(const Plane *p) {
 }
 static void local_time(u8 *out) { PICTURE_DATE(out); }
 
-#include "plugins/image-control/selective.c"
-#include "plugins/date-stamp/stamp.c"
+/* The plugin handler files and PLUGIN_ENCODERS. */
+#include "generated/encoders.h"
 
 /* Visible area of a preview picture: black bars depend on the capture aspect. */
 static void visible_area(volatile u32 *h,Plane *p) {
@@ -158,12 +158,8 @@ static u32 shot_record(volatile u32 *h,u32 shot) {
 }
 /* For picture_capture_tone: the record of a shot, or 0. */
 u32 picture_capture_record(u32 shot) { return shot_record(framing_header(),shot); }
-/* The encode handlers in order: selective color, then the stamp, which keeps
-   its own color. */
-static const Encoder encoders[]={
-    {PLUGIN_IMAGE_CONTROL,selective_wanted,selective_encode},
-    {PLUGIN_DATE_STAMP,stamp_wanted,stamp_encode},
-};
+/* The encode handlers in call order (Encoder.order in the registry). */
+static const Encoder encoders[]={PLUGIN_ENCODERS};
 #define ENCODER_COUNT (sizeof(encoders)/sizeof(encoders[0]))
 /* Once per plane set. The second full-size image (descriptor 3) shares the
    main planes. */

@@ -73,17 +73,9 @@ An unusable effect file does not stop the other effects or Framing. Unusable fil
 The `._` companions that macOS writes are therefore ignored.
 
 INSTALL also reads `SCRIPT/PLUGINS/PLUGINS.TXT`, which names the plugins to install (`runtime/selection.h`, `grkit_core::modules`). A missing file installs each plugin, and an empty file installs none.
-An unknown or repeated name stops the installation with status 43, and a read error with status 44. Image Control without effects counts as not installed. The installer stores the result in header `+56` (`GRKIT_HOST_PLUGINS`).
+An unknown or repeated name stops the installation with status 43, and a read error with status 44. A plugin that needs effects counts as not installed without effects. The installer stores the result in header `+56` (`GRKIT_HOST_PLUGINS`).
 
-Each hook and in-place patch belongs to one extension point (`components::Point`), and each plugin needs a set of points (`components::PLUGIN_POINTS`):
-
-| Plugin | Extension points |
-| --- | --- |
-| Image Control | `menu.page`, `tuning`, `picture.encode` |
-| Framing | `menu.page`, `viewfinder.overlay`, `capture.aspect` |
-| Guides | `menu.page`, `viewfinder.overlay` |
-| Date Stamp | `menu.page`, `picture.encode` |
-| Grain | `menu.page`, `pipeline.grain` |
+Each hook and in-place patch belongs to one extension point (`components::point_of`). Each plugin needs the points that the plugin registry gives (see [Plugins](#plugins)).
 
 INSTALL checks and publishes only the patches of the points that the installed plugins need. A plugin that is not installed therefore changes no firmware, and an empty `PLUGINS.TXT` installs no hook. The code in the tail is always published, because nothing calls it without a hook. `build.json` gives the number of patches of each point.
 
@@ -98,7 +90,7 @@ Off, GRKit, and the eighteen module tiles (four Framing, five Guides, five Date 
 The module tiles are contiguous from icon ID `0x7fec` to `0x7ffd`, below the GRKit tile (`0x7ffe`) and Off (`0x7fff`). The menu derives each one from the first Framing tile.
 
 `grkit_core::abi` defines the header, the records, and the scratch. Each of the 64 header words has a name, and a test checks that each byte belongs to exactly one field.
-`runtime/abi.h` is generated from these tables, and a test fails if the checked-in file differs. The C code, the assembly, and the loader take their offsets from these names.
+`runtime/abi.h` is generated from these tables, and the `generated` test fails if the checked-in file differs. The C code, the assembly, and the loader take their offsets from these names.
 
 ### Saved selections
 
@@ -106,7 +98,7 @@ After `INSTALL.OK`, the resident loader restores and saves the effect, the Frami
 The private header is the loader's `registry` array, so the script reads and writes it directly.
 
 `SCRIPT/PLUGINS/STATE.TXT` holds two decimal lines for each key: the key ID, then the value.
-The key ID is the CRC-32 of the key name modulo 10^9 (`runtime::state_key_id`), so each number has at most 9 digits. `runtime::STATE_KEYS` gives each key, its header word, and its largest value.
+The key ID is the CRC-32 of the key name modulo 10^9 (`runtime::state_key_id`), so each number has at most 9 digits. The plugin registry gives each key, its header word, and its largest value (`plugins::state_keys`).
 The Image Control key holds the ImageTone code of the effect, and 0 is Off. A file in the earlier single-integer format restores nothing.
 
 The loader checks the state every 2 s and writes the file only after a change. It writes through the camera's own file system, as photos do, never from Linux while the camera may write photos.
@@ -139,9 +131,48 @@ The build links each plugin into the core statically. `runtime/plugin.h` is ther
 | Date Stamp | `page.h`, `stamp.c` | `menu.page`, `picture.encode` |
 | Grain | `page.h` | `menu.page`, `pipeline.grain` |
 
+### Registry
+
+The plugin registry is `grkit_core::plugins::PLUGINS`. It is the only list of the plugins. Its order is the menu order, and plugin n is bit n of `GRKIT_HOST_PLUGINS`. Each entry gives these facts:
+
+- The ID: the name in `PLUGINS.TXT` and the directory under `runtime/plugins/`.
+- The extension points whose patches the plugin needs.
+- Whether the plugin shows only with effects.
+- The state keys that `STATE.TXT` keeps, with their header words and largest values.
+- The artwork tiles.
+- The handler file, with its overlay layers or its encoders and their order.
+
+The rest of the repository reads the registry:
+
+| Reader | Facts |
+| --- | --- |
+| `grkit_core::modules` | `PLUGINS.TXT` names |
+| `grkit_core::runtime` | The state keys of the loader, and the number of host icons |
+| `grkit_build::loader` | The extension points of each plugin, and the artwork |
+| `runtime/generated/plugins.h` | `PLUGIN_<ID>`, the names, the tile counts, and the largest state values |
+| `runtime/generated/pages.h` | The page of each plugin, for `runtime/modules.h` |
+| `runtime/generated/layers.h`, `encoders.h` | The handler files and the handler tables, for `runtime/framing.c` and `runtime/picture.c` |
+| `web/src/generated/plugins.ts` | The site keys and the plugins of each camera |
+
+The `generated` test of `grkit-core` fails if a generated file differs from the registry. The build crate stages each file under `runtime/`, so a new plugin file needs no list entry.
+
+### Add a plugin
+
+1. Add the C code in `runtime/plugins/<id>/`: `page.h`, and a handler file if the plugin has layers or encoders. Include only `runtime/plugin.h`.
+2. In `page.h`, define `<ID>_PAGE`. Give it `<ID>_TILES` as its tile count.
+3. Add the header words of its state to `crates/grkit-core/src/abi.rs`.
+4. Add the entry to `PLUGINS` in `crates/grkit-core/src/plugins.rs`.
+5. Add its tiles to `grkit_core::artwork`, its menu text to `grkit_core::menu_text`, and its site text to `web/src/i18n.ts`.
+6. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
+7. Run the tests. The tests fail if a tile count, a handler order, or an extension point does not agree with the code.
+
+The ADJ icon chunk has 40 slots, and the private header has 64 words. Each is full in this release, so a new plugin first needs room in both.
+
+### Hosts
+
 The hosts call plugins in two ways:
 
-- A point with several plugins has a table of handlers in a fixed order. `runtime/framing.c` paints the overlay layers: the Framing mask, the guides, then the Framing badge. `runtime/picture.c` runs the encoders: selective color, then the date stamp. A host calls only the handlers of installed plugins (`PLUGIN_INSTALLED`).
+- A point with several plugins has a table of handlers in registry order. `runtime/framing.c` paints the overlay layers: the Framing mask, the guides, then the Framing badge. `runtime/picture.c` runs the encoders: selective color, then the date stamp. A host calls only the handlers of installed plugins (`PLUGIN_INSTALLED`).
 - A point with one plugin is assembly in the core that reads the plugin's value from its header word. `pipeline.grain` reads the Grain level, and `capture.aspect` reads the Framing ratio. The `tuning` hooks read the active record of Image Control.
 
 The Framing ratio is also the capture area of the other plugins. The overlay host gives the guides the photo area of that ratio. The encode host gives the date stamp the visible area of each plane.
@@ -153,13 +184,14 @@ A private LineView draws the native translucent background before the shared sel
 
 The ADJ controller owns both objects. Exit hides them and restores the native geometry. Destruction unlinks and releases them. Movie mode keeps the five-entry layout.
 
-The registry in `runtime/modules.h` lists the page of each plugin, in the order of `grkit_core::modules::NAMES`. The core About row (`runtime/about.h`) follows the plugin rows.
+`runtime/modules.h` lists the page of each plugin in registry order (`runtime/generated/pages.h`). The core About row (`runtime/about.h`) follows the plugin rows.
 Each page owns its title, summary, rows, labels, icons, selection checks, activation, and committed row. A page opens at its committed row.
-A page returns its icons as tiles of its own artwork (`GRKIT_ICON_TILE`). The registry maps them to the global IDs from `0x7fec`, in registry order.
+
+A page returns its icons as tiles of its own artwork (`GRKIT_ICON_TILE`). The menu maps them to global IDs. The tiles of all plugins follow each other in registry order and end below the GRKit tile `0x7ffe`.
 
 Two page callbacks are optional. `highlight` receives each change of the highlighted row, and Image Control previews the row in the live view. `parameters` makes Fn apply the row and open the native parameter page.
 
-The root lists only the installed plugins (header `+56`), in registry order, then About. Image Control also needs effects.
+The root lists only the installed plugins (header `+56`), in registry order, then About. A plugin that needs effects, such as Image Control, shows only with effects.
 If no plugin is installed, the installer installs no menu hook, so the GRKit entry does not appear. ADJ always opens at the root.
 Module state stays in the private host header.
 

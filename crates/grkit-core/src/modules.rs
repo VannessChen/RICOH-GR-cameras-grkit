@@ -13,8 +13,8 @@ use anyhow::{bail, ensure, Result};
 pub const PATH: &str = "SCRIPT/PLUGINS/PLUGINS.TXT";
 /// The largest file that the installer reads.
 pub const MAX_FILE_SIZE: usize = 256;
-/// The plugins in menu order. Name n is module n of `runtime/modules.h`.
-pub const NAMES: [&str; 5] = ["image-control", "framing", "guides", "date-stamp", "grain"];
+/// The plugins in menu order (`plugins::PLUGINS`).
+pub use crate::plugins::NAMES;
 
 /// A set of plugins. Bit n is plugin n of `NAMES`, as the installer stores it
 /// in the private header (`GRKIT_HOST_PLUGINS`).
@@ -96,10 +96,11 @@ impl Selection {
     /// True when the camera menu would show no plugin for this many effects.
     /// `available` names the plugins that the runtime has.
     pub fn shows_nothing(self, effects: usize, available: &[&str]) -> bool {
-        self.names()
+        NAMES
             .iter()
-            .filter(|name| available.contains(name))
-            .all(|name| *name == NAMES[0] && effects == 0)
+            .enumerate()
+            .filter(|(index, name)| self.0 & 1 << index != 0 && available.contains(name))
+            .all(|(index, _)| crate::plugins::NEEDS_EFFECTS & 1 << index != 0 && effects == 0)
     }
 }
 

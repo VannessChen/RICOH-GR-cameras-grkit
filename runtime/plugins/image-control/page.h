@@ -47,4 +47,4 @@ static void image_preview(volatile u32 *h) {
 static u32 image_parameters(volatile u32 *h) { return h[GRKIT_HOST_MENU_CURSOR/4]!=0; }
 
 #define IMAGE_CONTROL_PAGE {image_title,image_summary,image_rows,image_label,image_icon, \
-    image_checked,image_apply,image_active_row,image_preview,image_parameters,0}
+    image_checked,image_apply,image_active_row,image_preview,image_parameters,IMAGE_CONTROL_TILES}

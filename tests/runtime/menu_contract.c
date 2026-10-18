@@ -12,14 +12,13 @@ static unsigned test_language;
 #define MENU_LANGUAGE() test_language
 #include "menu.c"
 #define ALL_PLUGINS ((1U << PLUGIN_COUNT) - 1)
-/* The global icon layout of the plugin tiles, from FRAMING_ICON. */
-#define FRAMING_ICON_COUNT 4U
-#define FRAMING_RATIO_ICON(ratio) (FRAMING_ICON + (ratio))
-#define GUIDES_ICON (FRAMING_ICON + FRAMING_ICON_COUNT)
+/* The global icon layout of the plugin tiles, from PLUGIN_ICON. */
+#define FRAMING_RATIO_ICON(ratio) (PLUGIN_ICON + (ratio))
+#define GUIDES_ICON (PLUGIN_ICON + FRAMING_TILES)
 #define GUIDE_STYLE_ICON(style) (GUIDES_ICON + (style))
-#define STAMP_ICON (GUIDES_ICON + 5U)
+#define STAMP_ICON (GUIDES_ICON + GUIDES_TILES)
 #define STAMP_STYLE_ICON(style) (STAMP_ICON + (style))
-#define GRAIN_ICON (STAMP_ICON + 5U)
+#define GRAIN_ICON (STAMP_ICON + DATE_STAMP_TILES)
 #define GRAIN_LEVEL_ICON(level) (GRAIN_ICON + (level))
 /* A page icon as its global ID. */
 #define PAGE_ICON(module, row) module_icon((module), modules[(module)].icon(test_header, (row)))
@@ -206,17 +205,17 @@ int main(void)
     /* Registry routing leaves the existing effect record untouched. */
     test_header[GRKIT_HOST_ACTIVE / 4] = 0x59005000;
     test_header[GRKIT_HOST_COUNT / 4] = 5;
-    test_header[GRKIT_HOST_FRAMING_ICON / 4] = 0x59007000;
+    test_header[GRKIT_HOST_TILE_ICON / 4] = 0x59007000;
     /* Framing tiles are contiguous after the module tile. */
-    assert(menu_icon(FRAMING_ICON) == 0x59007000);
+    assert(menu_icon(PLUGIN_ICON) == 0x59007000);
     assert(menu_icon(FRAMING_RATIO_ICON(3)) == 0x59007000 + 3 * GRKIT_ICON_STRIDE);
     /* Guides tiles follow the Framing tiles. */
-    assert(menu_icon(GUIDES_ICON) == 0x59007000 + FRAMING_ICON_COUNT * GRKIT_ICON_STRIDE);
+    assert(menu_icon(GUIDES_ICON) == 0x59007000 + FRAMING_TILES * GRKIT_ICON_STRIDE);
     assert(menu_icon(GUIDE_STYLE_ICON(4)) == 0x59007000 + 8 * GRKIT_ICON_STRIDE);
     /* Module tiles fill 0x7fec..0x7ffd; the GRKit tile (0x7ffe) follows them. */
-    assert(menu_icon(FRAMING_ICON - 1) == 0);
-    assert(FRAMING_ICON + MODULE_ICON_COUNT <= 0x7ffe);
-    assert(module_icon_count() == MODULE_ICON_COUNT);
+    assert(menu_icon(PLUGIN_ICON - 1) == 0);
+    assert(PLUGIN_ICON + PLUGIN_TILES <= 0x7ffe);
+    assert(module_icon_count() == PLUGIN_TILES);
     /* Date Stamp tiles follow the Guides tiles. */
     assert(menu_icon(STAMP_ICON) == 0x59007000 + 9 * GRKIT_ICON_STRIDE);
     assert(menu_icon(STAMP_STYLE_ICON(4)) == 0x59007000 + 13 * GRKIT_ICON_STRIDE);
@@ -228,7 +227,7 @@ int main(void)
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     assert(current_module(test_header) == &modules[1]);
     assert(same(current_module(test_header)->summary(test_header), "Framing: Off"));
-    assert(PAGE_ICON(1, 1) == FRAMING_ICON);
+    assert(PAGE_ICON(1, 1) == PLUGIN_ICON);
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 2;
     assert(PAGE_ICON(1, 1) == FRAMING_RATIO_ICON(2));
     /* Framing lists the ratios directly and opens at the selected one. */
@@ -284,7 +283,7 @@ int main(void)
     {
         u32 requests = framing_requests;
         menu_confirm(test_header);
-        assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == GUIDES_MODULE);
+        assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_GUIDES);
         assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3);
         assert(count(test_header) == 5);
         assert(same(current_module(test_header)->title(test_header), "Guides"));
@@ -345,7 +344,7 @@ int main(void)
     test_header[GRKIT_HOST_STAMP / 4] = 2;
     assert(PAGE_ICON(3, 3) == STAMP_STYLE_ICON(2));
     menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_DATE_STAMP);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2 && count(test_header) == 5);
     assert(same(current_module(test_header)->title(test_header), "Date Stamp"));
     for (u32 row = 0; row < 5; ++row) {
@@ -371,11 +370,11 @@ int main(void)
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 4;
     assert(same(current_module(test_header)->summary(test_header), "Grain: Off"));
-    assert(PAGE_ICON(GRAIN_MODULE, 4) == GRAIN_ICON);
+    assert(PAGE_ICON(PLUGIN_GRAIN, 4) == GRAIN_ICON);
     test_header[GRKIT_HOST_GRAIN / 4] = 2;
-    assert(PAGE_ICON(GRAIN_MODULE, 4) == GRAIN_LEVEL_ICON(2));
+    assert(PAGE_ICON(PLUGIN_GRAIN, 4) == GRAIN_LEVEL_ICON(2));
     menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == GRAIN_MODULE);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_GRAIN);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2 && count(test_header) == 4);
     assert(same(current_module(test_header)->title(test_header), "Grain"));
     for (u32 row = 0; row < 4; ++row) {
@@ -494,47 +493,47 @@ int main(void)
     /* A plugin that is not installed has no root row. The others keep their order. */
     test_header[GRKIT_HOST_PREVIEW / 4] = 0;
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 0;
-    test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS & ~(1U << GUIDES_MODULE);
+    test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS & ~(1U << PLUGIN_GUIDES);
     menu_start(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0 && count(test_header) == 5);
     assert(current_module(test_header) == &modules[0]);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
-    assert(current_module(test_header) == &modules[STAMP_MODULE]);
+    assert(current_module(test_header) == &modules[PLUGIN_DATE_STAMP]);
     assert(same(current_module(test_header)->summary(test_header), "Date Stamp: Off"));
     menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_DATE_STAMP);
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_MODULE / 4] == FRAMING_MODULE);
+    assert(test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_FRAMING);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 1);
     /* The page of a plugin that is not installed does not stay open. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
-    test_header[GRKIT_HOST_MODULE / 4] = GUIDES_MODULE;
+    test_header[GRKIT_HOST_MODULE / 4] = PLUGIN_GUIDES;
     menu_normalize(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     /* Image Control that is not installed does not show, even with effects. */
-    test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS & ~(1U | 1U << FRAMING_MODULE);
-    assert(visible_modules(test_header) == (1U << GUIDES_MODULE | 1U << STAMP_MODULE | 1U << GRAIN_MODULE | 1U << ABOUT_MODULE));
+    test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS & ~(1U | 1U << PLUGIN_FRAMING);
+    assert(visible_modules(test_header) == (1U << PLUGIN_GUIDES | 1U << PLUGIN_DATE_STAMP | 1U << PLUGIN_GRAIN | 1U << ABOUT_MODULE));
     /* Without effects, Image Control does not show. */
     test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS;
     test_header[GRKIT_HOST_COUNT / 4] = 0;
     menu_start(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 5);
-    assert(current_module(test_header) == &modules[FRAMING_MODULE]);
+    assert(current_module(test_header) == &modules[PLUGIN_FRAMING]);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
     menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
+    assert(test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_DATE_STAMP);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2);
     /* One installed plugin keeps the root level, because About follows it. */
-    test_header[GRKIT_HOST_PLUGINS / 4] = 1U | 1U << STAMP_MODULE;
+    test_header[GRKIT_HOST_PLUGINS / 4] = 1U | 1U << PLUGIN_DATE_STAMP;
     test_header[GRKIT_HOST_STAMP / 4] = 3;
     menu_start(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 2);
-    assert(root_module(test_header, 0) == STAMP_MODULE && root_module(test_header, 1) == ABOUT_MODULE);
+    assert(root_module(test_header, 0) == PLUGIN_DATE_STAMP && root_module(test_header, 1) == ABOUT_MODULE);
     menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == STAMP_MODULE);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_DATE_STAMP);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3 && count(test_header) == 5);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     assert(!menu_back(test_header));

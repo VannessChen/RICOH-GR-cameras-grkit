@@ -1,7 +1,7 @@
 /* Guides: the menu page. Off, thirds, center, golden ratio, and diagonals. */
 #include "../../plugin.h"
 
-#define GUIDE_STYLE_COUNT 5U
+#define GUIDE_STYLE_COUNT (GUIDES_STYLE_MAX+1U)
 static u32 guide_style(volatile u32 *h) {
     u32 value=h[GRKIT_HOST_GUIDE/4];
     return value<GUIDE_STYLE_COUNT ? value : 0;
@@ -20,4 +20,4 @@ static void guide_apply(volatile u32 *h,u32 row) { h[GRKIT_HOST_GUIDE/4]=row; }
 
 /* The module tile, then the four styles. */
 #define GUIDES_PAGE {guide_title,guide_summary,guide_rows,guide_label,guide_icon, \
-    guide_checked,guide_apply,guide_style,0,0,5}
+    guide_checked,guide_apply,guide_style,0,0,GUIDES_TILES}

@@ -1,3 +1,4 @@
+import { CAMERA_PLUGINS } from './generated/plugins';
 import type { ModuleKey } from './modules';
 
 export interface Camera {
@@ -13,14 +14,12 @@ export interface Camera {
     modeset: string;
     /** True until the runtime has been tested on a camera. */
     experimental: boolean;
-    /** The modules that the runtime has, in menu order (`camera.rs`). */
+    /** The modules that the runtime has, in menu order (`camera.rs`, through `CAMERA_PLUGINS`). */
     modules: readonly ModuleKey[];
     /** Framing offers only XPan, as a crop of native 16:9. */
     xpanOnly?: boolean;
   };
 }
-
-const ALL: readonly ModuleKey[] = ['imageControl', 'framing', 'guides', 'dateStamp', 'grain'];
 
 export const CAMERAS: readonly Camera[] = [
   {
@@ -31,7 +30,7 @@ export const CAMERAS: readonly Camera[] = [
       target: 'gr3-2.10',
       modeset: '00078350.588',
       experimental: false,
-      modules: ALL,
+      modules: CAMERA_PLUGINS.gr3,
     },
   },
   // GR IIIx 1.60 runs the GR III 2.10 code, so it uses the same runtime.
@@ -43,7 +42,7 @@ export const CAMERAS: readonly Camera[] = [
       target: 'gr3-2.10',
       modeset: '00078490.609',
       experimental: false,
-      modules: ALL,
+      modules: CAMERA_PLUGINS.gr3x,
     },
   },
   // GR IV and GR IV HDF run the same firmware.
@@ -55,7 +54,7 @@ export const CAMERAS: readonly Camera[] = [
       target: 'gr4-1.11',
       modeset: '00078560.636',
       experimental: true,
-      modules: ALL,
+      modules: CAMERA_PLUGINS.gr4,
       xpanOnly: true,
     },
   },

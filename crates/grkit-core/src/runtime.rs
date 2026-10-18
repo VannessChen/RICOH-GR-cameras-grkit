@@ -11,6 +11,7 @@ pub use crate::abi::{
     HOST_HEADER_SIZE as HEADER_SIZE, HOST_PLUGINS, HOST_RECORDS, HOST_STAMP, PICTURE_SCRATCH,
     RECORD_CODE, RECORD_SIZE, TAIL_SIZE,
 };
+use crate::plugins;
 
 /// The icon slot of GR III 2.10: an 8-byte native descriptor, then 40 x 40 RGBA.
 pub const ICON_STRIDE: usize = 6408;
@@ -24,11 +25,10 @@ pub fn icon_stride(target: &str) -> Result<usize> {
     }
 }
 pub const ICONS_PER_CHUNK: usize = 40;
-/// Off, GRKit, four Framing tiles, five Guides tiles, five Date Stamp tiles, and
-/// four Grain tiles.
-/// The menu addresses module tiles by offset, so they must stay contiguous in
+/// Off, GRKit, then the tiles of each plugin (`plugins::TILES`).
+/// The menu addresses plugin tiles by offset, so they must stay contiguous in
 /// one icon chunk.
-pub const HOST_ICON_COUNT: usize = 20;
+pub const HOST_ICON_COUNT: usize = 2 + plugins::TILES;
 /// Product limit for private Image Control effects.
 pub const MAX_COUNT: usize = 20;
 // One script array holds the header, every record, the scratch, and the text: at most 65536 words.
@@ -44,53 +44,9 @@ pub const STATE_TEMPORARY: &str = "STATE.TMP";
 /// The largest state file that the loader reads.
 pub const STATE_MAX_BYTES: usize = 512;
 
-/// A selection that `STATE.TXT` keeps. The file holds two lines for each key:
-/// the key ID (`state_key_id`), then the value, both in decimal.
-pub struct StateKey {
-    /// `<module>.<key>`.
-    pub name: &'static str,
-    /// The header word that holds the value, or `None` for the Image Control
-    /// effect, which the file keeps as the ImageTone code of the record.
-    pub word: Option<usize>,
-    pub max: u32,
-    /// The bit of the plugin in `HOST_PLUGINS`. A plugin that is not
-    /// installed restores 0.
-    pub module: u32,
-}
-
-pub const STATE_KEYS: &[StateKey] = &[
-    StateKey {
-        name: "image-control.effect",
-        word: None,
-        max: 0xffff,
-        module: 0,
-    },
-    StateKey {
-        name: "framing.ratio",
-        word: Some(HOST_FRAME_RATIO),
-        max: 3,
-        module: 1,
-    },
-    StateKey {
-        name: "guides.style",
-        word: Some(HOST_GUIDE),
-        max: 4,
-        module: 2,
-    },
-    StateKey {
-        name: "date-stamp.style",
-        word: Some(HOST_STAMP),
-        max: 4,
-        module: 3,
-    },
-    StateKey {
-        name: "grain.level",
-        word: Some(HOST_GRAIN),
-        max: 3,
-        module: 4,
-    },
-];
-
+/// `STATE.TXT` keeps the state keys of the plugins (`plugins::state_keys`).
+/// The file holds two lines for each key: the key ID (`state_key_id`), then
+/// the value, both in decimal. A plugin that is not installed restores 0.
 /// The most digits of a number in the state file. The loader parses the digits
 /// itself, and 9 digits cannot overflow its 32-bit integers.
 pub const STATE_DIGITS: usize = 9;
@@ -261,7 +217,8 @@ fn state_script() -> Vec<String> {
             RECORD_CODE / 4
         )
     };
-    let keys = STATE_KEYS.iter().enumerate();
+    let state_keys = plugins::state_keys();
+    let keys = state_keys.iter().enumerate();
     let mut lines: Vec<String> = vec![":resident".into(), "call restore".into()];
 
     // Save after a change. `filerename` cannot replace a file, and its result
@@ -287,7 +244,7 @@ fn state_script() -> Vec<String> {
     ]);
     for (i, key) in keys.clone() {
         lines.extend([
-            format!("filewriteln sfh '{}'", state_key_id(key.name)),
+            format!("filewriteln sfh '{}'", state_key_id(&key.name)),
             format!("int2str line value{i}"),
             "filewriteln sfh line".into(),
         ]);
@@ -402,7 +359,7 @@ fn state_script() -> Vec<String> {
     for (i, key) in keys.clone() {
         lines.push(format!(
             "if key = {} goto restore_key{i}",
-            state_key_id(key.name)
+            state_key_id(&key.name)
         ));
     }
     lines.push("goto restore_reset".into());
@@ -432,7 +389,7 @@ fn state_script() -> Vec<String> {
     ]);
     for (i, key) in keys.clone() {
         lines.extend([
-            format!("bit = (plugins >> {}) and 1", key.module),
+            format!("bit = (plugins >> {}) and 1", key.plugin),
             format!("if bit = 0 stored{i} = 0"),
         ]);
         if let Some(offset) = key.word {
@@ -496,18 +453,19 @@ mod tests {
 
     #[test]
     fn state_keys_have_distinct_positive_ids() {
-        let mut ids: Vec<_> = STATE_KEYS
-            .iter()
-            .map(|key| state_key_id(key.name))
-            .collect();
+        let keys = plugins::state_keys();
+        let mut ids: Vec<_> = keys.iter().map(|key| state_key_id(&key.name)).collect();
         assert!(ids
             .iter()
             .all(|id| *id > 0 && id.to_string().len() <= STATE_DIGITS));
         ids.sort_unstable();
         ids.dedup();
-        assert_eq!(ids.len(), STATE_KEYS.len());
-        assert!(STATE_KEYS[0].word.is_none());
-        assert!(STATE_KEYS[1..].iter().all(|key| key.word.is_some()));
+        assert_eq!(ids.len(), keys.len());
+        // The loader handles the Image Control effect, the one key without a
+        // header word, as value 0.
+        assert_eq!(keys[0].name, "image-control.effect");
+        assert!(keys[0].word.is_none());
+        assert!(keys[1..].iter().all(|key| key.word.is_some()));
     }
 
     /// A runtime error ends the script and frees the arrays, so the resident

@@ -8,8 +8,13 @@
    have handlers for the extension points that it uses (part of the Framing
    component). The core calls a handler only when PLUGINS.TXT installs the
    plugin. A plugin keeps its state in its own words of the private header
-   (runtime/abi.h). */
+   (runtime/abi.h).
+
+   The registry in crates/grkit-core/src/plugins.rs lists the plugins, their
+   extension points, state keys, tiles, and handlers. runtime/generated/ holds
+   that list for C. */
 #include "abi.h"
+#include "generated/plugins.h"
 
 typedef unsigned int u32;
 typedef unsigned short u16;
@@ -29,15 +34,7 @@ typedef short s16;
 #define BYTE(p,o) (*(volatile u8 *)((p)+(o)))
 #endif
 
-/* Plugins in registry order: grkit_core::modules::NAMES and the bits of
-   PLUGINS.TXT (GRKIT_HOST_PLUGINS). */
-#define PLUGIN_IMAGE_CONTROL 0U
-#define PLUGIN_FRAMING 1U
-#define PLUGIN_GUIDES 2U
-#define PLUGIN_DATE_STAMP 3U
-#define PLUGIN_GRAIN 4U
-#define PLUGIN_COUNT 5U
-/* True when PLUGINS.TXT installs the plugin. */
+/* True when PLUGINS.TXT installs the plugin (PLUGIN_<ID>, generated/plugins.h). */
 #define PLUGIN_INSTALLED(h,plugin) ((h)[GRKIT_HOST_PLUGINS/4]>>(plugin)&1U)
 
 /* ---- menu.page ------------------------------------------------------------ */
@@ -69,7 +66,7 @@ typedef struct {
     /* Optional: Fn on the highlighted row applies it and opens the native
        parameter page. */
     u32 (*parameters)(volatile u32 *);
-    /* Artwork tiles, in the order of grkit_core::artwork::module_tiles. */
+    /* Artwork tiles: <ID>_TILES (generated/plugins.h), from the registry. */
     u32 tiles;
 } Module;
 

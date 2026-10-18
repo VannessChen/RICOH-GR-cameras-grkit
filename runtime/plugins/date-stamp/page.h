@@ -1,7 +1,7 @@
 /* Date Stamp: the menu page. Off and four date styles. */
 #include "../../plugin.h"
 
-#define STAMP_STYLE_COUNT 5U
+#define STAMP_STYLE_COUNT (DATE_STAMP_STYLE_MAX+1U)
 static u32 stamp_style(volatile u32 *h) {
     u32 value=h[GRKIT_HOST_STAMP/4];
     return value<STAMP_STYLE_COUNT ? value : 0;
@@ -20,4 +20,4 @@ static void stamp_apply(volatile u32 *h,u32 row) { h[GRKIT_HOST_STAMP/4]=row; }
 
 /* The module tile, then the four styles. */
 #define DATE_STAMP_PAGE {stamp_title,stamp_summary,stamp_rows,stamp_label,stamp_icon, \
-    stamp_checked,stamp_apply,stamp_style,0,0,5}
+    stamp_checked,stamp_apply,stamp_style,0,0,DATE_STAMP_TILES}
