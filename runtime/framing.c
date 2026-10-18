@@ -58,20 +58,19 @@ static u32 capture_area(volatile u32 *h) {
 }
 
 #ifdef FRAMING_XPAN_NATIVE
-/* XPan crops the native aspect FRAMING_XPAN_NATIVE, and the other ratios are
-   native. Set `area` to the photo area that the live view shows: XPan in that
-   aspect, or the full area in native 3:2. Otherwise nothing shows: clear `data`. */
+/* The live view shows the Framing ratio in native 3:2. XPan also crops the
+   native aspect FRAMING_XPAN_NATIVE, whose live view shows only XPan. In other
+   native aspects nothing shows: clear `data`. */
 #define SHOWN_AREA(data,area) do { \
     u32 native=FRAMING_NATIVE_ASPECT(); \
-    if(native==0) (area)=0; \
-    else if(native!=FRAMING_XPAN_NATIVE || (area)!=1) (data)=0; \
+    if(native!=0 && (native!=FRAMING_XPAN_NATIVE || (area)!=1)) (data)=0; \
 } while(0)
 #else
 /* canvas_pixels() accepts only the native 3:2 aspect, where each ratio shows. */
 #define SHOWN_AREA(data,area) ((void)0)
 #endif
 
-#ifdef FW_CAPTURE_PROPERTIES
+#ifdef FRAMING_CAPTURE_ASPECT
 /* The still aspect property handler calls this for each requested value. The
    native menu requests 0 for 3:2, so 3:2 records the Framing ratio. Other
    native ratios pass unchanged. Only an installed Framing hooks the handler. */
@@ -86,6 +85,17 @@ static void capture_sync(u32 controller) {
        FRAMING_NATIVE_ASPECT()==0 && FRAMING_CAPTURE_ASPECT()!=framing_capture_id(h))
         FRAMING_REQUEST_ASPECT();
 }
+#ifdef FW_CAPTURE_ASPECT_GET
+/* The live view follows the capture aspect where the native firmware has a
+   live-view mode for each aspect (GR IV). A capture id 2 with the native 3:2
+   UI aspect comes from the Framing request above, so the live view keeps
+   mode 3:2. The live-view mode function and the mode check call this instead
+   of the capture aspect getter. */
+u32 framing_live_aspect(u32 property) {
+    u32 id=((u32 (*)(u32))FW_CAPTURE_ASPECT_GET)(property);
+    return id==2 && FRAMING_NATIVE_ASPECT()==0 ? 0 : id;
+}
+#endif
 #else
 /* Without the capture hooks a Framing ratio cannot be selected. */
 #define capture_sync(controller) ((void)(controller))

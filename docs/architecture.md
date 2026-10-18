@@ -28,7 +28,7 @@ Its RTOS image is larger (0x13d2ac0 bytes), and its data, functions, and object 
 The build defines `GRKIT_TARGET_<target>` (`components::Layout::define`), and `runtime/firmware.h` selects the header from it. Without a known definition, the compilation stops.
 `components::Layout` holds the regions and hooks of each target, and the build generates `hooks.h` from it.
 
-The GR IV runtime has the menu, Image Control, Framing, Guides, Date Stamp, and Grain. GR IV Framing offers only XPan, as a crop of native 16:9 (see Framing).
+The GR IV runtime has the menu, Image Control, Framing, Guides, Date Stamp, and Grain. GR IV Framing offers only XPan (see Framing).
 GR IV processing hooks are in `runtime/targets/gr4-1.11-processing.S`, after the Framing region. GR IV reads the type tables through getters.
 A private record therefore sets the Standard index (11) where all type paths join, and the record store keeps the private record.
 
@@ -269,7 +269,7 @@ The preview style is in header `+48`, and it applies only while the Framing prev
 
 ### Capture
 
-Capture uses the hidden GR IV aspect ids. Id 1 is 4:3 (5328x4000). Id 2 is 16:9 (6000x3376) or 65:24 (6000x2216). The menu, icon, and badge name 65:24 XPan.
+Capture uses the hidden GR III aspect ids. Id 1 is 4:3 (5328x4000). Id 2 is 16:9 (6000x3376) or 65:24 (6000x2216). The menu, icon, and badge name 65:24 XPan.
 The native StillAspectRatio value stays 0 (3:2), so menus, AF areas, and the live view stay native.
 A stored 1 or 2 would also make the stock firmware assert in AF code after a boot without GRKit.
 
@@ -293,12 +293,22 @@ The image aspect getter (`0x532b3ca0`) reports id 2 for 65:24 sizes.
 DNG files keep the full 6112x4064 sensor data, as native 1:1 does. DefaultCropOrigin and DefaultCropSize describe the crop.
 In-camera Crop, Resize, Digital Filter, and RAW development do not know the 65:24 variant.
 
-GR IV has native 4:3 and 16:9 live-view modes, so the GR III changes above would break them. GR IV Framing therefore offers Off and XPan, and XPan crops native 16:9 photos.
-GR IV has no capture request hook and no live-view changes. The GR IV sizes come from `ImageResolutionTranslatorKb636`. Its GetResolution (`0x538cfbfc`) has the id 2 height hooks, and slots 9 and 10 have the inset hooks.
+GR IV has a live-view mode for each capture aspect, so the GR III changes above would break native 4:3 and 16:9. GR IV Framing therefore offers Off and XPan.
+
+In native 3:2, XPan works as on GR III. The still aspect property handler (`0x5374f264`, property `0xdf`) maps a 3:2 request to id 2.
+
+Two hooks keep the live view in 3:2. They replace the capture aspect getter call in the live-view mode function (`0x5388c7b8`) and in the live-view mode check (`0x5363fa84`). Each call returns 0 for id 2 while the UI aspect (settings `+0x49f`) is 3:2.
+
+The still pipeline uses the native 16:9 row for id 2 (`0x538d0894`). The AF area of id 2 is the 16:9 band of the 3:2 frame (`0x537f6aac`).
+A Framing change and a live-view update resend the still aspect with `0x53284454`. With equal UI and applied aspects, it posts no UI event.
+
+In native 16:9, id 2 is native, and XPan crops native 16:9 photos. Native 4:3 and 1:1 ignore XPan.
+
+The GR IV sizes come from `ImageResolutionTranslatorKb636`. Its GetResolution (`0x538cfbfc`) has the id 2 height hooks, and slots 9 and 10 have the inset hooks.
 The `Kb588` class holds the GR III sizes and is not used. The GR IV size classifier (`0x533a2820`) keeps the width in `r6` and the class pointer in `r5`.
 
-GR IV 65:24 sizes are 6192x2288, 4944x1824, 3504x1296, and 1920x712. In native 16:9 the XPan mask uses the GR III XPan area. In native 3:2 XPan has no effect, and the viewfinder shows only the guides.
-The date stamp follows the same rule: it uses the XPan area of the screennail and the thumbnail only for a native 16:9 capture.
+GR IV 65:24 sizes are 6192x2288, 4944x1824, 3504x1296, and 1920x712. In native 3:2 and native 16:9 the XPan mask uses the GR III XPan area. In native 4:3 and 1:1 the viewfinder shows no GRKit drawing.
+The date stamp follows the same rule. For an XPan capture in native 3:2 or native 16:9, it uses the XPan area of the screennail and the thumbnail.
 
 ## Effect extension
 

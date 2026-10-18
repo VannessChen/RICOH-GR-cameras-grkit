@@ -20,6 +20,17 @@ framing_capture_request_hook:
     str r0, [sp,#4]
     pop {r0-r3,r12,pc}
 #endif
+#ifdef HOOK_FRAMING_LIVE_MODE
+/* Replace the capture aspect getter BL in the live-view mode function and in
+   the live-view mode check (GR IV). r0 = the capture property. */
+.global framing_live_mode
+.global framing_live_check
+framing_live_mode:
+framing_live_check:
+    push {r4,lr}
+    bl framing_live_aspect
+    pop {r4,pc}
+#endif
 /* Each entry hook preserves the displaced prologue and all incoming arguments. */
 .macro ENTRY name, helper, resume
 .global \name

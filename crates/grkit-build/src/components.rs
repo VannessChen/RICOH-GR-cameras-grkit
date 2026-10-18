@@ -268,14 +268,22 @@ const GR4_MENU_HOOKS: &[(u32, &str, &str)] = &[
 ];
 
 /// GR IV 1.11 Framing and Guides hooks: LiveViewController update, exit, and
-/// destroy, then Canvas::Draw entry and its child-draw BL. XPan crops native
-/// 16:9, so GR IV needs no capture request hook and no live-view patches.
+/// destroy, then Canvas::Draw entry and its child-draw BL. GR IV has a
+/// live-view mode for each capture aspect, so instead of the GR III patches two
+/// hooks keep the live view in 3:2 while XPan uses capture aspect id 2.
 const GR4_FRAMING_HOOKS: &[Hook] = &[
     (0x5318e350, "framing_update", "0dc0a0e1", false),
     (0x5318e984, "framing_exit", "0dc0a0e1", false),
     (0x531879e0, "framing_destroy", "0dc0a0e1", false),
     (0x5356dde4, "framing_canvas", "0dc0a0e1", false),
     (0x5356deb0, "framing_children", "6b0800eb", true),
+    // Still aspect property (0xdf) handler, as on GR III: a native 3:2 request
+    // records the Framing ratio.
+    (0x5374f2ac, "framing_capture_request_hook", "0010d4e5", true),
+    // The capture aspect getter BL of the live-view mode function (0x5388c7b8)
+    // and of the live-view mode check (0x5363fa84).
+    (0x5388c7d0, "framing_live_mode", "0d2ffbeb", true),
+    (0x5363fa9c, "framing_live_check", "5a6204eb", true),
     // ImageResolutionTranslatorKb636 (the GR IV sizes) GetResolution id 2
     // heights. The Kb588 class holds the GR III sizes and is not used.
     (0x538cfff8, "framing_height_0", "983d00e3", true),

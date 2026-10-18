@@ -81,9 +81,10 @@ void picture_post(u32 object,u32 context,u32 settings) {
 #endif
 /* Visible-area id of the capture: 0 3:2, 1 4:3, 2 16:9, 3 1:1, 4 XPan. */
 #ifdef FRAMING_XPAN_NATIVE
-/* XPan crops native FRAMING_XPAN_NATIVE photos. Other native aspects ignore it. */
+/* XPan applies to native 3:2 and native FRAMING_XPAN_NATIVE photos. Other
+   native aspects ignore it. */
 #define PICTURE_AREA_ID(native,ratio) \
-    ((native)==FRAMING_XPAN_NATIVE && (ratio)==1 ? 4 : PICTURE_NATIVE_ID(native))
+    (((native)==0 || (native)==FRAMING_XPAN_NATIVE) && (ratio)==1 ? 4 : PICTURE_NATIVE_ID(native))
 #else
 /* Framing ratios (Off, XPan, 16:9, 4:3) apply only to native 3:2 captures. */
 #define PICTURE_AREA_ID(native,ratio) ((native) ? PICTURE_NATIVE_ID(native) : \

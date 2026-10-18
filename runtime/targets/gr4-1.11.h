@@ -16,11 +16,23 @@
 #define FW_SETTINGS_DOMAIN 0x55379610
 #define SETTINGS_IC_TYPE 0x79c
 /* Framing: GR IV has native 4:3 and 16:9, so Framing offers Off and XPan.
-   XPan crops native 16:9 photos to 65:24. A Framing change sends no capture
-   request. */
+   XPan uses capture aspect id 2 with the 65:24 heights. In native 3:2 the
+   capture request hook maps the 3:2 request to id 2, and the live-view hooks
+   keep the live view in 3:2, as on GR III. In native 16:9 XPan crops the
+   native 16:9 photos. */
 #define FRAMING_RATIO_COUNT 2U
 #define FRAMING_XPAN_NATIVE 2
-#define MENU_FRAMING_REQUEST() ((void)0)
+/* Capture aspect (property 0xdf, CommonProperty +0x7da) getter. The live-view
+   mode function 0x5388c7b8 and the mode check 0x5363fa84 call it. */
+#define FW_CAPTURE_ASPECT_GET 0x5375840c
+/* Resend the still aspect: with the UI aspect (+0x49f) equal to the applied
+   aspect (+0xf8b) it posts no UI event and, in still mode, sends property
+   0xdf with the applied value. */
+#define FW_STILL_ASPECT_RESEND 0x53284454
+/* The next copy of the capture aspect: domain +0x518 -> control, +4 -> next. */
+#define FRAMING_CAPTURE_ASPECT() BYTE(WORD(WORD(WORD(FW_SETTINGS_DOMAIN,0),0x518),4),0x7da)
+#define FRAMING_REQUEST_ASPECT() (((void (*)(u32))FW_STILL_ASPECT_RESEND)(FRAMING_SETTINGS()))
+#define MENU_FRAMING_REQUEST() (((void (*)(u32))FW_STILL_ASPECT_RESEND)(CALL0(FW_SETTINGS)()))
 /* ImageResolutionTranslatorKb636 GetResolution id 2: the stock 16:9 height and
    the 65:24 height (width x 24 / 65, a multiple of 8) of each size. */
 #define XPAN_HEIGHT_0 3480, 2288

@@ -688,7 +688,7 @@ fn each_point_has_its_hooks() {
     // GR III 5 to capture.aspect (build.json "points" counts both).
     for (layout, expected) in [
         (&components::GR3_LAYOUT, [16, 15, 5, 9, 1, 2]),
-        (&components::GR4_LAYOUT, [15, 16, 5, 8, 1, 4]),
+        (&components::GR4_LAYOUT, [15, 16, 5, 11, 1, 4]),
     ] {
         let mut counts = [0; 6];
         for (_, symbol) in components::hook_sites(layout) {

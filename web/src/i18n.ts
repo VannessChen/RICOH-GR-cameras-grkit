@@ -87,7 +87,7 @@ const en = {
     grain: "Film grain from the camera's own grain stage, in three strengths. Photos only.",
   },
   framingXpanOnly:
-    'XPan 65:24 photos, cropped from the native 16:9 aspect ratio. The viewfinder dims the area outside the photo.',
+    'XPan 65:24 photos. The viewfinder stays 3:2 and dims the area outside the photo.',
   steps: [
     ['Turn the camera off.'],
     ['Unzip GRKit.zip. Copy the contents of ', '`SD_ROOT', ' to the card root.'],
@@ -198,7 +198,7 @@ const zhHans: Strings = {
     dateStamp: '在照片右下角加印橙色七段数码日期。',
     grain: '使用相机内置的颗粒感处理，分弱、中、强三档。不影响影片。',
   },
-  framingXpanOnly: '从 16:9 长宽比裁切出 XPan 65:24 照片。显示屏上照片以外的区域会变暗。',
+  framingXpanOnly: '以 XPan 65:24 的长宽比拍摄。显示屏仍按 3:2 显示，照片以外的区域会变暗。',
   steps: [
     ['关闭相机。'],
     ['解压 GRKit.zip。把 ', '`SD_ROOT', ' 中的内容复制到存储卡根目录。'],
@@ -299,7 +299,7 @@ const zhHant: Strings = {
     dateStamp: '在照片右下角加印橙色七段數字日期。',
     grain: '使用相機內建的粒紋感處理，分弱、中、強三檔。不影響影片。',
   },
-  framingXpanOnly: '從 16:9 長寬比裁切出 XPan 65:24 照片。顯示屏上照片以外的區域會變暗。',
+  framingXpanOnly: '以 XPan 65:24 的長寬比拍攝。顯示屏仍按 3:2 顯示，照片以外的區域會變暗。',
   steps: [
     ['關閉相機。'],
     ['解壓縮 GRKit.zip。把 ', '`SD_ROOT', ' 中的內容複製到記憶卡根目錄。'],

@@ -313,8 +313,8 @@ int main(void)
         assert(b.lit && b.bottom <= 480 - 38 && b.top > 240);
     }
 #else
-    /* GR IV: XPan crops native 16:9 captures, and native 3:2 captures ignore it.
-       The screennail and thumbnail stamps stay above the bar of the capture. */
+    /* GR IV: XPan applies to native 3:2 and native 16:9 captures. The
+       screennail and thumbnail stamps stay above the bar of the capture. */
     {
         struct box sn[3][2], th[3][2];
         for (u32 native = 0; native <= 2; native += 2)
@@ -329,8 +329,9 @@ int main(void)
                 th[native][ratio] = changes(2, 0);
                 assert(sn[native][ratio].lit && th[native][ratio].lit);
             }
-        assert(!memcmp(&sn[0][1], &sn[0][0], sizeof(struct box)));
-        assert(!memcmp(&th[0][1], &th[0][0], sizeof(struct box)));
+        assert(sn[0][0].bottom > 480 - 38 && th[0][0].bottom > 120 - 16);
+        assert(!memcmp(&sn[0][1], &sn[2][1], sizeof(struct box)));
+        assert(!memcmp(&th[0][1], &th[2][1], sizeof(struct box)));
         assert(sn[2][0].bottom <= 480 - 38 && sn[2][0].bottom > 480 - 107);
         assert(th[2][0].bottom <= 120 - 16 && th[2][0].bottom > 120 - 30);
         assert(sn[2][1].bottom <= 480 - 107 && sn[2][1].top > 240);

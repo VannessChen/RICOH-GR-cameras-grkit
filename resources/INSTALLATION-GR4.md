@@ -19,7 +19,7 @@ After the installation, you can remove `00078560.636` and `DEVELOP.MOD` from the
 Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late.
 
 - **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to open the Standard parameters of the effect. The effects were made for GR III, so their colors can differ on GR IV.
-- **Framing:** set the native aspect ratio to 16:9 first. Then select XPan. The viewfinder dims the area outside the photo.
+- **Framing:** select XPan. The viewfinder stays 3:2 and dims the area outside the photo. XPan also works when the native aspect ratio is 16:9.
 - **Guides:** select a guide style. The lines show only in the viewfinder.
 - **Date Stamp:** select a date style. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.
