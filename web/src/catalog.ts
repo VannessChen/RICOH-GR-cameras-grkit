@@ -2,8 +2,8 @@
 export interface Effect {
   id: string;
   name: string;
-  label: string;
-  shape: 'film' | 'filter' | 'plain';
+  /** The ADJ icon: 40 x 40 RGBA pixels, base64-encoded. */
+  icon: string;
   monochrome: boolean;
   look: string;
   origin: string;

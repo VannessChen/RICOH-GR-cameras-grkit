@@ -15,8 +15,11 @@
     6195
   ],
   "icon": {
-    "label": "AC",
-    "shape": "film"
+    "template": "box",
+    "brand": "Kodak",
+    "name": "AEROCOLOR",
+    "number": "IV",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",

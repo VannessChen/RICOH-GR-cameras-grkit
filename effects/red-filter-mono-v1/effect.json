@@ -15,8 +15,11 @@
     336
   ],
   "icon": {
-    "label": "R",
-    "shape": "filter"
+    "template": "box",
+    "brand": "Kodak",
+    "name": "TRI-X RED",
+    "number": "400",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",

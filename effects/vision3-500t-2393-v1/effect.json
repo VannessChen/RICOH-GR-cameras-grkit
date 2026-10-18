@@ -15,13 +15,15 @@
     7916
   ],
   "icon": {
-    "label": "50T",
-    "shape": "film"
+    "template": "cine",
+    "brand": "Kodak",
+    "name": "VISION3",
+    "number": "500T"
   },
   "attribution": {
     "origin": "cube-fit",
     "license": "CC-BY-SA-4.0",
-    "target": "Kodak Vision3 500T on Vision Premier 2393 print film",
+    "target": "Kodak Vision3 500T 5219 on Vision Premier 2393 print film",
     "generator": "spektrafilm 0.3.4 (3bb2c2d)",
     "source": "vision3-500t-2393-v1.cube",
     "source_sha256": "cea22beac0935008169bf716d8aa84fe1d331ca8d2a69493499d3d61bae52290",

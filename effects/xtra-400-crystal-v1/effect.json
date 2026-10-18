@@ -1,7 +1,7 @@
 {
   "schema": "grkit-effect-v1",
   "effect_id": "xtra-400-crystal-v1",
-  "name": "X-Tra 400",
+  "name": "Superia 400",
   "flags": 0,
   "matrix": [
     6620,
@@ -15,13 +15,16 @@
     9910
   ],
   "icon": {
-    "label": "X4",
-    "shape": "film"
+    "template": "box",
+    "brand": "FUJIFILM",
+    "name": "SUPERIA",
+    "number": "400",
+    "band": false
   },
   "attribution": {
     "origin": "cube-fit",
     "license": "CC-BY-SA-4.0",
-    "target": "Fujifilm X-Tra 400 on Crystal Archive Type II paper",
+    "target": "Fujifilm Superia X-TRA 400 on Crystal Archive Type II paper",
     "generator": "spektrafilm 0.3.4 (3bb2c2d)",
     "source": "xtra-400-crystal-v1.cube",
     "source_sha256": "9305c01ab20062fa09572fb6d29ea0769183ff1c2184654578afb8943b5eafae",

@@ -123,6 +123,26 @@ pub fn preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
     Ok(table)
 }
 
+/// Standard base64 with padding. The catalog carries each 40 x 40 RGBA icon
+/// in this form, so the site shows the pixels that the camera shows.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let word = chunk.iter().enumerate().fold(0u32, |word, (i, byte)| {
+            word | u32::from(*byte) << (16 - 8 * i)
+        });
+        for i in 0..4 {
+            out.push(if i <= chunk.len() {
+                char::from(ALPHABET[(word >> (18 - 6 * i) & 63) as usize])
+            } else {
+                '='
+            });
+        }
+    }
+    out
+}
+
 fn text<'a>(value: &'a Value, what: &str) -> Result<&'a str> {
     value
         .as_str()
@@ -146,7 +166,7 @@ pub fn publish_effects(
     let mut entries = Vec::new();
     for definition in definitions {
         let blob = effects::compile_definition(definition)?;
-        let (effect, _) = effects::decode(&blob)?;
+        let (effect, icon) = effects::decode(&blob)?;
         let id = text(&effect["effect_id"], "ID")?;
         let file = effects::filename(id)?;
         ensure!(
@@ -158,8 +178,7 @@ pub fn publish_effects(
         entries.push(json!({
             "id": id,
             "name": effect["name"],
-            "label": definition["icon"]["label"],
-            "shape": definition["icon"]["shape"],
+            "icon": base64(&icon),
             "monochrome": effect["flags"].as_u64() == Some(effects::MONOCHROME.into()),
             "look": text(&attribution["target"], "target look")?,
             "origin": text(&attribution["origin"], "origin")?,

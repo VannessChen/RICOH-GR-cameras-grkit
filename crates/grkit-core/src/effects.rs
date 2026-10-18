@@ -5,7 +5,7 @@
 //! `selective`). Bytes 120..128 are reserved. An effect without features has zeros in
 //! the whole extension.
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use serde::{
     de::{self, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer,
@@ -104,6 +104,41 @@ fn has_keys(value: &Value, keys: &[&str]) -> bool {
     value.as_object().is_some_and(|object| {
         object.len() == keys.len() && keys.iter().all(|k| object.contains_key(*k))
     })
+}
+
+/// Renders the `icon` of an effect definition: a label tile (`label`, `shape`),
+/// a film box (`template` "box"), or a motion picture film label (`template` "cine").
+pub fn icon_pixels(icon: &Value) -> Result<Vec<u8>> {
+    let text = |key: &str| {
+        icon[key]
+            .as_str()
+            .with_context(|| format!("Expected icon {key}"))
+    };
+    match icon.get("template").map(|t| t.as_str().unwrap_or_default()) {
+        None => {
+            ensure!(
+                has_keys(icon, &["label", "shape"]),
+                "Expected icon label and shape"
+            );
+            crate::artwork::render_tile(text("label")?, text("shape")?)
+        }
+        Some("box") => {
+            ensure!(
+                has_keys(icon, &["template", "brand", "name", "number", "band"]),
+                "Expected box icon brand, name, number, and band"
+            );
+            let band = icon["band"].as_bool().context("Expected icon band")?;
+            crate::artwork::render_box(text("brand")?, text("name")?, text("number")?, band)
+        }
+        Some("cine") => {
+            ensure!(
+                has_keys(icon, &["template", "brand", "name", "number"]),
+                "Expected cine icon brand, name, and number"
+            );
+            crate::artwork::render_cine(text("brand")?, text("name")?, text("number")?)
+        }
+        Some(_) => bail!("Expected icon template box or cine"),
+    }
 }
 
 /// `required` keys, any of the `optional` keys, and nothing else.
@@ -441,15 +476,7 @@ pub fn compile_definition(definition: &Value) -> Result<Vec<u8>> {
         definition["attribution"].is_object(),
         "Expected attribution metadata"
     );
-    let icon = &definition["icon"];
-    ensure!(
-        has_keys(icon, &["label", "shape"]),
-        "Expected icon label and shape"
-    );
-    let pixels = crate::artwork::render_tile(
-        icon["label"].as_str().context("Expected icon label")?,
-        icon["shape"].as_str().context("Expected icon shape")?,
-    )?;
+    let pixels = icon_pixels(&definition["icon"])?;
     let curves = if let Some(knots) = definition.get("curve_knots") {
         let channels = knots
             .as_array()

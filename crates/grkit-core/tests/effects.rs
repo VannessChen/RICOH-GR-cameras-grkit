@@ -65,6 +65,9 @@ fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
         artwork::render_tile("OFF", "film").unwrap(),
         artwork::render_tile("OFF", "filter").unwrap(),
         artwork::render_tile("OFF", "plain").unwrap(),
+        artwork::render_box("Kodak", "PORTRA", "400", true).unwrap(),
+        artwork::render_box("FUJIFILM", "SUPERIA", "400", false).unwrap(),
+        artwork::render_cine("Kodak", "VISION3", "250D").unwrap(),
     ]
     .into_iter()
     .chain(modules)
@@ -277,6 +280,57 @@ fn compiler_rejects_ambiguous_definitions_and_invalid_artwork() {
 }
 
 #[test]
+fn cover_icons_span_the_tile_width_inside_the_row_margin() {
+    for pixels in [
+        artwork::render_box("Kodak", "KODACHROME", "64", true).unwrap(),
+        artwork::render_cine("Kodak", "EXR", "200T").unwrap(),
+    ] {
+        for y in 0..40 {
+            for x in 0..40 {
+                let alpha = pixels[(y * 40 + x) * 4 + 3];
+                let inside = (3..37).contains(&y);
+                assert_eq!(alpha, if inside { 255 } else { 0 }, "({x}, {y})");
+            }
+        }
+    }
+    // Only the pixel font has no lowercase, so a wide brand must be capitals.
+    assert!(artwork::render_box("Fujicolorpro", "PRO", "400H", true).is_err());
+    assert!(artwork::render_box("FUJICOLOR", "PRO", "400H", true).is_ok());
+}
+
+#[test]
+fn compiler_rejects_cover_icons_that_do_not_fit() {
+    let definition = read_json(root().join("portra-400-endura-v1/effect.json"));
+    let box_icon = definition["icon"].clone();
+    for (key, value) in [
+        ("name", json!("WWWWWWWWWWW")),
+        ("name", json!("Portra")),
+        ("name", json!("")),
+        ("number", json!("1234567")),
+        ("number", json!("é")),
+        ("band", json!("yes")),
+        ("template", json!("can")),
+        ("label", json!("P4")),
+    ] {
+        let mut changed = definition.clone();
+        changed["icon"][key] = value.clone();
+        assert!(
+            effects::compile_definition(&changed).is_err(),
+            "{key} = {value}"
+        );
+    }
+    let mut changed = definition.clone();
+    changed["icon"] = json!({"template": "cine", "brand": "Kodak", "name": "VISION3"});
+    assert!(effects::compile_definition(&changed).is_err());
+    changed["icon"] = json!({"template": "cine", "brand": "Kodak", "name": "VISION3", "number": "250D", "band": true});
+    assert!(effects::compile_definition(&changed).is_err());
+    assert_eq!(
+        effects::icon_pixels(&box_icon).unwrap(),
+        artwork::render_box("Kodak", "PORTRA", "400", true).unwrap()
+    );
+}
+
+#[test]
 fn pinned_source_inputs_match_their_manifest() {
     let directory = root().join("sources");
     let manifest = read_json(directory.join("manifest.json"));
@@ -343,4 +397,40 @@ fn selective_color_rejects_invalid_parameters() {
     mono["selective_color"] = base["selective_color"].clone();
     let error = effects::compile_definition(&mono).unwrap_err().to_string();
     assert!(error.contains("selective"), "{error}");
+}
+
+/// The words of an effect name or an icon text, in capitals. A space or a
+/// hyphen separates words.
+fn words(text: &str) -> Vec<String> {
+    let mut words: Vec<String> = text
+        .split([' ', '-'])
+        .filter(|word| !word.is_empty())
+        .map(str::to_ascii_uppercase)
+        .collect();
+    words.sort();
+    words
+}
+
+#[test]
+fn published_cover_icons_show_the_words_of_the_effect_name() {
+    for entry in fs::read_dir(root()).unwrap() {
+        let path = entry.unwrap().path().join("effect.json");
+        if !path.is_file() {
+            continue;
+        }
+        let definition = read_json(path);
+        let icon = &definition["icon"];
+        let name = definition["name"].as_str().unwrap();
+        assert!(icon.get("template").is_some(), "{name} has no cover icon");
+        let shown = format!(
+            "{} {}",
+            icon["name"].as_str().unwrap(),
+            icon["number"].as_str().unwrap()
+        );
+        assert_eq!(words(&shown), words(name), "{name}");
+        assert!(
+            ["Kodak", "FUJIFILM"].contains(&icon["brand"].as_str().unwrap()),
+            "{name}"
+        );
+    }
 }

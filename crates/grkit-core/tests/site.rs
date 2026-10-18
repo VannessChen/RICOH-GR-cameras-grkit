@@ -21,6 +21,32 @@ fn synthetic_base() -> [u16; 256] {
     })
 }
 
+/// Decodes padded standard base64, as the site does with `atob`.
+fn from_base64(text: &str) -> Vec<u8> {
+    let value = |c: u8| match c {
+        b'A'..=b'Z' => c - b'A',
+        b'a'..=b'z' => c - b'a' + 26,
+        b'0'..=b'9' => c - b'0' + 52,
+        b'+' => 62,
+        b'/' => 63,
+        _ => panic!("unexpected base64 byte {c}"),
+    };
+    let mut bytes = Vec::new();
+    for quad in text.as_bytes().chunks(4) {
+        let data: Vec<u8> = quad
+            .iter()
+            .take_while(|c| **c != b'=')
+            .map(|c| value(*c))
+            .collect();
+        let word = data
+            .iter()
+            .enumerate()
+            .fold(0u32, |word, (i, v)| word | u32::from(*v) << (18 - 6 * i));
+        bytes.extend((0..data.len() - 1).map(|i| (word >> (16 - 8 * i)) as u8));
+    }
+    bytes
+}
+
 /// A selective color definition that keeps only red. No published effect uses the feature.
 fn keep_red() -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/keep-red.json");
@@ -99,7 +125,10 @@ fn published_effects_match_their_definitions() {
         assert_eq!(blob, &effects::compile_definition(definition).unwrap());
         assert_eq!(entry["sha256"], packaging::sha256(blob));
         assert_eq!(entry["name"], definition["name"]);
-        assert_eq!(entry["label"], definition["icon"]["label"]);
+        assert_eq!(
+            from_base64(entry["icon"].as_str().unwrap()),
+            effects::decode(blob).unwrap().1
+        );
         assert_eq!(entry["look"], definition["attribution"]["target"]);
         assert_eq!(
             files[entry["preview"].as_str().unwrap()].len(),
@@ -108,7 +137,7 @@ fn published_effects_match_their_definitions() {
     }
     assert_eq!(entries[0]["monochrome"], false);
     assert_eq!(entries[1]["monochrome"], true);
-    assert_eq!(entries[1]["shape"], "filter");
+    assert!(entries.iter().all(|entry| entry.get("label").is_none()));
 
     let duplicate = [definitions[0].clone(), definitions[0].clone()];
     let error = site::publish_effects(&duplicate, &synthetic_base(), "gr3-2.10").unwrap_err();

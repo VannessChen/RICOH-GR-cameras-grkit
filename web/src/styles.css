@@ -506,39 +506,12 @@ td input[type='checkbox'] {
   cursor: pointer;
 }
 
+/* The camera's 40 x 40 icon pixels, without smoothing. */
 .effect-icon {
-  position: relative;
-  width: 42px;
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid var(--ink);
-  border-radius: 3px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.effect-icon.filter {
-  border-radius: 50%;
-}
-
-.effect-icon.film::before,
-.effect-icon.film::after {
-  content: '';
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  border-top: 3px dotted var(--ink);
-}
-
-.effect-icon.film::before {
-  top: 3px;
-}
-
-.effect-icon.film::after {
-  bottom: 3px;
+  display: block;
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
 }
 
 /* Modules, package, install */

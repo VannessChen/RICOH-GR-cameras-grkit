@@ -15,13 +15,15 @@
     7986
   ],
   "icon": {
-    "label": "25D",
-    "shape": "film"
+    "template": "cine",
+    "brand": "Kodak",
+    "name": "VISION3",
+    "number": "250D"
   },
   "attribution": {
     "origin": "cube-fit",
     "license": "CC-BY-SA-4.0",
-    "target": "Kodak Vision3 250D on Vision 2383 print film",
+    "target": "Kodak Vision3 250D 5207 on Vision 2383 print film",
     "generator": "spektrafilm 0.3.4 (3bb2c2d)",
     "source": "vision3-250d-2383-v1.cube",
     "source_sha256": "6deeaf3c1f84f4ccb0e3005dc722e127a507534b08b82ea3cf5d55945eaf3684",

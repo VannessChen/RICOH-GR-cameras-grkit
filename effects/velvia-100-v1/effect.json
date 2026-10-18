@@ -15,8 +15,11 @@
     7698
   ],
   "icon": {
-    "label": "V1",
-    "shape": "film"
+    "template": "box",
+    "brand": "FUJIFILM",
+    "name": "VELVIA",
+    "number": "100",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",

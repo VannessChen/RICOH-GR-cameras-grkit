@@ -1,10 +1,23 @@
+import { useCallback } from 'react';
 import type { Effect } from '../catalog';
 
-/** The ADJ icon of an effect: a ring for a filter, a film frame, or a plain tile. */
+const SIZE = 40;
+
+/** Paints base64 40 x 40 RGBA pixels. A malformed icon leaves the canvas empty. */
+function paint(canvas: HTMLCanvasElement | null, icon: string) {
+  const context = canvas?.getContext('2d');
+  if (!context) {
+    return;
+  }
+  const pixels = Uint8ClampedArray.from(atob(icon), (character) => character.charCodeAt(0));
+  if (pixels.length === SIZE * SIZE * 4) {
+    context.putImageData(new ImageData(pixels, SIZE, SIZE), 0, 0);
+  }
+}
+
+/** The ADJ icon of an effect, with the pixels that the camera shows. */
 export function EffectIcon({ effect }: { effect: Effect }) {
-  return (
-    <span className={`effect-icon ${effect.shape}`} aria-hidden="true">
-      {effect.label}
-    </span>
-  );
+  const { icon } = effect;
+  const draw = useCallback((canvas: HTMLCanvasElement | null) => paint(canvas, icon), [icon]);
+  return <canvas ref={draw} className="effect-icon" width={SIZE} height={SIZE} aria-hidden="true" />;
 }

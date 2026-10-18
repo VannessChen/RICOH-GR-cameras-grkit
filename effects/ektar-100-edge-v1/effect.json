@@ -15,8 +15,11 @@
     9526
   ],
   "icon": {
-    "label": "E1",
-    "shape": "film"
+    "template": "box",
+    "brand": "Kodak",
+    "name": "EKTAR",
+    "number": "100",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",

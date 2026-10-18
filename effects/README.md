@@ -16,7 +16,7 @@ The compiler writes self-contained GRFX0001 files with a 40 x 40 icon. CRC32 det
 | `flags` | Yes | 0, or 1 for monochrome |
 | `matrix` | Yes | Nine signed Q13 coefficients, row-major. Each row sums to 8192. |
 | `curves` or `curve_knots` | Yes | Three 256-sample curves of 0 to 16383, or knots for each channel |
-| `icon` | Yes | `label` and `shape` (`film`, `filter`, or `plain`) |
+| `icon` | Yes | A label tile, a film box, or a motion picture film label. [Icons](#icons) gives the fields. |
 | `attribution` | Yes | An object with the origin, source, and license |
 | `post_matrix` | No | Nine signed Q13 coefficients, row-major, after the tone curves |
 | `selective_color` | No | `hue` in degrees (0 to 360), `lower` and `higher` `[inner, outer]` half widths in degrees (0 to 75), and `chroma` `[c0, c1]` (c0 < c1 <= 181) |
@@ -24,6 +24,28 @@ The compiler writes self-contained GRFX0001 files with a 40 x 40 icon. CRC32 det
 A monochrome effect cannot have `post_matrix` or `selective_color`.
 
 `selective_color` keeps the chroma of one hue in recorded pictures and removes it elsewhere. A pair keeps all of its chroma inside the inner half width, and none outside the outer one. `lower` is the side toward smaller hue angles (from red, toward magenta), and `higher` the side toward larger angles (toward orange and skin). Pairs with chroma below `c0` lose it, and pairs above `c1` keep it. The hue is the angle of (Cb - 128, Cr - 128): sRGB red is at 108.6 degrees. The viewfinder shows the effect in monochrome, because selective color applies only to recorded pictures.
+
+## Icons
+
+The compiler draws each icon in gray. An icon has one of three forms:
+
+| Form | Fields | Picture |
+|---|---|---|
+| Label tile | `label` (1 to 4 capitals or digits) and `shape` (`film`, `filter`, or `plain`) | The label on a dark tile |
+| Film box | `template` `"box"`, `brand`, `name`, `number`, and `band` (`true` or `false`) | A light band with the brand, the name and a large number on a dark body, and a light bottom band if `band` is `true` |
+| Motion picture film label | `template` `"cine"`, `brand`, `name`, and `number` | As a film box, with three light stripes at the bottom |
+
+A film box and a film label span the full 40-pixel width of the tile. Their brand uses Inter Black if it fits at full width. Otherwise, it uses a 5-pixel font, which has only capitals, digits, spaces, `-`, and `+`.
+
+The name always uses the 5-pixel font, and it must fit in 40 pixels. Most glyphs are 3 pixels wide, with 1 pixel between glyphs. The exceptions are `I` and the space (1), `1` and `-` (2), `N` (4), and `M` and `W` (5). If a name does not fit, `M` and `W` change to 3-pixel forms. The number uses Inter Black and can compress to 75% of its width. If a text does not fit, the compiler stops with an error.
+
+The icon shows the effect name and the brand, and nothing else:
+
+- The `name` and `number` of an icon hold the words of the effect name, in capitals. A hyphen can split a word, so `FP-100C` gives `FP` and `100C`.
+- The number is the speed, or the model if the film has no single speed (`IV`).
+- Stock codes, papers, and process details go in the target description, not in the icon or the name.
+
+A test checks that the icon words of each published effect match its name.
 
 ## Effect catalog
 
@@ -35,15 +57,15 @@ The site and the release packages publish every effect in this directory:
 | Gold 200 | `gold-200-premier-v1` | Kodak Gold 200 on Endura Premier paper |
 | Ektar 100 | `ektar-100-edge-v1` | Kodak Ektar 100 on Ektacolor Edge paper |
 | Pro 400H | `pro-400h-crystal-v1` | Fujifilm Pro 400H on Crystal Archive Type II paper |
-| X-Tra 400 | `xtra-400-crystal-v1` | Fujifilm X-Tra 400 on Crystal Archive Type II paper |
-| Vision3 250D | `vision3-250d-2383-v1` | Kodak Vision3 250D on Vision 2383 print film |
-| Vision3 500T | `vision3-500t-2393-v1` | Kodak Vision3 500T on Vision Premier 2393 print film |
-| Portra 800 +2 | `portra-800-push2-v1` | Kodak Portra 800 pushed two stops, on Portra Endura paper |
+| Superia 400 | `xtra-400-crystal-v1` | Fujifilm Superia X-TRA 400 on Crystal Archive Type II paper |
+| Vision3 250D | `vision3-250d-2383-v1` | Kodak Vision3 250D 5207 on Vision 2383 print film |
+| Vision3 500T | `vision3-500t-2393-v1` | Kodak Vision3 500T 5219 on Vision Premier 2393 print film |
+| Portra 800 +2 | `portra-800-push2-v1` | Kodak Portra 800 pushed two stops (EI 3200), on Portra Endura paper |
 | Kodachrome 64 | `kodachrome-64-v1` | Kodak Kodachrome 64 slide film, scanned |
 | Velvia 100 | `velvia-100-v1` | Fujifilm Velvia 100 slide film, scanned |
 | Portra 160 | `portra-160-ultra-v1` | Kodak Portra 160 on Ultra Endura paper |
 | Tri-X 400 | `trix-400-mono-v1` | Kodak Tri-X 400 on Polymax Fine-Art paper, grade 2 |
-| Tri-X 400 Red | `red-filter-mono-v1` | Tri-X 400 behind a Wratten 25 red filter, on Polymax Fine-Art paper |
+| Tri-X 400 Red | `red-filter-mono-v1` | Kodak Tri-X 400 behind a Wratten 25 red filter, on Polymax Fine-Art paper |
 | FP-100C | `fp-100c-v1` | Fujifilm FP-100C instant film |
 | Aerocolor IV | `aerocolor-iv-v1` | Kodak Aerocolor IV 2460 aerial negative on Portra Endura paper |
 | EXR 200T | `exr-200t-2383-v1` | Kodak EXR 200T 5293 on Vision 2383 print film |
@@ -58,6 +80,7 @@ To refit an effect:
 2. Run `python sources/bake_spektrafilm.py LUTS` or `python sources/bake_spectral_film_lut.py LUTS`.
 3. Compare the SHA-256 of `LUTS/ID.cube` with the manifest. Floating-point results can differ on another platform.
 4. Run `grkit effects import --input vlog` with the effect's ID, name, label, and shape.
+   The import writes a label tile. To show a film box or a film label, replace `icon` after the import.
 5. Copy `license`, `target`, and `generator` from the old `attribution`.
 
 The two monochrome fits have identical matrix rows and curves. Set `flags` to 1 for them.

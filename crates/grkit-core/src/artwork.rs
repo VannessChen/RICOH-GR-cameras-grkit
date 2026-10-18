@@ -1,10 +1,12 @@
 //! Deterministic 40 × 40 RGBA menu tiles.
 //!
 //! Tiles follow the camera's own menu icons: a dark square with a gray frame
-//! and anti-aliased text. Alpha is binary; text edges blend in RGB.
+//! and anti-aliased text. Effect icons can instead be gray film covers
+//! (`render_box`, `render_cine`) that span the tile width. Alpha is binary;
+//! text edges blend in RGB.
 
 use ab_glyph::{point, Font, FontRef, PxScale, Rect, ScaleFont};
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 
 /// Inter Medium 4.1, SIL Open Font License 1.1 (`assets/Inter-LICENSE.txt`).
 const FONT: &[u8] = include_bytes!("../assets/Inter-Medium.ttf");
@@ -158,6 +160,280 @@ pub fn render_tile(label: &str, shape: &str) -> Result<Vec<u8>> {
     };
     text(&mut rgba, label, size, width, 20.0, ink);
     Ok(rgba)
+}
+
+/// Inter Black 4.1, from the same release and license as `FONT`. Only the
+/// cover icons use it.
+const COVER_FONT: &[u8] = include_bytes!("../assets/Inter-Black.ttf");
+/// Cover shades: the light bands, the dark text on them, and the body.
+const LIGHT: u8 = 214;
+const DARK: u8 = 40;
+const BODY: u8 = 51;
+/// The cover rows. Above and below, the 3-pixel transparent margin of the
+/// other tiles stays. The cover spans the full tile width, so that a name
+/// such as KODACHROME fits on one line.
+const COVER: i32 = 3;
+const COVER_END: i32 = 37;
+const COVER_WIDTH: i32 = 40;
+/// A cover text may compress to this horizontal scale before it is rejected.
+const MIN_COMPRESSION: f32 = 0.75;
+
+fn fill(rgba: &mut [u8], top: i32, bottom: i32, shade: u8) {
+    for y in top..bottom {
+        for x in 0..COVER_WIDTH {
+            dot(rgba, x as usize, y as usize, shade);
+        }
+    }
+}
+
+/// Draw `label` in Inter Black, centered on x = 20, with `capital` pixels of
+/// capital height on the `baseline` row. The text compresses horizontally to
+/// fit `width` pixels. Returns `None`, and draws nothing, if the text would
+/// need a horizontal scale below `min_compression`.
+#[allow(clippy::too_many_arguments)]
+fn cover_text(
+    rgba: &mut [u8],
+    label: &str,
+    capital: f32,
+    baseline: i32,
+    tracking: f32,
+    width: f32,
+    min_compression: f32,
+    ink: u8,
+) -> Option<()> {
+    let font = FontRef::try_from_slice(COVER_FONT).expect("embedded font is valid");
+    let unit = PxScale::from(100.0);
+    let size = 100.0 * capital
+        / font
+            .outline_glyph(font.glyph_id('H').with_scale(unit))
+            .expect("the font has H")
+            .px_bounds()
+            .height();
+    let mut compression = 1.0f32;
+    loop {
+        let scale = PxScale {
+            x: size * compression,
+            y: size,
+        };
+        let scaled = font.as_scaled(scale);
+        let mut caret = 0.0;
+        let outlines: Vec<_> = label
+            .chars()
+            .filter_map(|character| {
+                let id = scaled.glyph_id(character);
+                let glyph = id.with_scale_and_position(scale, point(caret, 0.0));
+                caret += scaled.h_advance(id) + tracking * size * compression;
+                font.outline_glyph(glyph)
+            })
+            .collect();
+        let left = outlines
+            .iter()
+            .map(|o| o.px_bounds().min.x)
+            .reduce(f32::min)?;
+        let right = outlines
+            .iter()
+            .map(|o| o.px_bounds().max.x)
+            .reduce(f32::max)?;
+        let actual = right - left;
+        if actual > width {
+            compression *= width / actual * 0.999;
+            if compression < min_compression {
+                return None;
+            }
+            continue;
+        }
+        // Whole-pixel offsets keep the stems sharp, as in `text`.
+        let dx = (20.0 - actual / 2.0 - left).round() as i32;
+        for outline in outlines {
+            let origin = outline.px_bounds().min;
+            outline.draw(|x, y, coverage| {
+                blend(
+                    rgba,
+                    origin.x as i32 + x as i32 + dx,
+                    origin.y as i32 + y as i32 + baseline,
+                    ink,
+                    coverage,
+                )
+            });
+        }
+        return Some(());
+    }
+}
+
+/// Five-pixel capitals for cover text too small for an outline font.
+/// Each string is one row, and `#` is ink.
+fn pixel_glyph(character: char) -> Option<[&'static str; 5]> {
+    Some(match character {
+        'A' => [".#.", "#.#", "###", "#.#", "#.#"],
+        'B' => ["##.", "#.#", "##.", "#.#", "##."],
+        'C' => [".##", "#..", "#..", "#..", ".##"],
+        'D' => ["##.", "#.#", "#.#", "#.#", "##."],
+        'E' => ["###", "#..", "##.", "#..", "###"],
+        'F' => ["###", "#..", "##.", "#..", "#.."],
+        'G' => [".##", "#..", "#.#", "#.#", ".##"],
+        'H' => ["#.#", "#.#", "###", "#.#", "#.#"],
+        'I' => ["#", "#", "#", "#", "#"],
+        'J' => ["..#", "..#", "..#", "#.#", ".#."],
+        'K' => ["#.#", "#.#", "##.", "#.#", "#.#"],
+        'L' => ["#..", "#..", "#..", "#..", "###"],
+        'M' => ["#...#", "##.##", "#.#.#", "#...#", "#...#"],
+        'N' => ["#..#", "##.#", "#.##", "#..#", "#..#"],
+        'O' => [".#.", "#.#", "#.#", "#.#", ".#."],
+        'P' => ["##.", "#.#", "##.", "#..", "#.."],
+        'Q' => [".#.", "#.#", "#.#", "##.", ".##"],
+        'R' => ["##.", "#.#", "##.", "#.#", "#.#"],
+        'S' => [".##", "#..", ".#.", "..#", "##."],
+        'T' => ["###", ".#.", ".#.", ".#.", ".#."],
+        'U' => ["#.#", "#.#", "#.#", "#.#", "###"],
+        'V' => ["#.#", "#.#", "#.#", "#.#", ".#."],
+        'W' => ["#...#", "#...#", "#.#.#", "##.##", "#...#"],
+        'X' => ["#.#", "#.#", ".#.", "#.#", "#.#"],
+        'Y' => ["#.#", "#.#", ".#.", ".#.", ".#."],
+        'Z' => ["###", "..#", ".#.", "#..", "###"],
+        '0' => ["###", "#.#", "#.#", "#.#", "###"],
+        '1' => [".#", "##", ".#", ".#", ".#"],
+        '2' => ["##.", "..#", ".#.", "#..", "###"],
+        '3' => ["##.", "..#", ".#.", "..#", "##."],
+        '4' => ["#.#", "#.#", "###", "..#", "..#"],
+        '5' => ["###", "#..", "##.", "..#", "##."],
+        '6' => [".##", "#..", "###", "#.#", "###"],
+        '7' => ["###", "..#", ".#.", ".#.", ".#."],
+        '8' => ["###", "#.#", "###", "#.#", "###"],
+        '9' => ["###", "#.#", "###", "..#", "##."],
+        '-' => ["..", "..", "##", "..", ".."],
+        '+' => ["...", ".#.", "###", ".#.", "..."],
+        ' ' => [".", ".", ".", ".", "."],
+        _ => return None,
+    })
+}
+
+/// Draw `label` in the pixel font, centered on x = 20, with its top row at `top`.
+/// Narrow forms of the five-pixel `M` and `W`, for a text that does not fit
+/// with the regular forms. They read less clearly, so only such a text uses them.
+fn narrow_glyph(character: char) -> Option<[&'static str; 5]> {
+    match character {
+        'M' => Some(["#.#", "###", "###", "#.#", "#.#"]),
+        'W' => Some(["#.#", "#.#", "###", "###", "#.#"]),
+        other => pixel_glyph(other),
+    }
+}
+
+/// The width of glyphs with one blank column between them.
+fn pixel_width(glyphs: &[[&str; 5]]) -> i32 {
+    glyphs
+        .iter()
+        .map(|rows| rows[0].len() as i32 + 1)
+        .sum::<i32>()
+        - 1
+}
+
+fn pixel_text(rgba: &mut [u8], label: &str, top: i32, ink: u8) -> Result<()> {
+    let glyphs_of = |glyph: fn(char) -> Option<[&'static str; 5]>| {
+        label
+            .chars()
+            .map(glyph)
+            .collect::<Option<Vec<_>>>()
+            .context("Expected capitals, digits, spaces, '-', or '+' in the cover text")
+    };
+    let mut glyphs = glyphs_of(pixel_glyph)?;
+    if pixel_width(&glyphs) > COVER_WIDTH {
+        glyphs = glyphs_of(narrow_glyph)?;
+    }
+    let width = pixel_width(&glyphs);
+    ensure!(
+        width <= COVER_WIDTH,
+        "Cover text {label:?} is {width} pixels wide, more than {COVER_WIDTH}"
+    );
+    let mut x = 20 - (width + 1) / 2;
+    for rows in glyphs {
+        for (dy, row) in rows.iter().enumerate() {
+            for (dx, bit) in row.bytes().enumerate() {
+                if bit == b'#' {
+                    blend(rgba, x + dx as i32, top + dy as i32, ink, 1.0);
+                }
+            }
+        }
+        x += rows[0].len() as i32 + 1;
+    }
+    Ok(())
+}
+
+fn check_cover_label(label: &str, what: &str) -> Result<()> {
+    ensure!(
+        (1..=12).contains(&label.len()) && label.bytes().all(|c| c.is_ascii_graphic() || c == b' '),
+        "Expected 1 to 12 printable ASCII characters in the cover {what}"
+    );
+    Ok(())
+}
+
+/// The bottom of a cover.
+#[derive(Clone, Copy)]
+enum Bottom {
+    /// The dark body continues to the bottom row.
+    None,
+    /// A light band, as on professional film boxes.
+    Band,
+    /// Three light stripes, as on motion picture film labels.
+    Stripes,
+}
+
+/// A gray cover: a light band with the brand, then a dark body with the film
+/// name and a large number. The brand uses Inter Black when it fits without
+/// compression, and the pixel font otherwise. The name always uses the pixel
+/// font.
+fn cover(brand: &str, name: &str, number: &str, bottom: Bottom) -> Result<Vec<u8>> {
+    check_cover_label(brand, "brand")?;
+    check_cover_label(name, "name")?;
+    check_cover_label(number, "number")?;
+    let mut rgba = vec![0; 40 * 40 * 4];
+    fill(&mut rgba, COVER, COVER_END, BODY);
+    fill(&mut rgba, COVER, 12, LIGHT);
+    if cover_text(&mut rgba, brand, 6.0, 10, -0.04, 28.0, 1.0, DARK).is_none() {
+        pixel_text(&mut rgba, brand, 5, DARK)?;
+    }
+    // The number sits one row lower without a bottom band, and one row
+    // higher above the stripes.
+    let (name_top, baseline) = match bottom {
+        Bottom::None => (15, 33),
+        Bottom::Band => {
+            fill(&mut rgba, 34, COVER_END, LIGHT);
+            (14, 32)
+        }
+        Bottom::Stripes => {
+            for row in [32, 34, 36] {
+                fill(&mut rgba, row, row + 1, LIGHT);
+            }
+            (14, 31)
+        }
+    };
+    pixel_text(&mut rgba, name, name_top, 255)?;
+    cover_text(
+        &mut rgba,
+        number,
+        11.0,
+        baseline,
+        -0.04,
+        34.0,
+        MIN_COMPRESSION,
+        255,
+    )
+    .with_context(|| format!("Cover number {number:?} does not fit"))?;
+    Ok(rgba)
+}
+
+/// A still film box. Professional films have a light band at the bottom.
+pub fn render_box(brand: &str, name: &str, number: &str, band: bool) -> Result<Vec<u8>> {
+    cover(
+        brand,
+        name,
+        number,
+        if band { Bottom::Band } else { Bottom::None },
+    )
+}
+
+/// A motion picture film label, with three light stripes at the bottom.
+pub fn render_cine(brand: &str, name: &str, number: &str) -> Result<Vec<u8>> {
+    cover(brand, name, number, Bottom::Stripes)
 }
 
 pub fn off_pixels() -> Vec<u8> {

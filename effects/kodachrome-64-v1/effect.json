@@ -15,8 +15,11 @@
     7797
   ],
   "icon": {
-    "label": "K64",
-    "shape": "film"
+    "template": "box",
+    "brand": "Kodak",
+    "name": "KODACHROME",
+    "number": "64",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",

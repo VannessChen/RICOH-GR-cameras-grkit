@@ -15,8 +15,10 @@
     7638
   ],
   "icon": {
-    "label": "EXR",
-    "shape": "film"
+    "template": "cine",
+    "brand": "Kodak",
+    "name": "EXR",
+    "number": "200T"
   },
   "attribution": {
     "origin": "cube-fit",

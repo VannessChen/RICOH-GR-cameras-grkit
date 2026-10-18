@@ -15,8 +15,11 @@
     4405
   ],
   "icon": {
-    "label": "TX",
-    "shape": "film"
+    "template": "box",
+    "brand": "Kodak",
+    "name": "TRI-X",
+    "number": "400",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",

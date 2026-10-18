@@ -9,7 +9,7 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "zip 2.4.2: only ZipArchive::extract and stream extraction are affected. GRKit never calls them. verify_package reads each entry into memory and rejects symbolic links." },
     { id = "RUSTSEC-2026-0368", reason = "zip 2.4.2: only ZipArchive::extract is affected. GRKit never calls it. verify_package reads each entry into memory and rejects symbolic links." },
     { id = "RUSTSEC-2026-0369", reason = "zip 2.4.2: only ZipArchive::extract and ZipStreamReader::extract are affected. GRKit never calls them." },
-    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained. ab_glyph uses it only to parse the bundled Inter font, which is trusted input." },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained. ab_glyph uses it only to parse the bundled Inter fonts, which are trusted input." },
 ]
 
 [licenses]

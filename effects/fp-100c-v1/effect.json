@@ -15,8 +15,11 @@
     7566
   ],
   "icon": {
-    "label": "FP",
-    "shape": "film"
+    "template": "box",
+    "brand": "FUJIFILM",
+    "name": "FP",
+    "number": "100C",
+    "band": false
   },
   "attribution": {
     "origin": "cube-fit",

@@ -15,13 +15,16 @@
     10807
   ],
   "icon": {
-    "label": "P8",
-    "shape": "film"
+    "template": "box",
+    "brand": "Kodak",
+    "name": "PORTRA +2",
+    "number": "800",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",
     "license": "CC-BY-SA-4.0",
-    "target": "Kodak Portra 800 pushed two stops, on Portra Endura paper",
+    "target": "Kodak Portra 800 pushed two stops (EI 3200), on Portra Endura paper",
     "generator": "spektrafilm 0.3.4 (3bb2c2d)",
     "source": "portra-800-push2-v1.cube",
     "source_sha256": "b00d80ceb876c28912d619f2a6f6ad9dc1cf7d58cb0e729738039793174ba800",

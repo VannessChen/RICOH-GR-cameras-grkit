@@ -15,8 +15,11 @@
     8683
   ],
   "icon": {
-    "label": "P1",
-    "shape": "film"
+    "template": "box",
+    "brand": "Kodak",
+    "name": "PORTRA",
+    "number": "160",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",

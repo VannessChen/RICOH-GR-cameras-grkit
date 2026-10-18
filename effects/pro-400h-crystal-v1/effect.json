@@ -15,8 +15,11 @@
     7963
   ],
   "icon": {
-    "label": "4H",
-    "shape": "film"
+    "template": "box",
+    "brand": "FUJIFILM",
+    "name": "PRO",
+    "number": "400H",
+    "band": true
   },
   "attribution": {
     "origin": "cube-fit",

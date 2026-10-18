@@ -6,7 +6,7 @@ The repository and the SD packages contain the fitted parameters, not the LUTs.
 
 ## spektrafilm
 
-Portra 400, Gold 200, Ektar 100, Pro 400H, X-Tra 400, Vision3 250D, Vision3 500T,
+Portra 400, Gold 200, Ektar 100, Pro 400H, Superia 400, Vision3 250D, Vision3 500T,
 Portra 800 +2, Kodachrome 64, Velvia 100, and Portra 160 derive from LUTs of
 [spektrafilm](https://github.com/andreavolpato/spektrafilm) 0.3.4 by Andrea Volpato,
 licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
@@ -36,7 +36,8 @@ JPEG transforms. They add no grain, halation, or other spatial effect. The fits 
 at base-gamma index 7.8.
 
 Icon text uses the Inter typeface (SIL Open Font License 1.1, see
-`crates/grkit-core/assets/Inter-LICENSE.txt`). Icons use no manufacturer logo.
+`crates/grkit-core/assets/Inter-LICENSE.txt`). Icons show manufacturer and film names as
+text in Inter or in a pixel font. They use no manufacturer logo.
 The project code is licensed under the MIT License (see `LICENSE` at the repository root).
 
 ## Packages
