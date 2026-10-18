@@ -50,6 +50,21 @@
    Standard parameter page (still mode). */
 #define ADJ_IC_SLOT_TYPE 12
 #define IC_PARAMETERS_CONTROLLER 0x2000014
+/* ImageControlDetailController, the parameter page. Its start method sets the
+   type (+0x198), the set kind (+0x199: 0 the base set, 1 and 2 Custom), and
+   the base kind of its row table (+0x19a: 0 Standard). The Image Control
+   model keeps a snapshot of the adjustments from +3, one byte for each row
+   kind, and a cancel writes the snapshot back through the model setters. */
+/* The main title view of the page. UpdateViewMainTitle sets its text from the type. */
+#define DETAIL_TITLE 0x15c
+#define DETAIL_TYPE 0x198
+#define DETAIL_SET_KIND 0x199
+#define DETAIL_BASE_KIND 0x19a
+#define MODEL_SNAPSHOT 3
+/* The row kinds of the Standard adjustments, in GRKIT_RECORD_PARAMETERS order. */
+#define PARAMETER_KINDS {0,1,2,3,4,5,6,13,14}
+/* The page event that opens another controller (0x2000015) from the page. */
+#define DETAIL_EV_SUBPAGE 0x88
 #define FW_ADJ_REFRESH 0x531a4114
 #define FW_ADJ_SELECT_SLOT 0x531a4864
 #define FW_CHANGE_CONTROLLER 0x5316c9d8
@@ -66,6 +81,12 @@
 #define ADJ_FRAME 0x180
 #define ADJ_ICONS 0x184
 #define ADJ_FN_GUIDE 0x1ac
+/* The ADJ refresh fills the Fn hint only on a native slot that offers Fn. For
+   the Image Control slot, it uses the Fn label, layout 10, and the settings
+   icon. A new ADJ starts with an empty hint. */
+#define FW_GUIDE_SET_CONTENT 0x5339b7d4
+#define FN_GUIDE_TEXT 0x1cf
+#define FN_GUIDE_ICON 0x233
 #define ADJ_LIST 0x1f0
 #define ADJ_SLOT 0x1f4
 /* 1 in movie mode. */
@@ -76,6 +97,8 @@
 #define EV_SWITCH 5
 #define EV_SWITCH_END 8
 #define EV_FN 0x1b
+/* The argument of an Fn press. ADJ opens the native parameters on it. */
+#define FN_PRESS_ARG 2
 #define EV_TOUCH 0x30
 #define EV_LEFT 0xce
 #define EV_RIGHT 0xcf

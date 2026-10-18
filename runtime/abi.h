@@ -70,7 +70,19 @@
 #define GRKIT_HOST_MENU_DETAIL_WORDS 2
 /* The last ADJ events: kind | argument << 16. */
 #define GRKIT_HOST_MENU_EVENT_RING 112
-#define GRKIT_HOST_MENU_EVENT_RING_WORDS 16
+#define GRKIT_HOST_MENU_EVENT_RING_WORDS 8
+/* The record whose adjustments the native parameter page edits, or 0. Fn in
+   GRKit Image Control stores the record with bit 0 set, and the page start
+   clears bit 0. A page that native ADJ opens clears the word. */
+#define GRKIT_HOST_PARAMETERS 144
+/* Number of adjustment changes. The live view rebuilds its stages when it
+   changes. */
+#define GRKIT_HOST_PARAMETER_CHANGES 148
+/* GRKIT_HOST_PARAMETER_CHANGES at the last live-view build. */
+#define GRKIT_HOST_LIVE_PARAMETER_CHANGES 152
+/* Reserved and zero. */
+#define GRKIT_HOST_RESERVED 156
+#define GRKIT_HOST_RESERVED_WORDS 5
 /* Icon of the GRKit tile. */
 #define GRKIT_HOST_PLUGINS_ICON 176
 /* Private toolbar cell, or 0. */
@@ -142,6 +154,11 @@
    larger ones (Q8), and u8 chroma gate c0 and c1. Bytes 0x724..0x72b are
    reserved and zero. */
 #define GRKIT_RECORD_SELECTIVE 0x716
+/* Fn adjustments of the effect: saturation, hue, high/low key, contrast,
+   highlight contrast, shadow contrast, sharpness, shading, clarity. Each byte
+   is (native value - 4) mod 9, so zero is neutral. A native value is 0..8, and
+   4 is neutral. */
+#define GRKIT_RECORD_PARAMETERS 0x72c
 #define GRKIT_FEATURE_POST 1U
 #define GRKIT_FEATURE_SELECTIVE 2U
 /* The longest menu string, with its NUL: an Image Control summary is a prefix
@@ -176,6 +193,9 @@
 /* Everything after the records: the script array must hold it. */
 #define GRKIT_TAIL_SIZE 149640
 #define GRKIT_TEXT_SUMMARY 4096
+/* The parameter page title of a GRKit session, after the summaries: the page,
+   its vtable, and the descriptor of the effect name. */
+#define GRKIT_TEXT_PARAMETER_TITLE 8176
 #define GRKIT_TEXT_LANGUAGES 3
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE+GRKIT_PICTURE_SCRATCH)

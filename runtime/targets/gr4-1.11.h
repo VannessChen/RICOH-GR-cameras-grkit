@@ -83,6 +83,19 @@
    Standard parameter page (still mode). */
 #define ADJ_IC_SLOT_TYPE 15
 #define IC_PARAMETERS_CONTROLLER 0x2000017
+/* ImageControlDetailController, as on GR III with other fields: the type
+   (+0x19c), the set kind (+0x19d), and the base kind of its row table
+   (+0x19e, 0 Standard). The model snapshot holds one byte for each row kind
+   from +3. GR IV has one more row kind before shading, so shading and clarity
+   are kinds 14 and 15. */
+/* The main title view of the page, as on GR III. */
+#define DETAIL_TITLE 0x15c
+#define DETAIL_TYPE 0x19c
+#define DETAIL_SET_KIND 0x19d
+#define DETAIL_BASE_KIND 0x19e
+#define MODEL_SNAPSHOT 3
+#define PARAMETER_KINDS {0,1,2,3,4,5,6,14,15}
+#define DETAIL_EV_SUBPAGE 0x8c
 #define FW_ADJ_REFRESH 0x531bf3c8
 #define FW_ADJ_SELECT_SLOT 0x531bf94c
 #define FW_CHANGE_CONTROLLER 0x53182e4c
@@ -99,6 +112,13 @@
 #define ADJ_FRAME 0x180
 #define ADJ_ICONS 0x184
 #define ADJ_FN_GUIDE 0x1ac
+/* The Image Control slot method of the ADJ refresh fills the Fn hint with the
+   Fn label, layout 10, and the settings icon, and moves it to x 300. A new ADJ
+   starts with an empty hint. */
+#define FW_GUIDE_SET_CONTENT 0x53577c6c
+#define FN_GUIDE_TEXT 0x1de
+#define FN_GUIDE_ICON 0x240
+#define FN_GUIDE_X 300
 #define ADJ_LIST 0x1f8
 #define ADJ_SLOT 0x1fc
 #define ADJ_ACTION 0x281
@@ -111,6 +131,10 @@
 #define EV_SWITCH 5
 #define EV_SWITCH_END 8
 #define EV_FN 0x1b
+/* An Fn press comes as EV_FN with argument 0, then EV_FN_ACTION. The native ADJ
+   handler ignores EV_FN and acts on EV_FN_ACTION (0x531bd388). */
+#define FN_PRESS_ARG 0
+#define EV_FN_ACTION 0x187
 #define EV_TOUCH 0x31
 #define EV_LEFT 0xd4
 #define EV_RIGHT 0xd5

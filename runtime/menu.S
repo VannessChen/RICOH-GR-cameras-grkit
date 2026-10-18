@@ -13,6 +13,15 @@ menu_header:
 .global menu_text_measure
 .type menu_text_measure, %function
 menu_text_measure:
+    /* r7 is the text ID and r5 the view. The title of a GRKit parameter page
+       takes the effect name instead of the table entry. Flags survive pop. */
+    push {r0-r3, r12, lr}
+    mov r0, r5
+    bl menu_parameter_title
+    cmp r0, #0
+    movne r7, r0
+    pop {r0-r3, r12, lr}
+    bne measure_resume
     ldr r7, [r3, r7, lsl #2]
     push {r0-r3, lr}
     ldr r0, =GRKIT_HEADER_REFERENCE
@@ -37,10 +46,21 @@ measure_language:
     pop {r12}
 measure_done:
     pop {r0-r3, lr}
+measure_resume:
     ldr pc, =HOOK_MENU_TEXT_MEASURE_RESUME
 .global menu_text_draw
 .type menu_text_draw, %function
 menu_text_draw:
+    /* r7 is the text ID, r4 the view, and r3 the table. As at the measure
+       hook, the title of a GRKit parameter page takes the effect name. The
+       name replaces the saved r3, so pop loads it. Flags survive pop. */
+    push {r0-r3, r12, lr}
+    mov r0, r4
+    bl menu_parameter_title
+    cmp r0, #0
+    strne r0, [sp, #12]
+    pop {r0-r3, r12, lr}
+    bne draw_resume
     ldr r3, [r3, r7, lsl #2]
     push {r1, r2, r12, lr}
     ldr r12, =GRKIT_HEADER_REFERENCE
@@ -63,6 +83,7 @@ draw_language:
     pop {r3, lr}
 draw_done:
     pop {r1, r2, r12, lr}
+draw_resume:
     ldr pc, =HOOK_MENU_TEXT_DRAW_RESUME
 .global menu_event_original
 .type menu_event_original, %function
@@ -312,5 +333,146 @@ menu_icon_entry:
     pop {r0-r2, r12, lr}
     ldreq r3, [r0, r7, lsl #2]
     ldr pc, =HOOK_MENU_ICON_ENTRY_RESUME
+.ltorg
+#endif
+
+#ifdef HOOK_MENU_PARAMETER_START
+/* The native parameter page edits the adjustments of a GRKit effect while
+   GRKIT_HOST_PARAMETERS holds its record (menu.c). Each hook replaces the
+   first instruction, `mov r12, sp`, of an Image Control model getter or setter
+   of one Standard adjustment. Only the parameter page calls them. */
+.macro PARAMETER_GET index, resume
+.global menu_parameter_get_\index
+.type menu_parameter_get_\index, %function
+/* The getter has no arguments and returns the native value. */
+menu_parameter_get_\index:
+    push {r1-r3, lr}
+    mov r0, #\index
+    bl menu_parameter_get
+    subs r0, r0, #1
+    popge {r1-r3, pc}
+    pop {r1-r3, lr}
+    mov r12, sp
+    ldr pc, =\resume
+.endm
+.macro PARAMETER_SET index, resume
+.global menu_parameter_set_\index
+.type menu_parameter_set_\index, %function
+/* r0 = the model, r1 = the native value. The setter returns nothing. */
+menu_parameter_set_\index:
+    push {r0-r3, r12, lr}
+    mov r0, #\index
+    bl menu_parameter_set
+    cmp r0, #0
+    pop {r0-r3, r12, lr}
+    bxne lr
+    mov r12, sp
+    ldr pc, =\resume
+.endm
+PARAMETER_GET 0, HOOK_MENU_PARAMETER_GET_0_RESUME
+PARAMETER_GET 1, HOOK_MENU_PARAMETER_GET_1_RESUME
+PARAMETER_GET 2, HOOK_MENU_PARAMETER_GET_2_RESUME
+PARAMETER_GET 3, HOOK_MENU_PARAMETER_GET_3_RESUME
+PARAMETER_GET 4, HOOK_MENU_PARAMETER_GET_4_RESUME
+PARAMETER_GET 5, HOOK_MENU_PARAMETER_GET_5_RESUME
+PARAMETER_GET 6, HOOK_MENU_PARAMETER_GET_6_RESUME
+PARAMETER_GET 7, HOOK_MENU_PARAMETER_GET_7_RESUME
+PARAMETER_GET 8, HOOK_MENU_PARAMETER_GET_8_RESUME
+.ltorg
+PARAMETER_SET 0, HOOK_MENU_PARAMETER_SET_0_RESUME
+PARAMETER_SET 1, HOOK_MENU_PARAMETER_SET_1_RESUME
+PARAMETER_SET 2, HOOK_MENU_PARAMETER_SET_2_RESUME
+PARAMETER_SET 3, HOOK_MENU_PARAMETER_SET_3_RESUME
+PARAMETER_SET 4, HOOK_MENU_PARAMETER_SET_4_RESUME
+PARAMETER_SET 5, HOOK_MENU_PARAMETER_SET_5_RESUME
+PARAMETER_SET 6, HOOK_MENU_PARAMETER_SET_6_RESUME
+PARAMETER_SET 7, HOOK_MENU_PARAMETER_SET_7_RESUME
+PARAMETER_SET 8, HOOK_MENU_PARAMETER_SET_8_RESUME
+.ltorg
+
+/* Replace the BL to the native value read of a list row of the page. The
+   read keeps its arguments, so a native read is a tail call. */
+.macro PARAMETER_ROW index, target
+.global menu_parameter_row_\index
+.type menu_parameter_row_\index, %function
+menu_parameter_row_\index:
+    push {r0-r4, lr}
+    mov r0, #\index
+    bl menu_parameter_get
+    subs r4, r0, #1
+    movge r0, r4
+    addge sp, sp, #4
+    popge {r1-r4, pc}
+    pop {r0-r4, lr}
+    ldr r12, =\target
+    bx r12
+.endm
+PARAMETER_ROW 0, HOOK_MENU_PARAMETER_ROW_0_TARGET
+PARAMETER_ROW 1, HOOK_MENU_PARAMETER_ROW_1_TARGET
+PARAMETER_ROW 2, HOOK_MENU_PARAMETER_ROW_2_TARGET
+PARAMETER_ROW 3, HOOK_MENU_PARAMETER_ROW_3_TARGET
+PARAMETER_ROW 4, HOOK_MENU_PARAMETER_ROW_4_TARGET
+PARAMETER_ROW 5, HOOK_MENU_PARAMETER_ROW_5_TARGET
+PARAMETER_ROW 6, HOOK_MENU_PARAMETER_ROW_6_TARGET
+PARAMETER_ROW 7, HOOK_MENU_PARAMETER_ROW_7_TARGET
+PARAMETER_ROW 8, HOOK_MENU_PARAMETER_ROW_8_TARGET
+.ltorg
+
+/* The page start method. r0 = the page. */
+.global menu_parameter_start
+.type menu_parameter_start, %function
+menu_parameter_start:
+    push {r0-r3, r12, lr}
+    bl menu_parameter_page_start
+    pop {r0-r3, r12, lr}
+    mov r12, sp
+    ldr pc, =HOOK_MENU_PARAMETER_START_RESUME
+
+/* Replaces the BL to the method that reads the type and the set kinds of the
+   page. r0 = the page. */
+.global menu_parameter_kinds
+.type menu_parameter_kinds, %function
+menu_parameter_kinds:
+    push {r4, lr}
+    mov r4, r0
+    ldr r12, =HOOK_MENU_PARAMETER_KINDS_TARGET
+    blx r12
+    mov r0, r4
+    bl menu_parameter_page_kinds
+    pop {r4, pc}
+
+/* Replace the two BLs of the page start to the model method that loads the
+   snapshot of the adjustments. r0 = the model. */
+.macro PARAMETER_SNAPSHOT index, target
+.global menu_parameter_snapshot_\index
+.type menu_parameter_snapshot_\index, %function
+menu_parameter_snapshot_\index:
+    push {r4, lr}
+    mov r4, r0
+    ldr r12, =\target
+    blx r12
+    mov r0, r4
+    bl menu_parameter_page_snapshot
+    pop {r4, pc}
+.endm
+PARAMETER_SNAPSHOT 0, HOOK_MENU_PARAMETER_SNAPSHOT_0_TARGET
+PARAMETER_SNAPSHOT 1, HOOK_MENU_PARAMETER_SNAPSHOT_1_TARGET
+
+/* The page event handler. Replaces `ldrh r3, [r1]`, the event kind. r0 = the
+   page, r1 = the event. */
+.global menu_parameter_event
+.type menu_parameter_event, %function
+menu_parameter_event:
+    ldrh r3, [r1]
+    cmp r3, #DETAIL_EV_SUBPAGE
+    bne parameter_event_resume
+    push {r0-r3, r12, lr}
+    bl menu_parameter_session
+    cmp r0, #0
+    pop {r0-r3, r12, lr}
+    movne r0, #0
+    bxne lr
+parameter_event_resume:
+    ldr pc, =HOOK_MENU_PARAMETER_EVENT_RESUME
 .ltorg
 #endif

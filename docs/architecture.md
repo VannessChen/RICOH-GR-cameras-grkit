@@ -94,12 +94,16 @@ The module tiles are contiguous from icon ID `0x7fec` to `0x7ffd`, below the GRK
 
 ### Saved selections
 
-After `INSTALL.OK`, the resident loader restores and saves the effect, the Framing ratio, the Guides style, the Date Stamp style, and the Grain level.
+After `INSTALL.OK`, the resident loader restores and saves the effect, the Fn adjustments of each effect, the Framing ratio, the Guides style, the Date Stamp style, and the Grain level.
 The private header is the loader's `registry` array, so the script reads and writes it directly.
 
 `SCRIPT/PLUGINS/STATE.TXT` holds two decimal lines for each key: the key ID, then the value.
 The key ID is the CRC-32 of the key name modulo 10^9 (`runtime::state_key_id`), so each number has at most 9 digits. The plugin registry gives each key, its header word, and its largest value (`plugins::state_keys`).
 The Image Control key holds the ImageTone code of the effect, and 0 is Off. A file in the earlier single-integer format restores nothing.
+
+An effect with Fn adjustments has an entry of its own. Its key ID is `990000000` plus the low 15 bits of the effect's ImageTone code (`runtime::PARAMETER_KEY_BASE`), a range that no plugin key uses.
+Its value holds the nine stored bytes of `RECORD_PARAMETERS` as base-9 digits, the first adjustment lowest. Neutral adjustments have no entry.
+The restore applies an entry to each installed effect with that code. The menu counts each adjustment change in header `+148`, and the loader writes the file when the count changes.
 
 The loader checks the state every 2 s and writes the file only after a change. It writes through the camera's own file system, as photos do, never from Linux while the camera may write photos.
 A missing, empty, or too large file restores nothing. A pair with an unknown key or an out-of-range value is skipped. An effect that is no longer installed stays Off, and its file entry stays until the next change.
@@ -215,13 +219,14 @@ The menu finds the text from the record count, so the header needs no pointer. A
 ## Image Control
 
 Selection changes a private active-record pointer. Each processing task captures that pointer once. Off follows the native processing path.
-Records apply the native Standard adjustments, which the parameter hook copies from the live settings without writing them back.
+Each record has its own Fn adjustments (`RECORD_PARAMETERS`): saturation, hue, high/low key, contrast, highlight contrast, shadow contrast, sharpness, shading, and clarity.
+The parameter hook fills the native Standard adjustments of the processing packet from them, so the native Image Control settings do not change a record, and a record does not change them.
 
 A preview word overrides the active record in the live-view context only. Still captures always use the committed record.
 Highlighting a row previews it. OK commits it. MENU, other exits, and controller destruction clear the preview.
 
 The live-view diff at `0x536dc860` sets the stage flags (`+4`..`+0x12` of the tuning object) from native inputs only.
-When the live-view record changes, the gamma hook therefore rebuilds the curves and sets the color matrix flag (`+5`).
+When the live-view record or the adjustment count (header `+148`) changes, the gamma hook therefore rebuilds the curves and sets the color matrix flag (`+5`).
 The matrix stage runs before the gamma hook, so the matrix changes one update later.
 Without this, the color matrix keeps the previous effect until the white balance changes. The matrix carries the monochrome weights.
 
@@ -229,10 +234,20 @@ Native Image Control pages apply each highlighted value, which previews native p
 OK or an ADJ press on the native slot, and OK on the native MENU page, disable the private effect.
 MENU on the ADJ slot keeps it, because MENU emits its switch event before the same confirm event as OK.
 
-Fn on an effect row commits that row and opens the native Standard parameter page. Off has no Fn hint and ignores Fn.
+Fn on an effect row commits that row and opens the native parameter page (ImageControlDetailController) for the adjustments of the effect. Off has no Fn hint and ignores Fn.
 Fn uses the native slot's call: event `0x1b` with argument 2, then `ChangeController(adj, 0x2000014, 0x2000000)`.
-It first refreshes the model snapshot with `0x531a0150`, because a cancel restores the snapshot type persistently. It requires the native Standard type.
+It first refreshes the model snapshot with `0x531a0150`, because a cancel restores the snapshot type persistently.
 On return, header `+252` reopens GRKit Image Control at the committed row.
+
+The page reads and writes the native settings through the Image Control model, so GRKit redirects the model while the page edits an effect (`components::PARAMETER_HOOKS`):
+
+- Fn stores the record in header `+144` with bit 0 set. The page start (vtable slot 7) clears bit 0, which starts the session. A page that native ADJ opens clears the word.
+- The model getters and setters of the nine adjustments read and write the record instead of the settings. Only the page calls them. The settings reads in the row texts of the page's list are redirected at their call sites, because other code also uses those reads.
+- After the page reads its type and set kinds, it shows the Standard rows of the base set for any native type.
+- The page keeps a snapshot of the adjustments in the model (`+3` plus the row kind), and a cancel writes the snapshot back through the setters. After the native snapshot load, the snapshot holds the record's values, so a cancel restores the record.
+- The page event that opens another controller from the page does nothing during a session.
+
+GR IV has one more row kind before shading, so shading and clarity are row kinds 14 and 15 there (13 and 14 on GR III).
 
 Photos record the effect in the maker-note ImageTone tag (`0x4f`, hook `0x53608080`). Each record has a stable code at `+0x6f8`: `0x8000` plus 15 bits of an FNV-1a hash of the effect ID.
 The tag hook reads the record of its own shot from the shot ring (see Recorded pictures). A shot without an entry keeps the native tag.

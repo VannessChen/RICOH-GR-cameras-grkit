@@ -319,6 +319,8 @@ static int install(void)
            reserved zero bytes. */
         copy(at(record + GRKIT_RECORD_FEATURES), profile + 84, 4);
         copy(at(record + GRKIT_RECORD_POST), profile + 88, 40);
+        /* Neutral Fn adjustments until the loader restores the saved ones. */
+        zero(at(record + GRKIT_RECORD_PARAMETERS), 9);
         u32 n = length((const char *)profile + 48);
         for (u32 j = 0; j < n; ++j) at(record + GRKIT_RECORD_NAME + j * 2)[0] = profile[48 + j];
         store(record + GRKIT_RECORD_MONOCHROME, get32(profile + 80));

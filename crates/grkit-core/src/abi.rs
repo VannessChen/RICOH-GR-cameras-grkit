@@ -92,7 +92,18 @@ fields!(HEADER_FIELDS {
     /// Text descriptor of the ADJ detail line.
     HOST_MENU_DETAIL = 104, 8;
     /// The last ADJ events: kind | argument << 16.
-    HOST_MENU_EVENT_RING = 112, 64;
+    HOST_MENU_EVENT_RING = 112, 32;
+    /// The record whose adjustments the native parameter page edits, or 0. Fn
+    /// in GRKit Image Control stores the record with bit 0 set, and the page
+    /// start clears bit 0. A page that native ADJ opens clears the word.
+    HOST_PARAMETERS = 144, 4;
+    /// Number of adjustment changes. The live view rebuilds its stages when it
+    /// changes.
+    HOST_PARAMETER_CHANGES = 148, 4;
+    /// GRKIT_HOST_PARAMETER_CHANGES at the last live-view build.
+    HOST_LIVE_PARAMETER_CHANGES = 152, 4;
+    /// Reserved and zero.
+    HOST_RESERVED = 156, 20;
     /// Icon of the GRKit tile.
     HOST_PLUGINS_ICON = 176, 4;
     /// Private toolbar cell, or 0.
@@ -165,6 +176,11 @@ fields!(RECORD_FIELDS {
     /// larger ones (Q8), and u8 chroma gate c0 and c1. Bytes 0x724..0x72b are
     /// reserved and zero.
     RECORD_SELECTIVE = 0x716, 0x72c - 0x716;
+    /// Fn adjustments of the effect: saturation, hue, high/low key, contrast,
+    /// highlight contrast, shadow contrast, sharpness, shading, clarity. Each
+    /// byte is (native value - 4) mod 9, so zero is neutral. A native value is
+    /// 0..8, and 4 is neutral.
+    RECORD_PARAMETERS = 0x72c, 9;
 });
 
 /// Bytes of the date stamp core and halo masks at the start of the picture scratch.
@@ -176,11 +192,12 @@ pub const SHOT_ENTRIES: usize = 8;
 pub const PICTURE_SCRATCH: usize = PICTURE_MASKS + 8 + 8 * SHOT_ENTRIES;
 /// Everything after the records: the picture scratch, then the menu text.
 pub const TAIL_SIZE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE;
-// The summaries of every record in every menu language fit the text area.
+// The summaries of every record in every menu language end before the
+// parameter page title.
 const _: () = assert!(
     menu_text::TEXT_SUMMARY
         + runtime::MAX_COUNT * crate::packaging::Language::ALL.len() * menu_text::SUMMARY_UNITS * 2
-        <= menu_text::TEXT_SIZE
+        <= menu_text::TEXT_PARAMETER_TITLE
 );
 
 /// Wraps `text` into a C comment.
@@ -326,6 +343,13 @@ pub fn header() -> String {
         menu_text::TEXT_SUMMARY
     )
     .unwrap();
+    define(
+        &mut out,
+        "The parameter page title of a GRKit session, after the summaries: the \
+         page, its vtable, and the descriptor of the effect name.",
+        "TEXT_PARAMETER_TITLE",
+        menu_text::TEXT_PARAMETER_TITLE,
+    );
     writeln!(
         out,
         "#define GRKIT_TEXT_LANGUAGES {}",

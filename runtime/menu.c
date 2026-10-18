@@ -14,6 +14,7 @@ extern u32 menu_destroy_original(u32);
 #define CALL0(a) ((u32 (*)(void))(a))
 #define CALL1(a) ((u32 (*)(u32))(a))
 #define CALL2(a) ((u32 (*)(u32,u32))(a))
+#define CALL4(a) ((u32 (*)(u32,u32,u32,u32))(a))
 #define CALL5(a) ((u32 (*)(u32,u32,u32,u32,u32))(a))
 #define CALL3(a) ((u32 (*)(u32,u32,u32))(a))
 #define WORD(a,o) (*(u32 *)((a)+(o)))
@@ -142,10 +143,16 @@ static void native_focus(u32 controller) {
     if(CALL2(FW_ADJ_SLOT_TYPE)(controller,BYTE(controller,ADJ_SLOT))!=ADJ_IC_SLOT_TYPE)
         menu_header()[GRKIT_HOST_PREVIEW/4]=0;
 }
-/* Fn opens the native Standard parameters from an effect row in the still
+/* Fn opens the native parameter page from an effect row in the still
    context. The native Fn hint shows only where this works. */
 static u32 parameters_available(u32 controller) {
-#ifdef FW_SETTINGS_DOMAIN
+#if defined(PARAMETER_KINDS)
+    /* The page edits the adjustments of the effect (menu_parameter_*), so the
+       native Image Control type does not matter. */
+    return parameters_row(menu_header()) && ADJ_MOVIE(controller)!=1;
+#elif defined(FW_SETTINGS_DOMAIN)
+    /* The page edits the native settings of the active type, which the
+       effects apply. */
     u32 settings=WORD(WORD(WORD(FW_SETTINGS_DOMAIN,0),0x518),0);
     return parameters_row(menu_header()) &&
            ADJ_MOVIE(controller)!=1 && BYTE(settings,SETTINGS_IC_TYPE)==11;
@@ -224,11 +231,25 @@ static void toolbar(u32 controller) {
     toolbar_layout(controller,1);
     CALL2(FW_VIEW_SET_VISIBLE)(WORD(controller,ADJ_FRAME),1);
 }
+#ifdef PARAMETER_KINDS
+/* The parameter page title of a GRKit session (GRKIT_TEXT_PARAMETER_TITLE). */
+static volatile u32 *parameter_title(volatile u32 *h) {
+    return (volatile u32 *)(GRKIT_TEXT(h)+GRKIT_TEXT_PARAMETER_TITLE);
+}
+#endif
 A32_ENTRY void menu_refresh(u32 controller) {
     volatile u32 *h=menu_header();
+#ifdef PARAMETER_KINDS
+    /* ADJ runs, so no parameter page shows its title. */
+    parameter_title(h)[0]=0;
+#endif
     if(private_mode(controller)) { render(controller); return; }
     if(h[GRKIT_HOST_RETURN/4]==2 && ADJ_MOVIE(controller)!=1) {
         h[GRKIT_HOST_RETURN/4]=0;
+#ifdef PARAMETER_KINDS
+        /* The page has ended. A record that no page started stays unused. */
+        if(h[GRKIT_HOST_PARAMETERS/4]&1U) h[GRKIT_HOST_PARAMETERS/4]=0;
+#endif
         enter(controller,3);
         /* Fn starts only from Image Control, so it is visible. */
         menu_open(h,0);
@@ -256,6 +277,21 @@ static void label(u32 object) {
 static __attribute__((noinline)) void detail_width(u32 controller,u32 width) {
     u32 object=WORD(controller,ADJ_DETAIL), rectangle[4]={0,50,width,40};
     CALL2(WORD(WORD(object,0),0x18))(object,(u32)rectangle);
+}
+/* Show the Fn hint where Fn opens the parameter page. The native refresh
+   fills the hint only on a native slot that offers Fn, so a hint that GRKit
+   shows could be empty. Fill it as the native Image Control slot does. */
+static void fn_guide(u32 controller) {
+    u32 guide=WORD(controller,ADJ_FN_GUIDE), shown=parameters_available(controller);
+#ifdef FW_GUIDE_SET_CONTENT
+    if(shown) {
+        CALL4(FW_GUIDE_SET_CONTENT)(guide,FN_GUIDE_TEXT,10,FN_GUIDE_ICON);
+#ifdef FN_GUIDE_X
+        CALL2(FW_VIEW_SET_X)(guide,FN_GUIDE_X);
+#endif
+    }
+#endif
+    CALL2(FW_VIEW_SET_VISIBLE)(guide,shown);
 }
 static void render(u32 controller) {
     volatile u32 *h=menu_header();
@@ -288,7 +324,7 @@ static void render(u32 controller) {
     /* Native detail controls do not describe private modules, except the Fn
        hint (+0x1ac) where Fn opens the native parameters. */
     CALL2(FW_VIEW_SET_VISIBLE)(WORD(controller,ADJ_DETAIL_VALUE),0);
-    CALL2(FW_VIEW_SET_VISIBLE)(WORD(controller,ADJ_FN_GUIDE),parameters_available(controller));
+    fn_guide(controller);
     toolbar(controller);
     /* Slot zero's canvas is at +4, as in the live view. */
     frame_preview(h,WORD(controller,ADJ_CANVAS),ADJ_MOVIE(controller)==1);
@@ -318,14 +354,103 @@ static void enter(u32 controller,u32 edge) {
 static void plugin_touch(u32 controller) {
     if(!private_mode(controller) && ADJ_MOVIE(controller)!=1) enter(controller,3);
 }
-/* Open the native Standard parameter page, as the native ADJ Image Control slot
-   does for event 0x1b with argument 2. GRKit effects apply these adjustments.
-   Refresh the model snapshot first: a cancel restores its type persistently. */
+#ifdef PARAMETER_KINDS
+/* Fn adjustments. While GRKIT_HOST_PARAMETERS holds a record, the native
+   parameter page reads and writes the adjustments of that record
+   (GRKIT_RECORD_PARAMETERS) instead of the native settings, and shows the
+   Standard rows for any native type. The page snapshot holds the record's
+   values, so a cancel writes them back to the record. Native settings do not
+   change. Only the page calls the hooked model getters and setters. */
+static const u8 parameter_kinds[]=PARAMETER_KINDS;
+_Static_assert(sizeof(parameter_kinds)==9, "GRKIT_RECORD_PARAMETERS holds nine adjustments");
+/* The record of a started page, or 0. */
+A32_ENTRY u32 menu_parameter_session(void) {
+    u32 record=menu_header()[GRKIT_HOST_PARAMETERS/4];
+    return record&1U ? 0 : record;
+}
+/* The native value 0..8 of a stored byte: (native - 4) mod 9. */
+static u32 parameter_native(u32 record,u32 index) {
+    u32 stored=BYTE(record,GRKIT_RECORD_PARAMETERS+index);
+    return stored>8 ? 4 : stored<5 ? stored+4 : stored-5;
+}
+/* The native value plus 1, or 0 to run the native getter. */
+A32_ENTRY u32 menu_parameter_get(u32 index) {
+    u32 record=menu_parameter_session();
+    return record ? parameter_native(record,index)+1 : 0;
+}
+/* Nonzero when the value went to the record. */
+A32_ENTRY u32 menu_parameter_set(u32 index,u32 value) {
+    volatile u32 *h=menu_header();
+    u32 record=menu_parameter_session();
+    if(!record) return 0;
+    if(value<=8) {
+        BYTE(record,GRKIT_RECORD_PARAMETERS+index)=(u8)(value>=4 ? value-4 : value+5);
+        ++h[GRKIT_HOST_PARAMETER_CHANGES/4];
+    }
+    return 1;
+}
+/* A page that GRKit opened starts its session. Any other page ends it. */
+A32_ENTRY void menu_parameter_page_start(void) {
+    volatile u32 *h=menu_header();
+    u32 record=h[GRKIT_HOST_PARAMETERS/4];
+    h[GRKIT_HOST_PARAMETERS/4]=record&1U ? record&~1U : 0;
+    parameter_title(h)[0]=0;
+}
+/* Show the Standard rows of the base set. The type is Standard, so the
+   native title would read Standard. Keep the page and the effect name, so
+   that the text hooks draw the name in the title (menu_parameter_title). */
+A32_ENTRY void menu_parameter_page_kinds(u32 page) {
+    u32 record=menu_parameter_session();
+    volatile u32 *title;
+    /* The title view keeps its measured width while its text ID stays the
+       same, which clipped a longer effect name. Clear the text, so that the
+       title measures the text that the page sets next. */
+    CALL3(FW_STRING_VIEW_RESET)(WORD(page,DETAIL_TITLE),0,0);
+    if(!record) return;
+    BYTE(page,DETAIL_TYPE)=11;
+    BYTE(page,DETAIL_SET_KIND)=0;
+    BYTE(page,DETAIL_BASE_KIND)=0;
+    title=parameter_title(menu_header());
+    descriptor(title+2,(const u16 *)(record+GRKIT_RECORD_NAME));
+    title[1]=WORD(page,0);
+    title[0]=page;
+}
+/* Replace the snapshot of the Standard adjustments with the record's values. */
+A32_ENTRY void menu_parameter_page_snapshot(u32 model) {
+    u32 record=menu_parameter_session(),i;
+    if(!record) return;
+    for(i=0;i<sizeof(parameter_kinds);++i)
+        BYTE(model,MODEL_SNAPSHOT+parameter_kinds[i])=(u8)parameter_native(record,i);
+}
+#endif
+/* The text descriptor for `view`: the effect name for the title of a page
+   that GRKit started, or 0 for native text. A page whose first word is no
+   longer its vtable has ended, and its memory may hold another object. */
+A32_ENTRY u32 menu_parameter_title(u32 view) {
+#ifdef PARAMETER_KINDS
+    volatile u32 *title;
+    u32 page;
+    if(!menu_parameter_session()) return 0;
+    title=parameter_title(menu_header());
+    page=title[0];
+    if(page && WORD(page,0)==title[1] && WORD(page,DETAIL_TITLE)==view) return (u32)(title+2);
+#else
+    (void)view;
+#endif
+    return 0;
+}
+/* Open the native parameter page, as the native ADJ Image Control slot does
+   for event 0x1b with argument 2. Refresh the model snapshot first: a cancel
+   restores its type persistently. */
 static u32 open_parameters(u32 controller) {
     if(!parameters_available(controller)) return 0;
 #ifdef FW_SETTINGS_DOMAIN
-    /* Like the native slot, edit the active parameters, including a custom set. */
     CALL1(FW_ADJ_SNAPSHOT)(controller);
+#ifdef PARAMETER_KINDS
+    /* The page edits the adjustments of the committed effect. Bit 0 marks a
+       page that has not started yet. */
+    menu_header()[GRKIT_HOST_PARAMETERS/4]=menu_header()[GRKIT_HOST_ACTIVE/4]|1U;
+#endif
     leave(controller);
     /* The page returns to ADJ (0x2000000) with the native Image Control slot
        focused, where OK would confirm Standard. Come back to GRKit instead. */
@@ -347,6 +472,10 @@ A32_ENTRY void menu_exit(u32 controller) {
     h[GRKIT_HOST_FRAME_PREVIEW/4]=0;
     /* ADJ exits once for the parameter page itself. Any other exit cancels the return. */
     h[GRKIT_HOST_RETURN/4]=h[GRKIT_HOST_RETURN/4]==1 ? 2 : 0;
+#ifdef PARAMETER_KINDS
+    if(!h[GRKIT_HOST_RETURN/4] && (h[GRKIT_HOST_PARAMETERS/4]&1U)) h[GRKIT_HOST_PARAMETERS/4]=0;
+    parameter_title(h)[0]=0;
+#endif
     menu_exit_original(controller);
     if(menu_header()[GRKIT_HOST_TOOLBAR_OWNER/4]==controller) {
         toolbar_visible(menu_header()[GRKIT_HOST_TOOLBAR_WIDGET/4],0);
@@ -397,6 +526,11 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
         else leave(controller);
         return 0;
     }
+#ifdef EV_FN_ACTION
+    /* The Fn press that opened a GRKit parameter page also sends its native
+       action. The native page must not open for it. */
+    if(kind==EV_FN_ACTION && h[GRKIT_HOST_RETURN/4]) return 0;
+#endif
     if(!private_mode(controller)) {
         /* OK or ADJ press on the native Image Control slot confirms a native value.
            Confirming the existing native type can omit its setter entirely. */
@@ -421,7 +555,7 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
     menu_normalize(h);
     /* On an effect row, commit the highlighted row, then adjust its parameters.
        Fn on Off does nothing. */
-    if(kind==EV_FN && *(u8 *)WORD((u32)event,4)==2 &&
+    if(kind==EV_FN && *(u8 *)WORD((u32)event,4)==FN_PRESS_ARG &&
        h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && current_module(h)->parameters) {
         if(!parameters_row(h)) return 0;
         current_module(h)->apply(h,h[GRKIT_HOST_MENU_CURSOR/4]);

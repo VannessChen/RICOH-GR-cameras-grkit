@@ -13,6 +13,9 @@ pub const TEXT_SIZE: usize = 8192;
 /// Where the Image Control summaries start in the text area. The label table
 /// must end before it.
 pub const TEXT_SUMMARY: usize = 4096;
+/// The last 16 bytes of the text area: the parameter page title of a GRKit
+/// session. Words: the page, its vtable, then the descriptor of the effect name.
+pub const TEXT_PARAMETER_TITLE: usize = TEXT_SIZE - 16;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).

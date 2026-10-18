@@ -18,7 +18,7 @@ Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-
 
 ![The GRKit page lists the modules and shows the current effect.](images/grkit-root.png)
 
-- **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to open the Standard parameters of the effect.
+- **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings.
 - **Framing:** select XPan, 16:9, or 4:3. The viewfinder dims the area outside the photo. Framing works only with the native 3:2 aspect ratio.
 - **Guides:** select a guide style. The lines show only in the viewfinder.
 - **Date Stamp:** select a date style. Photos get the date at the bottom right.

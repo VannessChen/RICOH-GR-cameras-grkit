@@ -27,21 +27,29 @@ picture_owned:
 // Replaces `ldrb r3, [r4, #0xe]` (the gamma stage flag) in the live-view diff.
 .global module_gamma_dirty
 module_gamma_dirty:
-    push {r0-r2, lr}
+    push {r0-r2, r12, lr}
     ldrb r3, [r4, #0xe]
     ldr r0, [r5, #8]
     bl picture_owned
     movne r0, #0
     // The native diff sets the stage flags from native inputs only. When the
-    // live-view record changes, rebuild the curves now, and the color matrix
-    // (+5, the monochrome weights) and the YCbCr matrix (+7, the post matrix)
-    // on the next update: their stages have already run. This hook runs only
-    // for ImageTuningLiveview.
+    // live-view record or the adjustments of a private record change, rebuild
+    // the curves now, and the color matrix (+5, the monochrome weights and the
+    // saturation) and the YCbCr matrix (+7, the post matrix) on the next
+    // update: their stages have already run. This hook runs only for
+    // ImageTuningLiveview.
     ldr r1, =GRKIT_HEADER_REFERENCE
     ldr r2, [r1, #GRKIT_HOST_LIVE_RECORD]
     str r0, [r1, #GRKIT_HOST_LIVE_RECORD]
     subs r2, r2, r0
     movne r2, #1
+    ldr r12, [r1, #GRKIT_HOST_PARAMETER_CHANGES]
+    ldr lr, [r1, #GRKIT_HOST_LIVE_PARAMETER_CHANGES]
+    str r12, [r1, #GRKIT_HOST_LIVE_PARAMETER_CHANGES]
+    cmp r12, lr
+    cmpne r0, #0
+    movne r2, #1
+    cmp r2, #0
     strbne r2, [r4, #5]
     strbne r2, [r4, #7]
     // Private records and record changes always rebuild the curves.
@@ -59,7 +67,7 @@ module_gamma_dirty:
 dirty_on:
     mov r3, #1
 dirty_resume:
-    pop {r0-r2, lr}
+    pop {r0-r2, r12, lr}
     ldr pc, =HOOK_MODULE_GAMMA_DIRTY_RESUME
 #endif
 

@@ -31,6 +31,7 @@ fn synthetic_firmware() -> firmware::FirmwareImage {
         .chain(components::VIEWFINDER_HOOKS.iter())
         .chain(components::METADATA_HOOKS.iter())
         .chain(components::PICTURE_HOOKS.iter())
+        .chain(components::PARAMETER_HOOKS.iter())
     {
         write(address, &hex::decode(bytes).unwrap());
     }
@@ -360,6 +361,40 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
         (0x531710c4, "menu_viewfinder_icon", "97e204eb", true),
         (0x53179b7c, "menu_playback_icon", "daf404eb", true),
         (0x532b7cfc, "menu_playback_detail", "eef1ffeb", true),
+        // The Fn parameter page: start, kinds, snapshots, event, then the
+        // nine getters, setters, and row texts.
+        (0x531b1020, "menu_parameter_start", "0dc0a0e1", false),
+        (0x531b1094, "menu_parameter_kinds", "d2eeffeb", true),
+        (0x531b1060, "menu_parameter_snapshot_0", "c54804eb", true),
+        (0x531b10c8, "menu_parameter_snapshot_1", "ab4804eb", true),
+        (0x531b0eac, "menu_parameter_event", "b030d1e1", false),
+        (0x532c283c, "menu_parameter_get_0", "0dc0a0e1", false),
+        (0x532c285c, "menu_parameter_get_1", "0dc0a0e1", false),
+        (0x532c287c, "menu_parameter_get_2", "0dc0a0e1", false),
+        (0x532c289c, "menu_parameter_get_3", "0dc0a0e1", false),
+        (0x532c28bc, "menu_parameter_get_4", "0dc0a0e1", false),
+        (0x532c28dc, "menu_parameter_get_5", "0dc0a0e1", false),
+        (0x532c28fc, "menu_parameter_get_6", "0dc0a0e1", false),
+        (0x532c2a1c, "menu_parameter_get_7", "0dc0a0e1", false),
+        (0x532c2a3c, "menu_parameter_get_8", "0dc0a0e1", false),
+        (0x532bd784, "menu_parameter_set_0", "0dc0a0e1", false),
+        (0x532bdcd8, "menu_parameter_set_1", "0dc0a0e1", false),
+        (0x532be22c, "menu_parameter_set_2", "0dc0a0e1", false),
+        (0x532be8a0, "menu_parameter_set_3", "0dc0a0e1", false),
+        (0x532bef14, "menu_parameter_set_4", "0dc0a0e1", false),
+        (0x532bf588, "menu_parameter_set_5", "0dc0a0e1", false),
+        (0x532bfbfc, "menu_parameter_set_6", "0dc0a0e1", false),
+        (0x532c0da8, "menu_parameter_set_7", "0dc0a0e1", false),
+        (0x532c141c, "menu_parameter_set_8", "0dc0a0e1", false),
+        (0x532abfc4, "menu_parameter_row_0", "d8770aeb", true),
+        (0x532ac0e0, "menu_parameter_row_1", "a2770aeb", true),
+        (0x532ac1fc, "menu_parameter_row_2", "6c770aeb", true),
+        (0x532ac318, "menu_parameter_row_3", "36770aeb", true),
+        (0x532ac434, "menu_parameter_row_4", "00770aeb", true),
+        (0x532ac550, "menu_parameter_row_5", "ca760aeb", true),
+        (0x532ac66c, "menu_parameter_row_6", "94760aeb", true),
+        (0x532acc88, "menu_parameter_row_7", "95750aeb", true),
+        (0x532acda4, "menu_parameter_row_8", "5f750aeb", true),
     ];
     let menu_instructions = [(0x535c251c, "0020a083", "01288083")];
     let framing_hooks = [
@@ -616,7 +651,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/PLUGINS/PLUGINS.TTL",
-            "c10a9981ea3bef553cf970e88b72ff7e38129ac6213e2dc38538294899014326",
+            "6f866c2af472f540fcb108023bf0d48c3daf6886b36b8514bedd603cee9744ac",
         ),
         (
             "SCRIPT/PLUGINS/INSTALL.BIN",
@@ -687,8 +722,8 @@ fn each_point_has_its_hooks() {
     // The hooks of each point. The in-place patches add 1 to tuning, and on
     // GR III 5 to capture.aspect (build.json "points" counts both).
     for (layout, expected) in [
-        (&components::GR3_LAYOUT, [16, 15, 5, 9, 1, 2]),
-        (&components::GR4_LAYOUT, [15, 16, 5, 11, 1, 4]),
+        (&components::GR3_LAYOUT, [16, 47, 5, 9, 1, 2]),
+        (&components::GR4_LAYOUT, [15, 48, 5, 11, 1, 4]),
     ] {
         let mut counts = [0; 6];
         for (_, symbol) in components::hook_sites(layout) {

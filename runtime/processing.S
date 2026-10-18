@@ -96,25 +96,34 @@ parameters_committed:
     // Capture metadata and the encode read the record of this shot.
     .word 0xeb000000 | (((.Lshot_store - . - 8) >> 2) & 0x00ffffff)
     // Fill the transient object (r6) like the native Standard branch, from the
-    // live settings that the caller computed in r7. Unlike that branch, never
-    // write the settings back, so other native types keep their own fields.
+    // adjustments of the record (r0), not from the native settings.
+    add r3, r0, #(GRKIT_RECORD_PARAMETERS & ~0xff)
+    add r3, r3, #(GRKIT_RECORD_PARAMETERS & 0xff)
     add r1, r6, #0x1e0
     add r0, r6, #0x200
-    add r3, r7, #0x700
     adr r12, parameters_sources
 parameters_fill:
     ldrb r2, [r12], #1
-    cmp r2, #1
-    ldrbhi r2, [r3, r2]
+    cmp r2, #9
+    subhs r2, r2, #0x10
+    bhs parameters_store
+    // A stored byte is (native - 4) mod 9. Another value is neutral.
+    ldrb r2, [r3, r2]
+    cmp r2, #8
+    movhi r2, #0
+    cmp r2, #5
+    addlo r2, r2, #4
+    subhs r2, r2, #5
+parameters_store:
     strh r2, [r1], #2
     cmp r1, r0
     bne parameters_fill
     pop {r0-r3, r12, pc}
-// Source per halfword at +0x1e0: settings offset - 0x700, or the constant 0 or 1.
-// Saturation, hue, key, contrast, highlight, shadow, 1, sharpness, 0, 0,
-// shading, clarity, 0, 0, 0, 0.
+// Source per halfword at +0x1e0: an index of GRKIT_RECORD_PARAMETERS, or 0x10
+// plus a constant. Saturation, hue, key, contrast, highlight, shadow, 1,
+// sharpness, 0, 0, shading, clarity, 0, 0, 0, 0.
 parameters_sources:
-    .byte 0x7d, 0x7e, 0x7f, 0x80, 0x81, 0x82, 1, 0x84, 0, 0, 0x93, 0x94, 0, 0, 0, 0
+    .byte 0, 1, 2, 3, 4, 5, 0x11, 6, 0x10, 0x10, 7, 8, 0x10, 0x10, 0x10, 0x10
 parameters_stock:
     mov r0, #0
     str r0, [r4, #8]

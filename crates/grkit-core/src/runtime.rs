@@ -8,8 +8,8 @@ use crate::{camera::Camera, Files};
 
 pub use crate::abi::{
     HEADER_REFERENCE, HOST_ACTIVE, HOST_COUNT, HOST_FRAME_RATIO, HOST_GRAIN, HOST_GUIDE,
-    HOST_HEADER_SIZE as HEADER_SIZE, HOST_PLUGINS, HOST_RECORDS, HOST_STAMP, PICTURE_SCRATCH,
-    RECORD_CODE, RECORD_SIZE, TAIL_SIZE,
+    HOST_HEADER_SIZE as HEADER_SIZE, HOST_PARAMETER_CHANGES, HOST_PLUGINS, HOST_RECORDS,
+    HOST_STAMP, PICTURE_SCRATCH, RECORD_CODE, RECORD_PARAMETERS, RECORD_SIZE, TAIL_SIZE,
 };
 use crate::plugins;
 
@@ -42,7 +42,7 @@ pub const STATE_FILE: &str = "STATE.TXT";
 /// The new state file before it replaces `STATE_FILE`.
 pub const STATE_TEMPORARY: &str = "STATE.TMP";
 /// The largest state file that the loader reads.
-pub const STATE_MAX_BYTES: usize = 512;
+pub const STATE_MAX_BYTES: usize = 1024;
 
 /// `STATE.TXT` keeps the state keys of the plugins (`plugins::state_keys`).
 /// The file holds two lines for each key: the key ID (`state_key_id`), then
@@ -56,6 +56,16 @@ pub const STATE_DIGITS: usize = 9;
 pub fn state_key_id(name: &str) -> u32 {
     crc32fast::hash(name.as_bytes()) % 1_000_000_000
 }
+
+/// The Fn adjustments of an effect are a state entry of their own: the key ID
+/// is this base plus the low 15 bits of the effect's ImageTone code, and the
+/// value is the nine stored bytes (`RECORD_PARAMETERS`) as base-9 digits, the
+/// first adjustment lowest. Neutral adjustments have no entry.
+pub const PARAMETER_KEY_BASE: u32 = 990_000_000;
+/// The largest packed adjustment value: 9^9 - 1.
+pub const PARAMETER_VALUE_MAX: u32 = 387_420_488;
+/// The number of adjustments of an effect.
+pub const PARAMETER_COUNT: usize = 9;
 
 pub const LINUX_DIRECTORY: &str = "/media/storage1/SCRIPT/PLUGINS";
 
@@ -217,6 +227,22 @@ fn state_script() -> Vec<String> {
             RECORD_CODE / 4
         )
     };
+    let record_word = |index: &str, offset: usize| {
+        format!(
+            "registry[{} + {index} * {} + {}]",
+            HEADER_SIZE / 4,
+            RECORD_SIZE / 4,
+            offset / 4
+        )
+    };
+    let parameter_word =
+        |index: &str, word: usize| record_word(index, RECORD_PARAMETERS + word * 4);
+    // The record count for the adjustments, or 0 if it is out of range.
+    let parameter_count = [
+        format!("pcount = {}", word(HOST_COUNT)),
+        "if pcount < 0 pcount = 0".to_string(),
+        format!("if pcount > {MAX_COUNT} pcount = 0"),
+    ];
     let state_keys = plugins::state_keys();
     let keys = state_keys.iter().enumerate();
     let mut lines: Vec<String> = vec![":resident".into(), "call restore".into()];
@@ -236,6 +262,7 @@ fn state_script() -> Vec<String> {
     for (i, _) in keys.clone() {
         lines.push(format!("if value{i} <> saved{i} changed = 1"));
     }
+    lines.push("if pchanges <> psaved changed = 1".into());
     lines.extend([
         "if changed = 0 goto save_end".into(),
         format!("filedelete '{temporary}'"),
@@ -249,6 +276,39 @@ fn state_script() -> Vec<String> {
             "filewriteln sfh line".into(),
         ]);
     }
+    // The adjustments of each effect that has a non-neutral one.
+    lines.extend(parameter_count.clone());
+    lines.extend([
+        "pindex = 0".into(),
+        ":save_parameters".into(),
+        "if pindex >= pcount goto save_parameters_end".into(),
+        format!("pw0 = {}", parameter_word("pindex", 0)),
+        format!("pw1 = {}", parameter_word("pindex", 1)),
+        format!("pw2 = {}", parameter_word("pindex", 2)),
+        "pvalue = 0".into(),
+    ]);
+    for digit in (0..PARAMETER_COUNT).rev() {
+        lines.extend([
+            format!("pdigit = (pw{} >> {}) and 255", digit / 4, digit % 4 * 8),
+            "if pdigit > 8 pdigit = 0".into(),
+            "pvalue = pvalue * 9 + pdigit".into(),
+        ]);
+    }
+    lines.extend([
+        "if pvalue = 0 goto save_parameters_next".into(),
+        format!(
+            "pkey = {PARAMETER_KEY_BASE} + ({} and 32767)",
+            code_word("pindex")
+        ),
+        "int2str line pkey".into(),
+        "filewriteln sfh line".into(),
+        "int2str line pvalue".into(),
+        "filewriteln sfh line".into(),
+        ":save_parameters_next".into(),
+        "pindex = pindex + 1".into(),
+        "goto save_parameters".into(),
+        ":save_parameters_end".into(),
+    ]);
     lines.extend([
         "fileclose sfh".into(),
         format!("filesearch '{temporary}'"),
@@ -263,6 +323,7 @@ fn state_script() -> Vec<String> {
     for (i, _) in keys.clone() {
         lines.push(format!("saved{i} = value{i}"));
     }
+    lines.push("psaved = pchanges".into());
     lines.extend([":save_end".into(), "return".into()]);
 
     // The current selections. The effect is the ImageTone code of the active
@@ -287,6 +348,8 @@ fn state_script() -> Vec<String> {
             lines.push(format!("value{i} = {}", word(offset)));
         }
     }
+    // The menu counts each adjustment change.
+    lines.push(format!("pchanges = {}", word(HOST_PARAMETER_CHANGES)));
     lines.push("return".into());
 
     // Restore. A missing, empty, or too large file restores nothing. `fileopen`
@@ -303,6 +366,7 @@ fn state_script() -> Vec<String> {
     for (i, _) in keys.clone() {
         lines.push(format!("stored{i} = 0"));
     }
+    lines.extend(parameter_count);
     lines.extend([
         format!("statefile = '{state}'"),
         "filesearch statefile".into(),
@@ -362,7 +426,42 @@ fn state_script() -> Vec<String> {
             state_key_id(&key.name)
         ));
     }
-    lines.push("goto restore_reset".into());
+    // An adjustment entry applies to each installed effect with its code. An
+    // effect that is not installed keeps nothing.
+    lines.extend([
+        format!("if key < {PARAMETER_KEY_BASE} goto restore_reset"),
+        format!("if key > {} goto restore_reset", PARAMETER_KEY_BASE + 32767),
+        format!("if token > {PARAMETER_VALUE_MAX} goto restore_reset"),
+        format!("pcode = key - {PARAMETER_KEY_BASE}"),
+        "pindex = 0".into(),
+        ":restore_parameters".into(),
+        "if pindex >= pcount goto restore_reset".into(),
+        format!("pkey = {} and 32767", code_word("pindex")),
+        "if pkey != pcode goto restore_parameters_next".into(),
+        "pvalue = token".into(),
+    ]);
+    for digit in 0..PARAMETER_COUNT {
+        lines.extend([
+            format!("pd{digit} = pvalue % 9"),
+            "pvalue = pvalue / 9".into(),
+        ]);
+    }
+    lines.extend([
+        format!(
+            "{} = pd0 + pd1 * 256 + pd2 * 65536 + pd3 * 16777216",
+            parameter_word("pindex", 0)
+        ),
+        format!(
+            "{} = pd4 + pd5 * 256 + pd6 * 65536 + pd7 * 16777216",
+            parameter_word("pindex", 1)
+        ),
+        // Bytes after the ninth adjustment are not part of the record fields.
+        format!("pw2 = {} >> 8", parameter_word("pindex", 2)),
+        format!("{} = pw2 * 256 + pd8", parameter_word("pindex", 2)),
+        ":restore_parameters_next".into(),
+        "pindex = pindex + 1".into(),
+        "goto restore_parameters".into(),
+    ]);
     for (i, key) in keys.clone() {
         lines.extend([
             format!(":restore_key{i}"),
@@ -419,6 +518,7 @@ fn state_script() -> Vec<String> {
         // entry until the user selects something else.
         ":restore_end".into(),
         "call snapshot".into(),
+        "psaved = pchanges".into(),
     ]);
     for (i, _) in keys {
         lines.push(format!("saved{i} = value{i}"));
@@ -473,19 +573,29 @@ mod tests {
     #[test]
     fn the_resident_script_cannot_stop_on_its_own_arithmetic() {
         let script = state_script().join("\n");
-        let record_code = format!(
-            "{} + index * {} + {}",
-            HEADER_SIZE / 4,
-            RECORD_SIZE / 4,
-            RECORD_CODE / 4
-        );
+        let record = |index: &str, offset: usize| {
+            format!(
+                "{} + {index} * {} + {}",
+                HEADER_SIZE / 4,
+                RECORD_SIZE / 4,
+                offset / 4
+            )
+        };
+        // The computed indexes are words of a record below `count` or `pcount`:
+        // its code, and the three words of its adjustments.
+        let allowed = [
+            record("index", RECORD_CODE),
+            record("pindex", RECORD_CODE),
+            record("pindex", RECORD_PARAMETERS),
+            record("pindex", RECORD_PARAMETERS + 4),
+            record("pindex", RECORD_PARAMETERS + 8),
+        ];
         for (at, _) in script.match_indices("registry[") {
             let index = &script[at + 9..];
             let index = &index[..index.find(']').unwrap()];
             match index.parse::<usize>() {
                 Ok(word) => assert!(word < HEADER_SIZE / 4, "registry[{word}]"),
-                // The only computed index is the code of a record below `count`.
-                Err(_) => assert_eq!(index, record_code),
+                Err(_) => assert!(allowed.iter().any(|a| a == index), "registry[{index}]"),
             }
         }
         for line in script.lines() {
@@ -504,5 +614,32 @@ mod tests {
         // Each computed record index is below `count`, which is at most MAX_COUNT.
         assert!(script.contains(&format!("if count > {MAX_COUNT} goto snapshot_values")));
         assert!(script.contains(&format!("if count > {MAX_COUNT} count = 0")));
+        assert!(script.contains("if pcount < 0 pcount = 0"));
+        assert!(script.contains(&format!("if pcount > {MAX_COUNT} pcount = 0")));
+        assert_eq!(script.matches("if pindex >= pcount goto").count(), 2);
+    }
+
+    #[test]
+    fn adjustment_entries_fit_the_state_file() {
+        // Nine base-9 digits, and keys of at most nine digits that no plugin
+        // key uses.
+        assert_eq!(PARAMETER_VALUE_MAX, 9u32.pow(PARAMETER_COUNT as u32) - 1);
+        assert_eq!(
+            PARAMETER_COUNT,
+            crate::abi::RECORD_FIELDS
+                .iter()
+                .find(|field| field.name == "RECORD_PARAMETERS")
+                .unwrap()
+                .size
+        );
+        let last = PARAMETER_KEY_BASE + 32767;
+        assert!(last.to_string().len() <= STATE_DIGITS);
+        assert!(plugins::state_keys().iter().all(|key| {
+            let id = state_key_id(&key.name);
+            !(PARAMETER_KEY_BASE..=last).contains(&id)
+        }));
+        // Each key and value line, with CR LF, for every effect and plugin key.
+        let line = STATE_DIGITS + 2;
+        assert!(2 * line * (MAX_COUNT + plugins::state_keys().len()) <= STATE_MAX_BYTES);
     }
 }

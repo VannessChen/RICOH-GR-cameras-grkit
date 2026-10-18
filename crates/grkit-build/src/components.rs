@@ -124,6 +124,48 @@ pub const PICTURE_HOOKS: &[(u32, &str, &str, bool)] = &[
     (0x5351361c, "grain_gate", "e7feffeb", true),
 ];
 
+/// The native parameter page edits the Fn adjustments of a GRKit effect
+/// (`runtime/menu.c`). ImageControlDetailController: its start method, the BL
+/// to its kind reader, the two BLs to the snapshot loader, and its event
+/// handler. Then the Image Control model getters and setters of the Standard
+/// adjustments (saturation, hue, key, contrast, highlight, shadow, sharpness,
+/// shading, clarity), and the value reads of the page's list rows.
+pub const PARAMETER_HOOKS: &[Hook] = &[
+    (0x531b1020, "menu_parameter_start", "0dc0a0e1", false),
+    (0x531b1094, "menu_parameter_kinds", "d2eeffeb", true),
+    (0x531b1060, "menu_parameter_snapshot_0", "c54804eb", true),
+    (0x531b10c8, "menu_parameter_snapshot_1", "ab4804eb", true),
+    (0x531b0eac, "menu_parameter_event", "b030d1e1", false),
+    (0x532c283c, "menu_parameter_get_0", "0dc0a0e1", false),
+    (0x532c285c, "menu_parameter_get_1", "0dc0a0e1", false),
+    (0x532c287c, "menu_parameter_get_2", "0dc0a0e1", false),
+    (0x532c289c, "menu_parameter_get_3", "0dc0a0e1", false),
+    (0x532c28bc, "menu_parameter_get_4", "0dc0a0e1", false),
+    (0x532c28dc, "menu_parameter_get_5", "0dc0a0e1", false),
+    (0x532c28fc, "menu_parameter_get_6", "0dc0a0e1", false),
+    (0x532c2a1c, "menu_parameter_get_7", "0dc0a0e1", false),
+    (0x532c2a3c, "menu_parameter_get_8", "0dc0a0e1", false),
+    (0x532bd784, "menu_parameter_set_0", "0dc0a0e1", false),
+    (0x532bdcd8, "menu_parameter_set_1", "0dc0a0e1", false),
+    (0x532be22c, "menu_parameter_set_2", "0dc0a0e1", false),
+    (0x532be8a0, "menu_parameter_set_3", "0dc0a0e1", false),
+    (0x532bef14, "menu_parameter_set_4", "0dc0a0e1", false),
+    (0x532bf588, "menu_parameter_set_5", "0dc0a0e1", false),
+    (0x532bfbfc, "menu_parameter_set_6", "0dc0a0e1", false),
+    (0x532c0da8, "menu_parameter_set_7", "0dc0a0e1", false),
+    (0x532c141c, "menu_parameter_set_8", "0dc0a0e1", false),
+    // The BL to the settings getter in the row text of each adjustment.
+    (0x532abfc4, "menu_parameter_row_0", "d8770aeb", true),
+    (0x532ac0e0, "menu_parameter_row_1", "a2770aeb", true),
+    (0x532ac1fc, "menu_parameter_row_2", "6c770aeb", true),
+    (0x532ac318, "menu_parameter_row_3", "36770aeb", true),
+    (0x532ac434, "menu_parameter_row_4", "00770aeb", true),
+    (0x532ac550, "menu_parameter_row_5", "ca760aeb", true),
+    (0x532ac66c, "menu_parameter_row_6", "94760aeb", true),
+    (0x532acc88, "menu_parameter_row_7", "95750aeb", true),
+    (0x532acda4, "menu_parameter_row_8", "5f750aeb", true),
+];
+
 pub const VIEWFINDER_HOOKS: &[(u32, &str, &str, bool)] =
     &[(0x531710c4, "menu_viewfinder_icon", "97e204eb", true)];
 
@@ -172,7 +214,10 @@ pub fn point_of(symbol: &str) -> Result<Point> {
         "framing_children",
     ];
     Ok(
-        if TUNING.contains(&symbol) || symbol.starts_with("module_") {
+        if TUNING.contains(&symbol)
+            || symbol.starts_with("module_")
+            || symbol.starts_with("menu_parameter_")
+        {
             Point::Tuning
         } else if OVERLAY.contains(&symbol) {
             Point::ViewfinderOverlay
@@ -212,6 +257,8 @@ pub struct Layout {
     pub menu_hooks: &'static [(u32, &'static str, &'static str)],
     pub viewfinder_hooks: &'static [Hook],
     pub metadata_hooks: &'static [Hook],
+    /// The Fn parameter page hooks of the menu.
+    pub parameter_hooks: &'static [Hook],
     pub instruction_patches: &'static [InstructionPatch],
     pub framing_hooks: &'static [Hook],
     pub picture_hooks: &'static [Hook],
@@ -234,6 +281,7 @@ pub const GR3_LAYOUT: Layout = Layout {
     menu_hooks: MENU_HOOKS,
     viewfinder_hooks: VIEWFINDER_HOOKS,
     metadata_hooks: METADATA_HOOKS,
+    parameter_hooks: PARAMETER_HOOKS,
     instruction_patches: INSTRUCTION_PATCHES,
     framing_hooks: FRAMING_HOOKS,
     picture_hooks: PICTURE_HOOKS,
@@ -315,6 +363,45 @@ const GR4_PICTURE_HOOKS: &[Hook] = &[
     (0x5371557c, "grain_gate", "defeffeb", true),
 ];
 
+/// GR IV 1.11 parameter page hooks, as `PARAMETER_HOOKS` on GR III. The
+/// model getters and setters and the row texts of shading and clarity are
+/// those of row kinds 14 and 15.
+const GR4_PARAMETER_HOOKS: &[Hook] = &[
+    (0x531cb6cc, "menu_parameter_start", "0dc0a0e1", false),
+    (0x531cb744, "menu_parameter_kinds", "51edffeb", true),
+    (0x531cb710, "menu_parameter_snapshot_0", "86cf07eb", true),
+    (0x531cb77c, "menu_parameter_snapshot_1", "6bcf07eb", true),
+    (0x531cb55c, "menu_parameter_event", "b030d1e1", false),
+    (0x533b7110, "menu_parameter_get_0", "0dc0a0e1", false),
+    (0x533b77f8, "menu_parameter_get_1", "0dc0a0e1", false),
+    (0x533b7ee0, "menu_parameter_get_2", "0dc0a0e1", false),
+    (0x533b8908, "menu_parameter_get_3", "0dc0a0e1", false),
+    (0x533b9330, "menu_parameter_get_4", "0dc0a0e1", false),
+    (0x533b9d58, "menu_parameter_get_5", "0dc0a0e1", false),
+    (0x533ba780, "menu_parameter_get_6", "0dc0a0e1", false),
+    (0x533bcd98, "menu_parameter_get_7", "0dc0a0e1", false),
+    (0x533bd7c0, "menu_parameter_get_8", "0dc0a0e1", false),
+    (0x533b670c, "menu_parameter_set_0", "0dc0a0e1", false),
+    (0x533b675c, "menu_parameter_set_1", "0dc0a0e1", false),
+    (0x533b67ac, "menu_parameter_set_2", "0dc0a0e1", false),
+    (0x533b67fc, "menu_parameter_set_3", "0dc0a0e1", false),
+    (0x533b684c, "menu_parameter_set_4", "0dc0a0e1", false),
+    (0x533b689c, "menu_parameter_set_5", "0dc0a0e1", false),
+    (0x533b68ec, "menu_parameter_set_6", "0dc0a0e1", false),
+    (0x533b6b6c, "menu_parameter_set_7", "0dc0a0e1", false),
+    (0x533b6bbc, "menu_parameter_set_8", "0dc0a0e1", false),
+    // The BL to the settings getter in the row text of each adjustment.
+    (0x5339a6a8, "menu_parameter_row_0", "11f50eeb", true),
+    (0x5339a7c4, "menu_parameter_row_1", "dbf40eeb", true),
+    (0x5339a8e0, "menu_parameter_row_2", "a5f40eeb", true),
+    (0x5339a9fc, "menu_parameter_row_3", "6ff40eeb", true),
+    (0x5339ab18, "menu_parameter_row_4", "39f40eeb", true),
+    (0x5339ac34, "menu_parameter_row_5", "03f40eeb", true),
+    (0x5339ad50, "menu_parameter_row_6", "cdf30eeb", true),
+    (0x5339b450, "menu_parameter_row_7", "a6f20eeb", true),
+    (0x5339b56c, "menu_parameter_row_8", "70f20eeb", true),
+];
+
 const GR4_VIEWFINDER_HOOKS: &[Hook] = &[(0x53187f90, "menu_viewfinder_icon", "2e3d08eb", true)];
 
 /// GR IV 1.11 Image Control tag, as `METADATA_HOOKS` on GR III: the playback
@@ -372,6 +459,7 @@ pub const GR4_LAYOUT: Layout = Layout {
     menu_hooks: GR4_MENU_HOOKS,
     viewfinder_hooks: GR4_VIEWFINDER_HOOKS,
     metadata_hooks: GR4_METADATA_HOOKS,
+    parameter_hooks: GR4_PARAMETER_HOOKS,
     instruction_patches: GR4_INSTRUCTION_PATCHES,
     framing_hooks: GR4_FRAMING_HOOKS,
     picture_hooks: GR4_PICTURE_HOOKS,
@@ -396,6 +484,7 @@ pub(crate) fn hook_sites(layout: &Layout) -> impl Iterator<Item = (u32, &'static
                 .viewfinder_hooks
                 .iter()
                 .chain(layout.metadata_hooks)
+                .chain(layout.parameter_hooks)
                 .chain(layout.framing_hooks)
                 .chain(layout.picture_hooks)
                 .map(|&(address, name, _, _)| (address, name)),
@@ -615,7 +704,8 @@ pub fn menu(
         .iter()
         .map(|&(a, n, b)| (a, n, b, false))
         .chain(layout.viewfinder_hooks.iter().copied())
-        .chain(layout.metadata_hooks.iter().copied());
+        .chain(layout.metadata_hooks.iter().copied())
+        .chain(layout.parameter_hooks.iter().copied());
     add_patches(
         &mut component,
         body,
