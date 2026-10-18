@@ -1,9 +1,20 @@
-import { Suspense, use, useRef, useState, useTransition, type ChangeEvent } from 'react';
+import {
+  Suspense,
+  use,
+  useCallback,
+  useRef,
+  useState,
+  useTransition,
+  type ChangeEvent,
+} from 'react';
+import { Handle, HandleRoot, Item, Provider, Root } from 'react-compare-slider/components';
+import { useReactCompareSlider } from 'react-compare-slider/hooks';
 import { PREVIEW_TARGET } from '../cameras';
 import { effectUrl, loadCatalog, MAX_EFFECTS, type Effect } from '../catalog';
 import type { Language, Strings } from '../i18n';
-import { forget, picture, preview, type PreviewEffect, type Source } from '../preview/render';
-import { SAMPLES, type Sample } from '../preview/samples';
+import { forget, preview, type PreviewEffect, type Source } from '../preview/render';
+import { DEFAULT_SAMPLE } from '../preview/samples';
+import { PhotoLoader } from '../preview/raw';
 import { EffectIcon } from './EffectIcon';
 import { ErrorBoundary } from './ErrorBoundary';
 
@@ -16,14 +27,24 @@ interface Props {
   onSelectionChange: (selection: ReadonlySet<string>) => void;
 }
 
-export function EffectsSection({ strings: t, language, selection, onSelectionChange }: Props) {
+export function EffectsSection({ strings: t, selection, onSelectionChange }: Props) {
   const catalog = use(loadCatalog(PREVIEW_TARGET));
   const effects = catalog.effects;
   const [previewId, setPreviewId] = useState(DEFAULT_PREVIEW);
-  const [source, setSource] = useState<Source>(SAMPLES[0]!);
-  const [photo, setPhoto] = useState<Source | null>(null);
+  const [source, setSource] = useState<Source>(DEFAULT_SAMPLE);
+  const photo = useRef<Source | null>(null);
+  const [loader] = useState(() => new PhotoLoader());
+  const [decoding, setDecoding] = useState(false);
+  const ownPhoto = useCallback(
+    () => () => {
+      loader.cancel();
+      if (photo.current) forget(photo.current);
+      photo.current = null;
+    },
+    [loader],
+  );
   const [photoError, setPhotoError] = useState(false);
-  const [split, setSplit] = useState(50);
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const [isPending, startTransition] = useTransition();
   const photoCount = useRef(0);
 
@@ -44,56 +65,61 @@ export function EffectsSection({ strings: t, language, selection, onSelectionCha
     startTransition(() => setPreviewId(effect.id));
   }
 
-  function showSample(sample: Sample) {
+  function showSample() {
+    loader.cancel();
+    setDecoding(false);
     setPhotoError(false);
-    startTransition(() => {
-      setSource(sample);
-      setPhoto(null);
-    });
-    if (photo) {
-      forget(photo);
-    }
+    startTransition(() => setSource(DEFAULT_SAMPLE));
+    if (photo.current) forget(photo.current);
+    photo.current = null;
   }
 
   async function openPhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    // Clear the input, so the same file can be opened again.
     event.target.value = '';
-    if (!file) {
-      return;
-    }
-    photoCount.current += 1;
-    const next: Source = { key: `photo-${photoCount.current}`, load: async () => file };
+    if (!file) return;
+    setPhotoError(false);
+    setDecoding(true);
     try {
-      await picture(next);
+      const image = await loader.open(file);
+      // A replacement, sample selection, or unmount cancelled this request.
+      if (!image) return;
+      const next: Source = { key: `photo-${++photoCount.current}`, load: async () => image };
+      const previous = photo.current;
+      photo.current = next;
+      startTransition(() => setSource(next));
+      if (previous) forget(previous);
+      setDecoding(false);
     } catch {
       setPhotoError(true);
-      return;
-    }
-    setPhotoError(false);
-    const previous = photo;
-    startTransition(() => {
-      setPhoto(next);
-      setSource(next);
-    });
-    if (previous) {
-      forget(previous);
+      setDecoding(false);
     }
   }
 
-  const sourceLabel =
-    photo && source === photo
-      ? t.yourPhoto
-      : (SAMPLES.find((sample) => sample === source)?.label(t, language) ?? '');
+  const sourceLabel = source === DEFAULT_SAMPLE ? t.samplePhoto : t.yourPhoto;
+
+  function retryPreview() {
+    forget(source);
+    setPreviewAttempt((attempt) => attempt + 1);
+  }
 
   return (
-    <div className="section-body">
+    <div className="section-body" ref={ownPhoto}>
       <div className="preview-row">
         <div className="viewer">
           {shown && (
             <ErrorBoundary
-              resetKey={`${source.key}\n${shown.id}`}
-              fallback={<Placeholder text={t.previewError} />}
+              resetKey={`${source.key}\n${shown.id}\n${previewAttempt}`}
+              fallback={
+                <div className="frame">
+                  <div className="frame-placeholder">
+                    <p>{t.previewError}</p>
+                    <button type="button" className="button small" onClick={retryPreview}>
+                      {t.retryPreview}
+                    </button>
+                  </div>
+                </div>
+              }
             >
               <Suspense fallback={<Placeholder text={sourceLabel} busy />}>
                 <PreviewFrame
@@ -102,9 +128,10 @@ export function EffectsSection({ strings: t, language, selection, onSelectionCha
                     id: shown.id,
                     table: effectUrl(catalog.target, shown.preview),
                     size: catalog.lutSize,
+                    baseline: effectUrl(catalog.target, catalog.baseline),
                   }}
-                  split={split}
-                  busy={isPending}
+                  compareLabel={t.compare}
+                  busy={isPending || decoding}
                   originalLabel={t.original}
                   originalAlt={sourceLabel}
                   effectName={name}
@@ -112,16 +139,6 @@ export function EffectsSection({ strings: t, language, selection, onSelectionCha
               </Suspense>
             </ErrorBoundary>
           )}
-          <label className="compare">
-            <span>{t.compare}</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={split}
-              onChange={(event) => setSplit(Number(event.target.value))}
-            />
-          </label>
         </div>
 
         <div className="preview-side">
@@ -132,17 +149,14 @@ export function EffectsSection({ strings: t, language, selection, onSelectionCha
           <div className="field">
             <span className="field-label">{t.samples}</span>
             <div className="choices">
-              {SAMPLES.map((sample) => (
-                <button
-                  key={sample.key}
-                  type="button"
-                  className="button small"
-                  aria-pressed={source === sample}
-                  onClick={() => showSample(sample)}
-                >
-                  {sample.label(t, language)}
-                </button>
-              ))}
+              <button
+                type="button"
+                className="button small"
+                aria-pressed={source === DEFAULT_SAMPLE}
+                onClick={showSample}
+              >
+                {t.samplePhoto}
+              </button>
             </div>
           </div>
           <label htmlFor="photo-input" className="upload">
@@ -167,9 +181,14 @@ export function EffectsSection({ strings: t, language, selection, onSelectionCha
             id="photo-input"
             className="visually-hidden"
             type="file"
-            accept="image/jpeg,image/png"
+            accept=".dng,image/x-adobe-dng"
             onChange={openPhoto}
           />
+          {decoding && (
+            <p role="status" className="status">
+              {t.decodingPhoto}
+            </p>
+          )}
           {photoError && (
             <p role="alert" className="status error">
               {t.photoError}
@@ -177,6 +196,11 @@ export function EffectsSection({ strings: t, language, selection, onSelectionCha
           )}
           <p className="note">{t.uploadNote}</p>
           <p className="note">{t.previewNote}</p>
+          <p className="note">
+            <a href="https://raw.pixls.us/" target="_blank" rel="noreferrer">
+              {t.sampleCredit}
+            </a>
+          </p>
         </div>
       </div>
 
@@ -265,23 +289,40 @@ export function EffectsSection({ strings: t, language, selection, onSelectionCha
 interface FrameProps {
   source: Source;
   effect: PreviewEffect;
-  split: number;
+  compareLabel: string;
   busy: boolean;
   originalLabel: string;
   originalAlt: string;
   effectName: string;
 }
 
-/** The original on the left of the divider and the effect on the right. */
-function PreviewFrame({ source, effect, split, busy, originalLabel, originalAlt, effectName }: FrameProps) {
+/** The baseline development on the left and the effect on the right. */
+function PreviewFrame({
+  source,
+  effect,
+  compareLabel,
+  busy,
+  originalLabel,
+  originalAlt,
+  effectName,
+}: FrameProps) {
   const result = use(preview(source, effect));
+  const comparison = useReactCompareSlider({ clip: 'itemTwo' });
   return (
     <div className="frame" aria-busy={busy}>
-      <img src={result.original} alt={originalAlt} />
-      <div className="after" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
-        <img src={result.processed} alt="" />
-      </div>
-      <div className="divider" style={{ left: `${split}%` }} />
+      <Provider {...comparison}>
+        <Root className="image-comparison">
+          <Item item="itemOne">
+            <img src={result.original} alt={`${originalAlt} — ${originalLabel}`} />
+          </Item>
+          <Item item="itemTwo" className="comparison-effect">
+            <img src={result.processed} alt={`${originalAlt} — ${effectName}`} />
+          </Item>
+          <HandleRoot aria-label={compareLabel}>
+            <Handle buttonStyle={{ width: 44, height: 44 }} />
+          </HandleRoot>
+        </Root>
+      </Provider>
       <span className="tag left">{originalLabel}</span>
       <span className="tag right">{effectName}</span>
     </div>

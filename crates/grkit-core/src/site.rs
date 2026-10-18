@@ -1,9 +1,8 @@
 //! Effect files for the website: compiled effects, preview tables, and their catalog.
 //!
-//! A preview table answers "how would this Standard JPEG look with the effect?". For each
-//! sRGB input it undoes the Standard rendering of the fit model (Standard look matrix, then
-//! base gamma, no curves) to scene-linear light, then renders that light with the effect.
-//! An effect equal to Standard maps each input to itself.
+//! Published preview tables render scene-linear sRGB from decoded RAW photos. The sRGB
+//! transfer function spaces the table coordinates more densely in the shadows. The
+//! Standard baseline and each effect render the same linear input independently.
 
 use anyhow::{ensure, Context, Result};
 use serde_json::{json, Value};
@@ -17,6 +16,7 @@ use crate::{effects, packaging, Files};
 /// Points on each axis of a preview table.
 pub const LUT_SIZE: usize = 33;
 pub const CATALOG_SCHEMA: &str = "grkit-site-effects-v1";
+const STANDARD_PREVIEW: &str = "preview/standard.lut";
 /// A bound on the catalog. A package still holds at most `runtime::MAX_COUNT` effects.
 pub const MAX_EFFECTS: usize = 100;
 
@@ -97,7 +97,8 @@ impl Standard {
     }
 }
 
-/// An 8-bit sRGB table with `LUT_SIZE` points on each axis, red fastest, then green, then blue.
+/// A legacy Standard-JPEG input table, red fastest, then green, then blue.
+/// Published catalogs use `linear_preview_lut` instead.
 pub fn preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
     let params = params(effect)?;
     let selective = effect
@@ -121,6 +122,48 @@ pub fn preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
         }
     }
     Ok(table)
+}
+
+/// Samples linear sRGB through an sRGB coordinate shaper, with 8-bit display RGB output.
+fn linear_lut(render: impl Fn([f64; 3]) -> [f64; 3]) -> Vec<u8> {
+    let step = |i: usize| cube::srgb_decode(i as f64 / (LUT_SIZE - 1) as f64);
+    let mut table = Vec::with_capacity(LUT_SIZE.pow(3) * 3);
+    for b in 0..LUT_SIZE {
+        for g in 0..LUT_SIZE {
+            for r in 0..LUT_SIZE {
+                let display = render([step(r), step(g), step(b)]);
+                table.extend(display.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8));
+            }
+        }
+    }
+    table
+}
+
+/// Renders RAW linear sRGB, using sRGB-encoded lookup coordinates in red-fastest order.
+/// The output contains `LUT_SIZE` cubed 8-bit RGB samples.
+pub fn linear_preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
+    let params = params(effect)?;
+    let selective = effect
+        .get("selective_color")
+        .map(|value| Selective::from_json(value).map(|s| s.table()))
+        .transpose()?;
+    let model = Model::new(base_gamma);
+    Ok(linear_lut(|linear| {
+        let display = model.render(&params, linear);
+        match &selective {
+            Some(table) => selective::apply_rgb(table, display),
+            None => display,
+        }
+    }))
+}
+
+/// The Standard baseline for RAW previews, with the same coordinates as effect tables.
+/// Standard applies its look matrix and base gamma directly, without effect curves.
+pub fn standard_linear_preview_lut(base_gamma: &[u16; 256]) -> Vec<u8> {
+    let model = Model::new(base_gamma);
+    let look = unit(&fit::STANDARD_LOOK);
+    let matrix: Matrix = std::array::from_fn(|r| std::array::from_fn(|c| look[r * 3 + c]));
+    linear_lut(|linear| cube::mul(&matrix, linear).map(|value| model.base_gamma(value) / 16384.0))
 }
 
 /// Standard base64 with padding. The catalog carries each 40 x 40 RGBA icon
@@ -151,7 +194,7 @@ fn text<'a>(value: &'a Value, what: &str) -> Result<&'a str> {
 
 /// Compiles effect definitions for the site catalog of `target`, whose firmware holds
 /// `base_gamma`. The result holds `catalog.json`, one `.GRF` per effect under its
-/// package filename, and `preview/<id>.lut`.
+/// package filename, `preview/<id>.lut`, and the Standard baseline preview table.
 pub fn publish_effects(
     definitions: &[Value],
     base_gamma: &[u16; 256],
@@ -162,6 +205,10 @@ pub fn publish_effects(
         "Expected 1 to {MAX_EFFECTS} effects"
     );
     let mut files = Files::new();
+    files.insert(
+        STANDARD_PREVIEW.into(),
+        standard_linear_preview_lut(base_gamma),
+    );
     let mut ids = BTreeSet::new();
     let mut entries = Vec::new();
     for definition in definitions {
@@ -175,6 +222,10 @@ pub fn publish_effects(
         );
         let attribution = &definition["attribution"];
         let preview = format!("preview/{id}.lut");
+        ensure!(
+            !files.contains_key(&preview),
+            "Effect preview conflicts with the Standard baseline: {id}"
+        );
         entries.push(json!({
             "id": id,
             "name": effect["name"],
@@ -187,13 +238,19 @@ pub fn publish_effects(
             "sha256": packaging::sha256(&blob),
             "preview": preview,
         }));
-        files.insert(preview, preview_lut(base_gamma, &effect)?);
+        files.insert(preview, linear_preview_lut(base_gamma, &effect)?);
         files.insert(file, blob);
     }
     let catalog = json!({
         "schema": CATALOG_SCHEMA,
         "target": target,
-        "preview": {"size": LUT_SIZE, "order": "rgb", "input": "standard-srgb8"},
+        "preview": {
+            "size": LUT_SIZE,
+            "order": "rgb",
+            "input": "linear-srgb16",
+            "shaper": "srgb",
+            "baseline": STANDARD_PREVIEW,
+        },
         "effects": entries,
     });
     files.insert("catalog.json".into(), packaging::json_bytes(&catalog)?);

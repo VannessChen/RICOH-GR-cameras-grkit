@@ -18,6 +18,7 @@ export interface Effect {
 export interface Catalog {
   target: string;
   lutSize: number;
+  baseline: string;
   effects: readonly Effect[];
 }
 
@@ -39,10 +40,26 @@ async function fetchCatalog(target: string): Promise<Catalog> {
     throw new Error(`Catalog request failed: ${response.status}`);
   }
   const data = await response.json();
-  if (data?.schema !== SCHEMA || data.target !== target || !Array.isArray(data.effects)) {
+  if (
+    data?.schema !== SCHEMA ||
+    data.target !== target ||
+    !Array.isArray(data.effects) ||
+    data.preview?.input !== 'linear-srgb16' ||
+    data.preview.shaper !== 'srgb' ||
+    data.preview.order !== 'rgb' ||
+    !Number.isInteger(data.preview.size) ||
+    data.preview.size < 2 ||
+    data.preview.size > 256 ||
+    typeof data.preview.baseline !== 'string'
+  ) {
     throw new Error('Unexpected catalog format');
   }
-  return { target, lutSize: data.preview.size, effects: data.effects };
+  return {
+    target,
+    lutSize: data.preview.size,
+    baseline: data.preview.baseline,
+    effects: data.effects,
+  };
 }
 
 const catalogs = new Map<string, Promise<Catalog>>();

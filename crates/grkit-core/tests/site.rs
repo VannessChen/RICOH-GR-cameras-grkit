@@ -107,17 +107,65 @@ fn effect_previews_follow_the_effect() {
 }
 
 #[test]
+fn raw_previews_render_linear_input_without_inverting_standard() {
+    let base = synthetic_base();
+    let effect = decoded(&definition("ektar-100-edge-v1"));
+    let model = fit::Model::new(&base);
+    let params = site::params(&effect).unwrap();
+    let table = site::linear_preview_lut(&base, &effect).unwrap();
+    let baseline = site::standard_linear_preview_lut(&base);
+    let standard = std::array::from_fn(|r| {
+        std::array::from_fn(|c| fit::STANDARD_LOOK[r * 3 + c] as f64 / 8192.0)
+    });
+    assert_eq!(table.len(), site::LUT_SIZE.pow(3) * 3);
+    assert_eq!(baseline.len(), table.len());
+    for [r, g, b] in [[0, 0, 0], [1, 1, 1], [16, 16, 16], [28, 6, 4], [32, 32, 32]] {
+        let linear = [r, g, b].map(|v| cube::srgb_decode(v as f64 / 32.0));
+        let expected = model
+            .render(&params, linear)
+            .map(|v| (v * 255.0).round() as u8);
+        assert_eq!(entry(&table, r, g, b), expected);
+        let expected_baseline = cube::mul(&standard, linear)
+            .map(|v| (model.base_gamma(v) / 16384.0 * 255.0).round() as u8);
+        assert_eq!(entry(&baseline, r, g, b), expected_baseline);
+    }
+    let legacy = site::preview_lut(&base, &effect).unwrap();
+    assert_ne!(entry(&table, 16, 16, 16), entry(&legacy, 16, 16, 16));
+}
+
+#[test]
+fn raw_standard_baseline_does_not_clip_through_effect_curves() {
+    // A saturated base gamma exposes the 16320 ceiling of identity effect curves.
+    let base = [16384; 256];
+    let baseline = site::standard_linear_preview_lut(&base);
+    assert!(baseline.iter().all(|value| *value == 255));
+}
+
+#[test]
 fn published_effects_match_their_definitions() {
     let ids = ["ektar-100-edge-v1", "red-filter-mono-v1"];
     let definitions: Vec<Value> = ids.iter().map(|id| definition(id)).collect();
     let files = site::publish_effects(&definitions, &synthetic_base(), "gr3-2.10").unwrap();
     let catalog = effects::parse_json(&files["catalog.json"]).unwrap();
-    assert_eq!(catalog["schema"], site::CATALOG_SCHEMA);
+    assert_eq!(catalog["schema"], "grkit-site-effects-v1");
     assert_eq!(catalog["target"], "gr3-2.10");
-    assert_eq!(catalog["preview"]["size"], site::LUT_SIZE);
+    assert_eq!(
+        catalog["preview"],
+        json!({
+            "size": site::LUT_SIZE,
+            "order": "rgb",
+            "input": "linear-srgb16",
+            "shaper": "srgb",
+            "baseline": "preview/standard.lut",
+        })
+    );
+    assert_eq!(
+        files["preview/standard.lut"],
+        site::standard_linear_preview_lut(&synthetic_base())
+    );
     let entries = catalog["effects"].as_array().unwrap();
     assert_eq!(entries.len(), 2);
-    assert_eq!(files.len(), 1 + 2 * entries.len());
+    assert_eq!(files.len(), 2 + 2 * entries.len());
     for (entry, definition) in entries.iter().zip(&definitions) {
         let id = entry["id"].as_str().unwrap();
         let blob = &files[entry["file"].as_str().unwrap()];
@@ -131,8 +179,8 @@ fn published_effects_match_their_definitions() {
         );
         assert_eq!(entry["look"], definition["attribution"]["target"]);
         assert_eq!(
-            files[entry["preview"].as_str().unwrap()].len(),
-            site::LUT_SIZE.pow(3) * 3
+            files[entry["preview"].as_str().unwrap()],
+            site::linear_preview_lut(&synthetic_base(), &decoded(definition)).unwrap()
         );
     }
     assert_eq!(entries[0]["monochrome"], false);
@@ -143,6 +191,11 @@ fn published_effects_match_their_definitions() {
     let error = site::publish_effects(&duplicate, &synthetic_base(), "gr3-2.10").unwrap_err();
     assert!(error.to_string().contains("Duplicate effect ID"), "{error}");
     assert!(site::publish_effects(&[], &synthetic_base(), "gr3-2.10").is_err());
+
+    let mut reserved = definitions[0].clone();
+    reserved["effect_id"] = json!("standard");
+    let error = site::publish_effects(&[reserved], &synthetic_base(), "gr3-2.10").unwrap_err();
+    assert!(error.to_string().contains("Standard baseline"), "{error}");
 }
 
 #[test]
@@ -170,5 +223,23 @@ fn selective_color_previews_keep_red_and_gray_other_hues() {
             a.iter().zip(p).all(|(a, p)| a.abs_diff(p) <= 1),
             "{a:?} {p:?}"
         );
+    }
+}
+
+#[test]
+fn raw_previews_apply_selective_color_after_rendering() {
+    let base = synthetic_base();
+    let effect = decoded(&keep_red());
+    let params = site::params(&effect).unwrap();
+    let selective = grkit_core::selective::Selective::from_json(&effect["selective_color"])
+        .unwrap()
+        .table();
+    let model = fit::Model::new(&base);
+    let table = site::linear_preview_lut(&base, &effect).unwrap();
+    for [r, g, b] in [[32, 0, 0], [0, 32, 0], [0, 0, 32], [16, 16, 16]] {
+        let linear = [r, g, b].map(|v| cube::srgb_decode(v as f64 / 32.0));
+        let expected = grkit_core::selective::apply_rgb(&selective, model.render(&params, linear))
+            .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+        assert_eq!(entry(&table, r, g, b), expected);
     }
 }

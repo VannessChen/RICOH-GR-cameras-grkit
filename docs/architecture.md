@@ -11,8 +11,18 @@ Menu, processing, and Framing hooks run in the camera's RTOS domain.
 - `grkit-wasm` assembles packages in the browser. It takes a runtime build as `grkit build` writes it (`build.json` and `sd/`) and compiled effects, and it uses the `grkit-core` checks that the CLI uses.
 - `web/` is the static site. It fetches the runtime, the effect catalog, and the selected effects, and calls `grkit-wasm` to build `GRKit.zip` in the browser.
 
-The site preview applies one 33 x 33 x 33 table for each effect. `grkit effects publish` computes each table from the fit model: it undoes the Standard rendering of an sRGB input, then renders the result with the effect.
-An effect equal to Standard maps each input to itself. The preview assumes that the input is a Standard JPEG. The long highlight shoulder of the base gamma can exaggerate the change of other bright, saturated colors.
+The site preview accepts original GR III and GR IIIx DNG files. A browser Worker uses LibRaw to decode sensor data into half-size 16-bit linear sRGB.
+It uses the recorded white balance and disables automatic brightness and content-dependent white-level adjustment.
+The preview applies orientation and the DNG default crop, then resizes in linear light to a maximum edge of 1200 pixels.
+The default CC0 sample is preprocessed with the same functions and distributed as compressed linear pixels.
+
+`grkit effects publish` writes a `grkit-site-effects-v1` catalog with 33 x 33 x 33 preview tables.
+An sRGB coordinate shaper distributes the grid over linear input in 0..1. Each effect table applies the fit model directly to that input.
+`preview/standard.lut` applies the Standard look matrix and base gamma to the same pixels for the comparison baseline.
+
+The old JPEG inversion function remains available to Rust callers, but the site does not use it.
+Both preview sides use the GR III model. Exposure calibration remains an assumption, and decoder color processing can differ from camera processing.
+See [RAW preview](../web/README.md#raw-preview) for the input limits and sample format.
 
 ## Cameras
 

@@ -3,24 +3,57 @@
  * Trilinear interpolation. Alpha stays unchanged.
  */
 export function applyLut(pixels: Uint8ClampedArray, table: Uint8Array, size: number): void {
-  if (table.length !== size * size * size * 3) {
+  transform(pixels, pixels, 4, table, size, 256, (value) => value / 255);
+}
+
+/** The LUT grid uses sRGB transfer solely as a shaper, preserving shadow precision. */
+export function srgbCoordinate(linear: number): number {
+  return linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055;
+}
+
+export function applyLinearLut(
+  pixels: Uint16Array,
+  table: Uint8Array,
+  size: number,
+): Uint8ClampedArray<ArrayBuffer> {
+  if (pixels.length % 3 !== 0) throw new Error('Expected RGB pixels');
+  const result = new Uint8ClampedArray((pixels.length / 3) * 4);
+  transform(pixels, result, 3, table, size, 65536, (value) => srgbCoordinate(value / 65535));
+  return result;
+}
+
+function transform(
+  input: Uint8ClampedArray | Uint16Array,
+  pixels: Uint8ClampedArray,
+  channels: number,
+  table: Uint8Array,
+  size: number,
+  levels: number,
+  coordinate: (value: number) => number,
+): void {
+  if (
+    !Number.isInteger(size) ||
+    size < 2 ||
+    size > 256 ||
+    table.length !== size * size * size * 3
+  ) {
     throw new Error('Preview table size mismatch');
   }
-  const scale = (size - 1) / 255;
   const stride = [3, size * 3, size * size * 3] as const;
   // Per input level: the lower grid index and the weight of the upper index.
-  const low = new Uint16Array(256);
-  const weight = new Float32Array(256);
-  for (let v = 0; v < 256; v++) {
-    const x = v * scale;
+  const low = new Uint16Array(levels);
+  const weight = new Float32Array(levels);
+  for (let v = 0; v < levels; v++) {
+    const x = coordinate(v) * (size - 1);
     const i = Math.min(Math.floor(x), size - 2);
     low[v] = i;
     weight[v] = x - i;
   }
-  for (let p = 0; p < pixels.length; p += 4) {
-    const r = pixels[p]!;
-    const g = pixels[p + 1]!;
-    const b = pixels[p + 2]!;
+  for (let p = 0, source = 0; p < pixels.length; p += 4, source += channels) {
+    const r = input[source]!;
+    const g = input[source + 1]!;
+    const b = input[source + 2]!;
+    if (channels === 3) pixels[p + 3] = 255;
     const fr = weight[r]!;
     const fg = weight[g]!;
     const fb = weight[b]!;

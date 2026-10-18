@@ -12,7 +12,8 @@ The `site` branch holds only deployed sites, one commit for each deployment. It 
 The version is the `[workspace.package]` version in `Cargo.toml`. Each runtime `build.json` gives it, and the site shows it in the footer. A release tag is `v` and the version, for example `v0.1.0`.
 
 `grkit site` writes only `build.json` and `sd/` to `site/runtime/<target>/`, for `gr3-2.10` and `gr4-1.11`. It leaves out `objects/`, because the generated header there holds firmware bytes.
-`grkit effects publish` writes `catalog.json`, the `.GRF` files, and `preview/<id>.lut` to `site/effects/<target>/`, for both targets. The web build adds `index.html`, `assets/`, and `_headers`.
+`grkit effects publish` writes the v1 catalog, `.GRF` files, and preview tables to `site/effects/<target>/` for both targets.
+The tables include `preview/standard.lut` and `preview/<id>.lut`. The web build adds `index.html`, `assets/`, `samples/`, and `_headers`.
 
 ## Set up
 
