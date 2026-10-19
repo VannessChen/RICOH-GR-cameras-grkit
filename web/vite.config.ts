@@ -1,8 +1,9 @@
 /// <reference types="vitest/config" />
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from 'vite';
+import { addPlausible, allowPlausible, plausibleOrigin } from './plausible';
 
 /**
  * The GRKit version from the workspace Cargo.toml. The Release workflow builds the site
@@ -64,8 +65,37 @@ function woff2Only(): Plugin {
   };
 }
 
+/**
+ * Adds Plausible analytics to the build when PLAUSIBLE_HOST gives the Plausible origin, and
+ * extends the Content-Security-Policy of `_headers` for it. The Release workflow sets it.
+ */
+function plausible(host: string | undefined): Plugin {
+  const origin = host ? plausibleOrigin(host) : undefined;
+  let outDir = '';
+  return {
+    name: 'grkit-plausible',
+    apply: 'build',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    transformIndexHtml(html) {
+      return origin ? addPlausible(html, origin) : html;
+    },
+    closeBundle() {
+      if (!origin) return;
+      const headers = resolve(outDir, '_headers');
+      writeFileSync(headers, allowPlausible(readFileSync(headers, 'utf8'), origin));
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), woff2Only(), siteData(process.env.GRKIT_SITE_DATA ?? '../dist/site-data')],
+  plugins: [
+    react(),
+    woff2Only(),
+    siteData(process.env.GRKIT_SITE_DATA ?? '../dist/site-data'),
+    plausible(process.env.PLAUSIBLE_HOST || undefined),
+  ],
   define: { __GRKIT_VERSION__: JSON.stringify(workspaceVersion()) },
   build: {
     target: 'es2023',

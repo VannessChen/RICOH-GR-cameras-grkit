@@ -135,6 +135,9 @@ jobs:
       - run: sh web/scripts/install-wasm-bindgen.sh
       - name: Build the web page
         working-directory: web
+        env:
+          # Adds Plausible analytics when the variable gives its origin.
+          PLAUSIBLE_HOST: ${{ vars.PLAUSIBLE_HOST }}
         run: |
           pnpm install --frozen-lockfile
           pnpm wasm

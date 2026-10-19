@@ -27,7 +27,8 @@ The tables include `preview/standard.lut` and `preview/<id>.lut`.
    3. Set the production branch to `site` and the framework preset to None. Leave the build command empty. Set the build output directory to `/`.
    4. After Cloudflare creates the project, go to Settings, Builds, Branch control. Set the preview branch to None. Otherwise Cloudflare deploys the source of each other branch as a preview.
 4. Add the repository variable `SITE_URL` with the production URL of the site and no trailing slash, for example `https://<project>.pages.dev`. `Deploy` reads `SITE_URL/runtime/gr3-2.10/build.json` to find the version that the site serves.
-5. Keep a private backup of the firmware, so that a release does not depend on the Ricoh download:
+5. Optional: add the repository variable `PLAUSIBLE_HOST` with the origin of a Plausible server, for example `https://plausible.example.com`. Release then adds Plausible analytics to the site for the domain `grkit.app`.
+6. Keep a private backup of the firmware, so that a release does not depend on the Ricoh download:
    1. Download `gr3_v210.zip` and `gr4_v111.zip` from Ricoh and accept the license. Do not change the zips.
    2. Create a private repository: `gh repo create <owner>/<backup-repo> --private`.
    3. Upload each zip as a release asset with the tag of its target:
