@@ -140,12 +140,12 @@ static u32 expected_guide(u32 ratio,u32 style,u32 x,u32 y)
 {
     const u32 *box=boxes[ratio];
     if(x<box[0] || x>=box[2] || y<box[1] || y>=box[3]) return 0;
-    if(style==1 || style==3) {
-        const u32 *lines=style==1 ? thirds[ratio] : golden[ratio];
-        return x==lines[0] || x==lines[1] || y==lines[2] || y==lines[3];
+    if(style==1 || style==3 || style==5) {
+        const u32 *lines=style==3 ? golden[ratio] : thirds[ratio];
+        if(x==lines[0] || x==lines[1] || y==lines[2] || y==lines[3]) return 1;
     }
     /* Every center is (360,240), with 20-pixel arms. */
-    if(style==2) return (y==240 && x>=340 && x<=380) || (x==360 && y>=220 && y<=260);
+    if(style==2 || style==5) return (y==240 && x>=340 && x<=380) || (x==360 && y>=220 && y<=260);
     if(style==4) {
         u32 width=box[2]-box[0], height=box[3]-box[1], column=x-box[0];
         u32 rows[2]={column, width-1-column};
@@ -253,7 +253,7 @@ int main(void)
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
     /* Guides stay inside the photo area of each ratio, below the badge. */
-    for (u32 ratio=0; ratio<4; ++ratio) for (u32 style=1; style<=4; ++style) {
+    for (u32 ratio=0; ratio<4; ++ratio) for (u32 style=1; style<=GUIDES_STYLE_MAX; ++style) {
         reset();
         header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
         header[GRKIT_HOST_GUIDE/4]=style;

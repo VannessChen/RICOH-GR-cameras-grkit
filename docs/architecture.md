@@ -101,8 +101,8 @@ The registry script array holds the header, the records, the picture scratch, an
 The scratch has 141,376 bytes for the date stamp masks, then the 72-byte shot ring (see Recorded pictures).
 
 The icons are in chunks. Each chunk is one script array with 40 icon slots, and the header holds the address of each chunk (`GRKIT_HOST_ICON_CHUNKS`, at most 5).
-Chunk 0 starts with the host icons: Off, GRKit, and the eighteen module tiles (four Framing, five Guides, five Date Stamp, four Grain).
-The effect icons follow them in record order, and continue in the next chunk. With 20 effects, the icons fill one chunk.
+Chunk 0 starts with the host icons: Off, GRKit, and the twenty module tiles (four Framing, six Guides, six Date Stamp, four Grain).
+The effect icons follow them in record order, and continue in the next chunk. Chunk 0 holds 18 effect icons, so 19 or 20 effects use two chunks.
 The host icons must fit in chunk 0, because the menu finds each plugin tile by its offset from the first one.
 
 The module tiles are contiguous from icon ID `0x7fec` to `0x7ffd`, below the GRKit tile (`0x7ffe`) and Off (`0x7fff`). The menu derives each one from the first Framing tile.
@@ -302,7 +302,7 @@ While ADJ is open, Framing draws the committed ratio's mask on the ADJ canvas be
 ### Guides
 
 Guides draws 1-pixel lines inside the photo area of the committed Framing ratio, in the same drawing path as the mask. Off uses the full 3:2 canvas.
-The styles are thirds, a center cross with 20-pixel arms, the golden section (0.381966), and corner-to-corner diagonals.
+The styles are thirds, a center cross with 20-pixel arms, the golden section (0.381966), corner-to-corner diagonals, and thirds with the center cross.
 Grid positions are fractions of the photo size in 1/65536, rounded. The diagonals are Bresenham lines, rounded half up. Neither needs division.
 
 The line color is opaque gray (`0xffc0c0c0`), which has the same value with straight or premultiplied alpha. The format of the OSD bitmap is not confirmed.
@@ -451,7 +451,7 @@ The screennail and the thumbnail have black bars that depend on the capture aspe
 ### Date stamp
 
 The Date Stamp module prints the local time (`0x536b6510`) at the bottom right of the visible area, as a film data back exposes it.
-The styles are `'YY M D`, `'YY M D  H:MM`, `M D 'YY`, and `D M 'YY`. Months, days, and hours have no leading zero.
+The styles are `'YY M D`, `'YY M D  H:MM`, `M D 'YY`, `D M 'YY`, and `D M 'YY  H:MM`. Months, days, and hours have no leading zero.
 
 The digits are italic seven-segment characters at 4.5% of the short side, at least 8 pixels. They render into a coverage mask of at most 48 rows (32 for long text), with horizontal anti-aliasing.
 Two box blurs of the mask give an amber core and a red-orange halo. The hook scales the mask up and adds the light with a screen blend in RGB.

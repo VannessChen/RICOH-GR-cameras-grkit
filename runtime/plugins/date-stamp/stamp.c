@@ -99,18 +99,19 @@ static char *two(char *o,u32 v) {
     *o++=(char)('0'+tens); *o++=(char)('0'+v);
     return o;
 }
-/* Format one style: 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY. */
+/* Format one style: 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY,
+   5 D M 'YY H:MM. Two spaces come before the time. */
 static u32 date_text(char *o,const u8 *dt,u32 style) {
     char *start=o;
     u32 year=dt[0]|dt[1]<<8, short_year=year>=2000 ? year-2000 : 0;
     while(short_year>=100) short_year-=100;
     if(style<=2) {
         *o++='\''; o=two(o,short_year); *o++=' '; o=number(o,dt[2]); *o++=' '; o=number(o,dt[3]);
-        if(style==2) { *o++=' '; *o++=' '; o=number(o,dt[4]); *o++=':'; o=two(o,dt[5]); }
     } else {
         o=number(o,style==3 ? dt[2] : dt[3]); *o++=' '; o=number(o,style==3 ? dt[3] : dt[2]);
         *o++=' '; *o++='\''; o=two(o,short_year);
     }
+    if(style==2 || style==5) { *o++=' '; *o++=' '; o=number(o,dt[4]); *o++=':'; o=two(o,dt[5]); }
     return (u32)(o-start);
 }
 static u32 clamp255(int v) { return v<0 ? 0 : v>255 ? 255 : (u32)v; }
@@ -299,7 +300,7 @@ static void stamp_scaled(const Plane *dst,const Plane *src,const Stamp *st,u32 m
 static u32 stamp_wanted(volatile u32 *h,const PictureSet *set) {
     u32 style=h[GRKIT_HOST_STAMP/4];
     (void)set;
-    return style>=1 && style<=4;
+    return style>=1 && style<=DATE_STAMP_STYLE_MAX;
 }
 /* The largest picture draws the stamp. The smaller ones scale its mask, so
    playback keeps the stamp's place and width when it switches from the

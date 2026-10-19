@@ -484,6 +484,7 @@ enum Guide {
     Center,
     Golden,
     Diagonals,
+    ThirdsCenter,
 }
 
 /// A frame of about 3:2 with its guide lines, centered horizontally. Lines are
@@ -507,15 +508,24 @@ fn guide_frame(rgba: &mut [u8], top: usize, guide: Guide) {
             (left + 1..right).for_each(|x| dot(rgba, x, y, 170));
         }
     };
+    // Even dimensions center the cross between two pixel rows and columns.
+    // `reach` is the arm length from the center pair.
+    let cross = |rgba: &mut [u8], reach: (usize, usize)| {
+        for offset in [0, 1] {
+            (left + 13 - reach.0..=left + 14 + reach.0)
+                .for_each(|x| dot(rgba, x, top + 8 + offset, 170));
+            (top + 8 - reach.1..=top + 9 + reach.1)
+                .for_each(|y| dot(rgba, left + 13 + offset, y, 170));
+        }
+    };
     match guide {
         Guide::Thirds => grid(rgba, 9, 6),
         Guide::Golden => grid(rgba, 10, 7),
-        Guide::Center => {
-            // Even dimensions center the cross between two pixel rows and columns.
-            for offset in [0, 1] {
-                (left + 9..=right - 9).for_each(|x| dot(rgba, x, top + 8 + offset, 170));
-                (top + 4..=bottom - 4).for_each(|y| dot(rgba, left + 13 + offset, y, 170));
-            }
+        Guide::Center => cross(rgba, (4, 4)),
+        // A short cross inside the center cell of the grid.
+        Guide::ThirdsCenter => {
+            grid(rgba, 9, 6);
+            cross(rgba, (2, 1));
         }
         Guide::Diagonals => {
             for x in 1..width - 1 {
@@ -537,7 +547,7 @@ fn guide_pixels(label: &str, guide: Guide) -> Vec<u8> {
 }
 
 /// Guides artwork in runtime order: the module tile, then thirds, center,
-/// golden ratio, and diagonals.
+/// golden ratio, diagonals, and thirds with center.
 pub fn guides_tiles() -> Vec<Vec<u8>> {
     let mut module = background();
     guide_frame(&mut module, 11, Guide::Thirds);
@@ -547,20 +557,27 @@ pub fn guides_tiles() -> Vec<Vec<u8>> {
         guide_pixels("Ctr", Guide::Center),
         guide_pixels("Phi", Guide::Golden),
         guide_pixels("Diag", Guide::Diagonals),
+        guide_pixels("3x3+", Guide::ThirdsCenter),
     ]
 }
 
 /// Date stamp artwork in runtime order: the module tile, then the 'YY M D,
-/// 'YY M D H:MM, M D 'YY, and D M 'YY styles, each named by a sample.
+/// 'YY M D H:MM, M D 'YY, D M 'YY, and D M 'YY H:MM styles, each named by a
+/// sample. The last tile has two lines: the day-first order and the time.
 pub fn stamp_tiles() -> Vec<Vec<u8>> {
-    ["DATE", "'26", "9:05", "M D", "D M"]
+    let mut tiles: Vec<_> = ["DATE", "'26", "9:05", "M D", "D M"]
         .iter()
         .map(|label| {
             let mut rgba = background();
             text(&mut rgba, label, LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
             rgba
         })
-        .collect()
+        .collect();
+    let mut rgba = background();
+    text(&mut rgba, "D M", 14.0, LABEL_WIDTH, 13.5, 255);
+    text(&mut rgba, "9:05", 14.0, LABEL_WIDTH, 26.5, 255);
+    tiles.push(rgba);
+    tiles
 }
 
 /// Light speckles in rows `top..bottom`, one in `period` pixels on average.

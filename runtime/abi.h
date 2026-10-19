@@ -217,22 +217,23 @@
 #define TEXT_OFF 5
 /* Framing rows 1..3: XPan 65:24, 16:9, 4:3. */
 #define TEXT_RATIO 6
-/* Guides rows 1..4: thirds, center, golden ratio, diagonals. */
+/* Guides rows 1..5: thirds, center, golden ratio, diagonals, thirds and
+   center. */
 #define TEXT_GUIDE 9
-/* Date Stamp rows 1..4: the date styles. */
-#define TEXT_STAMP 13
+/* Date Stamp rows 1..5: the date styles. */
+#define TEXT_STAMP 14
 /* Grain rows 1..3: weak, medium, strong. */
-#define TEXT_GRAIN_LEVEL 17
-#define TEXT_IMAGE_OFF_SUMMARY 20
+#define TEXT_GRAIN_LEVEL 19
+#define TEXT_IMAGE_OFF_SUMMARY 22
 /* Summaries for each value, Off first. */
-#define TEXT_FRAMING_SUMMARY 21
-#define TEXT_GUIDES_SUMMARY 25
-#define TEXT_STAMP_SUMMARY 30
-#define TEXT_GRAIN_SUMMARY 35
+#define TEXT_FRAMING_SUMMARY 23
+#define TEXT_GUIDES_SUMMARY 27
+#define TEXT_STAMP_SUMMARY 33
+#define TEXT_GRAIN_SUMMARY 39
 /* The Image Control summary before an effect name, for the installer. */
-#define TEXT_IMAGE_PREFIX 39
+#define TEXT_IMAGE_PREFIX 43
 /* The About row: the GRKit version. */
-#define TEXT_VERSION 40
-#define GRKIT_TEXT_STRINGS 41
+#define TEXT_VERSION 44
+#define GRKIT_TEXT_STRINGS 45
 
 #endif

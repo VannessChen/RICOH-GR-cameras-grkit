@@ -241,12 +241,12 @@ int main(void)
 
     /* Date text for each style: no leading zeros except the year and minutes. */
     {
-        static const char *const expected[] = {"'26 10 17", "'26 10 17  9:05", "10 17 '26", "17 10 '26"};
-        static const char *const early[] = {"'07 1 5", "'07 1 5  13:07", "1 5 '07", "5 1 '07"};
+        static const char *const expected[] = {"'26 10 17", "'26 10 17  9:05", "10 17 '26", "17 10 '26", "17 10 '26  9:05"};
+        static const char *const early[] = {"'07 1 5", "'07 1 5  13:07", "1 5 '07", "5 1 '07", "5 1 '07  13:07"};
         static const uint8_t date[6] = {2026 & 255, 2026 >> 8, 10, 17, 9, 5};
         static const uint8_t january[6] = {2007 & 255, 2007 >> 8, 1, 5, 13, 7};
         char text[20];
-        for (u32 style = 1; style <= 4; ++style) {
+        for (u32 style = 1; style <= DATE_STAMP_STYLE_MAX; ++style) {
             u32 n = date_text(text, date, style);
             assert(n == strlen(expected[style - 1]) && !memcmp(text, expected[style - 1], n));
             n = date_text(text, january, style);
@@ -260,7 +260,7 @@ int main(void)
     for (u32 i = 0; i < 3; ++i) assert(changes(i, 0).lit == 0);
     /* On a dark neutral picture the stamp lights an orange core at the bottom
        right of the visible area, once per plane set, and only lightens. */
-    for (u32 style = 1; style <= 4; ++style) {
+    for (u32 style = 1; style <= DATE_STAMP_STYLE_MAX; ++style) {
         encode_setup();
         fill_planes(40, 128, 128);
         header[GRKIT_HOST_STAMP / 4] = style;
@@ -286,7 +286,20 @@ int main(void)
     fill_planes(40, 128, 128);
     header[GRKIT_HOST_STAMP / 4] = 2;
     picture_encode(0, MESSAGE);
-    assert(changes(0, 0).left < short_left);
+    struct box long_box = changes(0, 0);
+    assert(long_box.left < short_left);
+    /* Day first with time has the same characters as style 2, so its mask has
+       the same size and it fits wherever style 2 fits. Only the first glyph
+       differs: an apostrophe for style 2, a digit for style 5. */
+    encode_setup();
+    fill_planes(40, 128, 128);
+    header[GRKIT_HOST_STAMP / 4] = 5;
+    picture_encode(0, MESSAGE);
+    {
+        struct box b = changes(0, 0);
+        assert(b.right == long_box.right && b.top == long_box.top && b.bottom == long_box.bottom);
+        assert(abs((int)b.left - (int)long_box.left) <= 8);
+    }
     /* A screen blend fades on bright areas, as an exposure on film does. */
     encode_setup();
     fill_planes(40, 128, 128);
@@ -359,7 +372,7 @@ int main(void)
     /* The largest picture draws the stamp and the previews scale its mask, so
        the stamp keeps its place and total width when playback switches from the
        screennail to the main picture. */
-    for (u32 style = 1; style <= 4; ++style) {
+    for (u32 style = 1; style <= DATE_STAMP_STYLE_MAX; ++style) {
         reset();
         WORD(MESSAGE, 8) = CONFIG;
         picture(0, 1200, 800, 1216, PLANES);

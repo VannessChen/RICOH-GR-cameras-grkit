@@ -232,9 +232,9 @@ pub const PLUGINS: [Plugin; 5] = [
         state: &[StateKey {
             name: "style",
             slot: Slot::Core(HOST_GUIDE),
-            max: 4,
+            max: 5,
         }],
-        tiles: 5,
+        tiles: 6,
         artwork: artwork::guides_tiles,
         handlers: Some("guides.c"),
         layers: &[Layer {
@@ -253,9 +253,9 @@ pub const PLUGINS: [Plugin; 5] = [
         state: &[StateKey {
             name: "style",
             slot: Slot::Core(HOST_STAMP),
-            max: 4,
+            max: 5,
         }],
-        tiles: 5,
+        tiles: 6,
         artwork: artwork::stamp_tiles,
         handlers: Some("stamp.c"),
         layers: &[],

@@ -22,16 +22,16 @@
    end below the GRKit tile. */
 #define IMAGE_CONTROL_TILES 0U
 #define FRAMING_TILES 4U
-#define GUIDES_TILES 5U
-#define DATE_STAMP_TILES 5U
+#define GUIDES_TILES 6U
+#define DATE_STAMP_TILES 6U
 #define GRAIN_TILES 4U
-#define PLUGIN_TILES 18U
+#define PLUGIN_TILES 20U
 /* The largest value of each state key. The loader restores a larger value as
    0. */
 #define IMAGE_CONTROL_EFFECT_MAX 65535U
 #define FRAMING_RATIO_MAX 3U
-#define GUIDES_STYLE_MAX 4U
-#define DATE_STAMP_STYLE_MAX 4U
+#define GUIDES_STYLE_MAX 5U
+#define DATE_STAMP_STYLE_MAX 5U
 #define GRAIN_LEVEL_MAX 3U
 
 #endif

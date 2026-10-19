@@ -1,4 +1,4 @@
-/* Date Stamp: the menu page. Off and four date styles. */
+/* Date Stamp: the menu page. Off and five date styles. */
 #include "../../plugin.h"
 
 #define STAMP_STYLE_COUNT (DATE_STAMP_STYLE_MAX+1U)
@@ -18,6 +18,6 @@ static u32 stamp_checked(volatile u32 *h,u32 row) { return row==stamp_style(h); 
 /* Recorded pictures only: the encode handler prints the capture date. */
 static void stamp_apply(volatile u32 *h,u32 row) { h[GRKIT_HOST_STAMP/4]=row; }
 
-/* The module tile, then the four styles. */
+/* The module tile, then the five styles. */
 #define DATE_STAMP_PAGE {stamp_title,stamp_summary,stamp_rows,stamp_label,stamp_icon, \
     stamp_checked,stamp_apply,stamp_style,0,0,DATE_STAMP_TILES}

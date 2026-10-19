@@ -19,7 +19,7 @@ pub const TEXT_PARAMETER_TITLE: usize = TEXT_SIZE - 16;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).
-pub const STRINGS: usize = 41;
+pub const STRINGS: usize = 45;
 /// The longest effect name in a record.
 const NAME_UNITS: usize = 16;
 
@@ -46,8 +46,8 @@ struct Words {
     ratios: [&'static str; 3],
     /// The ratios in a summary, which has less room than a row.
     ratio_values: [&'static str; 3],
-    guide_styles: [&'static str; 4],
-    stamp_styles: [&'static str; 4],
+    guide_styles: [&'static str; 5],
+    stamp_styles: [&'static str; 5],
     grain_levels: [&'static str; 3],
 }
 
@@ -62,8 +62,20 @@ const ENGLISH: Words = Words {
     off: "Off",
     ratios: ["XPan 65:24", "16:9", "4:3"],
     ratio_values: ["XPan", "16:9", "4:3"],
-    guide_styles: ["Thirds", "Center", "Golden Ratio", "Diagonals"],
-    stamp_styles: ["'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY"],
+    guide_styles: [
+        "Thirds",
+        "Center",
+        "Golden Ratio",
+        "Diagonals",
+        "Thirds + Center",
+    ],
+    stamp_styles: [
+        "'YY M D",
+        "'YY M D H:MM",
+        "M D 'YY",
+        "D M 'YY",
+        "D M 'YY H:MM",
+    ],
     grain_levels: ["Weak", "Medium", "Strong"],
 };
 
@@ -78,8 +90,14 @@ const SIMPLIFIED_CHINESE: Words = Words {
     off: "关闭",
     ratios: ["XPan 65:24", "16:9", "4:3"],
     ratio_values: ["XPan", "16:9", "4:3"],
-    guide_styles: ["三分法", "中心", "黄金分割", "对角线"],
-    stamp_styles: ["'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY"],
+    guide_styles: ["三分法", "中心", "黄金分割", "对角线", "三分法+中心"],
+    stamp_styles: [
+        "'YY M D",
+        "'YY M D H:MM",
+        "M D 'YY",
+        "D M 'YY",
+        "D M 'YY H:MM",
+    ],
     grain_levels: ["弱", "中", "强"],
 };
 
@@ -94,8 +112,14 @@ const TRADITIONAL_CHINESE: Words = Words {
     off: "關閉",
     ratios: ["XPan 65:24", "16:9", "4:3"],
     ratio_values: ["XPan", "16:9", "4:3"],
-    guide_styles: ["三分法", "中心", "黃金分割", "對角線"],
-    stamp_styles: ["'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY"],
+    guide_styles: ["三分法", "中心", "黃金分割", "對角線", "三分法+中心"],
+    stamp_styles: [
+        "'YY M D",
+        "'YY M D H:MM",
+        "M D 'YY",
+        "D M 'YY",
+        "D M 'YY H:MM",
+    ],
     grain_levels: ["弱", "中", "強"],
 };
 
@@ -112,8 +136,14 @@ const JAPANESE: Words = Words {
     off: "オフ",
     ratios: ["XPan 65:24", "16:9", "4:3"],
     ratio_values: ["XPan", "16:9", "4:3"],
-    guide_styles: ["9分割", "画面中央", "黄金比", "対角線"],
-    stamp_styles: ["'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY"],
+    guide_styles: ["9分割", "画面中央", "黄金比", "対角線", "9分割+画面中央"],
+    stamp_styles: [
+        "'YY M D",
+        "'YY M D H:MM",
+        "M D 'YY",
+        "D M 'YY",
+        "D M 'YY H:MM",
+    ],
     grain_levels: ["弱", "中", "強"],
 };
 
@@ -149,15 +179,15 @@ pub const RUNS: &[Run] = &[
     run("RATIO", 3, "Framing rows 1..3: XPan 65:24, 16:9, 4:3."),
     run(
         "GUIDE",
-        4,
-        "Guides rows 1..4: thirds, center, golden ratio, diagonals.",
+        5,
+        "Guides rows 1..5: thirds, center, golden ratio, diagonals, thirds and center.",
     ),
-    run("STAMP", 4, "Date Stamp rows 1..4: the date styles."),
+    run("STAMP", 5, "Date Stamp rows 1..5: the date styles."),
     run("GRAIN_LEVEL", 3, "Grain rows 1..3: weak, medium, strong."),
     run("IMAGE_OFF_SUMMARY", 1, ""),
     run("FRAMING_SUMMARY", 4, "Summaries for each value, Off first."),
-    run("GUIDES_SUMMARY", 5, ""),
-    run("STAMP_SUMMARY", 5, ""),
+    run("GUIDES_SUMMARY", 6, ""),
+    run("STAMP_SUMMARY", 6, ""),
     run("GRAIN_SUMMARY", 4, ""),
     run(
         "IMAGE_PREFIX",
@@ -315,10 +345,10 @@ mod tests {
     #[test]
     fn english_keeps_the_menu_text_of_earlier_builds() {
         let english = strings(Language::English, VERSION);
-        assert_eq!(english[1], "Framing");
-        assert_eq!(english[22], "Framing: XPan");
-        assert_eq!(english[20], "Image Control: Off");
-        assert_eq!(english[39], "Image Control: ");
+        assert_eq!(english[id("FRAMING")], "Framing");
+        assert_eq!(english[id("FRAMING_SUMMARY") + 1], "Framing: XPan");
+        assert_eq!(english[id("IMAGE_OFF_SUMMARY")], "Image Control: Off");
+        assert_eq!(english[id("IMAGE_PREFIX")], "Image Control: ");
     }
 
     #[test]

@@ -36,20 +36,22 @@ static void guide_diagonals(u32 data,u32 stride,const u16 *box) {
         if(2*error>=run) { ++y; error-=run; }
     }
 }
-/* Styles: 1 thirds, 2 center, 3 golden ratio, 4 diagonals. Grid fractions are
-   in 1/65536: 1/3 for thirds and 0.381966 for the golden section. */
+/* A cross with GUIDE_ARM-pixel arms at the center of the photo area. */
+static void guide_cross(u32 data,u32 stride,const u16 *box) {
+    u32 i, x=guide_at(box[0],box[2],32768), y=guide_at(box[1],box[3],32768);
+    for(i=0;i<=2*GUIDE_ARM;++i) {
+        guide_pixel(data,stride,x-GUIDE_ARM+i,y);
+        guide_pixel(data,stride,x,y-GUIDE_ARM+i);
+    }
+}
+/* Styles: 1 thirds, 2 center, 3 golden ratio, 4 diagonals, 5 thirds and
+   center. Grid fractions are in 1/65536: 1/3 for thirds and 0.381966 for the
+   golden section. */
 static void guides_paint(const Surface *s,u32 style) {
     const u16 *box=s->box;
-    u32 x,y,i,data=s->data,stride=s->stride;
-    if(style==1) guide_grid(data,stride,box,21845);
+    u32 data=s->data,stride=s->stride;
+    if(style==1 || style==5) guide_grid(data,stride,box,21845);
     if(style==3) guide_grid(data,stride,box,25033);
     if(style==4) guide_diagonals(data,stride,box);
-    if(style==2) {
-        x=guide_at(box[0],box[2],32768);
-        y=guide_at(box[1],box[3],32768);
-        for(i=0;i<=2*GUIDE_ARM;++i) {
-            guide_pixel(data,stride,x-GUIDE_ARM+i,y);
-            guide_pixel(data,stride,x,y-GUIDE_ARM+i);
-        }
-    }
+    if(style==2 || style==5) guide_cross(data,stride,box);
 }

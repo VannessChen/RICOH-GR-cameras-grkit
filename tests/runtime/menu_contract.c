@@ -40,8 +40,8 @@ static int same(const u16 *actual, const char *expected)
     return actual[i] == 0;
 }
 static const char *const ratio_names[] = {"Off", "XPan 65:24", "16:9", "4:3"};
-static const char *const guide_names[] = {"Off", "Thirds", "Center", "Golden Ratio", "Diagonals"};
-static const char *const stamp_names[] = {"Off", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY"};
+static const char *const guide_names[] = {"Off", "Thirds", "Center", "Golden Ratio", "Diagonals", "Thirds + Center"};
+static const char *const stamp_names[] = {"Off", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"};
 static const char *const grain_names[] = {"Off", "Weak", "Medium", "Strong"};
 static u32 native_changes;
 static u32 native_events;
@@ -213,17 +213,17 @@ int main(void)
     assert(menu_icon(FRAMING_RATIO_ICON(3)) == 0x59007000 + 3 * GRKIT_ICON_STRIDE);
     /* Guides tiles follow the Framing tiles. */
     assert(menu_icon(GUIDES_ICON) == 0x59007000 + FRAMING_TILES * GRKIT_ICON_STRIDE);
-    assert(menu_icon(GUIDE_STYLE_ICON(4)) == 0x59007000 + 8 * GRKIT_ICON_STRIDE);
-    /* Module tiles fill 0x7fec..0x7ffd; the GRKit tile (0x7ffe) follows them. */
+    assert(menu_icon(GUIDE_STYLE_ICON(5)) == 0x59007000 + 9 * GRKIT_ICON_STRIDE);
+    /* Module tiles fill 0x7fea..0x7ffd; the GRKit tile (0x7ffe) follows them. */
     assert(menu_icon(PLUGIN_ICON - 1) == 0);
     assert(PLUGIN_ICON + PLUGIN_TILES <= 0x7ffe);
     assert(module_icon_count() == PLUGIN_TILES);
     /* Date Stamp tiles follow the Guides tiles. */
-    assert(menu_icon(STAMP_ICON) == 0x59007000 + 9 * GRKIT_ICON_STRIDE);
-    assert(menu_icon(STAMP_STYLE_ICON(4)) == 0x59007000 + 13 * GRKIT_ICON_STRIDE);
+    assert(menu_icon(STAMP_ICON) == 0x59007000 + 10 * GRKIT_ICON_STRIDE);
+    assert(menu_icon(STAMP_STYLE_ICON(5)) == 0x59007000 + 15 * GRKIT_ICON_STRIDE);
     /* Grain tiles follow the Date Stamp tiles and end below the GRKit tile. */
-    assert(menu_icon(GRAIN_ICON) == 0x59007000 + 14 * GRKIT_ICON_STRIDE);
-    assert(menu_icon(GRAIN_LEVEL_ICON(3)) == 0x59007000 + 17 * GRKIT_ICON_STRIDE);
+    assert(menu_icon(GRAIN_ICON) == 0x59007000 + 16 * GRKIT_ICON_STRIDE);
+    assert(menu_icon(GRAIN_LEVEL_ICON(3)) == 0x59007000 + 19 * GRKIT_ICON_STRIDE);
     assert(GRAIN_LEVEL_ICON(3) == 0x7ffd);
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
@@ -287,14 +287,14 @@ int main(void)
         menu_confirm(test_header);
         assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_GUIDES);
         assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3);
-        assert(count(test_header) == 5);
+        assert(count(test_header) == 6);
         assert(same(current_module(test_header)->title(test_header), "Guides"));
-        for (u32 row = 0; row < 5; ++row) {
+        for (u32 row = 0; row < 6; ++row) {
             test_header[GRKIT_HOST_MENU_CURSOR / 4] = row;
             menu_confirm(test_header);
             assert(test_header[GRKIT_HOST_GUIDE / 4] == row);
             assert(current_module(test_header)->checked(test_header, row));
-            assert(!current_module(test_header)->checked(test_header, (row + 1) % 5));
+            assert(!current_module(test_header)->checked(test_header, (row + 1) % 6));
             assert(same(current_module(test_header)->label(test_header, row), guide_names[row]));
             assert(CURRENT_ICON(row) == (row ? GUIDE_STYLE_ICON(row) : 0x7fff));
             assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 3);
@@ -347,9 +347,9 @@ int main(void)
     assert(PAGE_ICON(3, 3) == STAMP_STYLE_ICON(2));
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_DATE_STAMP);
-    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2 && count(test_header) == 5);
+    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2 && count(test_header) == 6);
     assert(same(current_module(test_header)->title(test_header), "Date Stamp"));
-    for (u32 row = 0; row < 5; ++row) {
+    for (u32 row = 0; row < 6; ++row) {
         test_header[GRKIT_HOST_MENU_CURSOR / 4] = row;
         menu_confirm(test_header);
         assert(test_header[GRKIT_HOST_STAMP / 4] == row);
@@ -363,7 +363,7 @@ int main(void)
     frame_preview(test_header, 0x5c000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 4 && test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 0);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3);
-    assert(same(current_module(test_header)->summary(test_header), "Date Stamp: D M 'YY"));
+    assert(same(current_module(test_header)->summary(test_header), "Date Stamp: D M 'YY H:MM"));
     test_header[GRKIT_HOST_STAMP / 4] = 999;
     assert(stamp_style(test_header) == 0);
     test_header[GRKIT_HOST_STAMP / 4] = 0;
@@ -536,7 +536,7 @@ int main(void)
     assert(root_module(test_header, 0) == PLUGIN_DATE_STAMP && root_module(test_header, 1) == ABOUT_MODULE);
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_DATE_STAMP);
-    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3 && count(test_header) == 5);
+    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3 && count(test_header) == 6);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     assert(!menu_back(test_header));
     test_header[GRKIT_HOST_STAMP / 4] = 0;
