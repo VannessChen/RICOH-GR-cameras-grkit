@@ -146,19 +146,6 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
             <span className="field-label">{t.previewing}</span>
             <span className="previewing">{name}</span>
           </div>
-          <div className="field">
-            <span className="field-label">{t.samples}</span>
-            <div className="choices">
-              <button
-                type="button"
-                className="button small"
-                aria-pressed={source === DEFAULT_SAMPLE}
-                onClick={showSample}
-              >
-                {t.samplePhoto}
-              </button>
-            </div>
-          </div>
           <label htmlFor="photo-input" className="upload">
             <svg
               width="18"
@@ -194,13 +181,24 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
               {t.photoError}
             </p>
           )}
+          {source !== DEFAULT_SAMPLE && (
+            <button type="button" className="button small" onClick={showSample}>
+              {t.useSample}
+            </button>
+          )}
           <p className="note">{t.uploadNote}</p>
           <p className="note">{t.previewNote}</p>
-          <p className="note">
-            <a href="https://raw.pixls.us/" target="_blank" rel="noreferrer">
-              {t.sampleCredit}
-            </a>
-          </p>
+          {source === DEFAULT_SAMPLE && (
+            <p className="note">
+              <a
+                href="https://www.flickr.com/photos/cafetricot/51803682755/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t.sampleCredit}
+              </a>
+            </p>
+          )}
         </div>
       </div>
 
@@ -323,8 +321,7 @@ function PreviewFrame({
           </HandleRoot>
         </Root>
       </Provider>
-      <span className="tag left">{originalLabel}</span>
-      <span className="tag right">{effectName}</span>
+      <span className="tag">{effectName}</span>
     </div>
   );
 }

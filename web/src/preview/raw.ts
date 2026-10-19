@@ -1,12 +1,11 @@
 import type { LinearPicture } from './linear';
 
-/** Bound memory use before reading an upload. GR III/IIIx DNGs fit within this limit. */
-export const MAX_RAW_BYTES = 64 * 1024 * 1024;
 const DECODE_TIMEOUT = 60_000;
 
+/** Any DNG. The decoder bounds the sensor size, so the file size needs no limit. */
 export function validateRawFile(file: Pick<File, 'name' | 'size'>): void {
-  if (!/\.dng$/i.test(file.name) || file.size < 8 || file.size > MAX_RAW_BYTES) {
-    throw new Error('Use a GR III or GR IIIx DNG of at most 64 MiB');
+  if (!/\.dng$/i.test(file.name) || file.size < 8) {
+    throw new Error('Choose a DNG file');
   }
 }
 

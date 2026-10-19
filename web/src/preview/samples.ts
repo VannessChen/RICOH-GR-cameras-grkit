@@ -2,11 +2,14 @@ import { siteUrl } from '../catalog';
 import { decodeLinear, MAX_EDGE } from './linear';
 import type { Source } from './render';
 
-/** The sample is developed from a CC0 GR III DNG with the same settings as uploads. */
+/**
+ * Snow in Akihabara, a GR IIIx JPEG by nagi usano (CC BY 2.0). scripts/build-sample.mjs
+ * estimates its linear pixels by inverting the Standard development of the preview.
+ */
 export const DEFAULT_SAMPLE: Source = {
-  key: 'gr-iii-cc0-v1',
+  key: 'gr-iiix-akihabara-v1',
   load: async () => {
-    const response = await fetch(siteUrl('samples/gr-iii.grlinear'));
+    const response = await fetch(siteUrl('samples/akihabara.grlinear'));
     if (!response.ok || !response.body) throw new Error('Cannot load sample photo');
     const reader = response.body.pipeThrough(new DecompressionStream('gzip')).getReader();
     const chunks: Uint8Array[] = [];

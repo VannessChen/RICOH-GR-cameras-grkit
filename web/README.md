@@ -48,9 +48,8 @@ pnpm build
 
 ## RAW preview
 
-The page opens with a GR III sample photo. Uploads accept original GR III or GR IIIx DNG files up to 64 MiB.
-JPEG, PNG, other camera models, and converted DNG files are outside this preview's supported input.
-The decoder checks DNG metadata and rejects known conversion software. It does not authenticate the camera that made a file.
+The page opens with a GR IIIx sample photo. Uploads accept a DNG from any camera, including converted DNG files, with up to 120 megapixels. Other formats are not supported.
+The effects are fitted to the GR III, so the preview of another camera's photo is an approximation.
 
 A dedicated Worker decodes each upload with `@colorhythm/libraw-wasm` 1.1.1 (LibRaw 0.22.1).
 It reads sensor data, uses the recorded white balance, and produces half-size 16-bit linear sRGB.
@@ -71,20 +70,23 @@ The 16-bit input clips values outside 0..1. It does not retain scene highlights 
 
 ## Default sample
 
-The default image comes from raw.pixls.us record 3115, a GR III DNG released under CC0-1.0.
-`public/samples/gr-iii.json` records its source URL, license, source SHA-256, decoder settings, dimensions, and output SHA-256.
-The site also includes this attribution in `THIRD_PARTY_LICENSES.txt`.
+The default image is Snow in Akihabara by nagi usano, a GR IIIx JPEG released under CC BY 2.0. The README screenshot shows the same photo.
+`public/samples/akihabara.json` records its source URL, license, source SHA-256, processing settings, dimensions, and output SHA-256.
+The site also includes this attribution in `THIRD_PARTY_LICENSES.txt`, and the preview links to the source.
 
-The checked-in `public/samples/gr-iii.grlinear` contains gzip-compressed linear pixels, so visitors do not download or decode the full DNG.
+The preview applies tables to linear pixels, but a JPEG holds developed pixels. `scripts/build-sample.mjs` therefore estimates the linear pixels: it inverts the Standard development of `preview/standard.lut` for each pixel. The baseline of the sample then matches the JPEG, and each effect starts from the same pixels as on a RAW photo. The JPEG keeps the look that its author gave it, so the sample shows the effects on that look.
+
+The checked-in `public/samples/akihabara.grlinear` contains gzip-compressed linear pixels, so visitors do not download or convert the full JPEG.
 After decompression, the format is eight ASCII bytes `GRLIN001`, little-endian u32 width and height, then little-endian u16 RGB samples.
 The custom extension prevents static servers from treating the inner gzip container as an HTTP content encoding.
-The browser decoder and the sample builder use the same decoding, cropping, and resizing functions.
+The sample builder uses the same resizing function as the browser decoder.
 
 To reproduce the sample:
 
-1. Download the DNG from the source URL in `public/samples/gr-iii.json` to a directory outside the repository.
-2. Run `node scripts/build-sample.mjs /path/to/gr-iii.dng` from `web/`. The script checks the source SHA-256 before decoding it.
-3. Run `pnpm test`. The sample test checks its hash, attribution, dimensions, and pixel format.
+1. Download the JPEG from the source URL in `public/samples/akihabara.json` to a directory outside the repository.
+2. Get `preview/standard.lut` of `gr3-2.10` from the site data, for example `effects/gr3-2.10/preview/standard.lut` in `site.tar.gz` of a release.
+3. Run `node scripts/build-sample.mjs /path/to/Snow_in_Akihabara_2022-01-06.jpg /path/to/standard.lut` from `web/`. The script checks the source SHA-256 before it decodes the JPEG.
+4. Run `pnpm test`. The sample test checks its hash, attribution, dimensions, and pixel format.
 
 The RAW decoder is loaded only for uploads. Its WASM and JavaScript files are served from the site.
 LibRaw is distributed under CDDL-1.0. The site license file includes its notices and a link to the source and build instructions.

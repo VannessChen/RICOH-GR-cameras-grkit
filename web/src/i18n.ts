@@ -12,8 +12,10 @@ export type RichText = readonly string[];
 
 const en = {
   language: 'Language',
-  tagline:
-    'Choose your camera and the effects you like. Then download one package and copy it to your SD card.',
+  /** The document title. */
+  title: 'GRKit: new features for RICOH GR, no firmware flashing',
+  /** The hero line under the GRKit heading. */
+  lead: 'New features for RICOH GR. No firmware flashing.',
   camera: 'Camera',
   firmware: 'Firmware',
   supported: 'Supported',
@@ -36,19 +38,17 @@ const en = {
   package: 'Package',
   install: 'Install',
   previewing: 'Previewing',
-  samples: 'Sample photos',
-  samplePhoto: 'GR III sample',
-  sampleCredit: 'Sample: raw.pixls.us · CC0',
+  samplePhoto: 'Sample photo',
+  sampleCredit: 'Photo: nagi usano · CC BY 2.0',
+  useSample: 'Use the sample photo',
   decodingPhoto: 'Developing RAW photo…',
   upload: 'Open a DNG photo',
   yourPhoto: 'Your photo',
-  photoError:
-    'This photo could not be developed. Use an original GR III or GR IIIx DNG up to 64 MiB, then try again.',
+  photoError: 'This photo cannot be developed. Try another DNG.',
   previewError: 'The preview cannot be shown.',
   retryPreview: 'Retry preview',
-  uploadNote: 'GR III / GR IIIx DNG only, up to 64 MiB. Your photo stays in this browser.',
-  previewNote:
-    'The preview uses the GR III model and the recorded white balance. Color and exposure can differ from camera photos.',
+  uploadNote: 'DNG only. Your photo stays in this browser.',
+  previewNote: 'The preview is approximate. Color and exposure can differ from the camera.',
   compare: 'Compare',
   original: 'Base development',
   preview: 'Preview',
@@ -70,10 +70,8 @@ const en = {
   firmwareNote: 'Before you download, check the firmware version in the camera menu.',
   download: 'Download GRKit.zip',
   building: 'Preparing GRKit.zip…',
-  ready: 'GRKit.zip is ready. Copy the contents of SD_ROOT to the card root.',
+  ready: 'GRKit.zip is ready.',
   buildError: 'GRKit.zip cannot be prepared. Reload the page to try again.',
-  footer:
-    'Supports RICOH GR III firmware 2.10 and GR IIIx firmware 1.60. GR IV and GR IV HDF firmware 1.11 support is experimental and has not been tested on a camera.',
   trademarks:
     'GRKit is not affiliated with or endorsed by Ricoh, Kodak, or Fujifilm. Some camera, film, and paper names are trademarks of their owners.',
   licenses: 'Effect licenses',
@@ -87,28 +85,20 @@ const en = {
   noModules: 'Select at least one module.',
   modulesText: {
     imageControl: 'The effects below, with live-view preview.',
-    framing:
-      'XPan 65:24, 16:9, or 4:3 photos. The viewfinder stays 3:2 and dims the area outside the photo.',
-    guides: 'Thirds, center, golden ratio, or diagonal lines inside the Framing area.',
-    dateStamp: 'The date on photos in orange seven-segment digits.',
-    grain: "Film grain from the camera's own grain stage, in three strengths. Photos only.",
+    framing: 'XPan 65:24, 16:9, or 4:3 photos. The viewfinder stays 3:2 and dims the rest.',
+    guides: 'Thirds, center, golden ratio, or diagonals inside the Framing area.',
+    dateStamp: 'An orange seven-segment date at the bottom right of photos.',
+    grain: "Film grain from the camera's grain stage, in three strengths. Photos only.",
   },
-  framingXpanOnly:
-    'XPan 65:24 photos. The viewfinder stays 3:2 and dims the area outside the photo.',
+  framingXpanOnly: 'XPan 65:24 photos. The viewfinder stays 3:2 and dims the rest.',
   steps: [
     ['Turn the camera off.'],
     ['Unzip GRKit.zip. Copy the contents of ', '`SD_ROOT', ' to the card root.'],
     [
-      'Insert the card. If SD scripts are not enabled, hold MENU while you turn the camera on. Wait until the camera turns itself off.',
+      'Insert the card. If SD scripts are off, hold MENU while you turn the camera on, then wait until it turns itself off.',
     ],
-    ['Turn the camera on normally. Open ADJ and select the sixth entry, GRK.'],
-    [
-      'Optional: after the installation, remove ',
-      '`{modeset}',
-      ' and ',
-      '`DEVELOP.MOD',
-      ' from the card root.',
-    ],
+    ['Turn the camera on. In ADJ, select the sixth entry, GRK.'],
+    ['Optional: remove ', '`{modeset}', ' and ', '`DEVELOP.MOD', ' from the card root.'],
   ] as readonly RichText[],
   looks: {
     'portra-400-endura-v1': 'Kodak Portra 400 on Portra Endura paper',
@@ -134,7 +124,8 @@ export type Strings = typeof en;
 
 const zhHans: Strings = {
   language: '语言',
-  tagline: '选择你的相机和喜欢的效果，下载安装包，然后复制到存储卡。',
+  title: 'GRKit：为 RICOH GR 加入新功能，无需刷固件',
+  lead: '为 RICOH GR 加入新功能，无需刷固件。',
   camera: '相机',
   firmware: '固件',
   supported: '已支持',
@@ -155,17 +146,17 @@ const zhHans: Strings = {
   package: '安装包',
   install: '安装',
   previewing: '正在预览',
-  samples: '示例照片',
-  samplePhoto: 'GR III 样片',
-  sampleCredit: '样片：raw.pixls.us · CC0',
+  samplePhoto: '示例照片',
+  sampleCredit: '照片：nagi usano · CC BY 2.0',
+  useSample: '换回示例照片',
   decodingPhoto: '正在显影 RAW 照片…',
   upload: '打开 DNG 照片',
   yourPhoto: '你的照片',
-  photoError: '无法显影这张照片。请使用不超过 64 MiB 的 GR III 或 GR IIIx 原始 DNG，然后重试。',
+  photoError: '无法显影这张照片，请换一张 DNG。',
   previewError: '无法显示预览。',
   retryPreview: '重试预览',
-  uploadNote: '仅接受 GR III／GR IIIx 的 DNG，最大 64 MiB。照片只在本浏览器中处理。',
-  previewNote: '预览使用 GR III 模型和拍摄时的白平衡。颜色和曝光可能与机内成片不同。',
+  uploadNote: '仅支持 DNG。照片只在本浏览器中处理。',
+  previewNote: '预览为近似效果，颜色和曝光可能与机内成片不同。',
   compare: '对比',
   original: '基础显影',
   preview: '预览',
@@ -186,10 +177,8 @@ const zhHans: Strings = {
   firmwareNote: '下载前，请在相机菜单中确认固件版本。',
   download: '下载 GRKit.zip',
   building: '正在准备 GRKit.zip…',
-  ready: 'GRKit.zip 已就绪。请把 SD_ROOT 中的内容复制到存储卡根目录。',
+  ready: 'GRKit.zip 已就绪。',
   buildError: '无法准备 GRKit.zip。请刷新页面后重试。',
-  footer:
-    '目前支持 RICOH GR III 固件 2.10 和 GR IIIx 固件 1.60。GR IV 与 GR IV HDF 固件 1.11 为实验性支持，未经真机测试。',
   trademarks:
     'GRKit 与 Ricoh、Kodak、Fujifilm 无关，也未获得它们的认可。部分相机、胶片和相纸名称是其所有者的商标。',
   licenses: '效果许可',
@@ -203,18 +192,18 @@ const zhHans: Strings = {
   noModules: '请至少选择一个模块。',
   modulesText: {
     imageControl: '使用下方选择的效果，可在实时显示中预览。',
-    framing: '以 XPan 65:24、16:9 或 4:3 的长宽比拍摄。显示屏仍按 3:2 显示，照片以外的区域会变暗。',
-    guides: '在画幅范围内显示辅助线：三分法、中心、黄金分割或对角线。',
+    framing: '拍摄 XPan 65:24、16:9 或 4:3 照片。显示屏仍为 3:2，画幅外的区域变暗。',
+    guides: '在画幅内显示三分法、中心、黄金分割或对角线。',
     dateStamp: '在照片右下角加印橙色七段数码日期。',
-    grain: '使用相机内置的颗粒感处理，分弱、中、强三档。不影响影片。',
+    grain: '相机内置的颗粒感，分弱、中、强三档。仅用于照片。',
   },
-  framingXpanOnly: '以 XPan 65:24 的长宽比拍摄。显示屏仍按 3:2 显示，照片以外的区域会变暗。',
+  framingXpanOnly: '拍摄 XPan 65:24 照片。显示屏仍为 3:2，画幅外的区域变暗。',
   steps: [
     ['关闭相机。'],
-    ['解压 GRKit.zip。把 ', '`SD_ROOT', ' 中的内容复制到存储卡根目录。'],
-    ['插入存储卡。如果尚未启用 SD 脚本，请按住 MENU 按钮开机，然后等待相机自动关机。'],
-    ['正常开机。按下 ADJ 杆进入 ADJ 模式，选择第 6 个功能 GRK。'],
-    ['可选：安装完成后，从存储卡根目录删除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
+    ['解压 GRKit.zip，把 ', '`SD_ROOT', ' 中的内容复制到存储卡根目录。'],
+    ['插入存储卡。如未启用 SD 脚本，按住 MENU 按钮开机，等待相机自动关机。'],
+    ['正常开机，在 ADJ 模式中选择第 6 个功能 GRK。'],
+    ['可选：从存储卡根目录删除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
   ],
   looks: {
     'portra-400-endura-v1': 'Kodak Portra 400，Portra Endura 相纸',
@@ -238,7 +227,8 @@ const zhHans: Strings = {
 
 const zhHant: Strings = {
   language: '語言',
-  tagline: '選擇你的相機和喜歡的效果，下載安裝包，然後複製到記憶卡。',
+  title: 'GRKit：為 RICOH GR 加入新功能，無需刷韌體',
+  lead: '為 RICOH GR 加入新功能，無需刷韌體。',
   camera: '相機',
   firmware: '韌體',
   supported: '已支援',
@@ -259,17 +249,17 @@ const zhHant: Strings = {
   package: '安裝包',
   install: '安裝',
   previewing: '正在預覽',
-  samples: '範例照片',
-  samplePhoto: 'GR III 範例照片',
-  sampleCredit: '範例照片：raw.pixls.us · CC0',
+  samplePhoto: '範例照片',
+  sampleCredit: '照片：nagi usano · CC BY 2.0',
+  useSample: '換回範例照片',
   decodingPhoto: '正在顯影 RAW 照片…',
   upload: '開啟 DNG 照片',
   yourPhoto: '你的照片',
-  photoError: '無法顯影這張照片。請使用不超過 64 MiB 的 GR III 或 GR IIIx 原始 DNG，然後重試。',
+  photoError: '無法顯影這張照片，請換一張 DNG。',
   previewError: '無法顯示預覽。',
   retryPreview: '重試預覽',
-  uploadNote: '僅接受 GR III／GR IIIx 的 DNG，最大 64 MiB。照片只在此瀏覽器中處理。',
-  previewNote: '預覽使用 GR III 模型和拍攝時的白平衡。顏色與曝光可能與機內成片不同。',
+  uploadNote: '僅支援 DNG。照片只在此瀏覽器中處理。',
+  previewNote: '預覽為近似效果，顏色與曝光可能與機內成片不同。',
   compare: '對比',
   original: '基礎顯影',
   preview: '預覽',
@@ -290,10 +280,8 @@ const zhHant: Strings = {
   firmwareNote: '下載前，請在相機功能表中確認韌體版本。',
   download: '下載 GRKit.zip',
   building: '正在準備 GRKit.zip…',
-  ready: 'GRKit.zip 已就緒。請把 SD_ROOT 中的內容複製到記憶卡根目錄。',
+  ready: 'GRKit.zip 已就緒。',
   buildError: '無法準備 GRKit.zip。請重新整理頁面後再試。',
-  footer:
-    '目前支援 RICOH GR III 韌體 2.10 與 GR IIIx 韌體 1.60。GR IV 與 GR IV HDF 韌體 1.11 為實驗性支援，未經實機測試。',
   trademarks:
     'GRKit 與 Ricoh、Kodak、Fujifilm 無關，也未獲得其認可。部分相機、底片與相紙名稱為其所有者的商標。',
   licenses: '效果授權',
@@ -307,18 +295,18 @@ const zhHant: Strings = {
   noModules: '請至少選擇一個模組。',
   modulesText: {
     imageControl: '使用下方選擇的效果，可在實時顯示中預覽。',
-    framing: '以 XPan 65:24、16:9 或 4:3 的長寬比拍攝。顯示屏仍按 3:2 顯示，照片以外的區域會變暗。',
-    guides: '在畫幅範圍內顯示輔助線：三分法、中心、黃金分割或對角線。',
+    framing: '拍攝 XPan 65:24、16:9 或 4:3 照片。顯示屏仍為 3:2，畫幅外的區域變暗。',
+    guides: '在畫幅內顯示三分法、中心、黃金分割或對角線。',
     dateStamp: '在照片右下角加印橙色七段數字日期。',
-    grain: '使用相機內建的粒紋感處理，分弱、中、強三檔。不影響影片。',
+    grain: '相機內建的粒紋感，分弱、中、強三檔。僅用於照片。',
   },
-  framingXpanOnly: '以 XPan 65:24 的長寬比拍攝。顯示屏仍按 3:2 顯示，照片以外的區域會變暗。',
+  framingXpanOnly: '拍攝 XPan 65:24 照片。顯示屏仍為 3:2，畫幅外的區域變暗。',
   steps: [
     ['關閉相機。'],
-    ['解壓縮 GRKit.zip。把 ', '`SD_ROOT', ' 中的內容複製到記憶卡根目錄。'],
-    ['插入記憶卡。如果尚未啟用 SD 腳本，請按住 MENU 按鈕開機，然後等待相機自動關機。'],
-    ['正常開機。按下 ADJ 桿進入 ADJ 模式，選擇第 6 個功能 GRK。'],
-    ['選用：安裝完成後，從記憶卡根目錄刪除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
+    ['解壓縮 GRKit.zip，把 ', '`SD_ROOT', ' 中的內容複製到記憶卡根目錄。'],
+    ['插入記憶卡。如未啟用 SD 腳本，按住 MENU 按鈕開機，等待相機自動關機。'],
+    ['正常開機，在 ADJ 模式中選擇第 6 個功能 GRK。'],
+    ['選用：從記憶卡根目錄刪除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
   ],
   looks: {
     'portra-400-endura-v1': 'Kodak Portra 400，Portra Endura 相紙',
@@ -342,8 +330,8 @@ const zhHant: Strings = {
 
 const ja: Strings = {
   language: '言語',
-  tagline:
-    'カメラと好みのエフェクトを選んでください。パッケージを 1 つダウンロードして、メモリーカードにコピーします。',
+  title: 'GRKit：RICOH GR に新しい機能を、ファームウェア書き換え不要',
+  lead: 'RICOH GR に新しい機能を。ファームウェアの書き換えは不要です。',
   camera: 'カメラ',
   firmware: 'ファームウェア',
   supported: '対応',
@@ -364,19 +352,17 @@ const ja: Strings = {
   package: 'パッケージ',
   install: 'インストール',
   previewing: 'プレビュー中',
-  samples: 'サンプル写真',
-  samplePhoto: 'GR III のサンプル',
-  sampleCredit: 'サンプル：raw.pixls.us · CC0',
+  samplePhoto: 'サンプル写真',
+  sampleCredit: '写真：nagi usano · CC BY 2.0',
+  useSample: 'サンプル写真に戻す',
   decodingPhoto: 'RAW 写真を現像中…',
   upload: 'DNG 写真を開く',
   yourPhoto: '読み込んだ写真',
-  photoError:
-    'この写真は現像できません。64 MiB 以下の GR III または GR IIIx のオリジナル DNG を使って、もう一度お試しください。',
+  photoError: 'この写真は現像できません。別の DNG をお試しください。',
   previewError: 'プレビューを表示できません。',
   retryPreview: 'プレビューを再試行',
-  uploadNote: 'GR III／GR IIIx の DNG のみ、64 MiB まで。写真はこのブラウザー内だけで処理されます。',
-  previewNote:
-    'プレビューは GR III のモデルと撮影時のホワイトバランスを使います。色や露出は、カメラで撮影した写真と異なる場合があります。',
+  uploadNote: 'DNG のみ。写真はこのブラウザー内だけで処理されます。',
+  previewNote: 'プレビューは目安です。色や露出はカメラで撮った写真と異なる場合があります。',
   compare: '比較',
   original: '基本現像',
   preview: 'プレビュー',
@@ -397,10 +383,8 @@ const ja: Strings = {
   firmwareNote: 'ダウンロードする前に、カメラのメニューでファームウェアのバージョンを確認してください。',
   download: 'GRKit.zip をダウンロード',
   building: 'GRKit.zip を準備中…',
-  ready: 'GRKit.zip の準備ができました。SD_ROOT の中身をカードのルートにコピーしてください。',
+  ready: 'GRKit.zip の準備ができました。',
   buildError: 'GRKit.zip を準備できません。ページを再読み込みして、もう一度お試しください。',
-  footer:
-    'RICOH GR III（ファームウェア 2.10）と GR IIIx（ファームウェア 1.60）に対応しています。GR IV と GR IV HDF（ファームウェア 1.11）への対応は試験的なもので、実機ではテストしていません。',
   trademarks:
     'GRKit は Ricoh、Kodak、Fujifilm とは関係がなく、これらの企業の承認も受けていません。一部のカメラ、フィルム、印画紙の名称は、各所有者の商標です。',
   licenses: 'エフェクトのライセンス',
@@ -415,22 +399,18 @@ const ja: Strings = {
   noModules: 'モジュールを 1 つ以上選択してください。',
   modulesText: {
     imageControl: '下で選んだエフェクトを使います。ライブビューでプレビューできます。',
-    framing:
-      'XPan 65:24、16:9、4:3 の写真を撮影します。撮影画面は 3:2 のままで、写真の範囲外は暗く表示されます。',
-    guides: 'フレーミングの範囲内に、9 分割、画面中央、黄金比、対角線のいずれかの線を表示します。',
-    dateStamp: '写真に日付をオレンジ色の 7 セグメント数字で入れます。',
-    grain: 'カメラ内蔵の粒状感処理で、フィルムの粒子を加えます。強さは弱・中・強の 3 段階で、静止画のみに適用されます。',
+    framing: 'XPan 65:24、16:9、4:3 の写真を撮影します。撮影画面は 3:2 のままで、範囲外が暗くなります。',
+    guides: 'フレーミングの範囲内に、9 分割、画面中央、黄金比、対角線のいずれかを表示します。',
+    dateStamp: '写真の右下に、オレンジ色の 7 セグメント数字で日付を入れます。',
+    grain: 'カメラ内蔵の粒状感を、弱・中・強の 3 段階で加えます。静止画のみ。',
   },
-  framingXpanOnly:
-    'XPan 65:24 の写真を撮影します。撮影画面は 3:2 のままで、写真の範囲外は暗く表示されます。',
+  framingXpanOnly: 'XPan 65:24 の写真を撮影します。撮影画面は 3:2 のままで、範囲外が暗くなります。',
   steps: [
     ['カメラの電源を切ります。'],
     ['GRKit.zip を展開し、', '`SD_ROOT', ' の中身をカードのルートにコピーします。'],
-    [
-      'カードを入れます。SD スクリプトが有効になっていない場合は、MENU ボタンを押したまま電源を入れます。カメラの電源が自動的に切れるまで待ちます。',
-    ],
-    ['通常どおり電源を入れます。撮影モードで ADJ レバーを押し込んで ADJ モードにし、6 番目の項目「GRK」を選びます。'],
-    ['任意：インストール後、カードのルートから', '`{modeset}', 'と', '`DEVELOP.MOD', 'を削除します。'],
+    ['カードを入れます。SD スクリプトがオフの場合は、MENU ボタンを押したまま電源を入れ、電源が自動で切れるまで待ちます。'],
+    ['電源を入れ、撮影モードで ADJ レバーを押し込んで ADJ モードにし、6 番目の項目「GRK」を選びます。'],
+    ['任意：カードのルートから ', '`{modeset}', ' と ', '`DEVELOP.MOD', ' を削除します。'],
   ],
   looks: {
     'portra-400-endura-v1': 'Kodak Portra 400、Portra Endura 印画紙',
@@ -494,9 +474,15 @@ export function initialLanguage(): Language {
   return matchLanguage(navigator.languages ?? [navigator.language]);
 }
 
+/** Sets the language and the title of the document. */
+export function showLanguage(language: Language): void {
+  document.documentElement.lang = language;
+  document.title = STRINGS[language].title;
+}
+
 /** Applies a language to the document and remembers it for the next visit. */
 export function applyLanguage(language: Language): void {
-  document.documentElement.lang = language;
+  showLanguage(language);
   try {
     localStorage.setItem(STORAGE_KEY, language);
   } catch {

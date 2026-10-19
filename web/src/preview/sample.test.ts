@@ -5,13 +5,13 @@ import { expect, it } from 'vitest';
 import { decodeLinear } from './linear';
 
 it('ships the documented sample as valid linear pixels with its source attribution', () => {
-  const bytes = readFileSync(new URL('../../public/samples/gr-iii.grlinear', import.meta.url));
+  const bytes = readFileSync(new URL('../../public/samples/akihabara.grlinear', import.meta.url));
   const manifest = JSON.parse(
-    readFileSync(new URL('../../public/samples/gr-iii.json', import.meta.url), 'utf8'),
+    readFileSync(new URL('../../public/samples/akihabara.json', import.meta.url), 'utf8'),
   );
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(manifest.sha256);
-  expect(manifest.license).toBe('CC0-1.0');
-  expect(manifest.sourceId).toBe(3115);
+  expect(manifest.license).toBe('CC-BY-2.0');
+  expect(manifest.author).toBe('nagi usano');
   const unpacked = gunzipSync(bytes);
   const image = decodeLinear(
     unpacked.buffer.slice(unpacked.byteOffset, unpacked.byteOffset + unpacked.byteLength),

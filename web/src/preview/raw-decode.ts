@@ -1,7 +1,9 @@
 import { LibRaw } from '@colorhythm/libraw-wasm';
 import { cropRawImage, readRawCrop } from './raw-crop.ts';
 
-const MAX_RAW_PIXELS = 30_000_000;
+// Bounds the decoder memory. 120 megapixels covers current DNG cameras, including 102 MP
+// medium format, and the half-size output stays within the 30-megapixel picture limit.
+const MAX_RAW_PIXELS = 120_000_000;
 
 export interface DecodedRaw {
   width: number;
@@ -17,17 +19,8 @@ export async function decodeRaw(bytes: Uint8Array, wasm: ArrayBuffer): Promise<D
     await decoder.waitUntilReady();
     // The input can be a view into a larger buffer. LibRaw must see only this file.
     decoder.open(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-    const metadata = decoder.getIParams();
-    const make = metadata.normalized_make.trim().toLowerCase();
-    const model = metadata.normalized_model.trim().toLowerCase();
-    if (!metadata.dng_version || make !== 'ricoh' || !['gr iii', 'gr iiix'].includes(model)) {
-      throw new Error('Choose an original DNG from a RICOH GR III or GR IIIx.');
-    }
-    if (
-      /adobe|lightroom|darktable|rawtherapee|capture one|dng converter/i.test(metadata.software)
-    ) {
-      throw new Error('Choose an original camera DNG, without converting or editing it.');
-    }
+    // Any camera and any DNG writer. LibRaw applies the camera matrix and white balance of the file.
+    if (!decoder.getIParams().dng_version) throw new Error('Choose a DNG file.');
     const crop = readRawCrop(bytes);
     const activeWidth = decoder.getActiveWidth();
     const activeHeight = decoder.getActiveHeight();

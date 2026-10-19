@@ -4,8 +4,11 @@
   --muted: #545454;
   --line: #d4d4d4;
   --paper: #ffffff;
-  --accent: #c2410c;
-  --selected: #fbf3ee;
+  /* Ricoh red: Pantone 186C, sRGB 207/20/43. */
+  --accent: #cf142b;
+  --selected: #fcf1f2;
+  /* A darker Ricoh red for warnings and errors in small text. */
+  --warning: #a3111f;
   --code: #f2f2f2;
   --cjk: 'Noto Sans SC';
   --body: 'IBM Plex Sans', var(--cjk), sans-serif;
@@ -51,8 +54,7 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
 }
 
 .visually-hidden {
@@ -170,11 +172,24 @@ button {
   letter-spacing: -0.02em;
 }
 
-.masthead p {
+/* The dot of the i in Ricoh red. The text keeps its glyph: a gradient fills it, red down to the
+   gap between the dot and the stem. In IBM Plex Sans Condensed Bold, the gap spans 33% to 38%
+   of the content box at each font size. */
+.masthead h1 .dot {
+  --dot-end: 35.5%;
+  background: linear-gradient(var(--accent) var(--dot-end), var(--ink) var(--dot-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.masthead .lead {
   margin: 0;
-  font-size: 20px;
-  line-height: 1.6;
-  max-width: 560px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(26px, 3.4vw, 40px);
+  line-height: 1.2;
+  max-width: 22em;
 }
 
 /* Sections */
@@ -218,7 +233,7 @@ button {
 }
 
 .status.error {
-  color: #9a3412;
+  color: var(--warning);
 }
 
 /* Camera */
@@ -291,12 +306,12 @@ button {
 }
 
 .badge.experimental {
-  color: #9a3412;
-  border: 1px solid #9a3412;
+  color: var(--warning);
+  border: 1px solid var(--warning);
 }
 
 .note.warning {
-  color: #9a3412;
+  color: var(--warning);
 }
 
 /* Effect preview */
@@ -352,12 +367,11 @@ button {
 }
 
 .comparison-effect {
+  /* react-compare-slider 4.0.0 gives the first item z-index 1 for each clip mode, so with
+     clip 'itemTwo' the original covers the effect. The same z-index puts the effect above the
+     original and below the handle, in document order. */
+  z-index: 1;
   transition: opacity 120ms;
-}
-
-.image-comparison [role='slider']:focus-visible [data-rcs='handle'] {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
 }
 
 .tag {
@@ -365,19 +379,13 @@ button {
   pointer-events: none;
   position: absolute;
   top: 10px;
+  right: 10px;
   background: rgba(11, 11, 11, 0.78);
   color: var(--paper);
   font-size: 12px;
   padding: 4px 8px;
 }
 
-.tag.left {
-  left: 10px;
-}
-
-.tag.right {
-  right: 10px;
-}
 
 .preview-side {
   flex: 0 1 300px;
@@ -404,12 +412,6 @@ button {
   font-size: 26px;
 }
 
-.choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .upload {
   display: inline-flex;
   align-items: center;
@@ -420,11 +422,6 @@ button {
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-}
-
-.upload:has(+ input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* Effect table */
@@ -562,7 +559,7 @@ td input[type='checkbox'] {
 .module-warning {
   font-size: 14px;
   line-height: 1.6;
-  color: #9a3412;
+  color: var(--warning);
 }
 
 .package {
@@ -638,11 +635,6 @@ code {
 
 .footer p {
   margin: 0;
-}
-
-.footer .footer-notes {
-  display: grid;
-  gap: 6px;
   max-width: 72ch;
 }
 

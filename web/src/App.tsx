@@ -104,8 +104,10 @@ export function App() {
       </div>
 
       <header className="masthead">
-        <h1>GRKit</h1>
-        <p>{t.tagline}</p>
+        <h1>
+          GRK<span className="dot">i</span>t
+        </h1>
+        <p className="lead">{t.lead}</p>
       </header>
 
       <main>
@@ -264,10 +266,7 @@ export function App() {
       </main>
 
       <footer className="footer">
-        <div className="footer-notes">
-          <p>{t.footer}</p>
-          <p>{t.trademarks}</p>
-        </div>
+        <p>{t.trademarks}</p>
         <div>
           <a href={`${REPOSITORY}/blob/main/effects/NOTICE.md`}>{t.licenses}</a>
           <a href={siteUrl('THIRD_PARTY_LICENSES.txt')}>{t.thirdParty}</a>

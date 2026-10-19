@@ -70,17 +70,23 @@ describe('decodeRaw', () => {
     expect(mocks.decoder.dispose).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    { dng_version: 0 },
-    { normalized_make: 'Canon' },
-    { normalized_model: 'GR IV' },
-    { software: 'Adobe DNG Converter' },
-  ])('rejects unsupported or converted input before unpacking: %j', async (change) => {
+  it('rejects a raw file that is not a DNG before unpacking', async () => {
     const metadata = mocks.decoder.getIParams();
-    mocks.decoder.getIParams.mockReturnValueOnce({ ...metadata, ...change });
-    await expect(decodeRaw(new Uint8Array([1]), new ArrayBuffer(1))).rejects.toThrow();
+    mocks.decoder.getIParams.mockReturnValueOnce({ ...metadata, dng_version: 0 });
+    await expect(decodeRaw(new Uint8Array([1]), new ArrayBuffer(1))).rejects.toThrow('DNG');
     expect(mocks.decoder.unpack).not.toHaveBeenCalled();
     expect(mocks.decoder.dispose).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { normalized_make: 'Canon', normalized_model: 'EOS R5' },
+    { normalized_model: 'GR IV' },
+    { software: 'Adobe DNG Converter' },
+  ])('decodes a DNG from any camera or writer: %j', async (change) => {
+    const metadata = mocks.decoder.getIParams();
+    mocks.decoder.getIParams.mockReturnValueOnce({ ...metadata, ...change });
+    await expect(decodeRaw(new Uint8Array([1]), new ArrayBuffer(1))).resolves.toBeDefined();
+    expect(mocks.decoder.unpack).toHaveBeenCalledOnce();
   });
 
   it('bounds sensor allocation before unpacking', async () => {

@@ -12,10 +12,10 @@ Menu, processing, and Framing hooks run in the camera's RTOS domain.
 - `web/` is the static site. It fetches the runtime, the effect catalog, the selected effects, and the installation guide PDF, and calls `grkit-wasm` to build `GRKit.zip` in the browser.
 - `grkit_core::guide` converts the Markdown guides in `resources/` to Typst. The release compiles them to `guides/<camera>/<language>.pdf`. A package holds the guide of its camera in one language, with the recovery guide as an appendix.
 
-The site preview accepts original GR III and GR IIIx DNG files. A browser Worker uses LibRaw to decode sensor data into half-size 16-bit linear sRGB.
+The site preview accepts DNG files from any camera. A browser Worker uses LibRaw to decode sensor data into half-size 16-bit linear sRGB.
 It uses the recorded white balance and disables automatic brightness and content-dependent white-level adjustment.
 The preview applies orientation and the DNG default crop, then resizes in linear light to a maximum edge of 1200 pixels.
-The default CC0 sample is preprocessed with the same functions and distributed as compressed linear pixels.
+The default sample is a GR IIIx JPEG. Its linear pixels are estimated by inverting the Standard development of the preview, then resized with the same function and distributed as compressed linear pixels.
 
 `grkit effects publish` writes a `grkit-site-effects-v1` catalog with 33 x 33 x 33 preview tables.
 An sRGB coordinate shaper distributes the grid over linear input in 0..1. Each effect table applies the fit model directly to that input.

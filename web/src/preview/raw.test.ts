@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadRaw, MAX_RAW_BYTES, PhotoLoader, validateRawFile } from './raw';
+import { loadRaw, PhotoLoader, validateRawFile } from './raw';
 import type { LinearPicture } from './linear';
 
 const image: LinearPicture = { width: 1, height: 1, data: new Uint16Array([1, 2, 3]) };
@@ -21,10 +21,10 @@ afterEach(() => {
 });
 
 describe('RAW uploads', () => {
-  it('accepts a DNG name and rejects other extensions and oversized files', () => {
+  it('accepts a DNG of any size and rejects other extensions and empty files', () => {
     expect(() => validateRawFile(file)).not.toThrow();
+    expect(() => validateRawFile({ name: 'photo.dng', size: 512 * 1024 * 1024 })).not.toThrow();
     expect(() => validateRawFile({ name: 'photo.jpg', size: 16 })).toThrow();
-    expect(() => validateRawFile({ name: 'photo.dng', size: MAX_RAW_BYTES + 1 })).toThrow();
     expect(() => validateRawFile({ name: 'photo.dng', size: 0 })).toThrow();
   });
 

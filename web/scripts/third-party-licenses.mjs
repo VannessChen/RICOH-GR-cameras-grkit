@@ -126,11 +126,12 @@ const text = [
     readFileSync(join(web, 'node_modules/@colorhythm/libraw-wasm/LibRaw', file), 'utf8'),
   ),
   '=== Default sample photo ===\n',
-  'RICOH GR III sample, raw.pixls.us record 3115. Author not specified. CC0-1.0.',
-  'Source: https://raw.pixls.us/getfile.php/3115/nice/Ricoh%20-%20GR%20III%20-%2014bit%20(3%3A2).DNG',
-  'License: https://creativecommons.org/publicdomain/zero/1.0/',
-  'The sample was decoded to linear sRGB, cropped, resized, and gzip compressed.',
-  'See samples/gr-iii.json for the source hash, processing settings, and output hash.',
+  'Snow in Akihabara by nagi usano, taken with a RICOH GR IIIx. CC BY 2.0.',
+  'Source: https://www.flickr.com/photos/cafetricot/51803682755/',
+  'License: https://creativecommons.org/licenses/by/2.0/',
+  'The JPEG was converted to estimated linear sRGB, resized, and gzip compressed.',
+  'The preview shows it with the film effects of GRKit.',
+  'See samples/akihabara.json for the source hash, processing settings, and output hash.',
 ].join('\n');
 writeFileSync(join(dist, 'THIRD_PARTY_LICENSES.txt'), text);
 // The site serves dist/ as it is. The intermediate list is not a site file.
