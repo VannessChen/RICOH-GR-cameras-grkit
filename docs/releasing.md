@@ -71,7 +71,7 @@ Use `major` for a change that an earlier package cannot follow, for example a ne
 3. The release holds `site.tar.gz`, `GRKit-device-test-gr3.zip`, `GRKit-device-test-gr3x.zip`, and `GRKit-device-test-gr4.zip`. Each package has the published runtime and no effects. Install the package of each camera that you have, and test it. The GR IV runtime stays experimental until it passes a test on a camera.
 4. If a test fails, start `Deploy` with the tag of the previous release. The site then serves that release again.
 
-To release a commit on `main` without a release pull request, push a tag `vX.Y.Z` that matches the version in `Cargo.toml`. The first release, `v0.1.0`, uses this path.
+To release a commit on `main` without a release pull request, push a tag `vX.Y.Z` that matches the version in `Cargo.toml`. The first release, `v1.0.0`, uses this path.
 To build a tag again, for example with `firmware_source` set to `backup`, start `Release` with that tag. A published release is never replaced.
 
 A release keeps its files without an expiry date. To go back to an earlier version, start `Deploy` with its tag.

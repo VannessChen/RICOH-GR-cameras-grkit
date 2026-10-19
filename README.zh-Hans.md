@@ -42,6 +42,8 @@ GRKit 在 ADJ 模式中增加第 6 个功能 GRK，包含五个模块：
 
 ## 安装
 
+在 [grkit.app](https://grkit.app) 选择相机、模块和效果，然后下载 `GRKit.zip`。
+
 每个安装包都包含对应机型的安装指南，格式为 PDF，语言是下载时选择的语言。恢复指南在其末尾。源文件：
 
 - [GR III 和 GR IIIx](resources/INSTALLATION.zh-Hans.md)

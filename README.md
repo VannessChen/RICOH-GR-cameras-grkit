@@ -42,6 +42,8 @@ Other models and firmware versions are not supported. To see the firmware versio
 
 ## Install
 
+To make a package, go to [grkit.app](https://grkit.app). Select the camera, the modules, and the effects, then download `GRKit.zip`.
+
 Each package contains the installation guide for its camera as a PDF, in the language that you select. The recovery guide is at its end. The sources are:
 
 - [GR III and GR IIIx](resources/INSTALLATION.md)
