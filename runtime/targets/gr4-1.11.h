@@ -131,9 +131,10 @@
 #define EV_SWITCH 5
 #define EV_SWITCH_END 8
 #define EV_FN 0x1b
-/* An Fn press comes as EV_FN with argument 0, then EV_FN_ACTION. The native ADJ
-   handler ignores EV_FN and acts on EV_FN_ACTION (0x531bd388). */
-#define FN_PRESS_ARG 0
+/* An Fn press comes as EV_FN with argument 2, as on GR III, then EV_FN_ACTION,
+   then EV_FN with argument 1 at the release. The native ADJ handler ignores
+   EV_FN and acts on EV_FN_ACTION (0x531bd388). */
+#define FN_PRESS_ARG 2
 #define EV_FN_ACTION 0x187
 #define EV_TOUCH 0x31
 #define EV_LEFT 0xd4
