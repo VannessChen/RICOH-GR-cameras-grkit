@@ -20,7 +20,7 @@
 
 在拍攝模式下按下 ADJ 桿進入 ADJ 模式，然後選擇第 6 個功能 GRK。GRKit 在開機幾秒後才載入，所以 GRK 可能稍後才出現。
 
-![GRKit 頁面列出模組，並顯示目前的效果。](images/grkit-root.png)
+![GRKit 頁面列出模組，並顯示目前的效果。](images/grkit-root.jpg)
 
 照片：nagi usano 拍攝的 [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)，[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)。
 

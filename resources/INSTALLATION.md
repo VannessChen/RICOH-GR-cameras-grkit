@@ -20,7 +20,7 @@ After the installation, you can remove `00078350.588` and `DEVELOP.MOD` from the
 
 Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late.
 
-![The GRKit page lists the modules and shows the current effect.](images/grkit-root.png)
+![The GRKit page lists the modules and shows the current effect.](images/grkit-root.jpg)
 
 Photo: [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/) by nagi usano, [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/).
 

@@ -134,7 +134,7 @@ fn manifests_notices_and_extra_documents_are_rejected() {
         "NOTICES/EFFECTS.md",
         "RECOVERY.md",
         "INSTALLATION.md",
-        "images/grkit-root.png",
+        "images/grkit-root.jpg",
     ] {
         let mut extra = files.clone();
         extra.insert(name.into(), b"{}".to_vec());

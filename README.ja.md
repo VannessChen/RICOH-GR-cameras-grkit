@@ -7,7 +7,7 @@
 
 GRKit は、RICOH GR カメラにフィルムルックと撮影ツールを追加します。メモリーカードから読み込まれ、カメラのファームウェアには書き込みません。
 
-![ADJ モードの GRKit のページ](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.png)
+![ADJ モードの GRKit のページ](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.jpg)
 
 写真：nagi usano による [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)、[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)。
 

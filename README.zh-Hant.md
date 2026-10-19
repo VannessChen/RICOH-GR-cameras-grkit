@@ -7,7 +7,7 @@
 
 GRKit 為 RICOH GR 相機加入底片風格與拍攝輔助功能。它從記憶卡載入，不會改寫相機韌體。
 
-![ADJ 模式中的 GRKit 頁面](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.png)
+![ADJ 模式中的 GRKit 頁面](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.jpg)
 
 照片：nagi usano 拍攝的 [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)，[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)。
 

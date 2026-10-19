@@ -20,7 +20,7 @@ SD スクリプトがすでにオンの場合は、手順 3 を省略します�
 
 撮影モードで ADJ レバーを押し込んで ADJ モードにし、6 番目の項目 GRK を選びます。GRKit は電源を入れてから数秒後に読み込まれるため、この項目の表示が遅れることがあります。
 
-![GRKit のページに、モジュールの一覧と現在のエフェクトが表示されています。](images/grkit-root.png)
+![GRKit のページに、モジュールの一覧と現在のエフェクトが表示されています。](images/grkit-root.jpg)
 
 写真：nagi usano による [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)、[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)。
 

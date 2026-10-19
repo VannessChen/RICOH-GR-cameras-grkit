@@ -289,8 +289,8 @@ const MODESET_IMAGE: (&str, &[u8]) = (
 /// the links work in the repository and in the guide source.
 const GUIDE_IMAGES: [(&str, &[u8]); 2] = [
     (
-        "images/grkit-root.png",
-        include_bytes!("../../../resources/images/grkit-root.png"),
+        "images/grkit-root.jpg",
+        include_bytes!("../../../resources/images/grkit-root.jpg"),
     ),
     MODESET_IMAGE,
 ];
