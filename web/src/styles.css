@@ -509,11 +509,36 @@ td input[type='checkbox'] {
 }
 
 /* The camera's 40 x 40 icon pixels, without smoothing. */
+/* Larger than the camera's 40 pixels, so the small cover text reads well. */
 .effect-icon {
   display: block;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
+}
+
+.effect-icon.pixels {
   image-rendering: pixelated;
+}
+
+/* Cover text in viewBox units, centered as on the camera icon. */
+.effect-icon text {
+  font-family: 'IBM Plex Sans Condensed', sans-serif;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.cover-brand {
+  font-size: 8px;
+}
+
+.cover-name {
+  font-size: 6.6px;
+  letter-spacing: 0.2px;
+}
+
+.cover-number {
+  font-size: 14px;
+  letter-spacing: -0.3px;
 }
 
 /* Modules, package, install */

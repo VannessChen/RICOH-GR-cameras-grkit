@@ -173,6 +173,7 @@ fn published_effects_match_their_definitions() {
         assert_eq!(blob, &effects::compile_definition(definition).unwrap());
         assert_eq!(entry["sha256"], packaging::sha256(blob));
         assert_eq!(entry["name"], definition["name"]);
+        assert_eq!(entry["cover"], definition["icon"]);
         assert_eq!(
             from_base64(entry["icon"].as_str().unwrap()),
             effects::decode(blob).unwrap().1

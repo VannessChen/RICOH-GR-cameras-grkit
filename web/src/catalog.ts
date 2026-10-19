@@ -1,9 +1,21 @@
+/** The fields of a film cover icon, as `effect.json` gives them (`effects/README.md`, Icons). */
+export interface Cover {
+  template: 'box' | 'cine';
+  brand: string;
+  name: string;
+  number: string;
+  /** A light band at the bottom of a film box. */
+  band?: boolean;
+}
+
 /** One effect of `effects/<target>/catalog.json`, which `grkit effects publish` writes. */
 export interface Effect {
   id: string;
   name: string;
   /** The ADJ icon: 40 x 40 RGBA pixels, base64-encoded. */
   icon: string;
+  /** The cover fields of the icon. Catalogs of releases before 1.0.1 do not have them. */
+  cover?: Cover;
   monochrome: boolean;
   look: string;
   origin: string;

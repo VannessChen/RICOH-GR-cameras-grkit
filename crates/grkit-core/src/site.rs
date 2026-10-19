@@ -226,7 +226,7 @@ pub fn publish_effects(
             !files.contains_key(&preview),
             "Effect preview conflicts with the Standard baseline: {id}"
         );
-        entries.push(json!({
+        let mut entry = json!({
             "id": id,
             "name": effect["name"],
             "icon": base64(&icon),
@@ -237,7 +237,13 @@ pub fn publish_effects(
             "file": file,
             "sha256": packaging::sha256(&blob),
             "preview": preview,
-        }));
+        });
+        // The site draws a film cover icon from its fields with web fonts, so it
+        // stays sharp at any size. The pixels remain the camera's icon.
+        if definition["icon"].get("template").is_some() {
+            entry["cover"] = definition["icon"].clone();
+        }
+        entries.push(entry);
         files.insert(preview, linear_preview_lut(base_gamma, &effect)?);
         files.insert(file, blob);
     }

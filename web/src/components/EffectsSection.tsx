@@ -237,7 +237,7 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
               <th scope="col" style={{ width: 44 }}>
                 <span className="visually-hidden">{t.include}</span>
               </th>
-              <th scope="col" style={{ width: 56 }}>
+              <th scope="col" style={{ width: 64 }}>
                 {t.icon}
               </th>
               <th scope="col">{t.effect}</th>
