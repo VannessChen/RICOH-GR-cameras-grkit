@@ -1,4 +1,4 @@
-import { Suspense, useRef, useState } from 'react';
+import { Suspense, useCallback, useRef, useState } from 'react';
 import { CAMERAS, MODESET_TOKEN, type Camera } from './cameras';
 import { loadCatalog, siteUrl } from './catalog';
 import { EffectsSection } from './components/EffectsSection';
@@ -7,12 +7,19 @@ import { RichText } from './components/RichText';
 import { loadFonts } from './fonts';
 import { applyLanguage, initialLanguage, LANGUAGES, STRINGS, type Language } from './i18n';
 import { ALL_MODULES, MODULES, planModules, type ModuleKey } from './modules';
-import { buildPackage, save } from './package';
+import { buildPackage, prefetchPackage, save } from './package';
 
 const DEFAULT_SELECTION = ['portra-400-endura-v1', 'vision3-250d-2383-v1'];
 const REPOSITORY = 'https://github.com/ahonn/grkit';
 
-type Build = { state: 'idle' } | { state: 'building' } | { state: 'ready' } | { state: 'failed' };
+type Build =
+  | { state: 'idle' }
+  | { state: 'building'; received: number }
+  | { state: 'ready' }
+  | { state: 'failed' };
+
+/** Megabytes with one decimal, as the progress text shows them. */
+const megabytes = (bytes: number) => (bytes / 1_000_000).toFixed(1);
 
 export function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
@@ -29,6 +36,30 @@ export function App() {
   const available = support?.modules ?? [];
   const plan = planModules(enabled, selection.size, available);
   const effectCount = plan.includeEffects ? selection.size : 0;
+
+  function prefetch() {
+    if (support) prefetchPackage(support.target, camera.id, language);
+  }
+
+  // When the effects come into view, the package files start to download, so Download is quick
+  // on a slow connection. A change of camera or language observes again for the new files.
+  const prefetchInView = useCallback(
+    (section: HTMLElement | null) => {
+      if (!section || !support) return;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            observer.disconnect();
+            prefetchPackage(support.target, camera.id, language);
+          }
+        },
+        { rootMargin: '200px 0px' },
+      );
+      observer.observe(section);
+      return () => observer.disconnect();
+    },
+    [support, camera.id, language],
+  );
 
   function chooseLanguage(next: Language) {
     loadFonts(next);
@@ -66,12 +97,21 @@ export function App() {
     }
     buildRun.current += 1;
     const run = buildRun.current;
-    setBuild({ state: 'building' });
+    setBuild({ state: 'building', received: 0 });
     try {
       const effects = plan.includeEffects
         ? (await loadCatalog(support.target)).effects.filter((effect) => selection.has(effect.id))
         : [];
-      const blob = await buildPackage(support.target, camera.id, effects, plan.omitted, language);
+      const blob = await buildPackage(
+        support.target,
+        camera.id,
+        effects,
+        plan.omitted,
+        language,
+        (received) => {
+          if (run === buildRun.current) setBuild({ state: 'building', received });
+        },
+      );
       if (run === buildRun.current) {
         save(blob, 'GRKit.zip');
         setBuild({ state: 'ready' });
@@ -187,7 +227,7 @@ export function App() {
           </div>
         </section>
 
-        <section className="section" aria-labelledby="effects-label">
+        <section className="section" aria-labelledby="effects-label" ref={prefetchInView}>
           <h2 id="effects-label">{t.effects}</h2>
           {!available.includes('imageControl') ? (
             <p className="status section-body">{t.effectsUnavailable(camera.name)}</p>
@@ -234,12 +274,18 @@ export function App() {
                 disabled={!support || plan.visible.length === 0 || build.state === 'building'}
                 aria-busy={build.state === 'building'}
                 onClick={download}
+                onPointerEnter={prefetch}
+                onFocus={prefetch}
               >
                 {t.download}
               </button>
               <div aria-live="polite">
                 {plan.visible.length === 0 && <p className="status error">{t.noModules}</p>}
-                {build.state === 'building' && <p className="status">{t.building}</p>}
+                {build.state === 'building' && (
+                  <p className="status">
+                    {build.received > 0 ? t.downloading(megabytes(build.received)) : t.building}
+                  </p>
+                )}
                 {build.state === 'ready' && <p className="status">{t.ready}</p>}
                 {build.state === 'failed' && (
                   <p className="status error">{t.buildError}</p>

@@ -71,8 +71,9 @@ const en = {
   firmwareNote: 'Before you download, check the firmware version in the camera menu.',
   download: 'Download GRKit.zip',
   building: 'Preparing GRKit.zip…',
+  downloading: (received: string) => `Downloading GRKit.zip: ${received} MB…`,
   ready: 'GRKit.zip is ready.',
-  buildError: 'GRKit.zip cannot be prepared. Reload the page to try again.',
+  buildError: 'GRKit.zip cannot be prepared. Check the connection and try again.',
   trademarks:
     'GRKit is not affiliated with or endorsed by Ricoh, Kodak, or Fujifilm. Some camera, film, and paper names are trademarks of their owners.',
   licenses: 'Effect licenses',
@@ -179,8 +180,9 @@ const zhHans: Strings = {
   firmwareNote: '下载前，请在相机菜单中确认固件版本。',
   download: '下载 GRKit.zip',
   building: '正在准备 GRKit.zip…',
+  downloading: (received) => `正在下载 GRKit.zip：已下载 ${received} MB…`,
   ready: 'GRKit.zip 已就绪。',
-  buildError: '无法准备 GRKit.zip。请刷新页面后重试。',
+  buildError: '无法准备 GRKit.zip。请检查网络后重试。',
   trademarks:
     'GRKit 与 Ricoh、Kodak、Fujifilm 无关，也未获得它们的认可。部分相机、胶片和相纸名称是其所有者的商标。',
   licenses: '效果许可',
@@ -283,8 +285,9 @@ const zhHant: Strings = {
   firmwareNote: '下載前，請在相機功能表中確認韌體版本。',
   download: '下載 GRKit.zip',
   building: '正在準備 GRKit.zip…',
+  downloading: (received) => `正在下載 GRKit.zip：已下載 ${received} MB…`,
   ready: 'GRKit.zip 已就緒。',
-  buildError: '無法準備 GRKit.zip。請重新整理頁面後再試。',
+  buildError: '無法準備 GRKit.zip。請檢查網路後再試。',
   trademarks:
     'GRKit 與 Ricoh、Kodak、Fujifilm 無關，也未獲得其認可。部分相機、底片與相紙名稱為其所有者的商標。',
   licenses: '效果授權',
@@ -387,8 +390,9 @@ const ja: Strings = {
   firmwareNote: 'ダウンロードする前に、カメラのメニューでファームウェアのバージョンを確認してください。',
   download: 'GRKit.zip をダウンロード',
   building: 'GRKit.zip を準備中…',
+  downloading: (received) => `GRKit.zip をダウンロード中：${received} MB…`,
   ready: 'GRKit.zip の準備ができました。',
-  buildError: 'GRKit.zip を準備できません。ページを再読み込みして、もう一度お試しください。',
+  buildError: 'GRKit.zip を準備できません。接続を確認して、もう一度お試しください。',
   trademarks:
     'GRKit は Ricoh、Kodak、Fujifilm とは関係がなく、これらの企業の承認も受けていません。一部のカメラ、フィルム、印画紙の名称は、各所有者の商標です。',
   licenses: 'エフェクトのライセンス',

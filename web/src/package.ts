@@ -1,11 +1,127 @@
 import { effectUrl, siteUrl, type Effect } from './catalog';
+import wasmUrl from './wasm/grkit_wasm_bg.wasm?url';
 
-async function fetchBytes(url: string): Promise<Uint8Array> {
-  const response = await fetch(url, { cache: 'no-cache' });
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status} ${url}`);
+/** A request fails when no data arrives for this long, so a stalled connection ends in an error. */
+const STALL_MS = 20_000;
+
+/** One file that the package needs. A download keeps its bytes for later packages. */
+interface Transfer {
+  bytes: Promise<Uint8Array>;
+  received: number;
+}
+
+const transfers = new Map<string, Transfer>();
+/** Called on each received chunk, so a running build can report its progress. */
+const watchers = new Set<() => void>();
+
+function notify() {
+  for (const watcher of watchers) watcher();
+}
+
+async function download(url: string, transfer: Transfer): Promise<Uint8Array> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(new Error(`No data for ${STALL_MS} ms: ${url}`)), STALL_MS);
+  };
+  arm();
+  try {
+    const response = await fetch(url, { cache: 'no-cache', signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status} ${url}`);
+    }
+    const chunks: Uint8Array[] = [];
+    const reader = response.body!.getReader();
+    for (;;) {
+      arm();
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      transfer.received += value.length;
+      notify();
+    }
+    const bytes = new Uint8Array(transfer.received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return bytes;
+  } finally {
+    clearTimeout(timer);
   }
-  return new Uint8Array(await response.arrayBuffer());
+}
+
+/** The download of `url`: a new one, or the one in progress or done. A failed one starts again. */
+function transfer(url: string): Transfer {
+  let item = transfers.get(url);
+  if (!item) {
+    const created: Transfer = { bytes: Promise.resolve(new Uint8Array()), received: 0 };
+    created.bytes = download(url, created).catch((error: unknown) => {
+      if (transfers.get(url) === created) transfers.delete(url);
+      throw error;
+    });
+    transfers.set(url, created);
+    item = created;
+  }
+  return item;
+}
+
+type Wasm = typeof import('./wasm/grkit_wasm.js');
+let wasm: Promise<Wasm> | undefined;
+
+/** The packager, loaded once. Its module downloads like the other files, with a stall limit. */
+function loadWasm(): Promise<Wasm> {
+  wasm ??= (async () => {
+    const [module, bytes] = await Promise.all([
+      import('./wasm/grkit_wasm.js'),
+      transfer(wasmUrl).bytes,
+    ]);
+    await module.default({ module_or_path: bytes });
+    return module;
+  })().catch((error: unknown) => {
+    wasm = undefined;
+    throw error;
+  });
+  return wasm;
+}
+
+const buildUrl = (target: string) => siteUrl(`runtime/${target}/build.json`);
+const guideUrl = (camera: string, language: string) => siteUrl(`guides/${camera}/${language}.pdf`);
+const runtimeUrl = (target: string, path: string) => siteUrl(`runtime/${target}/sd/${path}`);
+
+/**
+ * The runtime paths that `build.json` lists, read without the packager so that the files can
+ * download while the packager loads. The packager checks each file against the manifest.
+ */
+function listedPaths(build: Uint8Array): string[] {
+  try {
+    const files: unknown = JSON.parse(new TextDecoder().decode(build)).files;
+    return Array.isArray(files)
+      ? files.flatMap((file) => (typeof file?.path === 'string' ? [file.path as string] : []))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Starts the downloads of a package for `camera` before the click on Download: the packager, the
+ * runtime, and the guide. A later `buildPackage` uses them. Errors stay silent here, and the
+ * build requests a failed file again.
+ */
+export function prefetchPackage(target: string, camera: string, language: string): void {
+  const ignore = () => {};
+  loadWasm().catch(ignore);
+  transfer(guideUrl(camera, language)).bytes.catch(ignore);
+  transfer(buildUrl(target))
+    .bytes.then((build) => {
+      for (const path of listedPaths(build)) {
+        transfer(runtimeUrl(target, path)).bytes.catch(ignore);
+      }
+    })
+    .catch(ignore);
 }
 
 async function sha256(bytes: Uint8Array): Promise<string> {
@@ -18,6 +134,7 @@ async function sha256(bytes: Uint8Array): Promise<string> {
  * `camera` selects the ModeSet file. `omitted` names the plugins that the package does not install.
  * `language` selects the installation guide, which the site publishes as `guides/<camera>/<language>.pdf`.
  * grkit-wasm checks each runtime file against `build.json` and each effect's format.
+ * `onProgress` receives the number of bytes of the files of this package that have arrived.
  */
 export async function buildPackage(
   target: string,
@@ -25,38 +142,69 @@ export async function buildPackage(
   effects: readonly Effect[],
   omitted: readonly string[],
   language: string,
+  onProgress: (received: number) => void,
 ): Promise<Blob> {
-  const { default: init, Package } = await import('./wasm/grkit_wasm.js');
-  await init();
-  const runtime = `runtime/${target}/`;
-  const builder = new Package(await fetchBytes(siteUrl(`${runtime}build.json`)));
+  const used = new Set<string>([wasmUrl]);
+  const use = (url: string) => {
+    used.add(url);
+    return transfer(url).bytes;
+  };
+  const report = () => {
+    let received = 0;
+    for (const url of used) received += transfers.get(url)?.received ?? 0;
+    onProgress(received);
+  };
+  watchers.add(report);
   try {
-    builder.setCamera(camera);
-    builder.setLanguage(language);
-    builder.setGuide(await fetchBytes(siteUrl(`guides/${camera}/${language}.pdf`)));
-    const files = await Promise.all(
-      builder.runtimePaths().map(async (path) => {
-        return [path, await fetchBytes(siteUrl(`${runtime}sd/${path}`))] as const;
-      }),
-    );
-    for (const [path, bytes] of files) {
-      builder.addRuntimeFile(path, bytes);
-    }
-    const blobs = await Promise.all(effects.map((effect) => fetchBytes(effectUrl(target, effect.file))));
-    for (const [index, blob] of blobs.entries()) {
-      const effect = effects[index]!;
-      if ((await sha256(blob)) !== effect.sha256) {
-        throw new Error(`Effect checksum mismatch: ${effect.id}`);
+    // The packager, the runtime files, the guide, and the effects download at the same time.
+    const ignore = () => {};
+    use(buildUrl(target))
+      .then((build) => {
+        for (const path of listedPaths(build)) use(runtimeUrl(target, path)).catch(ignore);
+      })
+      .catch(ignore);
+    const effectBytes = Promise.all(effects.map((effect) => use(effectUrl(target, effect.file))));
+    // The build awaits the effects later. Until then, a failure is not an unhandled rejection.
+    effectBytes.catch(ignore);
+    const [{ Package }, build, guide] = await Promise.all([
+      loadWasm(),
+      use(buildUrl(target)),
+      use(guideUrl(camera, language)),
+    ]);
+    report();
+    const builder = new Package(build);
+    try {
+      builder.setCamera(camera);
+      builder.setLanguage(language);
+      builder.setGuide(guide);
+      const paths = builder.runtimePaths();
+      const files = await Promise.all(paths.map((path) => use(runtimeUrl(target, path))));
+      for (const [index, bytes] of files.entries()) {
+        builder.addRuntimeFile(paths[index]!, bytes);
       }
-      builder.addEffect(blob);
+      for (const [index, blob] of (await effectBytes).entries()) {
+        const effect = effects[index]!;
+        if ((await sha256(blob)) !== effect.sha256) {
+          throw new Error(`Effect checksum mismatch: ${effect.id}`);
+        }
+        builder.addEffect(blob);
+      }
+      for (const name of omitted) {
+        builder.omitPlugin(name);
+      }
+      const zip = builder.build();
+      return new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' });
+    } finally {
+      builder.free();
     }
-    for (const name of omitted) {
-      builder.omitPlugin(name);
+  } catch (error) {
+    // A file can be stale after a deployment, so a new attempt downloads them all again.
+    for (const url of used) {
+      if (url !== wasmUrl) transfers.delete(url);
     }
-    const zip = builder.build();
-    return new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' });
+    throw error;
   } finally {
-    builder.free();
+    watchers.delete(report);
   }
 }
 
