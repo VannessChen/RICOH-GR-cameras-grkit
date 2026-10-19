@@ -500,6 +500,14 @@ td input[type='checkbox'] {
   cursor: pointer;
 }
 
+.effect-stock {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* The camera's 40 x 40 icon pixels, without smoothing. */
 .effect-icon {
   display: block;

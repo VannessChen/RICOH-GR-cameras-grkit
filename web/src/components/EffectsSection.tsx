@@ -15,10 +15,16 @@ import type { Language, Strings } from '../i18n';
 import { forget, preview, type PreviewEffect, type Source } from '../preview/render';
 import { DEFAULT_SAMPLE } from '../preview/samples';
 import { PhotoLoader } from '../preview/raw';
+import { STOCKS } from '../stocks';
 import { EffectIcon } from './EffectIcon';
 import { ErrorBoundary } from './ErrorBoundary';
 
 const DEFAULT_PREVIEW = 'portra-400-endura-v1';
+
+/** The film number, then the print film of a cine look: "5219 · 2393 print". */
+function stockText(stock: (typeof STOCKS)[string] & {}, t: Strings): string {
+  return stock.print ? `${stock.film} · ${t.printFilm(stock.print)}` : stock.film;
+}
 
 interface Props {
   strings: Strings;
@@ -261,6 +267,9 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
                   <label htmlFor={`effect-${effect.id}`} className="effect-name">
                     {effect.name}
                   </label>
+                  {STOCKS[effect.id] && (
+                    <span className="effect-stock">{stockText(STOCKS[effect.id]!, t)}</span>
+                  )}
                 </td>
                 <td>{t.looks[effect.id] ?? effect.look}</td>
                 <td>{effect.monochrome ? t.mono : t.color}</td>

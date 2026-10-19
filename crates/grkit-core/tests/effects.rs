@@ -411,6 +411,9 @@ fn words(text: &str) -> Vec<String> {
     words
 }
 
+/// A cover icon shows the words of the effect name. A motion picture film can
+/// show its film number, which its target names, in place of the series name:
+/// Vision3 500T shows 5219 above 500T.
 #[test]
 fn published_cover_icons_show_the_words_of_the_effect_name() {
     for entry in fs::read_dir(root()).unwrap() {
@@ -422,12 +425,20 @@ fn published_cover_icons_show_the_words_of_the_effect_name() {
         let icon = &definition["icon"];
         let name = definition["name"].as_str().unwrap();
         assert!(icon.get("template").is_some(), "{name} has no cover icon");
-        let shown = format!(
-            "{} {}",
+        let (series, number) = (
             icon["name"].as_str().unwrap(),
-            icon["number"].as_str().unwrap()
+            icon["number"].as_str().unwrap(),
         );
-        assert_eq!(words(&shown), words(name), "{name}");
+        if icon["template"] == "cine" && series.bytes().all(|c| c.is_ascii_digit()) {
+            let target = definition["attribution"]["target"].as_str().unwrap();
+            assert!(
+                target.split(' ').any(|word| word == series),
+                "{name}: {target}"
+            );
+            assert_eq!(name.rsplit(' ').next(), Some(number), "{name}");
+        } else {
+            assert_eq!(words(&format!("{series} {number}")), words(name), "{name}");
+        }
         assert!(
             ["Kodak", "FUJIFILM"].contains(&icon["brand"].as_str().unwrap()),
             "{name}"

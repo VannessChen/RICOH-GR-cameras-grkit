@@ -43,9 +43,10 @@ The icon shows the effect name and the brand, and nothing else:
 
 - The `name` and `number` of an icon hold the words of the effect name, in capitals. A hyphen can split a word, so `FP-100C` gives `FP` and `100C`.
 - The number is the speed, or the model if the film has no single speed (`IV`).
-- Stock codes, papers, and process details go in the target description, not in the icon or the name.
+- A motion picture film label shows the film number in place of the series name, because photographers know these films by number: Vision3 500T shows `5219` above `500T`. The target description must give that number.
+- Other stock codes, papers, and process details go in the target description, not in the icon or the name.
 
-A test checks that the icon words of each published effect match its name.
+A test checks that the icon words of each published effect match its name, or the film number of its target.
 
 ## Effect catalog
 
