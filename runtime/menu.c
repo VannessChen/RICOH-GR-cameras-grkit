@@ -536,9 +536,12 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
     back=back_event(h,kind,private_mode(controller));
     if(back==2) return 0;
     if(back==1) {
-        if(menu_back(h)) render(controller);
-        else leave(controller);
-        return 0;
+        if(menu_back(h)) { render(controller); return 0; }
+        /* MENU on the root closes ADJ, as on a native entry: the restored
+           native list gets this switch event and the confirm after it. */
+        h[GRKIT_HOST_BACK_PENDING/4]=0;
+        leave(controller);
+        return menu_event_original(controller,event);
     }
 #ifdef EV_FN_ACTION
     /* The Fn press that opened a GRKit parameter page also sends its native

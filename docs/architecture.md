@@ -215,7 +215,7 @@ Module state stays in the private host header.
 
 About is not a plugin, so `PLUGINS.TXT` does not select it. It uses the GRKit tile, and its summary gives the version, for example `Version 0.1.0`. It has no page: OK on it changes nothing.
 
-MENU returns one level. From the GRKit root it returns to the native ADJ items. The private menu restores the native list on its supported exit paths.
+MENU on a page returns to the GRKit root. MENU on the root closes ADJ, as on a native entry: the menu restores the native list and passes the MENU events to it. The private menu restores the native list on its supported exit paths.
 List restoration suppresses the native selection callbacks.
 
 ### Menu text
