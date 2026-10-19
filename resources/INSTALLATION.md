@@ -1,6 +1,6 @@
 # GRKit
 
-For RICOH GR III firmware 2.10 only.
+For RICOH GR III and GR III HDF firmware 2.10 only.
 
 ## Install
 

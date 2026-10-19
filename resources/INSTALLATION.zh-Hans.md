@@ -1,6 +1,6 @@
 # GRKit
 
-仅适用于 RICOH GR III 固件 2.10。
+仅适用于 RICOH GR III 和 GR III HDF 固件 2.10。
 
 ## 安装
 

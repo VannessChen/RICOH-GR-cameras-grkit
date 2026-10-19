@@ -1,5 +1,5 @@
 import { Suspense, useRef, useState } from 'react';
-import { CAMERAS, MODESET_TOKEN } from './cameras';
+import { CAMERAS, MODESET_TOKEN, type Camera } from './cameras';
 import { loadCatalog, siteUrl } from './catalog';
 import { EffectsSection } from './components/EffectsSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -41,7 +41,7 @@ export function App() {
     setBuild({ state: 'idle' });
   }
 
-  function chooseCamera(id: string) {
+  function chooseCamera(id: Camera['id']) {
     setCameraId(id);
     resetBuild();
   }

@@ -1,6 +1,6 @@
 # GRKit
 
-僅適用於 RICOH GR III 韌體 2.10。
+僅適用於 RICOH GR III 與 GR III HDF 韌體 2.10。
 
 ## 安裝
 

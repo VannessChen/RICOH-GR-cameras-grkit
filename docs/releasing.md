@@ -68,7 +68,7 @@ Use `major` for a change that an earlier package cannot follow, for example a ne
 
 1. Merge the `Release vX.Y.Z` pull request. `Release` starts on the merge commit. It builds the release, deploys the site, and publishes the release.
 2. If the site does not serve the version within 15 minutes, `Deploy` fails and the release stays a draft. Examine the deployment in the Cloudflare dashboard. If it failed, retry it there, because a second `Deploy` run makes no new commit. Then start `Deploy` with the tag `vX.Y.Z`.
-3. The release holds `site.tar.gz`, `GRKit-device-test-gr3.zip`, `GRKit-device-test-gr3x.zip`, and `GRKit-device-test-gr4.zip`. Each package has the published runtime and no effects. Install the package of each camera that you have, and test it. The GR IV runtime stays experimental until it passes a test on a camera.
+3. The release holds `site.tar.gz`, `GRKit-device-test-gr3.zip`, `GRKit-device-test-gr3x.zip`, and `GRKit-device-test-gr4.zip`. Each package has the published runtime and no effects. Install the package of each camera that you have, and test it.
 4. If a test fails, start `Deploy` with the tag of the previous release. The site then serves that release again.
 
 To release a commit on `main` without a release pull request, push a tag `vX.Y.Z` that matches the version in `Cargo.toml`. The first release, `v1.0.0`, uses this path.

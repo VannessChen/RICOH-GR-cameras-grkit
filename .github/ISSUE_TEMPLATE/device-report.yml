@@ -12,7 +12,9 @@ body:
       label: Camera
       options:
         - GR III
+        - GR III HDF
         - GR IIIx
+        - GR IIIx HDF
         - GR IV
         - GR IV HDF
     validations:

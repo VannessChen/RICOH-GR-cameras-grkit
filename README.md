@@ -30,10 +30,13 @@ You select the modules when you make a package. The menu shows only those module
 | Camera | Firmware | Status |
 | --- | --- | --- |
 | RICOH GR III | 2.10 | Tested on a camera |
-| RICOH GR IIIx | 1.60 | Not tested on a camera |
-| RICOH GR IV, GR IV HDF | 1.11 | Experimental, not tested on a camera. Framing offers only XPan. |
+| RICOH GR III HDF | 2.10 | Supported. It runs the same firmware and runtime as GR III. |
+| RICOH GR IIIx | 1.60 | Supported. It runs the same runtime as GR III, which has been tested on a camera. |
+| RICOH GR IIIx HDF | 1.60 | Supported. It runs the same firmware and runtime as GR IIIx. |
+| RICOH GR IV | 1.11 | Tested on a camera. Framing offers only XPan. |
+| RICOH GR IV HDF | 1.11 | Supported. It runs the same firmware and runtime as GR IV. Framing offers only XPan. |
 
-Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
+Each HDF model runs the firmware of its base camera and uses the same package. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
 
 > [!WARNING]
 > GRKit is experimental. Use it at your own risk.
@@ -46,7 +49,7 @@ To make a package, go to [grkit.app](https://grkit.app). Select the camera, the 
 
 Each package contains the installation guide for its camera as a PDF, in the language that you select. The recovery guide is at its end. The sources are:
 
-- [GR III and GR IIIx](resources/INSTALLATION.md)
+- [GR III, GR IIIx, and their HDF models](resources/INSTALLATION.md)
 - [GR IV and GR IV HDF](resources/INSTALLATION-GR4.md)
 
 To remove GRKit, turn the camera off and delete the `SCRIPT` folder from the card.
@@ -67,6 +70,7 @@ grkit verify dist/GRKit.zip
 
 - Guides: `install-guide-tools.sh` downloads Typst and the Noto Sans SC, TC, and JP fonts and checks their SHA-256, on Linux x86_64 or macOS arm64. `build-guides.sh` writes `build/guides/<camera>/<language>.pdf`.
 - GR IIIx: package with `--camera gr3x` and `--guide build/guides/gr3x/en.pdf`. The runtime is the same as for GR III.
+- HDF models: package for the base camera, for example `--camera gr3` for GR III HDF.
 - GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4` and `--guide build/guides/gr4/en.pdf`.
 - Fewer plugins: add `--plugins` with the plugins to install, for example `--plugins framing,guides`. The installer makes no firmware change for the other plugins. Without `--effects`, the package has no Image Control.
 - Guide language: add `--language zh-Hans`, `--language zh-Hant`, or `--language ja`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
@@ -88,7 +92,7 @@ grkit verify dist/GRKit.zip
 ## Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for the setup, the tests, and the pull request rules.
-If you test GRKit on a camera, open a device report issue with the result, as a pass or a failure. Reports for GR IIIx and GR IV are the most useful.
+If you test GRKit on a camera, open a device report issue with the result, as a pass or a failure. Reports for GR IIIx and the HDF models are the most useful.
 
 ## Documentation
 

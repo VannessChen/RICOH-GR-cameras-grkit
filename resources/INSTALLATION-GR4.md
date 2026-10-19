@@ -2,8 +2,6 @@
 
 For RICOH GR IV and GR IV HDF firmware 1.11 only.
 
-GRKit for GR IV is experimental and has not been tested on a camera. Use it only if you accept that risk.
-
 ## Install
 
 1. Turn the camera off.

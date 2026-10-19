@@ -2,7 +2,8 @@ import { CAMERA_PLUGINS } from './generated/plugins';
 import type { ModuleKey } from './modules';
 
 export interface Camera {
-  id: string;
+  /** The camera of the package (`camera.rs`): it selects the ModeSet file and the guide. */
+  id: keyof typeof CAMERA_PLUGINS;
   name: string;
   /**
    * The supported firmware version, the site target that holds its runtime, and the ModeSet file
@@ -21,10 +22,11 @@ export interface Camera {
   };
 }
 
+// Each HDF model runs the firmware of its base camera, so it uses the same package.
 export const CAMERAS: readonly Camera[] = [
   {
     id: 'gr3',
-    name: 'GR III',
+    name: 'GR III / GR III HDF',
     support: {
       firmware: '2.10',
       target: 'gr3-2.10',
@@ -36,7 +38,7 @@ export const CAMERAS: readonly Camera[] = [
   // GR IIIx 1.60 runs the GR III 2.10 code, so it uses the same runtime.
   {
     id: 'gr3x',
-    name: 'GR IIIx',
+    name: 'GR IIIx / GR IIIx HDF',
     support: {
       firmware: '1.60',
       target: 'gr3-2.10',
@@ -45,7 +47,6 @@ export const CAMERAS: readonly Camera[] = [
       modules: CAMERA_PLUGINS.gr3x,
     },
   },
-  // GR IV and GR IV HDF run the same firmware.
   {
     id: 'gr4',
     name: 'GR IV / GR IV HDF',
@@ -53,7 +54,7 @@ export const CAMERAS: readonly Camera[] = [
       firmware: '1.11',
       target: 'gr4-1.11',
       modeset: '00078560.636',
-      experimental: true,
+      experimental: false,
       modules: CAMERA_PLUGINS.gr4,
       xpanOnly: true,
     },

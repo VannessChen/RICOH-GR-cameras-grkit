@@ -582,9 +582,9 @@ fn each_camera_gets_its_modeset_file_and_guide() {
     let gr3x = unpack(&bytes);
     assert!(gr3x.contains_key("SD_ROOT/00078490.609"));
     assert!(!gr3x.contains_key("SD_ROOT/00078350.588"));
-    // The guide source names GR IIIx and its ModeSet file.
+    // The guide source names GR IIIx, GR IIIx HDF, and their ModeSet file.
     let guide = String::from_utf8(installation_guide(&camera::GR3X, Language::English)).unwrap();
-    assert!(guide.contains("For RICOH GR IIIx firmware 1.60 only."));
+    assert!(guide.contains("For RICOH GR IIIx and GR IIIx HDF firmware 1.60 only."));
     assert!(guide.contains("`00078490.609`") && !guide.contains("00078350.588"));
     assert_eq!(
         installation_guide(&camera::GR3, Language::English),
@@ -621,6 +621,7 @@ fn the_guide_names_the_camera_once_and_the_modeset_file_once() {
     ] {
         let phrase = language.camera_phrase(&camera::GR3);
         assert_eq!(guide.matches(&phrase).count(), 1, "{phrase}");
+        assert_eq!(guide.matches(camera::GR3.hdf).count(), 1, "{language:?}");
         assert_eq!(
             guide.matches(camera::GR3.modeset).count(),
             1,
@@ -647,9 +648,11 @@ fn a_package_has_the_guide_of_its_language_only() {
         assert_eq!(files[&language.guide_path()], PDF);
         let guides = files.keys().filter(|name| name.ends_with(".pdf")).count();
         assert_eq!(guides, 1, "{language:?}");
-        // The guide source names GR IIIx in each language.
+        // The guide source names GR IIIx and GR IIIx HDF in each language.
         let source = String::from_utf8(installation_guide(&camera::GR3X, language)).unwrap();
         assert!(source.contains(&language.camera_phrase(&camera::GR3X)));
+        assert_eq!(source.matches(camera::GR3X.hdf).count(), 1, "{language:?}");
+        assert!(!source.contains(camera::GR3.hdf));
         assert!(source.contains(camera::GR3X.modeset) && !source.contains(camera::GR3.modeset));
     }
     assert_eq!(

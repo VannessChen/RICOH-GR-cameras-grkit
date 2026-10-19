@@ -33,6 +33,9 @@ None of these bytes is a patch site or a firmware input of GRKit. A runtime buil
 The cameras differ in the ModeSet file that enables SD scripts: `00078350.588` on GR III and `00078490.609` on GR IIIx. `grkit_core::camera` lists the cameras.
 A package holds the ModeSet file of one camera, and its installation guide names that camera and file. `grkit verify` identifies the camera from that file.
 
+Ricoh publishes the GR III 2.10 firmware also for GR III HDF, and GR IIIx 1.60 also for GR IIIx HDF. The RTOS selects the HDF model from a factory adjustment, not from the ModeSet numbers.
+An HDF camera therefore uses the ModeSet file and the package of its base camera. `Camera::hdf` names the model, and the guides name both models. GRKit has not been tested on an HDF camera.
+
 GR IV 1.11 is a different build, with the target `gr4-1.11`. GR IV and GR IV HDF run the same firmware and ModeSet file, `00078560.636`.
 Its RTOS image is larger (0x13d2ac0 bytes), and its data, functions, and object layouts are at other addresses. `runtime/targets/<target>.h` holds these values for the C and assembly sources.
 

@@ -30,10 +30,13 @@ GRKit は ADJ モードに 6 番目の項目 GRK を追加します。GRK には
 | カメラ | ファームウェア | 状態 |
 | --- | --- | --- |
 | RICOH GR III | 2.10 | 実機でテスト済み |
-| RICOH GR IIIx | 1.60 | 実機では未テスト |
-| RICOH GR IV、GR IV HDF | 1.11 | 試験的。実機では未テスト。フレーミングは XPan のみです。 |
+| RICOH GR III HDF | 2.10 | 対応済み。GR III と同じファームウェアとランタイムです。 |
+| RICOH GR IIIx | 1.60 | 対応済み。実機でテスト済みの GR III と同じランタイムです。 |
+| RICOH GR IIIx HDF | 1.60 | 対応済み。GR IIIx と同じファームウェアとランタイムです。 |
+| RICOH GR IV | 1.11 | 実機でテスト済み。フレーミングは XPan のみです。 |
+| RICOH GR IV HDF | 1.11 | 対応済み。GR IV と同じファームウェアとランタイムです。フレーミングは XPan のみです。 |
 
-ほかの機種やファームウェアのバージョンには対応していません。ファームウェアのバージョンは、カメラのメニューで確認できます。
+HDF モデルはベースのカメラと同じファームウェアで動作し、同じパッケージを使います。ほかの機種やファームウェアのバージョンには対応していません。ファームウェアのバージョンは、カメラのメニューで確認できます。
 
 > [!WARNING]
 > GRKit は試験的なプロジェクトです。自己責任で使用してください。
@@ -46,7 +49,7 @@ GRKit は ADJ モードに 6 番目の項目 GRK を追加します。GRK には
 
 各パッケージには、そのカメラのインストールガイドが、選んだ言語の PDF で入っています。復旧ガイドはその末尾にあります。ソースファイルは次のとおりです。
 
-- [GR III と GR IIIx](resources/INSTALLATION.ja.md)
+- [GR III、GR IIIx とそれぞれの HDF モデル](resources/INSTALLATION.ja.md)
 - [GR IV と GR IV HDF](resources/INSTALLATION-GR4.ja.md)
 
 GRKit を削除するには、カメラの電源を切ってから、カードの `SCRIPT` フォルダーを削除します。
@@ -67,6 +70,7 @@ grkit verify dist/GRKit.zip
 
 - ガイド：`install-guide-tools.sh` は Typst と Noto Sans SC・TC・JP フォントをダウンロードし、SHA-256 を検証します。Linux x86_64 と macOS arm64 に対応しています。`build-guides.sh` は `build/guides/<カメラ>/<言語>.pdf` を書き出します。
 - GR IIIx：`--camera gr3x` と `--guide build/guides/gr3x/en.pdf` を指定してパッケージを作成します。ランタイムは GR III と同じです。
+- HDF モデル：ベースのカメラ用のパッケージを作成します。たとえば GR III HDF では `--camera gr3` を指定します。
 - GR IV：`fwdc248b.bin` から `--target gr4-1.11` でビルドし、`--camera gr4` と `--guide build/guides/gr4/en.pdf` を指定してパッケージを作成します。
 - プラグインを減らす：インストールするプラグインを `--plugins` で指定します。例：`--plugins framing,guides`。インストーラーは、ほかのプラグインのためにファームウェアを変更しません。`--effects` を指定しない場合、パッケージにイメージコントロールは含まれません。
 - ガイドの言語：`--language zh-Hans`、`--language zh-Hant`、`--language ja` のいずれかを追加し、その言語のガイドを指定します。例：`build/guides/gr3/zh-Hans.pdf`。
@@ -88,7 +92,7 @@ grkit verify dist/GRKit.zip
 ## コントリビューション
 
 セットアップ、テスト、プルリクエストのルールは [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
-GRKit を実機でテストした場合は、Device report の Issue を作成し、成功か失敗かの結果を報告してください。GR IIIx と GR IV の報告が特に役立ちます。
+GRKit を実機でテストした場合は、Device report の Issue を作成し、成功か失敗かの結果を報告してください。GR IIIx と HDF モデルの報告が特に役立ちます。
 
 ## ドキュメント（英語）
 

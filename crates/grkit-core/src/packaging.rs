@@ -262,15 +262,19 @@ impl Language {
         }
     }
 
-    /// The camera phrase of the GR III guide, for example "GR III firmware 2.10".
+    /// The camera phrase of the GR III guide, for example "GR III and GR III HDF
+    /// firmware 2.10".
     pub fn camera_phrase(self, camera: &Camera) -> String {
-        let word = match self {
-            Language::English => "firmware",
-            Language::SimplifiedChinese => "固件",
-            Language::TraditionalChinese => "韌體",
-            Language::Japanese => "ファームウェア",
+        let (and, word) = match self {
+            Language::English => ("and", "firmware"),
+            Language::SimplifiedChinese => ("和", "固件"),
+            Language::TraditionalChinese => ("與", "韌體"),
+            Language::Japanese => ("および", "ファームウェア"),
         };
-        format!("{} {word} {}", camera.name, camera.firmware)
+        format!(
+            "{} {and} {} {word} {}",
+            camera.name, camera.hdf, camera.firmware
+        )
     }
 }
 
@@ -442,8 +446,9 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
 }
 
 /// The installation guide of `camera` in one language, as Markdown, the source of
-/// its PDF (`guide::source`). The main resource describes GR III. GR IIIx gets its name, firmware version, and ModeSet file.
-/// GR IV, which has fewer modules, has its own resource.
+/// its PDF (`guide::source`). The main resource describes GR III. GR IIIx gets
+/// its names, firmware version, and ModeSet file. GR IV, which has fewer modules,
+/// has its own resource.
 pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
     let gr4 = camera.target == camera::GR4.target;
     let template = language.guide_template(gr4);
@@ -455,6 +460,7 @@ pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
             &language.camera_phrase(&camera::GR3),
             &language.camera_phrase(camera),
         )
+        .replace(camera::GR3.hdf, camera.hdf)
         .replace(camera::GR3.modeset, camera.modeset)
         .into_bytes()
 }

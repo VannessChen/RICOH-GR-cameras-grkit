@@ -1,6 +1,6 @@
 # GRKit
 
-RICOH GR III ファームウェア 2.10 専用です。
+RICOH GR III および GR III HDF ファームウェア 2.10 専用です。
 
 ## インストール
 
