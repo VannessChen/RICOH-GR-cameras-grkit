@@ -14,7 +14,7 @@
 use std::fmt::Write;
 
 use crate::{
-    abi::{HOST_FRAME_RATIO, HOST_GRAIN, HOST_GUIDE, HOST_STAMP},
+    abi::{HOST_FRAME_RATIO, HOST_GUIDE, HOST_PLUGIN_AREA, HOST_STAMP},
     artwork, camera,
 };
 
@@ -64,13 +64,30 @@ impl Point {
     }
 }
 
+/// A word of the private header that belongs to one plugin. The header holds
+/// the words of all plugins after its core fields, in plugin order
+/// (`GRKIT_HOST_PLUGIN_AREA`). C code names it `GRKIT_PLUGIN_<PLUGIN>_<NAME>`.
+pub struct Word {
+    pub name: &'static str,
+    pub doc: &'static str,
+}
+
+/// Where a state value lives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Slot {
+    /// The ImageTone code of the active Image Control record.
+    Effect,
+    /// A core field of the header, at this byte offset.
+    Core(usize),
+    /// A word of the plugin (`Plugin::words`), by its index.
+    Own(usize),
+}
+
 /// A value that `STATE.TXT` keeps across power-off.
 pub struct StateKey {
     /// The key name. The file names it `<plugin id>.<name>`.
     pub name: &'static str,
-    /// The header word that holds the value, or `None` for the Image Control
-    /// effect, which the file keeps as the ImageTone code of the record.
-    pub word: Option<usize>,
+    pub slot: Slot,
     /// The largest value. The loader restores a larger value as 0.
     pub max: u32,
 }
@@ -106,6 +123,8 @@ pub struct Plugin {
     /// The plugin shows only with effects. Without effects, the installer and
     /// the menu treat it as not installed.
     pub needs_effects: bool,
+    /// The plugin's own header words.
+    pub words: &'static [Word],
     pub state: &'static [StateKey],
     /// The number of artwork tiles. Tile 0 is the root tile of the page.
     pub tiles: usize,
@@ -155,9 +174,10 @@ pub const PLUGINS: [Plugin; 5] = [
         id: "image-control",
         points: &[Point::MenuPage, Point::Tuning, Point::PictureEncode],
         needs_effects: true,
+        words: &[],
         state: &[StateKey {
             name: "effect",
-            word: None,
+            slot: Slot::Effect,
             max: 0xffff,
         }],
         tiles: 0,
@@ -178,9 +198,10 @@ pub const PLUGINS: [Plugin; 5] = [
             Point::CaptureAspect,
         ],
         needs_effects: false,
+        words: &[],
         state: &[StateKey {
             name: "ratio",
-            word: Some(HOST_FRAME_RATIO),
+            slot: Slot::Core(HOST_FRAME_RATIO),
             max: 3,
         }],
         tiles: 4,
@@ -207,9 +228,10 @@ pub const PLUGINS: [Plugin; 5] = [
         id: "guides",
         points: &[Point::MenuPage, Point::ViewfinderOverlay],
         needs_effects: false,
+        words: &[],
         state: &[StateKey {
             name: "style",
-            word: Some(HOST_GUIDE),
+            slot: Slot::Core(HOST_GUIDE),
             max: 4,
         }],
         tiles: 5,
@@ -227,9 +249,10 @@ pub const PLUGINS: [Plugin; 5] = [
         id: "date-stamp",
         points: &[Point::MenuPage, Point::PictureEncode],
         needs_effects: false,
+        words: &[],
         state: &[StateKey {
             name: "style",
-            word: Some(HOST_STAMP),
+            slot: Slot::Core(HOST_STAMP),
             max: 4,
         }],
         tiles: 5,
@@ -247,9 +270,14 @@ pub const PLUGINS: [Plugin; 5] = [
         id: "grain",
         points: &[Point::MenuPage, Point::PipelineGrain],
         needs_effects: false,
+        words: &[Word {
+            name: "level",
+            doc: "Grain level: 0 Off, 1 weak, 2 medium, 3 strong. The native grain \
+                  stage of recorded pictures uses it instead of the native grain settings.",
+        }],
         state: &[StateKey {
             name: "level",
-            word: Some(HOST_GRAIN),
+            slot: Slot::Own(0),
             max: 3,
         }],
         tiles: 4,
@@ -297,10 +325,49 @@ pub const NEEDS_EFFECTS: u32 = {
     mask
 };
 
+/// A plugin word with its header offset.
+pub struct WordEntry {
+    /// `PLUGIN_<PLUGIN>_<NAME>`, without the `GRKIT_` prefix.
+    pub name: String,
+    pub offset: usize,
+    pub doc: &'static str,
+}
+
+/// The words of all plugins, in plugin order, from `GRKIT_HOST_PLUGIN_AREA`.
+pub fn words() -> Vec<WordEntry> {
+    PLUGINS
+        .iter()
+        .flat_map(|plugin| plugin.words.iter().map(move |word| (plugin, word)))
+        .enumerate()
+        .map(|(index, (plugin, word))| WordEntry {
+            name: format!(
+                "PLUGIN_{}_{}",
+                plugin.c_name(),
+                word.name.replace('-', "_").to_ascii_uppercase()
+            ),
+            offset: HOST_PLUGIN_AREA + 4 * index,
+            doc: word.doc,
+        })
+        .collect()
+}
+
+/// The header offset of word `index` of plugin `plugin`.
+fn own_word(plugin: usize, index: usize) -> usize {
+    assert!(
+        index < PLUGINS[plugin].words.len(),
+        "{} has no word {index}",
+        PLUGINS[plugin].id
+    );
+    let before: usize = PLUGINS[..plugin].iter().map(|p| p.words.len()).sum();
+    HOST_PLUGIN_AREA + 4 * (before + index)
+}
+
 /// A state key with its plugin.
 pub struct StateEntry {
     /// `<plugin id>.<key name>`.
     pub name: String,
+    /// The header word that holds the value, or `None` for the Image Control
+    /// effect, which the file keeps as the ImageTone code of the record.
     pub word: Option<usize>,
     pub max: u32,
     /// The bit of the plugin in `GRKIT_HOST_PLUGINS`.
@@ -315,7 +382,11 @@ pub fn state_keys() -> Vec<StateEntry> {
         .flat_map(|(index, plugin)| {
             plugin.state.iter().map(move |key| StateEntry {
                 name: format!("{}.{}", plugin.id, key.name),
-                word: key.word,
+                word: match key.slot {
+                    Slot::Effect => None,
+                    Slot::Core(offset) => Some(offset),
+                    Slot::Own(word) => Some(own_word(index, word)),
+                },
                 max: key.max,
                 plugin: index as u32,
             })

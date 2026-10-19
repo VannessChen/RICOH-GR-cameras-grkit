@@ -4,7 +4,7 @@
 
 use std::fmt::Write;
 
-use crate::{menu_text, runtime};
+use crate::{menu_text, plugins, runtime};
 
 /// A byte range of the private header or of a record.
 pub struct Field {
@@ -28,7 +28,8 @@ macro_rules! fields {
     };
 }
 
-pub const HOST_HEADER_SIZE: usize = 256;
+/// The core fields of the header, then the plugin words.
+pub const HOST_HEADER_SIZE: usize = 512;
 /// The placeholder for the header address in ARM code. The installer replaces
 /// each literal word with this value by the address of the `registry` array.
 pub const HEADER_REFERENCE: u32 = 0x58012340;
@@ -73,9 +74,8 @@ fields!(HEADER_FIELDS {
     HOST_MENU_REBUILDING = 60, 4;
     /// Native list position, saved when the private menu opens.
     HOST_MENU_LIST = 64, 8;
-    /// Grain level: 0 Off, 1 weak, 2 medium, 3 strong. The native grain stage of
-    /// recorded pictures uses it instead of the native grain settings.
-    HOST_GRAIN = 72, 4;
+    /// Reserved and zero.
+    HOST_RESERVED_72 = 72, 4;
     /// Number of ADJ events. GRKIT_HOST_MENU_EVENT_RING holds the last ones.
     HOST_MENU_EVENTS = 76, 4;
     /// Number of Image Control selections. A diagnostic.
@@ -102,8 +102,9 @@ fields!(HEADER_FIELDS {
     HOST_PARAMETER_CHANGES = 148, 4;
     /// GRKIT_HOST_PARAMETER_CHANGES at the last live-view build.
     HOST_LIVE_PARAMETER_CHANGES = 152, 4;
-    /// Reserved and zero.
-    HOST_RESERVED = 156, 20;
+    /// Icon chunk addresses: chunk n holds icon slots 40 n to 40 n + 39. The
+    /// host icons come first in chunk 0, then the effect icons.
+    HOST_ICON_CHUNKS = 156, 4 * runtime::ICON_CHUNK_SLOTS;
     /// Icon of the GRKit tile.
     HOST_PLUGINS_ICON = 176, 4;
     /// Private toolbar cell, or 0.
@@ -112,8 +113,8 @@ fields!(HEADER_FIELDS {
     HOST_TOOLBAR_OWNER = 184, 4;
     /// Module that the private menu shows at MENU_MODULE.
     HOST_MODULE = 188, 4;
-    /// Icon chunk addresses: chunk n holds icon slots 40 n to 40 n + 39.
-    HOST_ICON_CHUNKS = 192, 4 * runtime::MAX_CHUNKS;
+    /// Reserved and zero.
+    HOST_RESERVED_192 = 192, 4;
     /// Aspect id 2 variant for the photo shown in playback: 0 none (shooting uses
     /// the Framing ratio), 1 not 65:24, 2 65:24.
     HOST_FRAME_FILE = 196, 4;
@@ -149,6 +150,9 @@ fields!(HEADER_FIELDS {
     /// Return to GRKit Image Control after the native parameter page: 1 opening,
     /// 2 away.
     HOST_RETURN = 252, 4;
+    /// The words of the plugins (grkit_core::plugins::Plugin::words), in plugin
+    /// order, then zero words. GRKIT_PLUGIN_<PLUGIN>_<WORD> gives each offset.
+    HOST_PLUGIN_AREA = 256, HOST_HEADER_SIZE - 256;
 });
 
 pub const RECORD_SIZE: usize = 0x740;
@@ -268,6 +272,9 @@ pub fn header() -> String {
     writeln!(out, "#define GRKIT_HOST_MAGIC_VALUE {HOST_MAGIC_VALUE:#x}").unwrap();
     writeln!(out, "#define GRKIT_HOST_VERSION_VALUE {HOST_VERSION_VALUE}").unwrap();
     table(&mut out, HEADER_FIELDS, false);
+    for word in plugins::words() {
+        define(&mut out, word.doc, &word.name, word.offset);
+    }
     out.push('\n');
 
     comment(
@@ -409,6 +416,15 @@ mod tests {
             .iter()
             .all(|field| field.offset % 4 == 0 && field.size % 4 == 0));
         check(HEADER_FIELDS, HOST_HEADER_SIZE, true);
+    }
+
+    #[test]
+    fn plugin_words_fit_the_header() {
+        let words = plugins::words();
+        for (index, word) in words.iter().enumerate() {
+            assert_eq!(word.offset, HOST_PLUGIN_AREA + 4 * index, "{}", word.name);
+        }
+        assert!(HOST_PLUGIN_AREA + 4 * words.len() <= HOST_HEADER_SIZE);
     }
 
     #[test]

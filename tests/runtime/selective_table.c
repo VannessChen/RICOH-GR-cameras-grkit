@@ -21,7 +21,7 @@ static void *mapped(uint32_t address, uint32_t bytes)
 #define PICTURE_BARRIER() ((void)0)
 #include "picture.c"
 
-static volatile u32 header[64];
+static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
 volatile u32 *framing_header(void) { return header; }
 
 int main(int argc, char **argv)

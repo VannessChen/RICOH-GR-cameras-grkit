@@ -46,7 +46,7 @@ static uint32_t invalidations, invalidated;
 #define FRAMING_INVALIDATE(view) (++invalidations, invalidated = (view))
 #include "framing.c"
 
-static volatile u32 header[64];
+static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
 volatile u32 *framing_header(void) { return header; }
 
 static void reset(void)

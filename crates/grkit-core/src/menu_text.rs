@@ -9,10 +9,10 @@ use anyhow::{ensure, Result};
 use crate::packaging::Language;
 
 /// The size of the text area after the picture scratch.
-pub const TEXT_SIZE: usize = 12288;
+pub const TEXT_SIZE: usize = 16384;
 /// Where the Image Control summaries start in the text area. The label table
 /// must end before it.
-pub const TEXT_SUMMARY: usize = 4096;
+pub const TEXT_SUMMARY: usize = 8192;
 /// The last 16 bytes of the text area: the parameter page title of a GRKit
 /// session. Words: the page, its vtable, then the descriptor of the effect name.
 pub const TEXT_PARAMETER_TITLE: usize = TEXT_SIZE - 16;

@@ -7,7 +7,7 @@
 /* The private header: the start of the registry array. ARM code addresses it
    through the literal GRKIT_HEADER_REFERENCE, which the installer relocates. */
 #define GRKIT_HEADER_REFERENCE 0x58012340
-#define GRKIT_HOST_HEADER_SIZE 256
+#define GRKIT_HOST_HEADER_SIZE 512
 #define GRKIT_HOST_MAGIC_VALUE 0x314d5247
 #define GRKIT_HOST_VERSION_VALUE 1
 /* Number of Image Control records. */
@@ -48,9 +48,8 @@
 /* Native list position, saved when the private menu opens. */
 #define GRKIT_HOST_MENU_LIST 64
 #define GRKIT_HOST_MENU_LIST_WORDS 2
-/* Grain level: 0 Off, 1 weak, 2 medium, 3 strong. The native grain stage of
-   recorded pictures uses it instead of the native grain settings. */
-#define GRKIT_HOST_GRAIN 72
+/* Reserved and zero. */
+#define GRKIT_HOST_RESERVED_72 72
 /* Number of ADJ events. GRKIT_HOST_MENU_EVENT_RING holds the last ones. */
 #define GRKIT_HOST_MENU_EVENTS 76
 /* Number of Image Control selections. A diagnostic. */
@@ -80,9 +79,10 @@
 #define GRKIT_HOST_PARAMETER_CHANGES 148
 /* GRKIT_HOST_PARAMETER_CHANGES at the last live-view build. */
 #define GRKIT_HOST_LIVE_PARAMETER_CHANGES 152
-/* Reserved and zero. */
-#define GRKIT_HOST_RESERVED 156
-#define GRKIT_HOST_RESERVED_WORDS 5
+/* Icon chunk addresses: chunk n holds icon slots 40 n to 40 n + 39. The host
+   icons come first in chunk 0, then the effect icons. */
+#define GRKIT_HOST_ICON_CHUNKS 156
+#define GRKIT_HOST_ICON_CHUNKS_WORDS 5
 /* Icon of the GRKit tile. */
 #define GRKIT_HOST_PLUGINS_ICON 176
 /* Private toolbar cell, or 0. */
@@ -91,8 +91,8 @@
 #define GRKIT_HOST_TOOLBAR_OWNER 184
 /* Module that the private menu shows at MENU_MODULE. */
 #define GRKIT_HOST_MODULE 188
-/* Icon chunk addresses: chunk n holds icon slots 40 n to 40 n + 39. */
-#define GRKIT_HOST_ICON_CHUNKS 192
+/* Reserved and zero. */
+#define GRKIT_HOST_RESERVED_192 192
 /* Aspect id 2 variant for the photo shown in playback: 0 none (shooting uses
    the Framing ratio), 1 not 65:24, 2 65:24. */
 #define GRKIT_HOST_FRAME_FILE 196
@@ -129,6 +129,13 @@
 /* Return to GRKit Image Control after the native parameter page: 1 opening, 2
    away. */
 #define GRKIT_HOST_RETURN 252
+/* The words of the plugins (grkit_core::plugins::Plugin::words), in plugin
+   order, then zero words. GRKIT_PLUGIN_<PLUGIN>_<WORD> gives each offset. */
+#define GRKIT_HOST_PLUGIN_AREA 256
+#define GRKIT_HOST_PLUGIN_AREA_WORDS 64
+/* Grain level: 0 Off, 1 weak, 2 medium, 3 strong. The native grain stage of
+   recorded pictures uses it instead of the native grain settings. */
+#define GRKIT_PLUGIN_GRAIN_LEVEL 256
 
 /* An Image Control record. The records follow the header. */
 #define GRKIT_RECORD_SIZE 0x740
@@ -190,13 +197,13 @@
    UTF-16 strings. At GRKIT_TEXT_SUMMARY, the installer writes the Image
    Control summary of each record in each language, GRKIT_SUMMARY_UNITS units
    each, language-major. */
-#define GRKIT_TEXT_SIZE 12288
+#define GRKIT_TEXT_SIZE 16384
 /* Everything after the records: the script array must hold it. */
-#define GRKIT_TAIL_SIZE 153736
-#define GRKIT_TEXT_SUMMARY 4096
+#define GRKIT_TAIL_SIZE 157832
+#define GRKIT_TEXT_SUMMARY 8192
 /* The parameter page title of a GRKit session, after the summaries: the page,
    its vtable, and the descriptor of the effect name. */
-#define GRKIT_TEXT_PARAMETER_TITLE 12272
+#define GRKIT_TEXT_PARAMETER_TITLE 16368
 #define GRKIT_TEXT_LANGUAGES 4
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE+GRKIT_PICTURE_SCRATCH)

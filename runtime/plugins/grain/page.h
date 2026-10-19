@@ -1,10 +1,10 @@
 /* Grain: the menu page. Off, weak, medium, and strong. The core's
-   pipeline.grain hooks read the level (GRKIT_HOST_GRAIN). */
+   pipeline.grain hooks read the level (GRKIT_PLUGIN_GRAIN_LEVEL). */
 #include "../../plugin.h"
 
 #define GRAIN_LEVEL_COUNT (GRAIN_LEVEL_MAX+1U)
 static u32 grain_level(volatile u32 *h) {
-    u32 value=h[GRKIT_HOST_GRAIN/4];
+    u32 value=h[GRKIT_PLUGIN_GRAIN_LEVEL/4];
     return value<GRAIN_LEVEL_COUNT ? value : 0;
 }
 static const u16 *grain_title(volatile u32 *h) { return text(h,TEXT_GRAIN); }
@@ -17,7 +17,7 @@ static u32 grain_icon(volatile u32 *h,u32 row) {
 }
 static u32 grain_checked(volatile u32 *h,u32 row) { return row==grain_level(h); }
 /* Recorded pictures only: the native grain stage reads the level. */
-static void grain_apply(volatile u32 *h,u32 row) { h[GRKIT_HOST_GRAIN/4]=row; }
+static void grain_apply(volatile u32 *h,u32 row) { h[GRKIT_PLUGIN_GRAIN_LEVEL/4]=row; }
 
 /* The module tile, then the three levels. */
 #define GRAIN_PAGE {grain_title,grain_summary,grain_rows,grain_label,grain_icon, \

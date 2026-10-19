@@ -80,7 +80,7 @@ dirty_resume:
 // r3 = the level minus 1, or a value above 2 for Off. Flags change.
 grain_level:
     ldr r3, =GRKIT_HEADER_REFERENCE
-    ldr r3, [r3, #GRKIT_HOST_GRAIN]
+    ldr r3, [r3, #GRKIT_PLUGIN_GRAIN_LEVEL]
     sub r3, r3, #1
     cmp r3, #2
     bx lr

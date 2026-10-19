@@ -434,11 +434,11 @@ fn runtime_layout_matches_target_capacity() {
     assert_eq!(runtime::MAX_COUNT, 20);
     assert_eq!(
         runtime::layout(0).unwrap(),
-        json!({"words": 38498, "icon_words": [32040]})
+        json!({"words": 39586, "icon_words": [32040]})
     );
     assert_eq!(
         runtime::layout(20).unwrap(),
-        json!({"words": 47778, "icon_words": [64080]})
+        json!({"words": 48866, "icon_words": [64080]})
     );
     assert!(runtime::layout(21).is_err());
 }
@@ -457,7 +457,7 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
         // Picture scratch (the date stamp masks, then the shot ring), then the menu text.
         assert_eq!(
             words * 4,
-            256 + count * 0x740 + 141376 + 72 + 12288,
+            512 + count * 0x740 + 141376 + 72 + 16384,
             "count {count}"
         );
         assert_eq!(

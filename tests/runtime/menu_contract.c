@@ -24,7 +24,7 @@ static unsigned test_language;
 #define PAGE_ICON(module, row) module_icon((module), modules[(module)].icon(test_header, (row)))
 #define CURRENT_ICON(row) module_icon(current_index(test_header), current_module(test_header)->icon(test_header, (row)))
 
-static volatile u32 test_header[64];
+static volatile u32 test_header[GRKIT_HOST_HEADER_SIZE / 4];
 static u16 text_arena[GRKIT_TEXT_SIZE / 2];
 static const u16 *text_at(u32 address)
 {
@@ -373,7 +373,7 @@ int main(void)
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 4;
     assert(same(current_module(test_header)->summary(test_header), "Grain: Off"));
     assert(PAGE_ICON(PLUGIN_GRAIN, 4) == GRAIN_ICON);
-    test_header[GRKIT_HOST_GRAIN / 4] = 2;
+    test_header[GRKIT_PLUGIN_GRAIN_LEVEL / 4] = 2;
     assert(PAGE_ICON(PLUGIN_GRAIN, 4) == GRAIN_LEVEL_ICON(2));
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_GRAIN);
@@ -382,7 +382,7 @@ int main(void)
     for (u32 row = 0; row < 4; ++row) {
         test_header[GRKIT_HOST_MENU_CURSOR / 4] = row;
         menu_confirm(test_header);
-        assert(test_header[GRKIT_HOST_GRAIN / 4] == row);
+        assert(test_header[GRKIT_PLUGIN_GRAIN_LEVEL / 4] == row);
         assert(current_module(test_header)->checked(test_header, row));
         assert(same(current_module(test_header)->label(test_header, row), grain_names[row]));
         assert(CURRENT_ICON(row) == (row ? GRAIN_LEVEL_ICON(row) : 0x7fff));
@@ -391,9 +391,9 @@ int main(void)
     }
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 4);
     assert(same(current_module(test_header)->summary(test_header), "Grain: Strong"));
-    test_header[GRKIT_HOST_GRAIN / 4] = 999;
+    test_header[GRKIT_PLUGIN_GRAIN_LEVEL / 4] = 999;
     assert(grain_level(test_header) == 0);
-    test_header[GRKIT_HOST_GRAIN / 4] = 0;
+    test_header[GRKIT_PLUGIN_GRAIN_LEVEL / 4] = 0;
     test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] = 0;
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;

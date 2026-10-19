@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use crate::{camera::Camera, Files};
 
 pub use crate::abi::{
-    HEADER_REFERENCE, HOST_ACTIVE, HOST_COUNT, HOST_FRAME_RATIO, HOST_GRAIN, HOST_GUIDE,
+    HEADER_REFERENCE, HOST_ACTIVE, HOST_COUNT, HOST_FRAME_RATIO, HOST_GUIDE,
     HOST_HEADER_SIZE as HEADER_SIZE, HOST_PARAMETER_CHANGES, HOST_PLUGINS, HOST_RECORDS,
     HOST_STAMP, PICTURE_SCRATCH, RECORD_CODE, RECORD_PARAMETERS, RECORD_SIZE, TAIL_SIZE,
 };
@@ -26,16 +26,22 @@ pub fn icon_stride(target: &str) -> Result<usize> {
 }
 pub const ICONS_PER_CHUNK: usize = 40;
 /// Off, GRKit, then the tiles of each plugin (`plugins::TILES`).
-/// The menu addresses plugin tiles by offset, so they must stay contiguous in
-/// one icon chunk.
+/// The menu addresses plugin tiles by offset, so the host icons come first in
+/// chunk 0, and they must fit in it. The effect icons follow them.
 pub const HOST_ICON_COUNT: usize = 2 + plugins::TILES;
+const _: () = assert!(HOST_ICON_COUNT <= ICONS_PER_CHUNK);
 /// Product limit for private Image Control effects.
 pub const MAX_COUNT: usize = 20;
 // One script array holds the header, every record, the scratch, and the text: at most 65536 words.
 const _: () = assert!(HEADER_SIZE + MAX_COUNT * RECORD_SIZE + TAIL_SIZE <= 65536 * 4);
 const _: () = assert!(PICTURE_SCRATCH.is_multiple_of(4) && TAIL_SIZE.is_multiple_of(4));
+/// One script array holds one icon chunk: 40 slots of at most 6412 bytes stay
+/// below 65536 words.
 pub const MAX_CHUNKS: usize = (MAX_COUNT + HOST_ICON_COUNT).div_ceil(ICONS_PER_CHUNK);
-const _: () = assert!(MAX_COUNT + HOST_ICON_COUNT <= ICONS_PER_CHUNK);
+/// The chunk addresses that the header holds (`GRKIT_HOST_ICON_CHUNKS`).
+pub const ICON_CHUNK_SLOTS: usize = 5;
+const _: () = assert!(MAX_CHUNKS <= ICON_CHUNK_SLOTS);
+const _: () = assert!(ICONS_PER_CHUNK * 6412 <= 65536 * 4);
 /// Selections kept across power-off, written by the resident loader through the
 /// camera's own file system, never from Linux while the camera may write photos.
 pub const STATE_FILE: &str = "STATE.TXT";

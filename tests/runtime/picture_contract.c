@@ -44,7 +44,7 @@ static unsigned flushes, native_aspect;
 #define PICTURE_BARRIER() ((void)0)
 #include "picture.c"
 
-static volatile u32 header[64];
+static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
 volatile u32 *framing_header(void) { return header; }
 
 #define RECORDS (ARENA + 0x100)

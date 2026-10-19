@@ -96,14 +96,21 @@ INSTALL checks and publishes only the patches of the points that the installed p
 With more than 20 effects, the installer keeps the 20 smallest effect IDs.
 For a duplicate ID, the file with the smallest name wins. The result does not depend on directory order. Directory read errors stop the installation.
 
-The 20-effect capacity is a product limit, not a GRF format limit. It fits one script array and one icon chunk.
-The script array holds the header, the records, and the picture scratch.
+The 20-effect capacity is a product limit, not a GRF format limit.
+The registry script array holds the header, the records, the picture scratch, and the menu text.
 The scratch has 141,376 bytes for the date stamp masks, then the 72-byte shot ring (see Recorded pictures).
 
-Off, GRKit, and the eighteen module tiles (four Framing, five Guides, five Date Stamp, four Grain) use twenty host icon records outside that capacity. With 20 effects, they fill the 40-icon chunk.
+The icons are in chunks. Each chunk is one script array with 40 icon slots, and the header holds the address of each chunk (`GRKIT_HOST_ICON_CHUNKS`, at most 5).
+Chunk 0 starts with the host icons: Off, GRKit, and the eighteen module tiles (four Framing, five Guides, five Date Stamp, four Grain).
+The effect icons follow them in record order, and continue in the next chunk. With 20 effects, the icons fill one chunk.
+The host icons must fit in chunk 0, because the menu finds each plugin tile by its offset from the first one.
+
 The module tiles are contiguous from icon ID `0x7fec` to `0x7ffd`, below the GRKit tile (`0x7ffe`) and Off (`0x7fff`). The menu derives each one from the first Framing tile.
 
-`grkit_core::abi` defines the header, the records, and the scratch. Each of the 64 header words has a name, and a test checks that each byte belongs to exactly one field.
+`grkit_core::abi` defines the header, the records, and the scratch. The header has 128 words.
+The first 64 words are core fields. Each has a name, and a test checks that each byte belongs to exactly one field.
+The other 64 words are the plugin area (`GRKIT_HOST_PLUGIN_AREA`). It holds the words that the plugins declare in the registry, in plugin order.
+
 `runtime/abi.h` is generated from these tables, and the `generated` test fails if the checked-in file differs. The C code, the assembly, and the loader take their offsets from these names.
 
 ### Saved selections
@@ -156,6 +163,7 @@ The plugin registry is `grkit_core::plugins::PLUGINS`. It is the only list of th
 - The ID: the name in `PLUGINS.TXT` and the directory under `runtime/plugins/`.
 - The extension points whose patches the plugin needs.
 - Whether the plugin shows only with effects.
+- The plugin's own header words. C code names each one `GRKIT_PLUGIN_<ID>_<NAME>`.
 - The state keys that `STATE.TXT` keeps, with their header words and largest values.
 - The artwork tiles.
 - The handler file, with its overlay layers or its encoders and their order.
@@ -178,13 +186,20 @@ The `generated` test of `grkit-core` fails if a generated file differs from the 
 
 1. Add the C code in `runtime/plugins/<id>/`: `page.h`, and a handler file if the plugin has layers or encoders. Include only `runtime/plugin.h`.
 2. In `page.h`, define `<ID>_PAGE`. Give it `<ID>_TILES` as its tile count.
-3. Add the header words of its state to `crates/grkit-core/src/abi.rs`.
-4. Add the entry to `PLUGINS` in `crates/grkit-core/src/plugins.rs`.
-5. Add its tiles to `grkit_core::artwork`, its menu text to `grkit_core::menu_text`, and its site text to `web/src/i18n.ts`.
-6. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
-7. Run the tests. The tests fail if a tile count, a handler order, or an extension point does not agree with the code.
+3. Add the entry to `PLUGINS` in `crates/grkit-core/src/plugins.rs`. Declare its header words in `words`. A state key refers to one of them with `Slot::Own`.
+4. Add its tiles to `grkit_core::artwork`, its menu text to `grkit_core::menu_text`, and its site text to `web/src/i18n.ts`.
+5. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
+6. Run the tests. The tests fail if a tile count, a handler order, or an extension point does not agree with the code.
 
-The ADJ icon chunk has 40 slots, and the private header has 64 words. Each is full in this release, so a new plugin first needs room in both.
+These limits apply to new plugins:
+
+| Resource | Limit | Used in this release |
+| --- | --- | --- |
+| Host icons in chunk 0 | 40 | 20 |
+| Plugin area | 64 words | 1 |
+| Menu label table | 8192 bytes (`GRKIT_TEXT_SUMMARY`) | About 3,100 bytes |
+| Plugins | 32 (`GRKIT_HOST_PLUGINS`) | 5 |
+| Code regions | See [Code areas](#code-areas) | `build.json` gives each size and limit |
 
 ### Hosts
 
@@ -456,9 +471,9 @@ All private code lives in the tail reservation after the decoded RTOS image. GRK
 | Component | GR III 2.10 | GR IV 1.11 | Notes |
 | --- | --- | --- | --- |
 | Unused | `0x540b6000`–`0x540b6100` | `0x543d3000`–`0x543d3100` | Not written |
-| Processing | `0x540b6100`–`0x540b6900` | `0x543d3100`–`0x543d3900` | A32 assembly |
-| Menu | `0x540b6900`–`0x540b9000` | `0x543d3900`–`0x543d6000` | Thumb-2 C at `-Oz`, A32 entry points |
-| Framing | `0x540b9000`–`0x540be000` | `0x543d6000`–`0x543dc000` | A32 C at `-Os` and assembly: Framing, Guides, and the effect extension and picture hooks |
+| Processing | `0x540b6100`–`0x540b6500` | `0x543d3100`–`0x543d3500` | A32 assembly |
+| Menu | `0x540b6500`–`0x540b9800` | `0x543d3500`–`0x543d6800` | Thumb-2 C at `-Oz`, A32 entry points |
+| Framing | `0x540b9800`–`0x540be000` | `0x543d6800`–`0x543dc000` | A32 C at `-Os` and assembly: Framing, Guides, and the effect extension and picture hooks |
 
 `build.json` gives the size and the limit of each component. The freestanding link has no division helpers, so menu C must not divide.
 Picture code divides with its own shift-subtract routine, once per picture for each reciprocal.

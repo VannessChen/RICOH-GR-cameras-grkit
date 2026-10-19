@@ -430,20 +430,20 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
         (
             &processing,
             0x540b6100,
-            0x540b6900u32,
+            0x540b6500u32,
             processing_hooks.as_slice(),
             [].as_slice(),
         ),
         (
             &menu,
-            0x540b6900,
-            0x540b9000u32,
+            0x540b6500,
+            0x540b9800u32,
             menu_hooks.as_slice(),
             menu_instructions.as_slice(),
         ),
         (
             &framing,
-            0x540b9000,
+            0x540b9800,
             0x540be000u32,
             framing_hooks.as_slice(),
             framing_instructions.as_slice(),
@@ -651,7 +651,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/PLUGINS/PLUGINS.TTL",
-            "f004224bfc4489475260a7659c13d4d84a1c27a30837ec74e775bf97190a49e8",
+            "1795637987cf37f818672f85aef2492969c89bcc35160b9d8f9d7dd4a0531788",
         ),
         (
             "SCRIPT/PLUGINS/INSTALL.BIN",
