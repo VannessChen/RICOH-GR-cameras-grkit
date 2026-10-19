@@ -1,6 +1,6 @@
 # GRKit
 
-[English](README.md) | [简体中文](README.zh-Hans.md) | 繁體中文
+[English](README.md) | [简体中文](README.zh-Hans.md) | 繁體中文 | [日本語](README.ja.md)
 
 [![Tests](https://github.com/ahonn/grkit/actions/workflows/tests.yml/badge.svg)](https://github.com/ahonn/grkit/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -63,11 +63,11 @@ grkit package --build build/runtime --effects build/effects --guide build/guides
 grkit verify dist/GRKit.zip
 ```
 
-- 指南：`install-guide-tools.sh` 下載 Typst 與 Noto Sans SC、TC 字型，並校驗 SHA-256，支援 Linux x86_64 與 macOS arm64。`build-guides.sh` 產生 `build/guides/<機型>/<語言>.pdf`。
+- 指南：`install-guide-tools.sh` 下載 Typst 與 Noto Sans SC、TC、JP 字型，並校驗 SHA-256，支援 Linux x86_64 與 macOS arm64。`build-guides.sh` 產生 `build/guides/<機型>/<語言>.pdf`。
 - GR IIIx：用 `--camera gr3x` 與 `--guide build/guides/gr3x/en.pdf` 打包。它與 GR III 使用同一個執行環境。
 - GR IV：用 `fwdc248b.bin` 與 `--target gr4-1.11` 建置，再用 `--camera gr4` 與 `--guide build/guides/gr4/en.pdf` 打包。
 - 減少外掛：用 `--plugins` 列出要安裝的外掛，例如 `--plugins framing,guides`。安裝器不會為其他外掛修改韌體。不加 `--effects` 時，安裝包中沒有 Image Control。
-- 指南語言：加上 `--language zh-Hans` 或 `--language zh-Hant`，並提供該語言的指南，例如 `build/guides/gr3/zh-Hans.pdf`。
+- 指南語言：加上 `--language zh-Hans`、`--language zh-Hant` 或 `--language ja`，並提供該語言的指南，例如 `build/guides/gr3/zh-Hans.pdf`。
 
 ## 儲存庫結構
 

@@ -18,6 +18,13 @@
   --cjk: 'Noto Sans TC';
 }
 
+:root[lang='ja'] {
+  --cjk: 'Noto Sans JP';
+  /* Breaks Japanese lines between phrases, not inside a word or a number and its counter.
+     Browsers without auto-phrase break between characters. */
+  word-break: auto-phrase;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -141,6 +148,10 @@ button {
 
 .languages .button:lang(zh-Hant) {
   font-family: 'Noto Sans TC', sans-serif;
+}
+
+.languages .button:lang(ja) {
+  font-family: 'Noto Sans JP', sans-serif;
 }
 
 .masthead {

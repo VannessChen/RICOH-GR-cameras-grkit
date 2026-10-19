@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs the tools that build the installation guides into DIR: Typst in
-# DIR/bin and the Noto Sans SC and Noto Sans TC fonts in DIR/fonts.
+# DIR/bin and the Noto Sans SC, TC, and JP fonts in DIR/fonts.
 # Each download must match its pinned SHA-256.
 # Usage: sh .github/scripts/install-guide-tools.sh DIR
 set -eu
@@ -60,3 +60,7 @@ fetch "$fonts_url/TC/NotoSansTC-Regular.otf" "$dir/fonts/NotoSansTC-Regular.otf"
   5bab0cb3c1cf89dde07c4a95a4054b195afbcfe784d69d75c340780712237537
 fetch "$fonts_url/TC/NotoSansTC-Bold.otf" "$dir/fonts/NotoSansTC-Bold.otf" \
   55420b259eb119bf5f2a0aadba10cf9d736c12d64ab93e78546d69ef5f43558b
+fetch "$fonts_url/JP/NotoSansJP-Regular.otf" "$dir/fonts/NotoSansJP-Regular.otf" \
+  dff723ba59d57d136764a04b9b2d03205544f7cd785a711442d6d2d085ac5073
+fetch "$fonts_url/JP/NotoSansJP-Bold.otf" "$dir/fonts/NotoSansJP-Bold.otf" \
+  1b0edfb500b73a4fa8a4fcaae1bbbd403994e08e73e3e0da37e70d3853f42c5f

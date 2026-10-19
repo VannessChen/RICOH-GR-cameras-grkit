@@ -38,8 +38,8 @@ static const u16 plugins[] = {'G','R','K','i','t',0};
 #define MENU_TEXT(address) ((const u16 *)(address))
 #endif
 #ifndef MENU_LANGUAGE
-/* The camera's UI language byte (runtime/targets): 18 is Traditional Chinese,
-   19 Simplified Chinese. */
+/* The camera's UI language byte (runtime/targets): 0 is English, 18
+   Traditional Chinese, 19 Simplified Chinese, and 20 Japanese. */
 static u32 camera_language(void) {
 #if defined(LANGUAGE_SETTINGS_SLOT)
     u32 settings=WORD(LANGUAGE_SETTINGS_SLOT,0);
@@ -51,18 +51,32 @@ static u32 camera_language(void) {
 #endif
 }
 /* The camera language as a menu language (runtime/abi.h), or English. */
-#define MENU_LANGUAGE() (camera_language()==19 ? 1U : camera_language()==18 ? 2U : 0U)
+static u32 camera_menu_language(void) {
+    switch (camera_language()) {
+    case 19: return 1;
+    case 18: return 2;
+    case 20: return 3;
+    default: return 0;
+    }
+}
+#define MENU_LANGUAGE() camera_menu_language()
 #endif
 static u32 menu_language(void) {
     u32 language=MENU_LANGUAGE();
     return language<GRKIT_TEXT_LANGUAGES ? language : 0;
 }
 /* The language table index that the text hooks of menu.S pass on for GRKit
-   text. It selects the font: a Chinese font draws Chinese text, and the Latin
-   table index 1 draws English. Chinese text with index 1 shows "?" glyphs. */
+   text. It selects the font: a Chinese or Japanese font draws that text, and
+   the Latin table index 1 draws English. Chinese or Japanese text with index 1
+   shows "?" glyphs. The firmware maps the UI language byte to this index:
+   Chinese keeps 18 and 19, and Japanese (byte 20) uses index 0. */
 A32_ENTRY u32 menu_table_index(void) {
-    u32 language=menu_language();
-    return language==1 ? 19 : language==2 ? 18 : 1;
+    switch (menu_language()) {
+    case 1: return 19;
+    case 2: return 18;
+    case 3: return 0;
+    default: return 1;
+    }
 }
 /* One string of the label table in the menu language. */
 static const u16 *text(volatile u32 *h,u32 id) {

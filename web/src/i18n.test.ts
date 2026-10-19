@@ -11,10 +11,17 @@ describe('matchLanguage', () => {
     expect(matchLanguage(['zh-TW'])).toBe('zh-Hant');
   });
 
+  it('maps Japanese tags', () => {
+    expect(matchLanguage(['ja'])).toBe('ja');
+    expect(matchLanguage(['ja-JP'])).toBe('ja');
+  });
+
   it('uses the first supported tag and falls back to English', () => {
-    expect(matchLanguage(['ja-JP', 'zh-TW', 'en'])).toBe('zh-Hant');
+    expect(matchLanguage(['ja-JP', 'zh-TW', 'en'])).toBe('ja');
+    expect(matchLanguage(['ko-KR', 'zh-TW', 'ja'])).toBe('zh-Hant');
+    expect(matchLanguage(['fr', 'ja', 'en'])).toBe('ja');
     expect(matchLanguage(['fr', 'en-GB'])).toBe('en');
-    expect(matchLanguage(['ja'])).toBe('en');
+    expect(matchLanguage(['ko'])).toBe('en');
     expect(matchLanguage([])).toBe('en');
   });
 });
@@ -27,6 +34,7 @@ describe('STRINGS', () => {
     });
     expect(shape('zh-Hans')).toEqual(shape('en'));
     expect(shape('zh-Hant')).toEqual(shape('en'));
+    expect(shape('ja')).toEqual(shape('en'));
   });
 
   it('names the ModeSet file through the camera token once in each language', () => {

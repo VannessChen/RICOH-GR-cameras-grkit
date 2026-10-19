@@ -1,6 +1,6 @@
 # GRKit
 
-[English](README.md) | 简体中文 | [繁體中文](README.zh-Hant.md)
+[English](README.md) | 简体中文 | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md)
 
 [![Tests](https://github.com/ahonn/grkit/actions/workflows/tests.yml/badge.svg)](https://github.com/ahonn/grkit/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -63,11 +63,11 @@ grkit package --build build/runtime --effects build/effects --guide build/guides
 grkit verify dist/GRKit.zip
 ```
 
-- 指南：`install-guide-tools.sh` 下载 Typst 和 Noto Sans SC、TC 字体，并校验 SHA-256，支持 Linux x86_64 和 macOS arm64。`build-guides.sh` 生成 `build/guides/<机型>/<语言>.pdf`。
+- 指南：`install-guide-tools.sh` 下载 Typst 和 Noto Sans SC、TC、JP 字体，并校验 SHA-256，支持 Linux x86_64 和 macOS arm64。`build-guides.sh` 生成 `build/guides/<机型>/<语言>.pdf`。
 - GR IIIx：用 `--camera gr3x` 和 `--guide build/guides/gr3x/en.pdf` 打包。它和 GR III 使用同一个运行时。
 - GR IV：用 `fwdc248b.bin` 和 `--target gr4-1.11` 构建，再用 `--camera gr4` 和 `--guide build/guides/gr4/en.pdf` 打包。
 - 减少插件：用 `--plugins` 列出要安装的插件，例如 `--plugins framing,guides`。安装器不会为其他插件修改固件。不加 `--effects` 时，安装包中没有 Image Control。
-- 指南语言：加 `--language zh-Hans` 或 `--language zh-Hant`，并给出该语言的指南，例如 `build/guides/gr3/zh-Hans.pdf`。
+- 指南语言：加 `--language zh-Hans`、`--language zh-Hant` 或 `--language ja`，并给出该语言的指南，例如 `build/guides/gr3/zh-Hans.pdf`。
 
 ## 仓库结构
 

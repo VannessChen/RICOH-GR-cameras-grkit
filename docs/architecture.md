@@ -217,7 +217,7 @@ List restoration suppresses the native selection callbacks.
 
 ### Menu text
 
-The menu text is in English, Simplified Chinese, and Traditional Chinese. The menu uses the camera language if it is one of them, and English otherwise. Effect names stay as their definitions give them.
+The menu text is in English, Simplified Chinese, Traditional Chinese, and Japanese. The menu uses the camera language if it is one of them, and English otherwise. Effect names stay as their definitions give them.
 `grkit_core::menu_text` holds the strings and builds a label table: for each language, 41 u16 offsets, then NUL-terminated UTF-16 strings. The string IDs are in `runtime/abi.h`.
 
 The build gives the table the workspace version for the About row. Tests build it with the version `0.0.0`, so a new version does not change the pinned header hash.

@@ -12,7 +12,7 @@ The site serves these files:
 
 `THIRD_PARTY_LICENSES.txt` gives the licenses of the bundled JavaScript packages and fonts, and of the Rust crates in the WebAssembly module. `pnpm build` writes it with `scripts/third-party-licenses.mjs`. The script reads the JavaScript licenses from the Vite build and the crate licenses from `cargo metadata`, so Cargo must be on `PATH`.
 
-The site serves its fonts from `assets/` and sends no request to another host. The Noto Sans SC and TC styles load only on a Chinese page.
+The site serves its fonts from `assets/` and sends no request to another host. The Noto Sans SC and TC styles load only on a Chinese page, and the Noto Sans JP styles only on a Japanese page.
 
 ## Develop
 

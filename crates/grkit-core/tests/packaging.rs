@@ -434,11 +434,11 @@ fn runtime_layout_matches_target_capacity() {
     assert_eq!(runtime::MAX_COUNT, 20);
     assert_eq!(
         runtime::layout(0).unwrap(),
-        json!({"words": 37474, "icon_words": [32040]})
+        json!({"words": 38498, "icon_words": [32040]})
     );
     assert_eq!(
         runtime::layout(20).unwrap(),
-        json!({"words": 46754, "icon_words": [64080]})
+        json!({"words": 47778, "icon_words": [64080]})
     );
     assert!(runtime::layout(21).is_err());
 }
@@ -457,7 +457,7 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
         // Picture scratch (the date stamp masks, then the shot ring), then the menu text.
         assert_eq!(
             words * 4,
-            256 + count * 0x740 + 141376 + 72 + 8192,
+            256 + count * 0x740 + 141376 + 72 + 12288,
             "count {count}"
         );
         assert_eq!(
@@ -614,6 +614,10 @@ fn the_guide_names_the_camera_once_and_the_modeset_file_once() {
             Language::TraditionalChinese,
             include_str!("../../../resources/INSTALLATION.zh-Hant.md"),
         ),
+        (
+            Language::Japanese,
+            include_str!("../../../resources/INSTALLATION.ja.md"),
+        ),
     ] {
         let phrase = language.camera_phrase(&camera::GR3);
         assert_eq!(guide.matches(&phrase).count(), 1, "{phrase}");
@@ -654,6 +658,7 @@ fn a_package_has_the_guide_of_its_language_only() {
             "GRKit Installation Guide.pdf",
             "GRKit 安装指南.pdf",
             "GRKit 安裝指南.pdf",
+            "GRKit インストールガイド.pdf",
         ]
     );
     assert_eq!(
@@ -688,6 +693,7 @@ fn a_package_has_exactly_one_pdf_guide() {
     )
     .is_err());
     assert!(Language::parse("fr").is_err());
+    assert_eq!(Language::parse("ja").unwrap(), Language::Japanese);
 }
 
 #[test]

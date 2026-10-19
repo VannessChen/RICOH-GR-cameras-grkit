@@ -323,7 +323,7 @@ pub fn header() -> String {
     define(
         &mut out,
         "Menu text after the picture scratch, in each menu language: 0 English, 1 \
-         Simplified Chinese, 2 Traditional Chinese. The installer copies the label \
+         Simplified Chinese, 2 Traditional Chinese, 3 Japanese. The installer copies the label \
          table of the build to offset 0: for each language, GRKIT_TEXT_STRINGS u16 \
          byte offsets from the text start, then NUL-terminated UTF-16 strings. At \
          GRKIT_TEXT_SUMMARY, the installer writes the Image Control summary of each \

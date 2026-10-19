@@ -70,7 +70,7 @@ int main(void)
     descriptor(slot, modules[0].summary(test_header));
     assert(same(modules[0].summary(test_header), "Image Control: Off") && slot[0] == 0x113);
     /* Each language reads its own strings, and an unknown language reads English. */
-    for (u32 language = 0; language < 4; ++language) {
+    for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES + 2; ++language) {
         u32 table = language < GRKIT_TEXT_LANGUAGES ? language : 0;
         test_language = language;
         for (u32 id = 0; id < GRKIT_TEXT_STRINGS; ++id)
@@ -82,6 +82,8 @@ int main(void)
     assert(menu_table_index() == 18);
     test_language = 1;
     assert(menu_table_index() == 19);
+    test_language = 3;
+    assert(menu_table_index() == 0);
     test_language = 7;
     assert(menu_table_index() == 1);
     test_language = 0;

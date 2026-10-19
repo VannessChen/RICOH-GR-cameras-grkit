@@ -220,7 +220,7 @@ export function App() {
                 {plan.visible.length > 0
                   ? MODULES.filter((module) => plan.visible.includes(module.key))
                       .map((module) => t.moduleNames[module.key])
-                      .join(', ')
+                      .join(t.listSeparator)
                   : '—'}
               </dd>
               <dd className="package-note">{t.firmwareNote}</dd>

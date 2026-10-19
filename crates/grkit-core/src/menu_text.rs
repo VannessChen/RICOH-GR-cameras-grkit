@@ -9,7 +9,7 @@ use anyhow::{ensure, Result};
 use crate::packaging::Language;
 
 /// The size of the text area after the picture scratch.
-pub const TEXT_SIZE: usize = 8192;
+pub const TEXT_SIZE: usize = 12288;
 /// Where the Image Control summaries start in the text area. The label table
 /// must end before it.
 pub const TEXT_SUMMARY: usize = 4096;
@@ -24,11 +24,14 @@ pub const STRINGS: usize = 41;
 const NAME_UNITS: usize = 16;
 
 /// The words of one menu language. Each list follows the rows of its module
-/// after Off. The Chinese words reuse the terms of the camera manuals where
-/// they have them (影像控制, 关闭/關閉, 弱/中/强, 颗粒感/粒紋感). 加印日期 comes
-/// from the date imprint of earlier GR models. The camera's Chinese fonts draw
-/// each of these characters only while the camera language is Chinese, which
-/// is when the menu shows them.
+/// after Off. The Chinese and Japanese words reuse the terms of the camera
+/// menus where they have them (影像控制, 关闭/關閉, 弱/中/强, 颗粒感/粒紋感;
+/// イメージコントロール, オフ, 粒状感, グリッド, 9分割, 画面中央, 弱/中/強).
+/// 加印日期 and 日付入れ come from the date imprint of earlier GR models
+/// (日付入れ撮影 in the Japanese GR DIGITAL III manual).
+/// The camera's Chinese and Japanese fonts draw each of these characters only
+/// while the camera language is that language, which is when the menu shows
+/// them.
 struct Words {
     /// Between a module name and its value in a summary.
     separator: &'static str,
@@ -96,11 +99,30 @@ const TRADITIONAL_CHINESE: Words = Words {
     grain_levels: ["弱", "中", "強"],
 };
 
+const JAPANESE: Words = Words {
+    // A full-width colon would push "イメージコントロール：" and a 13-character
+    // effect name under the icon column. The half-width colon keeps them clear.
+    separator: ":",
+    image_control: "イメージコントロール",
+    framing: "フレーミング",
+    guides: "グリッド",
+    date_stamp: "日付入れ",
+    grain: "粒状感",
+    version: "バージョン",
+    off: "オフ",
+    ratios: ["XPan 65:24", "16:9", "4:3"],
+    ratio_values: ["XPan", "16:9", "4:3"],
+    guide_styles: ["9分割", "画面中央", "黄金比", "対角線"],
+    stamp_styles: ["'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY"],
+    grain_levels: ["弱", "中", "強"],
+};
+
 fn words(language: Language) -> &'static Words {
     match language {
         Language::English => &ENGLISH,
         Language::SimplifiedChinese => &SIMPLIFIED_CHINESE,
         Language::TraditionalChinese => &TRADITIONAL_CHINESE,
+        Language::Japanese => &JAPANESE,
     }
 }
 
@@ -312,6 +334,10 @@ mod tests {
         assert_eq!(
             strings(Language::TraditionalChinese, "1.2.3")[id("VERSION")],
             "版本 1.2.3"
+        );
+        assert_eq!(
+            strings(Language::Japanese, "1.2.3")[id("VERSION")],
+            "バージョン 1.2.3"
         );
     }
 

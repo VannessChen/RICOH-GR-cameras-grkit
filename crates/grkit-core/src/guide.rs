@@ -24,6 +24,7 @@ fn recovery_guide(language: Language) -> &'static str {
         Language::English => include_str!("../../../resources/RECOVERY.md"),
         Language::SimplifiedChinese => include_str!("../../../resources/RECOVERY.zh-Hans.md"),
         Language::TraditionalChinese => include_str!("../../../resources/RECOVERY.zh-Hant.md"),
+        Language::Japanese => include_str!("../../../resources/RECOVERY.ja.md"),
     }
 }
 
@@ -35,6 +36,7 @@ fn text_settings(language: Language) -> &'static str {
         Language::English => r#"font: "Noto Sans SC", lang: "en""#,
         Language::SimplifiedChinese => r#"font: "Noto Sans SC", lang: "zh", region: "cn""#,
         Language::TraditionalChinese => r#"font: "Noto Sans TC", lang: "zh", region: "tw""#,
+        Language::Japanese => r#"font: "Noto Sans JP", lang: "ja""#,
     }
 }
 

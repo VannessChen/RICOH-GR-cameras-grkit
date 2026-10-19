@@ -2,6 +2,7 @@ export const LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'zh-Hans', label: '简体中文' },
   { code: 'zh-Hant', label: '繁體中文' },
+  { code: 'ja', label: '日本語' },
 ] as const;
 
 export type Language = (typeof LANGUAGES)[number]['code'];
@@ -22,6 +23,8 @@ const en = {
     `GRKit for ${name} is experimental. It has not been tested on a camera.`,
   effects: 'Effects',
   modules: 'Modules',
+  /** Separates the module names in the package summary. */
+  listSeparator: ', ',
   /** Module names as the camera menu shows them in this language. */
   moduleNames: {
     imageControl: 'Image Control',
@@ -140,6 +143,7 @@ const zhHans: Strings = {
   experimentalNote: (name) => `${name} 的 GRKit 是实验性的，未经真机测试。`,
   effects: '效果',
   modules: '模块',
+  listSeparator: '、',
   /** Module names as the camera menu shows them in this language. */
   moduleNames: {
     imageControl: '影像控制',
@@ -243,6 +247,7 @@ const zhHant: Strings = {
   experimentalNote: (name) => `${name} 的 GRKit 為實驗性支援，未經實機測試。`,
   effects: '效果',
   modules: '模組',
+  listSeparator: '、',
   /** Module names as the camera menu shows them in this language. */
   moduleNames: {
     imageControl: '影像控制',
@@ -335,10 +340,123 @@ const zhHant: Strings = {
   },
 };
 
+const ja: Strings = {
+  language: '言語',
+  tagline:
+    'カメラと好みのエフェクトを選んでください。パッケージを 1 つダウンロードして、メモリーカードにコピーします。',
+  camera: 'カメラ',
+  firmware: 'ファームウェア',
+  supported: '対応',
+  planned: '対応予定',
+  experimental: '試験的',
+  experimentalNote: (name) => `${name} 用の GRKit は試験的なものです。実機ではテストしていません。`,
+  effects: 'エフェクト',
+  modules: 'モジュール',
+  listSeparator: '、',
+  /** Module names as the camera menu shows them in this language. */
+  moduleNames: {
+    imageControl: 'イメージコントロール',
+    framing: 'フレーミング',
+    guides: 'グリッド',
+    dateStamp: '日付入れ',
+    grain: '粒状感',
+  },
+  package: 'パッケージ',
+  install: 'インストール',
+  previewing: 'プレビュー中',
+  samples: 'サンプル写真',
+  samplePhoto: 'GR III のサンプル',
+  sampleCredit: 'サンプル：raw.pixls.us · CC0',
+  decodingPhoto: 'RAW 写真を現像中…',
+  upload: 'DNG 写真を開く',
+  yourPhoto: '読み込んだ写真',
+  photoError:
+    'この写真は現像できません。64 MiB 以下の GR III または GR IIIx のオリジナル DNG を使って、もう一度お試しください。',
+  previewError: 'プレビューを表示できません。',
+  retryPreview: 'プレビューを再試行',
+  uploadNote: 'GR III／GR IIIx の DNG のみ、64 MiB まで。写真はこのブラウザー内だけで処理されます。',
+  previewNote:
+    'プレビューは GR III のモデルと撮影時のホワイトバランスを使います。色や露出は、カメラで撮影した写真と異なる場合があります。',
+  compare: '比較',
+  original: '基本現像',
+  preview: 'プレビュー',
+  previewOf: (name) => `${name} をプレビュー`,
+  count: (max) => [`${max} 件中 `, ' 件を選択'],
+  selectAll: 'すべて選択',
+  clear: 'クリア',
+  include: '含める',
+  icon: 'アイコン',
+  effect: 'エフェクト',
+  look: 'フィルムルック',
+  type: 'タイプ',
+  color: 'カラー',
+  mono: 'モノクロ',
+  effectCount: 'エフェクト数',
+  loading: 'エフェクトを読み込み中…',
+  loadError: 'エフェクトを読み込めません。ページを再読み込みして、もう一度お試しください。',
+  firmwareNote: 'ダウンロードする前に、カメラのメニューでファームウェアのバージョンを確認してください。',
+  download: 'GRKit.zip をダウンロード',
+  building: 'GRKit.zip を準備中…',
+  ready: 'GRKit.zip の準備ができました。SD_ROOT の中身をカードのルートにコピーしてください。',
+  buildError: 'GRKit.zip を準備できません。ページを再読み込みして、もう一度お試しください。',
+  footer:
+    'RICOH GR III（ファームウェア 2.10）と GR IIIx（ファームウェア 1.60）に対応しています。GR IV と GR IV HDF（ファームウェア 1.11）への対応は試験的なもので、実機ではテストしていません。',
+  trademarks:
+    'GRKit は Ricoh、Kodak、Fujifilm とは関係がなく、これらの企業の承認も受けていません。一部のカメラ、フィルム、印画紙の名称は、各所有者の商標です。',
+  licenses: 'エフェクトのライセンス',
+  thirdParty: 'サードパーティーのライセンス',
+  recovery: '復旧ガイド',
+  source: 'ソースコード',
+  modulesNote: 'カメラのメニューには、選択したモジュールだけが表示されます。',
+  effectsOff: 'イメージコントロールがオフです。パッケージにエフェクトは含まれません。',
+  effectsUnavailable: (name) => `GRKit には、${name} 用のイメージコントロールはまだありません。`,
+  imageControlEmpty:
+    'エフェクトを 1 つ以上選択してください。エフェクトがないと、カメラはイメージコントロールを表示しません。',
+  noModules: 'モジュールを 1 つ以上選択してください。',
+  modulesText: {
+    imageControl: '下で選んだエフェクトを使います。ライブビューでプレビューできます。',
+    framing:
+      'XPan 65:24、16:9、4:3 の写真を撮影します。撮影画面は 3:2 のままで、写真の範囲外は暗く表示されます。',
+    guides: 'フレーミングの範囲内に、9 分割、画面中央、黄金比、対角線のいずれかの線を表示します。',
+    dateStamp: '写真に日付をオレンジ色の 7 セグメント数字で入れます。',
+    grain: 'カメラ内蔵の粒状感処理で、フィルムの粒子を加えます。強さは弱・中・強の 3 段階で、静止画のみに適用されます。',
+  },
+  framingXpanOnly:
+    'XPan 65:24 の写真を撮影します。撮影画面は 3:2 のままで、写真の範囲外は暗く表示されます。',
+  steps: [
+    ['カメラの電源を切ります。'],
+    ['GRKit.zip を展開し、', '`SD_ROOT', ' の中身をカードのルートにコピーします。'],
+    [
+      'カードを入れます。SD スクリプトが有効になっていない場合は、MENU ボタンを押したまま電源を入れます。カメラの電源が自動的に切れるまで待ちます。',
+    ],
+    ['通常どおり電源を入れます。撮影モードで ADJ レバーを押し込んで ADJ モードにし、6 番目の項目「GRK」を選びます。'],
+    ['任意：インストール後、カードのルートから', '`{modeset}', 'と', '`DEVELOP.MOD', 'を削除します。'],
+  ],
+  looks: {
+    'portra-400-endura-v1': 'Kodak Portra 400、Portra Endura 印画紙',
+    'gold-200-premier-v1': 'Kodak Gold 200、Endura Premier 印画紙',
+    'ektar-100-edge-v1': 'Kodak Ektar 100、Ektacolor Edge 印画紙',
+    'pro-400h-crystal-v1': 'Fujifilm Pro 400H、Crystal Archive 印画紙',
+    'xtra-400-crystal-v1': 'Fujifilm Superia X-TRA 400、Crystal Archive 印画紙',
+    'vision3-250d-2383-v1': 'Kodak Vision3 250D 5207、Vision 2383 プリントフィルム',
+    'vision3-500t-2393-v1': 'Kodak Vision3 500T 5219、Vision Premier 2393 プリントフィルム',
+    'portra-800-push2-v1': 'Kodak Portra 800 を EI 3200 まで 2 段増感、Portra Endura 印画紙',
+    'kodachrome-64-v1': 'リバーサルフィルム Kodak Kodachrome 64 をスキャン',
+    'velvia-100-v1': 'リバーサルフィルム Fujifilm Velvia 100 をスキャン',
+    'portra-160-ultra-v1': 'Kodak Portra 160、Ultra Endura 印画紙',
+    'trix-400-mono-v1': 'Kodak Tri-X 400、Polymax Fine-Art 印画紙',
+    'red-filter-mono-v1': 'Wratten 25 赤フィルターを付けた Kodak Tri-X 400',
+    'fp-100c-v1': 'Fujifilm FP-100C インスタントフィルム',
+    'aerocolor-iv-v1': 'Kodak Aerocolor IV 航空用ネガフィルム、Portra Endura 印画紙',
+    'exr-200t-2383-v1': 'Kodak EXR 200T、Vision 2383 プリントフィルム',
+  },
+};
+
 export const STRINGS: Readonly<Record<Language, Strings>> = {
   en,
   'zh-Hans': zhHans,
   'zh-Hant': zhHant,
+  ja,
 };
 
 const STORAGE_KEY = 'grkit.language';
@@ -353,6 +471,9 @@ export function matchLanguage(tags: readonly string[]): Language {
     const lower = tag.toLowerCase();
     if (lower.startsWith('zh')) {
       return /hant|-(tw|hk|mo)\b/.test(lower) ? 'zh-Hant' : 'zh-Hans';
+    }
+    if (lower === 'ja' || lower.startsWith('ja-')) {
+      return 'ja';
     }
     if (lower.startsWith('en')) {
       return 'en';

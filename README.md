@@ -1,6 +1,6 @@
 # GRKit
 
-English | [简体中文](README.zh-Hans.md) | [繁體中文](README.zh-Hant.md)
+English | [简体中文](README.zh-Hans.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md)
 
 [![Tests](https://github.com/ahonn/grkit/actions/workflows/tests.yml/badge.svg)](https://github.com/ahonn/grkit/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -63,11 +63,11 @@ grkit package --build build/runtime --effects build/effects --guide build/guides
 grkit verify dist/GRKit.zip
 ```
 
-- Guides: `install-guide-tools.sh` downloads Typst and the Noto Sans SC and TC fonts and checks their SHA-256, on Linux x86_64 or macOS arm64. `build-guides.sh` writes `build/guides/<camera>/<language>.pdf`.
+- Guides: `install-guide-tools.sh` downloads Typst and the Noto Sans SC, TC, and JP fonts and checks their SHA-256, on Linux x86_64 or macOS arm64. `build-guides.sh` writes `build/guides/<camera>/<language>.pdf`.
 - GR IIIx: package with `--camera gr3x` and `--guide build/guides/gr3x/en.pdf`. The runtime is the same as for GR III.
 - GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4` and `--guide build/guides/gr4/en.pdf`.
 - Fewer plugins: add `--plugins` with the plugins to install, for example `--plugins framing,guides`. The installer makes no firmware change for the other plugins. Without `--effects`, the package has no Image Control.
-- Guide language: add `--language zh-Hans` or `--language zh-Hant`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
+- Guide language: add `--language zh-Hans`, `--language zh-Hant`, or `--language ja`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
 
 ## Repository layout
 

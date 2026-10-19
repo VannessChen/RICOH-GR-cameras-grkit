@@ -110,7 +110,7 @@ impl Builder {
     }
 
     /// Selects the language of the installation guide: `en` (the default),
-    /// `zh-Hans`, or `zh-Hant`.
+    /// `zh-Hans`, `zh-Hant`, or `ja`.
     pub fn set_language(&mut self, code: &str) -> Result<()> {
         self.language = packaging::Language::parse(code)?;
         Ok(())
@@ -187,7 +187,7 @@ impl Package {
         self.0.set_camera(id).map_err(js_error)
     }
 
-    /// Selects the language of the installation guide: `en`, `zh-Hans`, or `zh-Hant`.
+    /// Selects the language of the installation guide: `en`, `zh-Hans`, `zh-Hant`, or `ja`.
     #[wasm_bindgen(js_name = setLanguage)]
     pub fn set_language(&mut self, code: &str) -> Result<(), JsError> {
         self.0.set_language(code).map_err(js_error)

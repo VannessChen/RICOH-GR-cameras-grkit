@@ -195,21 +195,23 @@ pub enum Language {
     English,
     SimplifiedChinese,
     TraditionalChinese,
+    Japanese,
 }
 
 impl Language {
-    pub const ALL: [Language; 3] = [
+    pub const ALL: [Language; 4] = [
         Language::English,
         Language::SimplifiedChinese,
         Language::TraditionalChinese,
+        Language::Japanese,
     ];
 
-    /// Parses a language tag of the site: `en`, `zh-Hans`, or `zh-Hant`.
+    /// Parses a language tag of the site: `en`, `zh-Hans`, `zh-Hant`, or `ja`.
     pub fn parse(code: &str) -> Result<Self> {
         Self::ALL
             .into_iter()
             .find(|language| language.code() == code)
-            .with_context(|| format!("Unknown language {code:?}. Use en, zh-Hans, or zh-Hant"))
+            .with_context(|| format!("Unknown language {code:?}. Use en, zh-Hans, zh-Hant, or ja"))
     }
 
     pub fn code(self) -> &'static str {
@@ -217,6 +219,7 @@ impl Language {
             Language::English => "en",
             Language::SimplifiedChinese => "zh-Hans",
             Language::TraditionalChinese => "zh-Hant",
+            Language::Japanese => "ja",
         }
     }
 
@@ -226,6 +229,7 @@ impl Language {
             Language::English => "GRKit Installation Guide",
             Language::SimplifiedChinese => "GRKit 安装指南",
             Language::TraditionalChinese => "GRKit 安裝指南",
+            Language::Japanese => "GRKit インストールガイド",
         }
     }
 
@@ -244,12 +248,16 @@ impl Language {
             (false, Language::TraditionalChinese) => {
                 include_str!("../../../resources/INSTALLATION.zh-Hant.md")
             }
+            (false, Language::Japanese) => include_str!("../../../resources/INSTALLATION.ja.md"),
             (true, Language::English) => include_str!("../../../resources/INSTALLATION-GR4.md"),
             (true, Language::SimplifiedChinese) => {
                 include_str!("../../../resources/INSTALLATION-GR4.zh-Hans.md")
             }
             (true, Language::TraditionalChinese) => {
                 include_str!("../../../resources/INSTALLATION-GR4.zh-Hant.md")
+            }
+            (true, Language::Japanese) => {
+                include_str!("../../../resources/INSTALLATION-GR4.ja.md")
             }
         }
     }
@@ -260,6 +268,7 @@ impl Language {
             Language::English => "firmware",
             Language::SimplifiedChinese => "固件",
             Language::TraditionalChinese => "韌體",
+            Language::Japanese => "ファームウェア",
         };
         format!("{} {word} {}", camera.name, camera.firmware)
     }

@@ -184,19 +184,20 @@
 #define GRKIT_PICTURE_SCRATCH 141448
 
 /* Menu text after the picture scratch, in each menu language: 0 English, 1
-   Simplified Chinese, 2 Traditional Chinese. The installer copies the label
-   table of the build to offset 0: for each language, GRKIT_TEXT_STRINGS u16
-   byte offsets from the text start, then NUL-terminated UTF-16 strings. At
-   GRKIT_TEXT_SUMMARY, the installer writes the Image Control summary of each
-   record in each language, GRKIT_SUMMARY_UNITS units each, language-major. */
-#define GRKIT_TEXT_SIZE 8192
+   Simplified Chinese, 2 Traditional Chinese, 3 Japanese. The installer copies
+   the label table of the build to offset 0: for each language,
+   GRKIT_TEXT_STRINGS u16 byte offsets from the text start, then NUL-terminated
+   UTF-16 strings. At GRKIT_TEXT_SUMMARY, the installer writes the Image
+   Control summary of each record in each language, GRKIT_SUMMARY_UNITS units
+   each, language-major. */
+#define GRKIT_TEXT_SIZE 12288
 /* Everything after the records: the script array must hold it. */
-#define GRKIT_TAIL_SIZE 149640
+#define GRKIT_TAIL_SIZE 153736
 #define GRKIT_TEXT_SUMMARY 4096
 /* The parameter page title of a GRKit session, after the summaries: the page,
    its vtable, and the descriptor of the effect name. */
-#define GRKIT_TEXT_PARAMETER_TITLE 8176
-#define GRKIT_TEXT_LANGUAGES 3
+#define GRKIT_TEXT_PARAMETER_TITLE 12272
+#define GRKIT_TEXT_LANGUAGES 4
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE+GRKIT_PICTURE_SCRATCH)
 /* String IDs of the label table, in grkit_core::menu_text order. A run of IDs

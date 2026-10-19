@@ -54,7 +54,7 @@ For the web site, see [web/README.md](web/README.md).
 - Add a change file in `.changeset/` for each change that a user can see. [docs/releasing.md](docs/releasing.md#record-a-change) describes the format.
 - Keep firmware, build outputs, archives, and local paths out of Git.
 - Keep third-party notices. Review each new effect input and its license.
-- Change the English, Simplified Chinese, and Traditional Chinese guides in `resources/` together. Keep their headings and steps in the same order. A test checks the camera phrase that the GR IIIx guide replaces. The guides use headings, paragraphs, lists, images, strong text, code spans, and links only, because `grkit guides` converts them to Typst. To check the PDFs, run `.github/scripts/build-guides.sh`.
+- Change the English, Simplified Chinese, Traditional Chinese, and Japanese guides in `resources/` together. Keep their headings and steps in the same order. A test checks the camera phrase that the GR IIIx guide replaces. The guides use headings, paragraphs, lists, images, strong text, code spans, and links only, because `grkit guides` converts them to Typst. To check the PDFs, run `.github/scripts/build-guides.sh`.
 
 ## License of contributions
 
