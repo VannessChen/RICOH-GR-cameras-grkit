@@ -504,6 +504,22 @@ fn native_catalog_contract_skips_unusable_files_and_ignores_directory_order() {
 }
 
 #[test]
+fn native_directory_contract_skips_long_names_and_a_stale_listing() {
+    let Some(compiler) = compiler() else {
+        return;
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("directory_contract");
+    compile(
+        &compiler,
+        &root().join("tests/runtime/directory_contract.c"),
+        &executable,
+        &[],
+    );
+    checked(&mut Command::new(&executable));
+}
+
+#[test]
 fn native_framing_contract_preserves_canvas_bounds_and_settings() {
     let Some(compiler) = compiler() else {
         return;

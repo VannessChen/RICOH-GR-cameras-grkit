@@ -59,6 +59,7 @@ static void number(u32 value)
 #define GRKIT_GRF_EMBEDDED
 #include "grf.c"
 #include "catalog.h"
+#include "directory.h"
 #include "selection.h"
 static char names[MAX_COUNT][CATALOG_NAME_SIZE];
 static int read_file(const char *path, u8 *buffer, u32 wanted)
@@ -96,6 +97,21 @@ static int read_selection(u32 *selected)
     if (have > SELECTION_FILE_MAX || !selection_parse(text, have, selected)) return 43;
     return 0;
 }
+static long directory_read(long fd, u8 *buffer, u32 size)
+{ return syscall6(217,fd,(u32)buffer,size,0,0,0); }
+static long directory_seek(long fd, long offset, u32 whence)
+{ return syscall6(19,fd,(u32)offset,whence,0,0,0); }
+/* A symbolic link or an unusable file does not stop the other effects. */
+static void offer_effect(const char *name, u32 n, void *context)
+{
+    (void)context;
+    if(!catalog_name(name,n)) return;
+    char path[sizeof(root) + 13]; u32 prefix=length(root);
+    copy((u8 *)path,(const u8 *)root,prefix); path[prefix++]='/';
+    copy((u8 *)path+prefix,(const u8 *)name,n+1);
+    if(read_file(path,temporary,8192) && valid_profile(temporary))
+        count=catalog_offer(profiles,names,count,MAX_COUNT,temporary,name);
+}
 static int discover(void)
 {
     count=0;
@@ -106,30 +122,8 @@ static int discover(void)
     long fd=syscall6(5,(u32)root,0xc000,0,0,0,0);
     if(fd==-2) return 0;
     if(fd<0) return 30;
-    int status=0; long got;
-    while((got=syscall6(217,fd,(u32)directory_entries,sizeof(directory_entries),0,0,0))>0) {
-        u32 offset=0;
-        while(offset<(u32)got) {
-            const u8 *entry=directory_entries+offset;
-            if((u32)got-offset<20) {status=31;break;}
-            u32 size=(u32)entry[16]|entry[17]<<8;
-            if(size<20 || size>(u32)got-offset) {status=31;break;}
-            u32 n=0; while(n<size-19 && entry[19+n]) ++n;
-            if(n==size-19) {status=31;break;}
-            const char *name=(const char *)entry+19;
-            /* A symbolic link or an unusable file does not stop the other effects. */
-            if(entry[18]!=10 && catalog_name(name,n)) {
-                char path[sizeof(root) + 13]; u32 prefix=length(root);
-                copy((u8 *)path,(const u8 *)root,prefix); path[prefix++]='/';
-                copy((u8 *)path+prefix,(const u8 *)name,n+1);
-                if(read_file(path,temporary,8192) && valid_profile(temporary))
-                    count=catalog_offer(profiles,names,count,MAX_COUNT,temporary,name);
-            }
-            offset+=size;
-        }
-        if(status) break;
-    }
-    if(got<0 && !status) status=30;
+    static const struct directory_calls calls={directory_read,directory_seek};
+    int status=directory_list(fd,directory_entries,sizeof(directory_entries),&calls,offer_effect,0);
     syscall6(6,fd,0,0,0,0,0);
     return status;
 }

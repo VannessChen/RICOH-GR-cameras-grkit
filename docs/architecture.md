@@ -86,6 +86,9 @@ The tail reservation itself has no content that INSTALL can check. On a GR III c
 An unusable effect file does not stop the other effects or Framing. Unusable files include names outside the `NAME.GRF` 8.3 rule, symbolic links, unreadable files, and invalid records.
 The `._` companions that macOS writes are therefore ignored.
 
+On an exFAT card, the camera returns an empty name for a file name longer than 12 characters, such as a `._` companion. The Linux 5.15 kernel of GR IV rejects that entry, and each read of the directory at that offset fails. The camera has already moved past the entry, so the installer moves the offset by one and reads again (`runtime/directory.h`, at most 256 skips). The Linux 4.4 kernel of GR III passes the empty name, which is not an effect name. FAT cards always return 8.3 names.
+The camera also keeps one listing position for all of Linux. After a listing that stopped early, the next listing of any directory first returns the entries of the old directory. The installer therefore reads `EFFECTS` two times and uses only the second pass.
+
 INSTALL also reads `SCRIPT/PLUGINS/PLUGINS.TXT`, which names the plugins to install (`runtime/selection.h`, `grkit_core::modules`). A missing file installs each plugin, and an empty file installs none.
 An unknown or repeated name stops the installation with status 43, and a read error with status 44. A plugin that needs effects counts as not installed without effects. The installer stores the result in header `+56` (`GRKIT_HOST_PLUGINS`).
 
@@ -94,7 +97,7 @@ Each hook and in-place patch belongs to one extension point (`components::point_
 INSTALL checks and publishes only the patches of the points that the installed plugins need. A plugin that is not installed therefore changes no firmware, and an empty `PLUGINS.TXT` installs no hook. The code in the tail is always published, because nothing calls it without a hook. `build.json` gives the number of patches of each point.
 
 With more than 20 effects, the installer keeps the 20 smallest effect IDs.
-For a duplicate ID, the file with the smallest name wins. The result does not depend on directory order. Directory read errors stop the installation.
+For a duplicate ID, the file with the smallest name wins. The result does not depend on directory order. A directory read error that a skip does not clear stops the installation with status 30, and a bad directory record with status 31.
 
 The 20-effect capacity is a product limit, not a GRF format limit.
 The registry script array holds the header, the records, the picture scratch, and the menu text.
