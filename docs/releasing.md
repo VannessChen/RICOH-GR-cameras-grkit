@@ -1,13 +1,14 @@
 # Releasing
 
-Three workflows release GRKit:
+Four workflows release GRKit:
 
 - `Release PR` keeps one pull request from the `release` branch open while change files are pending. knope sets the version in `Cargo.toml` and `Cargo.lock` and writes `CHANGELOG.md` from the change files.
 - `Release` starts when the release pull request is merged. It tags the merge commit, runs the tests, and builds the site. Then it creates a draft GitHub release that holds the site and the device-test packages.
   To build the site, it downloads the official GR III 2.10 and GR IV 1.11 firmware and checks their SHA-256. Then it builds a runtime for each with LLVM 21, publishes the effects in `effects/` with their preview tables, and deletes the firmware. It also builds the web page in `web/`.
-- `Deploy` commits the site of one draft release to the `site` branch. Cloudflare Pages deploys each commit on that branch. When the site serves the new version, `Deploy` publishes the release. The deployed bytes are therefore the tested bytes.
+- `Deploy` commits the site of one release to the `site` branch. Cloudflare Pages deploys each commit on that branch. When the site serves the new version, `Deploy` publishes the release. `Release` calls `Deploy` when it has built a tag. Start `Deploy` by hand to deploy a release again.
+- `Site` starts when a push to `main` changes `web/`. It builds the web page from the source of the latest published release with `web/` from `main`, and it keeps the runtimes, effects, and guides of that release. The WebAssembly packager therefore matches the released runtimes, and the footer shows the released version. If `web/` on `main` needs a packager change that is not released yet, the build fails and the site stays as it is.
 
-The `site` branch holds only deployed sites, one commit for each deployment. It shares no history with `main`. Do not push to it by hand. The repository holds no Cloudflare credentials, because Cloudflare reads the branch through its GitHub app.
+The `site` branch holds only deployed sites, one commit for each deployment. `.github/scripts/commit-site.sh` makes these commits for `Deploy` and `Site`. It shares no history with `main`. Do not push to it by hand. The repository holds no Cloudflare credentials, because Cloudflare reads the branch through its GitHub app.
 
 The version is the `[workspace.package]` version in `Cargo.toml`. Each runtime `build.json` gives it, and the site shows it in the footer. A release tag is `v` and the version, for example `v0.1.0`.
 
@@ -65,14 +66,14 @@ Use `major` for a change that an earlier package cannot follow, for example a ne
 
 ## Release a version
 
-1. Merge the `Release vX.Y.Z` pull request. `Release` starts on the merge commit.
-2. When the run is complete, open the draft release `vX.Y.Z`. It holds `site.tar.gz`, `GRKit-device-test-gr3.zip`, `GRKit-device-test-gr3x.zip`, and `GRKit-device-test-gr4.zip`. Each package has the published runtime and no effects.
-3. Install the package of each camera that you have, and test it. The GR IV runtime stays experimental until it passes a test on a camera.
-4. If the test passes, start the `Deploy` workflow with the tag `vX.Y.Z`. The run waits up to 15 minutes for Cloudflare Pages. If the site does not serve the version in that time, the run fails and the release stays a draft. Examine the deployment in the Cloudflare dashboard. If it failed, retry it there, because a second `Deploy` run makes no new commit. Then start `Deploy` again.
+1. Merge the `Release vX.Y.Z` pull request. `Release` starts on the merge commit. It builds the release, deploys the site, and publishes the release.
+2. If the site does not serve the version within 15 minutes, `Deploy` fails and the release stays a draft. Examine the deployment in the Cloudflare dashboard. If it failed, retry it there, because a second `Deploy` run makes no new commit. Then start `Deploy` with the tag `vX.Y.Z`.
+3. The release holds `site.tar.gz`, `GRKit-device-test-gr3.zip`, `GRKit-device-test-gr3x.zip`, and `GRKit-device-test-gr4.zip`. Each package has the published runtime and no effects. Install the package of each camera that you have, and test it. The GR IV runtime stays experimental until it passes a test on a camera.
+4. If a test fails, start `Deploy` with the tag of the previous release. The site then serves that release again.
 
 To release a commit on `main` without a release pull request, push a tag `vX.Y.Z` that matches the version in `Cargo.toml`. The first release, `v0.1.0`, uses this path.
 To build a tag again, for example with `firmware_source` set to `backup`, start `Release` with that tag. A published release is never replaced.
 
-The draft release keeps its files without an expiry date. To go back to an earlier version, start `Deploy` with its tag.
+A release keeps its files without an expiry date. To go back to an earlier version, start `Deploy` with its tag.
 
-The release toolchain is LLVM 21 on Ubuntu, not the reference Apple Clang. Test each CI runtime on a camera before you deploy it.
+The release toolchain is LLVM 21 on Ubuntu, not the reference Apple Clang. `Release` deploys its runtimes before a camera test, so test the device-test packages right after each release. To test a runtime before the release, build it with LLVM 21 as `release.yml` does.

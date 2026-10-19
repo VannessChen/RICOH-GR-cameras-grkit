@@ -1,31 +1,36 @@
 name: Deploy
 
-# Publishes the site of a tested release, then publishes the draft GitHub release.
-# Starting this workflow is the approval step, so it deploys the bytes that were
-# tested. A published release can be deployed again, for example to go back to an
-# earlier version.
+# Publishes the site of a release, then publishes the draft GitHub release.
+# Release calls this workflow when it has built a tag. Start it by hand to deploy
+# a release again, for example to go back to an earlier version.
 #
 # The workflow commits the site to the `site` branch. Cloudflare Pages deploys
 # each commit on that branch through its Git integration, so the repository holds
 # no Cloudflare credentials. The workflow then waits until SITE_URL serves the
 # version of the tag.
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag, for example v0.1.0
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag whose device-test packages passed, for example v0.1.0
+        description: Release tag, for example v0.1.0
         required: true
 
 permissions:
   contents: write
 
-concurrency:
-  group: deploy
-  cancel-in-progress: false
-
 jobs:
   deploy:
     runs-on: ubuntu-24.04
+    # One deployment at a time. A later run waits for the current one.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag }}
@@ -56,6 +61,11 @@ jobs:
             exit 1
           fi
           echo "draft=$draft" >> "$GITHUB_OUTPUT"
+      # The scripts of the commit that runs this workflow.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source
+          sparse-checkout: .github/scripts
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: site
@@ -65,17 +75,9 @@ jobs:
         run: |
           set -euo pipefail
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern site.tar.gz --dir "$RUNNER_TEMP"
-          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          tar -xzf "$RUNNER_TEMP/site.tar.gz" -C .
-          git add --all
-          if git diff --cached --quiet; then
-            echo "The site branch already holds the site of $TAG."
-            exit 0
-          fi
-          git -c user.name='github-actions[bot]' \
-            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit --quiet --message "deploy $TAG"
-          git push origin HEAD:site
+          mkdir "$RUNNER_TEMP/site"
+          tar -xzf "$RUNNER_TEMP/site.tar.gz" -C "$RUNNER_TEMP/site"
+          sh ../source/.github/scripts/commit-site.sh "$RUNNER_TEMP/site" "deploy $TAG"
       - name: Wait until the site serves the release
         run: |
           set -euo pipefail

@@ -2,8 +2,8 @@ name: Release
 
 # Builds one release from its tag: the site, the device-test packages, and a draft
 # GitHub release that holds both. Merging the release pull request tags the merge
-# commit and starts this workflow. After a device test, the Deploy workflow
-# publishes the site and the release. See docs/releasing.md.
+# commit and starts this workflow. Then the Deploy workflow publishes the site and
+# the release. See docs/releasing.md.
 on:
   pull_request:
     types: [closed]
@@ -283,8 +283,12 @@ jobs:
           tar -czf "$RUNNER_TEMP/site.tar.gz" -C site .
           gh release upload "$TAG" "$RUNNER_TEMP/site.tar.gz" device-test/GRKit-device-test-*.zip --clobber
       - name: Summary
-        run: |
-          {
-            echo "The draft release $TAG holds the site and the device-test packages."
-            echo "Test the package of each camera that you have. If the test passes, start the Deploy workflow with the tag \`$TAG\`."
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: echo "The draft release $TAG holds the site and the device-test packages." >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: [tag, publish]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
