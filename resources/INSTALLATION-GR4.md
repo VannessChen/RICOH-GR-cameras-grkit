@@ -11,7 +11,11 @@ GRKit for GR IV is experimental and has not been tested on a camera. Use it only
 3. Insert the card. Hold MENU while you turn the camera on. Wait until the camera turns itself off.
 4. Turn the camera on normally.
 
-Step 3 turns on the camera's SD scripts. If they are already on, skip step 3.
+Step 3 turns on the camera's SD scripts. The camera shows Mode Set Command, then Complete, and then turns itself off.
+
+![The Mode Set Command screen shows Script - Enable and Complete.](images/modeset.png)
+
+If the SD scripts are already on, skip step 3.
 After the installation, you can remove `00078560.636` and `DEVELOP.MOD` from the card root. This step is optional.
 
 ## Use

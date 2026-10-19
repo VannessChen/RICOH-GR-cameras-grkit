@@ -12,6 +12,8 @@ The text in the menu icons uses the [Inter](https://github.com/rsms/inter) typef
 
 The installation guide uses the [Noto Sans CJK](https://github.com/notofonts/noto-cjk) typefaces, which are licensed under the SIL Open Font License 1.1. Its code text uses DejaVu Sans Mono, which is licensed under the DejaVu Fonts License.
 
+The screenshot in the installation guide shows the photo [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/) by nagi usano, which is licensed under [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/). The photo is cropped and scaled, and the screenshot shows the GRKit menu and the Portra 400 effect over it.
+
 ## Effects
 
 Each file in `SD_ROOT/SCRIPT/PLUGINS/EFFECTS/` is one Image Control effect. Each effect of the GRKit catalog is a fit of one film simulation LUT. GRKit contributors made the fits. The files contain the fitted parameters, not the LUTs. "Changes to the LUTs" below describes the changes.

@@ -9,7 +9,11 @@
 3. 插入存储卡。按住 MENU 按钮开机。等待相机自动关机。
 4. 正常开机。
 
-第 3 步会打开相机的 SD 脚本功能。如果这个功能已经打开，跳过第 3 步。
+第 3 步会打开相机的 SD 脚本功能。相机先显示 Mode Set Command，然后显示 Complete，之后自动关机。
+
+![Mode Set Command 画面显示 Script - Enable 和 Complete。](images/modeset.png)
+
+如果 SD 脚本功能已经打开，跳过第 3 步。
 安装完成后，你可以从存储卡根目录删除 `00078350.588` 和 `DEVELOP.MOD`。这一步是可选的。
 
 ## 使用
@@ -17,6 +21,8 @@
 在拍摄模式下按下 ADJ 杆进入 ADJ 模式，然后选择第 6 个功能 GRK。GRKit 在开机几秒后才加载，所以 GRK 可能稍后才出现。
 
 ![GRKit 页面列出模块，并显示当前效果。](images/grkit-root.png)
+
+照片：nagi usano 拍摄的 [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)，[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)。
 
 - **影像控制（Image Control）：** 高亮一个效果，即可在实时显示中预览。按 OK 按钮保留这个效果。按 Fn 按钮调整这个效果的 [标准] 参数。每个效果单独保存自己的调整，不会改变相机的影像控制设置。
 - **画幅（Framing）：** 选择 XPan、16:9 或 4:3。显示屏上照片以外的区域会变暗。只有当相机的 [长宽比] 为 3:2 时，画幅才会生效。

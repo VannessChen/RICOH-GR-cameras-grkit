@@ -265,18 +265,31 @@ impl Language {
     }
 }
 
-/// The screenshot of the GR III guides, at the path that the guides link, so the
-/// link works in the repository and in the guide source.
-const GUIDE_IMAGES: [(&str, &[u8]); 1] = [(
-    "images/grkit-root.png",
-    include_bytes!("../../../resources/images/grkit-root.png"),
-)];
+/// The Mode Set screen that step 3 of each guide shows. GR III and GR IV show
+/// the same screen.
+const MODESET_IMAGE: (&str, &[u8]) = (
+    "images/modeset.png",
+    include_bytes!("../../../resources/images/modeset.png"),
+);
 
-/// The screenshots that the guides of `camera` show. The GR IV guides have none,
-/// because GR III screens could differ from GR IV screens.
+/// The screenshots of the GR III guides, at the paths that the guides link, so
+/// the links work in the repository and in the guide source.
+const GUIDE_IMAGES: [(&str, &[u8]); 2] = [
+    (
+        "images/grkit-root.png",
+        include_bytes!("../../../resources/images/grkit-root.png"),
+    ),
+    MODESET_IMAGE,
+];
+
+/// The GR IV guides show only the Mode Set screen, because other GR III screens
+/// could differ from GR IV screens.
+const GR4_GUIDE_IMAGES: [(&str, &[u8]); 1] = [MODESET_IMAGE];
+
+/// The screenshots that the guides of `camera` show.
 pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])] {
     if camera.target == camera::GR4.target {
-        &[]
+        &GR4_GUIDE_IMAGES
     } else {
         &GUIDE_IMAGES
     }

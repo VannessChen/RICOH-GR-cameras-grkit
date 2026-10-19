@@ -11,7 +11,11 @@ GR IV 版 GRKit 是實驗性支援，尚未經過實機測試。只有在你接�
 3. 插入記憶卡。按住 MENU 按鈕開機。等待相機自動關機。
 4. 正常開機。
 
-第 3 步會開啟相機的 SD 腳本功能。如果這個功能已經開啟，跳過第 3 步。
+第 3 步會開啟相機的 SD 腳本功能。相機先顯示 Mode Set Command，接著顯示 Complete，之後自動關機。
+
+![Mode Set Command 畫面顯示 Script - Enable 和 Complete。](images/modeset.png)
+
+如果 SD 腳本功能已經開啟，跳過第 3 步。
 安裝完成後，你可以從記憶卡根目錄刪除 `00078560.636` 與 `DEVELOP.MOD`。這一步是選用的。
 
 ## 使用

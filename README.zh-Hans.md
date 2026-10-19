@@ -9,6 +9,8 @@ GRKit 为 RICOH GR 相机增加胶片风格和拍摄辅助功能。它从存储�
 
 ![ADJ 模式中的 GRKit 页面](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.png)
 
+照片：nagi usano 拍摄的 [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)，[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)。
+
 ## 功能
 
 GRKit 在 ADJ 模式中增加第 6 个功能 GRK，包含五个模块：

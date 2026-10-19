@@ -791,8 +791,10 @@ fn guides_writes_one_typst_source_for_each_camera_and_language() {
     assert!(source.contains("仅适用于 RICOH GR IIIx 固件 1.60。"));
     assert!(source.contains("#link(<recovery>)") && source.contains("= 恢复 <recovery>"));
     assert!(out.join("gr3x/zh-Hans/images/grkit-root.png").is_file());
-    // The GR IV guides show no GR III screenshot.
-    assert!(!out.join("gr4/en/images").exists());
+    assert!(out.join("gr3x/zh-Hans/images/modeset.png").is_file());
+    // The GR IV guides show the Mode Set screen but no GR III menu screenshot.
+    assert!(out.join("gr4/en/images/modeset.png").is_file());
+    assert!(!out.join("gr4/en/images/grkit-root.png").exists());
     // The output must be new.
     assert!(!run(&["guides", "--out", text(&out)]).status.success());
 }

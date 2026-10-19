@@ -9,6 +9,8 @@ GRKit adds film looks and shooting tools to RICOH GR cameras. It loads from the 
 
 ![The GRKit page in the ADJ menu](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.png)
 
+Photo: [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/) by nagi usano, [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/).
+
 ## Features
 
 GRKit adds a sixth entry, GRK, to the ADJ menu. It has five modules:
