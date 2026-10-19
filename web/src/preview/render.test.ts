@@ -4,32 +4,13 @@ import type { Source } from './render';
 const image = { width: 1, height: 1, data: new Uint16Array([100, 200, 300]) };
 const effect = { id: 'film', table: '/film.lut', baseline: '/standard.lut', size: 2 };
 
+vi.mock('./renderer', () => ({ workerRender: () => async () => new Blob(['preview']) }));
+
 beforeEach(() => {
   vi.resetModules();
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => new Response(new Uint8Array(24))),
-  );
-  vi.stubGlobal(
-    'ImageData',
-    class {
-      constructor(
-        readonly data: Uint8ClampedArray,
-        readonly width: number,
-        readonly height: number,
-      ) {}
-    },
-  );
-  vi.stubGlobal(
-    'OffscreenCanvas',
-    class {
-      getContext() {
-        return { putImageData: vi.fn() };
-      }
-      async convertToBlob() {
-        return new Blob(['preview']);
-      }
-    },
   );
   vi.spyOn(URL, 'createObjectURL');
   vi.spyOn(URL, 'revokeObjectURL');

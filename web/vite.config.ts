@@ -3,7 +3,7 @@ import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } f
 import { resolve, sep } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from 'vite';
-import { addPlausible, allowPlausible, plausibleOrigin } from './plausible';
+import { addPlausible, allowPlausible, plausibleOrigin } from './plausible.ts';
 
 /**
  * The GRKit version from the workspace Cargo.toml. The Release workflow builds the site

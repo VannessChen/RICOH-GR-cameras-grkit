@@ -12,7 +12,7 @@ The site serves these files:
 
 `THIRD_PARTY_LICENSES.txt` gives the licenses of the bundled JavaScript packages and fonts, and of the Rust crates in the WebAssembly module. `pnpm build` writes it with `scripts/third-party-licenses.mjs`. The script reads the JavaScript licenses from the Vite build and the crate licenses from `cargo metadata`, so Cargo must be on `PATH`.
 
-The site serves its fonts from `assets/` and sends no request to another host.
+The site serves its fonts from `assets/` and sends no request to another host. The Noto Sans SC and TC styles load only on a Chinese page.
 
 ## Develop
 
@@ -64,6 +64,7 @@ The `grkit-site-effects-v1` catalog describes linear-input LUTs with an sRGB coo
 The shaper allocates more grid points to shadows. It does not convert the input into a Standard JPEG.
 `preview/standard.lut` renders the baseline, and each effect table renders the same decoded pixels with the GRKit fit model.
 Both sides use the GR III model, including when the selected package targets GR IV.
+A second Worker applies the tables and encodes the JPEG previews, so a preview does not block scrolling or input.
 
 These previews are approximations. The model's exposure calibration is assumed, and LibRaw's color processing differs from the camera's processing.
 The 16-bit input clips values outside 0..1. It does not retain scene highlights above that range.

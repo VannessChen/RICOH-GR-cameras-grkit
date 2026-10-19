@@ -4,6 +4,7 @@ import { loadCatalog, siteUrl } from './catalog';
 import { EffectsSection } from './components/EffectsSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RichText } from './components/RichText';
+import { loadFonts } from './fonts';
 import { applyLanguage, initialLanguage, LANGUAGES, STRINGS, type Language } from './i18n';
 import { ALL_MODULES, MODULES, planModules, type ModuleKey } from './modules';
 import { buildPackage, save } from './package';
@@ -30,6 +31,7 @@ export function App() {
   const effectCount = plan.includeEffects ? selection.size : 0;
 
   function chooseLanguage(next: Language) {
+    loadFonts(next);
     applyLanguage(next);
     setLanguage(next);
   }

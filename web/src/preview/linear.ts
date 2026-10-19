@@ -7,6 +7,7 @@ export interface LinearPicture {
 
 export const MAX_EDGE = 1200;
 const MAGIC = 'GRLIN001';
+const LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
 export function validatePicture(image: LinearPicture, maxPixels = 30_000_000): void {
   const { width, height, data } = image;
@@ -82,6 +83,9 @@ export function decodeLinear(bytes: ArrayBuffer): LinearPicture {
   ) {
     throw new Error('Invalid linear sample dimensions');
   }
+  // The samples are little-endian, as is each platform that browsers run on in practice,
+  // so one copy replaces 2.9 million DataView reads on the main thread.
+  if (LITTLE_ENDIAN) return { width, height, data: new Uint16Array(bytes.slice(16)) };
   const data = new Uint16Array(width * height * 3);
   for (let i = 0; i < data.length; i++) data[i] = view.getUint16(16 + i * 2, true);
   return { width, height, data };

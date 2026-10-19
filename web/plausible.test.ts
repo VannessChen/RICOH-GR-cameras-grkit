@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { addPlausible, allowPlausible, plausibleOrigin } from './plausible';
+import { addPlausible, allowPlausible, plausibleOrigin } from './plausible.ts';
 
 const origin = 'https://plausible.example.com';
 

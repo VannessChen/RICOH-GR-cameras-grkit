@@ -1,5 +1,5 @@
 import { validatePicture, MAX_EDGE, type LinearPicture } from './linear';
-import { applyLinearLut } from './lut';
+import { workerRender, type Render } from './renderer';
 
 /** A decoded RAW source. The key identifies it in the caches. */
 export interface Source {
@@ -70,14 +70,11 @@ function table(url: string): Promise<Uint8Array> {
   );
 }
 
+let renderer: Render | undefined;
+
 async function render(image: LinearPicture, lut: Uint8Array, size: number): Promise<string> {
-  const pixels = new ImageData(applyLinearLut(image.data, lut, size), image.width, image.height);
-  const canvas = new OffscreenCanvas(image.width, image.height);
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('2D canvas is not available');
-  context.putImageData(pixels, 0, 0);
-  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
-  return URL.createObjectURL(blob);
+  renderer ??= workerRender();
+  return URL.createObjectURL(await renderer(image, lut, size));
 }
 
 /** Shared by all effects of a source. Both sides use the same decoded pixels. */
