@@ -6,6 +6,7 @@ pub mod camera;
 pub mod cube;
 pub mod effects;
 pub mod fit;
+pub mod guide;
 pub mod menu_text;
 pub mod modules;
 pub mod packaging;

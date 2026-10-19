@@ -59,9 +59,19 @@ enum Command {
         /// The camera that the package enables SD scripts on.
         #[arg(long, default_value = "gr3", value_parser = grkit_core::camera::CAMERAS.map(|camera| camera.id))]
         camera: String,
-        /// The language of a second installation guide next to the English one.
+        /// The language of the installation guide.
         #[arg(long, default_value = "en", value_parser = packaging::Language::ALL.map(packaging::Language::code))]
         language: String,
+        /// The PDF of the installation guide for the camera, in the language of
+        /// `--language`. `grkit guides` writes its source.
+        #[arg(long)]
+        guide: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Write the Typst source of each installation guide to
+    /// OUT/<camera>/<language>/guide.typ, next to the images that it shows.
+    Guides {
         #[arg(long)]
         out: PathBuf,
     },
@@ -223,6 +233,7 @@ fn run(command: Command) -> Result<Value> {
             plugins,
             camera,
             language,
+            guide,
             out,
         } => {
             let (runtime, manifest) = storage::load_build(&build)?;
@@ -236,8 +247,17 @@ fn run(command: Command) -> Result<Value> {
             };
             let camera = grkit_core::camera::find(&camera)?;
             let language = packaging::Language::parse(&language)?;
-            let bytes = packaging::assemble_localized(
-                &runtime, &manifest, &effects, plugins, camera, language,
+            let pdf = storage::read_bounded(&guide, packaging::MAX_FILE_SIZE)?;
+            let bytes = packaging::assemble(
+                &runtime,
+                &manifest,
+                &effects,
+                plugins,
+                camera,
+                &packaging::Guide {
+                    language,
+                    pdf: &pdf,
+                },
             )?;
             let verified = packaging::verify_package(&bytes)?;
             storage::write_new(&out, &bytes)?;
@@ -245,6 +265,21 @@ fn run(command: Command) -> Result<Value> {
                 json!({"path": out, "sha256": packaging::sha256(&bytes), "camera": verified["camera"],
                 "entries": verified["entries"], "plugins": verified["plugins"],
                 "language": verified["language"]}),
+            )
+        }
+        Command::Guides { out } => {
+            storage::validate_output(&out)?;
+            let mut tree = Files::new();
+            for camera in grkit_core::camera::CAMERAS {
+                for language in packaging::Language::ALL {
+                    for (name, bytes) in grkit_core::guide::source(camera, language)? {
+                        tree.insert(format!("{}/{}/{name}", camera.id, language.code()), bytes);
+                    }
+                }
+            }
+            storage::write_directory(&out, &tree)?;
+            Ok(
+                json!({"output": out, "guides": grkit_core::camera::CAMERAS.len() * packaging::Language::ALL.len()}),
             )
         }
         Command::Verify { archive } => {

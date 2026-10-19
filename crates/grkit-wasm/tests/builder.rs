@@ -24,11 +24,15 @@ fn effect(id: &str) -> Vec<u8> {
     effects::encode(&value, &vec![0; 6400]).unwrap()
 }
 
+/// A stand-in for a guide PDF, which the site fetches.
+const PDF: &[u8] = b"%PDF-1.7\n% GRKit test guide\n";
+
 fn builder_with_runtime(files: &Files) -> Builder {
     let mut builder = Builder::new(&manifest(files)).unwrap();
     for path in builder.runtime_paths().to_vec() {
         builder.add_runtime_file(&path, &files[&path]).unwrap();
     }
+    builder.set_guide(PDF);
     builder
 }
 
@@ -101,7 +105,21 @@ fn the_camera_selects_the_modeset_file() {
 }
 
 #[test]
-fn the_language_adds_its_guide() {
+fn a_package_needs_the_guide_pdf() {
+    let files = runtime_files();
+    let mut builder = Builder::new(&manifest(&files)).unwrap();
+    for path in builder.runtime_paths().to_vec() {
+        builder.add_runtime_file(&path, &files[&path]).unwrap();
+    }
+    assert!(error(builder.build()).contains("Set the installation guide first"));
+    builder.set_guide(b"not a PDF");
+    assert!(error(builder.build()).contains("not a PDF document"));
+    builder.set_guide(PDF);
+    assert!(builder.build().is_ok());
+}
+
+#[test]
+fn the_language_names_the_guide() {
     let mut builder = builder_with_runtime(&runtime_files());
     assert!(error(builder.set_language("fr")).contains("Unknown language"));
     builder.set_language("zh-Hant").unwrap();

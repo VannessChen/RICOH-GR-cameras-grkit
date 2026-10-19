@@ -10,6 +10,8 @@ The files in `SD_ROOT/` are GRKit software, except the effect files. GRKit is li
 
 The text in the menu icons uses the [Inter](https://github.com/rsms/inter) typeface, which is licensed under the SIL Open Font License 1.1.
 
+The installation guide uses the [Noto Sans CJK](https://github.com/notofonts/noto-cjk) typefaces, which are licensed under the SIL Open Font License 1.1. Its code text uses DejaVu Sans Mono, which is licensed under the DejaVu Fonts License.
+
 ## Effects
 
 Each file in `SD_ROOT/SCRIPT/PLUGINS/EFFECTS/` is one Image Control effect. Each effect of the GRKit catalog is a fit of one film simulation LUT. GRKit contributors made the fits. The files contain the fitted parameters, not the LUTs. "Changes to the LUTs" below describes the changes.

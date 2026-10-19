@@ -40,7 +40,7 @@ Other models and firmware versions are not supported. To see the firmware versio
 
 ## Install
 
-Each package contains `INSTALLATION.md`, with the installation steps and the menu use for its camera:
+Each package contains the installation guide for its camera as a PDF, in the language that you select. The recovery guide is at its end. The sources are:
 
 - [GR III and GR IIIx](resources/INSTALLATION.md)
 - [GR IV and GR IV HDF](resources/INSTALLATION-GR4.md)
@@ -55,14 +55,17 @@ You need Rust 1.92 or later, Clang and LLD with ARM support, and the official fi
 cargo install --path crates/grkit-cli --locked
 grkit effects build --source effects --out build/effects
 grkit build --target gr3-2.10 --firmware firmware/fwdc239b.bin --out build/runtime
-grkit package --build build/runtime --effects build/effects --out dist/GRKit.zip
+sh .github/scripts/install-guide-tools.sh build/guide-tools
+sh .github/scripts/build-guides.sh grkit build/guide-tools build/guides
+grkit package --build build/runtime --effects build/effects --guide build/guides/gr3/en.pdf --out dist/GRKit.zip
 grkit verify dist/GRKit.zip
 ```
 
-- GR IIIx: add `--camera gr3x` to `grkit package`. The runtime is the same as for GR III.
-- GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4`.
+- Guides: `install-guide-tools.sh` downloads Typst and the Noto Sans SC and TC fonts and checks their SHA-256, on Linux x86_64 or macOS arm64. `build-guides.sh` writes `build/guides/<camera>/<language>.pdf`.
+- GR IIIx: package with `--camera gr3x` and `--guide build/guides/gr3x/en.pdf`. The runtime is the same as for GR III.
+- GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4` and `--guide build/guides/gr4/en.pdf`.
 - Fewer plugins: add `--plugins` with the plugins to install, for example `--plugins framing,guides`. The installer makes no firmware change for the other plugins. Without `--effects`, the package has no Image Control.
-- Guide language: add `--language zh-Hans` or `--language zh-Hant`. The package then has the guide in that language, next to the English guide.
+- Guide language: add `--language zh-Hans` or `--language zh-Hant`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
 
 ## Repository layout
 

@@ -21,6 +21,9 @@ fn success(args: &[&str]) -> Value {
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
+/// A stand-in for a guide PDF, which the release builds with Typst.
+const GUIDE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/guide.pdf");
+
 fn text(path: &Path) -> &str {
     path.to_str().unwrap()
 }
@@ -139,6 +142,8 @@ fn effect_compilation_is_independent_of_target_capacity() {
     let archive = tmp.path().join("overflow.zip");
     let result = run(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--effects",
@@ -188,6 +193,8 @@ fn compiled_directory_extras_and_changed_runtime_bytes_are_rejected() {
         let output = tmp.path().join("package.zip");
         let result = run(&[
             "package",
+            "--guide",
+            GUIDE,
             "--build",
             text(&build),
             "--effects",
@@ -237,6 +244,8 @@ fn symlink_definitions_and_compiled_effects_are_rejected() {
     symlink(&target, &path).unwrap();
     let result = run(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--effects",
@@ -256,6 +265,8 @@ fn package_roundtrip_and_output_ownership() {
     let zip = tmp.path().join("package.zip");
     let args = [
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--effects",
@@ -264,8 +275,8 @@ fn package_roundtrip_and_output_ownership() {
         text(&zip),
     ];
     let packaged = success(&args);
-    // Eleven runtime, document, and image entries, then one per effect.
-    assert_eq!(packaged["entries"], 11 + source_count());
+    // Ten runtime and document entries, then one per effect.
+    assert_eq!(packaged["entries"], 10 + source_count());
     assert_eq!(success(&["verify", text(&zip)])["effects"], source_count());
     let before = fs::read(&zip).unwrap();
     assert!(!run(&args).status.success());
@@ -274,6 +285,8 @@ fn package_roundtrip_and_output_ownership() {
     let rejected = tmp.path().join("rejected.zip");
     assert!(!run(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--effects",
@@ -293,6 +306,8 @@ fn package_targets_the_selected_camera() {
     let zip = tmp.path().join("gr3x.zip");
     let packaged = success(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--effects",
@@ -307,10 +322,12 @@ fn package_targets_the_selected_camera() {
     let verified = success(&["verify", text(&zip)]);
     assert_eq!(verified["camera"], "gr3x");
     assert_eq!(verified["target"], "gr3-2.10");
-    // A second language adds its guide next to the English guide.
+    // The language names the guide.
     let chinese = tmp.path().join("zh-Hans.zip");
     let packaged = success(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--language",
@@ -322,6 +339,8 @@ fn package_targets_the_selected_camera() {
     assert_eq!(success(&["verify", text(&chinese)])["language"], "zh-Hans");
     assert!(!run(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--language",
@@ -334,6 +353,8 @@ fn package_targets_the_selected_camera() {
     let rejected = tmp.path().join("gr4.zip");
     let output = run(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--camera",
@@ -352,6 +373,8 @@ fn package_selects_plugins_and_may_omit_effects() {
     let zip = tmp.path().join("selected.zip");
     let packaged = success(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--effects",
@@ -362,7 +385,7 @@ fn package_selects_plugins_and_may_omit_effects() {
         text(&zip),
     ]);
     // The plugin file is one more entry.
-    assert_eq!(packaged["entries"], 12 + source_count());
+    assert_eq!(packaged["entries"], 11 + source_count());
     assert_eq!(
         packaged["plugins"],
         json!(["image-control", "framing", "grain"])
@@ -377,6 +400,8 @@ fn package_selects_plugins_and_may_omit_effects() {
     let framing_only = tmp.path().join("framing.zip");
     let packaged = success(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--plugins",
@@ -384,12 +409,14 @@ fn package_selects_plugins_and_may_omit_effects() {
         "--out",
         text(&framing_only),
     ]);
-    assert_eq!(packaged["entries"], 12);
+    assert_eq!(packaged["entries"], 11);
     assert_eq!(success(&["verify", text(&framing_only)])["effects"], 0);
     for plugins in ["image-control", "hdr", "guides,guides"] {
         let rejected = tmp.path().join("rejected.zip");
         let output = run(&[
             "package",
+            "--guide",
+            GUIDE,
             "--build",
             text(&build),
             "--plugins",
@@ -476,6 +503,8 @@ fn literal_backslash_cannot_alias_manifest_path() {
     let output = tmp.path().join("package.zip");
     assert!(!run(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&build),
         "--effects",
@@ -664,6 +693,8 @@ fn site_export_publishes_only_the_verified_runtime() {
     let package = tmp.path().join("package.zip");
     success(&[
         "package",
+        "--guide",
+        GUIDE,
         "--build",
         text(&exported),
         "--effects",
@@ -749,4 +780,19 @@ fn effect_publish_writes_the_site_catalog() {
         assert_eq!(preview.len(), 33 * 33 * 33 * 3);
     }
     assert!(!run(&args).status.success(), "an existing output is kept");
+}
+
+#[test]
+fn guides_writes_one_typst_source_for_each_camera_and_language() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("guides");
+    assert_eq!(success(&["guides", "--out", text(&out)])["guides"], 9);
+    let source = fs::read_to_string(out.join("gr3x/zh-Hans/guide.typ")).unwrap();
+    assert!(source.contains("仅适用于 RICOH GR IIIx 固件 1.60。"));
+    assert!(source.contains("#link(<recovery>)") && source.contains("= 恢复 <recovery>"));
+    assert!(out.join("gr3x/zh-Hans/images/grkit-root.png").is_file());
+    // The GR IV guides show no GR III screenshot.
+    assert!(!out.join("gr4/en/images").exists());
+    // The output must be new.
+    assert!(!run(&["guides", "--out", text(&out)]).status.success());
 }

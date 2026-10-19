@@ -15,6 +15,16 @@ fn build() -> Value {
     json!({"target": "gr3-2.10", "profile": "production", "startup_activation": "Off"})
 }
 
+/// A stand-in for a guide PDF, which the release builds with Typst.
+const PDF: &[u8] = b"%PDF-1.7\n% GRKit test guide\n";
+
+fn english() -> Guide<'static> {
+    Guide {
+        language: Language::English,
+        pdf: PDF,
+    }
+}
+
 fn effect(id: &str) -> (String, Vec<u8>) {
     let curve: Vec<_> = (0..256).map(|i| i * 64).collect();
     let value = json!({"effect_id": id, "name": "Test", "flags": 0,
@@ -33,6 +43,7 @@ fn package() -> Vec<u8> {
         &Files::from([effect("test-effect")]),
         Selection::ALL,
         &camera::GR3,
+        &english(),
     )
     .unwrap()
 }
@@ -96,7 +107,7 @@ fn package_round_trip_is_deterministic_and_preserves_metadata() {
 }
 
 #[test]
-fn packages_ship_only_the_guide_its_images_the_licenses_and_checksums() {
+fn packages_ship_only_the_guide_the_licenses_and_checksums() {
     let files = unpack(&package());
     let documents: Vec<_> = files
         .keys()
@@ -105,19 +116,9 @@ fn packages_ship_only_the_guide_its_images_the_licenses_and_checksums() {
         .collect();
     assert_eq!(
         documents,
-        [
-            "INSTALLATION.md",
-            "LICENSES.md",
-            "SHA256SUMS",
-            "images/grkit-root.png",
-        ]
+        ["GRKit Installation Guide.pdf", "LICENSES.md", "SHA256SUMS"]
     );
-    // The guide links each packaged image, and the package has each linked image.
-    let guide = String::from_utf8(files["INSTALLATION.md"].clone()).unwrap();
-    for name in documents.iter().filter(|name| name.starts_with("images/")) {
-        assert!(guide.contains(&format!("]({name})")), "{name}");
-    }
-    assert_eq!(guide.matches("](images/").count(), 1);
+    assert_eq!(files["GRKit Installation Guide.pdf"], PDF);
 }
 
 #[test]
@@ -128,7 +129,13 @@ fn manifests_notices_and_extra_documents_are_rejected() {
         CompressionMethod::Stored
     ))
     .is_ok());
-    for name in ["MANIFEST.json", "NOTICES/EFFECTS.md", "RECOVERY.md"] {
+    for name in [
+        "MANIFEST.json",
+        "NOTICES/EFFECTS.md",
+        "RECOVERY.md",
+        "INSTALLATION.md",
+        "images/grkit-root.png",
+    ] {
         let mut extra = files.clone();
         extra.insert(name.into(), b"{}".to_vec());
         assert!(
@@ -150,7 +157,7 @@ fn corrupted_profiles_documents_manifests_and_sums_are_rejected() {
     let profile = original.keys().find(|name| name.ends_with(".GRF")).unwrap();
     for name in [
         profile.as_str(),
-        "INSTALLATION.md",
+        "GRKit Installation Guide.pdf",
         "LICENSES.md",
         "SHA256SUMS",
     ] {
@@ -231,7 +238,8 @@ fn production_boundaries_are_enforced() {
             &altered,
             &Files::new(),
             Selection::ALL,
-            &camera::GR3
+            &camera::GR3,
+            &english()
         )
         .is_err());
     }
@@ -256,6 +264,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
         &effects,
         Selection::ALL,
         &camera::GR3,
+        &english(),
     )
     .unwrap();
     assert_eq!(
@@ -271,7 +280,8 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
         &build(),
         &effects,
         Selection::ALL,
-        &camera::GR3
+        &camera::GR3,
+        &english()
     )
     .is_err());
     let bytes = assemble(
@@ -280,6 +290,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
         &Files::new(),
         Selection::ALL,
         &camera::GR3,
+        &english(),
     )
     .unwrap();
     assert_eq!(verify_package(&bytes).unwrap()["effect_ids"], json!([]));
@@ -295,6 +306,7 @@ fn selected_plugins_are_packaged_and_verified() {
         &effects,
         plugins,
         &camera::GR3,
+        &english(),
     )
     .unwrap();
     let files = unpack(&bytes);
@@ -313,6 +325,7 @@ fn selected_plugins_are_packaged_and_verified() {
         &effects,
         Selection::ALL,
         &camera::GR3,
+        &english(),
     )
     .unwrap();
     assert!(!unpack(&plain).contains_key("SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT"));
@@ -361,7 +374,8 @@ fn invalid_plugin_files_and_empty_menus_are_rejected() {
         &build(),
         &Files::new(),
         image_control,
-        &camera::GR3
+        &camera::GR3,
+        &english()
     )
     .is_err());
     let bytes = assemble(
@@ -370,6 +384,7 @@ fn invalid_plugin_files_and_empty_menus_are_rejected() {
         &Files::from([effect("test-effect")]),
         image_control,
         &camera::GR3,
+        &english(),
     )
     .unwrap();
     assert_eq!(
@@ -552,16 +567,13 @@ fn runtime_builds_must_match_their_manifest_exactly() {
 fn each_camera_gets_its_modeset_file_and_guide() {
     let effects = Files::from([effect("test-effect")]);
     let gr3 = unpack(&package());
-    assert_eq!(
-        gr3["INSTALLATION.md"],
-        include_bytes!("../../../resources/INSTALLATION.md")
-    );
     let bytes = assemble(
         &runtime_fixture(),
         &build(),
         &effects,
         Selection::ALL,
         &camera::GR3X,
+        &english(),
     )
     .unwrap();
     let verified = verify_package(&bytes).unwrap();
@@ -570,12 +582,17 @@ fn each_camera_gets_its_modeset_file_and_guide() {
     let gr3x = unpack(&bytes);
     assert!(gr3x.contains_key("SD_ROOT/00078490.609"));
     assert!(!gr3x.contains_key("SD_ROOT/00078350.588"));
-    let guide = String::from_utf8(gr3x["INSTALLATION.md"].clone()).unwrap();
+    // The guide source names GR IIIx and its ModeSet file.
+    let guide = String::from_utf8(installation_guide(&camera::GR3X, Language::English)).unwrap();
     assert!(guide.contains("For RICOH GR IIIx firmware 1.60 only."));
     assert!(guide.contains("`00078490.609`") && !guide.contains("00078350.588"));
+    assert_eq!(
+        installation_guide(&camera::GR3, Language::English),
+        include_bytes!("../../../resources/INSTALLATION.md")
+    );
     // Every runtime and effect file is the same for both cameras.
     for (name, blob) in &gr3 {
-        if !name.ends_with(".588") && name != "INSTALLATION.md" && name != "SHA256SUMS" {
+        if !name.ends_with(".588") && name != "SHA256SUMS" {
             assert_eq!(&gr3x[name], blob, "{name}");
         }
     }
@@ -609,56 +626,67 @@ fn the_guide_names_the_camera_once_and_the_modeset_file_once() {
 }
 
 #[test]
-fn a_package_adds_the_guide_of_its_language() {
+fn a_package_has_the_guide_of_its_language_only() {
     let effects = Files::from([effect("test-effect")]);
-    for language in [Language::SimplifiedChinese, Language::TraditionalChinese] {
-        let bytes = assemble_localized(
+    for language in Language::ALL {
+        let bytes = assemble(
             &runtime_fixture(),
             &build(),
             &effects,
             Selection::ALL,
             &camera::GR3X,
-            language,
+            &Guide { language, pdf: PDF },
         )
         .unwrap();
         assert_eq!(verify_package(&bytes).unwrap()["language"], language.code());
         let files = unpack(&bytes);
-        // The English guide stays, and the translated guide names GR IIIx.
-        assert_eq!(
-            files["INSTALLATION.md"],
-            installation_guide(&camera::GR3X, Language::English)
-        );
-        let guide = String::from_utf8(files[language.guide_path()].clone()).unwrap();
-        assert!(guide.contains(&language.camera_phrase(&camera::GR3X)));
-        assert!(guide.contains(camera::GR3X.modeset) && !guide.contains(camera::GR3.modeset));
+        assert_eq!(files[&language.guide_path()], PDF);
+        let guides = files.keys().filter(|name| name.ends_with(".pdf")).count();
+        assert_eq!(guides, 1, "{language:?}");
+        // The guide source names GR IIIx in each language.
+        let source = String::from_utf8(installation_guide(&camera::GR3X, language)).unwrap();
+        assert!(source.contains(&language.camera_phrase(&camera::GR3X)));
+        assert!(source.contains(camera::GR3X.modeset) && !source.contains(camera::GR3.modeset));
     }
-    // A GR IV package gets the translated GR IV guide.
-    let bytes = assemble_localized(
-        &gr4_runtime_fixture(),
-        &gr4_build(),
-        &Files::new(),
-        Selection::ALL,
-        &camera::GR4,
-        Language::TraditionalChinese,
-    )
-    .unwrap();
     assert_eq!(
-        unpack(&bytes)["INSTALLATION.zh-Hant.md"],
+        Language::ALL.map(Language::guide_path),
+        [
+            "GRKit Installation Guide.pdf",
+            "GRKit 安装指南.pdf",
+            "GRKit 安裝指南.pdf",
+        ]
+    );
+    assert_eq!(
+        installation_guide(&camera::GR4, Language::TraditionalChinese),
         include_bytes!("../../../resources/INSTALLATION-GR4.zh-Hant.md")
     );
-    assert_eq!(verify_package(&package()).unwrap()["language"], "en");
 }
 
 #[test]
-fn a_package_has_at_most_one_translated_guide() {
-    let mut files = unpack(&package());
-    for language in [Language::SimplifiedChinese, Language::TraditionalChinese] {
-        files.insert(
-            language.guide_path().into(),
-            installation_guide(&camera::GR3, language),
-        );
-    }
-    assert!(verify_package(&repack(&with_sums(files), CompressionMethod::Stored)).is_err());
+fn a_package_has_exactly_one_pdf_guide() {
+    let files = unpack(&package());
+    let mut two = files.clone();
+    two.insert(Language::SimplifiedChinese.guide_path(), PDF.to_vec());
+    assert!(verify_package(&repack(&with_sums(two), CompressionMethod::Stored)).is_err());
+    let mut none = files.clone();
+    none.remove("GRKit Installation Guide.pdf");
+    assert!(verify_package(&repack(&with_sums(none), CompressionMethod::Stored)).is_err());
+    let mut text = files;
+    text.insert("GRKit Installation Guide.pdf".into(), b"# GRKit\n".to_vec());
+    assert!(verify_package(&repack(&with_sums(text), CompressionMethod::Stored)).is_err());
+    let text_guide = Guide {
+        language: Language::English,
+        pdf: b"# GRKit\n",
+    };
+    assert!(assemble(
+        &runtime_fixture(),
+        &build(),
+        &Files::new(),
+        Selection::ALL,
+        &camera::GR3,
+        &text_guide,
+    )
+    .is_err());
     assert!(Language::parse("fr").is_err());
 }
 
@@ -701,6 +729,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
         &Files::new(),
         Selection::ALL,
         &camera::GR4,
+        &english(),
     )
     .unwrap();
     let verified = verify_package(&bytes).unwrap();
@@ -708,8 +737,9 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     assert_eq!(verified["target"], "gr4-1.11");
     let files = unpack(&bytes);
     assert!(files.contains_key("SD_ROOT/00078560.636"));
+    assert_eq!(files["GRKit Installation Guide.pdf"], PDF);
     assert_eq!(
-        files["INSTALLATION.md"],
+        installation_guide(&camera::GR4, Language::English),
         include_bytes!("../../../resources/INSTALLATION-GR4.md")
     );
     // A GR III runtime does not run on GR IV.
@@ -718,7 +748,8 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
         &build(),
         &Files::new(),
         Selection::ALL,
-        &camera::GR4
+        &camera::GR4,
+        &english()
     )
     .is_err());
     // GR IV has Image Control.
@@ -728,6 +759,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
         &Files::from([effect("test-effect")]),
         Selection::ALL,
         &camera::GR4,
+        &english(),
     )
     .unwrap();
     assert_eq!(
@@ -736,14 +768,23 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     );
     // GR IV has Framing, so Framing alone without effects shows a menu.
     let framing = Selection::from_names(["framing"]).unwrap();
-    assert!(assemble(&runtime, &gr4_build(), &Files::new(), framing, &camera::GR4).is_ok());
+    assert!(assemble(
+        &runtime,
+        &gr4_build(),
+        &Files::new(),
+        framing,
+        &camera::GR4,
+        &english()
+    )
+    .is_ok());
     let image_control = Selection::from_names(["image-control"]).unwrap();
     assert!(assemble(
         &runtime,
         &gr4_build(),
         &Files::new(),
         image_control,
-        &camera::GR4
+        &camera::GR4,
+        &english()
     )
     .is_err());
 }

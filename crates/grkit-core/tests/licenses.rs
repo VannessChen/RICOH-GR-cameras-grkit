@@ -23,6 +23,10 @@ fn package() -> Vec<u8> {
         )]),
         Selection::ALL,
         &camera::GR3,
+        &Guide {
+            language: Language::English,
+            pdf: b"%PDF-1.7\n",
+        },
     )
     .unwrap()
 }

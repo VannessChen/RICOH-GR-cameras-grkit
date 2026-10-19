@@ -193,6 +193,10 @@ jobs:
             --out site/effects/gr3-2.10
           target/release/grkit effects publish --source effects --target gr4-1.11 \
             --firmware "$firmware/fwdc248b.bin" --out site/effects/gr4-1.11
+      - name: Build the installation guides
+        run: |
+          sh .github/scripts/install-guide-tools.sh "$RUNNER_TEMP/guide-tools"
+          sh .github/scripts/build-guides.sh target/release/grkit "$RUNNER_TEMP/guide-tools" site/guides
       - name: Add the web page to the site
         run: |
           for path in web/dist/* web/dist/.[!.]*; do
@@ -209,7 +213,8 @@ jobs:
           for pair in gr3:gr3-2.10 gr3x:gr3-2.10 gr4:gr4-1.11; do
             camera="${pair%%:*}"
             target/release/grkit package --build "site/runtime/${pair#*:}" --camera "$camera" \
-              --effects "$RUNNER_TEMP/no-effects" --out "GRKit-device-test-$camera.zip"
+              --effects "$RUNNER_TEMP/no-effects" --guide "site/guides/$camera/en.pdf" \
+              --out "GRKit-device-test-$camera.zip"
             target/release/grkit verify "GRKit-device-test-$camera.zip"
           done
       - name: Check the version of each runtime

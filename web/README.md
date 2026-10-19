@@ -26,6 +26,8 @@ The tools are Node.js 24, pnpm, the `wasm32-unknown-unknown` Rust target, and wa
    grkit build --target gr3-2.10 --firmware fwdc239b.bin --out dist/runtime-local
    grkit site --build dist/runtime-local --out dist/site-data
    grkit effects publish --source effects --firmware fwdc239b.bin --out dist/site-data/effects/gr3-2.10
+   sh .github/scripts/install-guide-tools.sh dist/guide-tools
+   sh .github/scripts/build-guides.sh grkit dist/guide-tools dist/site-data/guides
    ```
 
    For GR IV, also build `gr4-1.11` from `fwdc248b.bin`, add it with `grkit site`, and publish its effects with `--target gr4-1.11`. Without them, only the GR III and GR IIIx packages work.

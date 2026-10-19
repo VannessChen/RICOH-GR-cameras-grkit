@@ -22,6 +22,7 @@ pub struct Builder {
     plugins: Selection,
     camera: &'static Camera,
     language: packaging::Language,
+    guide: Option<Vec<u8>>,
 }
 
 impl Builder {
@@ -47,6 +48,7 @@ impl Builder {
             plugins: Selection::ALL,
             camera: &camera::GR3,
             language: packaging::Language::English,
+            guide: None,
         })
     }
 
@@ -107,23 +109,35 @@ impl Builder {
         Ok(())
     }
 
-    /// Selects the language of a second guide next to the English one: `en` (the
-    /// default, no second guide), `zh-Hans`, or `zh-Hant`.
+    /// Selects the language of the installation guide: `en` (the default),
+    /// `zh-Hans`, or `zh-Hant`.
     pub fn set_language(&mut self, code: &str) -> Result<()> {
         self.language = packaging::Language::parse(code)?;
         Ok(())
     }
 
+    /// Sets the PDF of the installation guide for the camera, in the language of
+    /// `set_language`. The site publishes one for each camera and language.
+    pub fn set_guide(&mut self, pdf: &[u8]) {
+        self.guide = Some(pdf.to_vec());
+    }
+
     /// Verifies the runtime against its manifest and returns the verified package ZIP.
     pub fn build(&self) -> Result<Vec<u8>> {
         let (runtime, manifest) = packaging::load_runtime(&self.manifest, &self.runtime)?;
-        packaging::assemble_localized(
+        packaging::assemble(
             &runtime,
             &manifest,
             &self.effects,
             self.plugins,
             self.camera,
-            self.language,
+            &packaging::Guide {
+                language: self.language,
+                pdf: self
+                    .guide
+                    .as_deref()
+                    .context("Set the installation guide first")?,
+            },
         )
     }
 }
@@ -173,10 +187,16 @@ impl Package {
         self.0.set_camera(id).map_err(js_error)
     }
 
-    /// Adds the guide in `en` (no second guide), `zh-Hans`, or `zh-Hant` next to the English one.
+    /// Selects the language of the installation guide: `en`, `zh-Hans`, or `zh-Hant`.
     #[wasm_bindgen(js_name = setLanguage)]
     pub fn set_language(&mut self, code: &str) -> Result<(), JsError> {
         self.0.set_language(code).map_err(js_error)
+    }
+
+    /// Sets the PDF of the installation guide for the camera, in the selected language.
+    #[wasm_bindgen(js_name = setGuide)]
+    pub fn set_guide(&mut self, pdf: &[u8]) {
+        self.0.set_guide(pdf);
     }
 
     /// Returns the verified package as ZIP bytes.

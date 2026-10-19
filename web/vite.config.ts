@@ -16,7 +16,7 @@ function workspaceVersion(): string {
 }
 
 /** The paths that CI writes into the site next to the web build. */
-const DATA_PATH = /^\/(runtime|effects)\//;
+const DATA_PATH = /^\/(runtime|effects|guides)\//;
 
 /**
  * Serves runtime and effect files from a local site-data directory during `dev` and `preview`.

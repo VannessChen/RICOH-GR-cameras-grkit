@@ -49,7 +49,15 @@ pub fn json_bytes(value: &Value) -> Result<Vec<u8>> {
     Ok(ascii.into_bytes())
 }
 
+/// Checks an archive path: printable ASCII segments, none of them `.` or `..`.
+/// The localized guide names (`Language::guide_path`) are the only exceptions.
 pub fn safe_path(name: &str) -> Result<&str> {
+    if Language::ALL
+        .into_iter()
+        .any(|language| language.guide_path() == name)
+    {
+        return Ok(name);
+    }
     ensure!(
         !name.is_empty()
             && !name.contains(['\\', ':'])
@@ -179,8 +187,8 @@ fn is_effect_path(name: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
-/// The language of a package's guide. Each package has the English guide
-/// (`INSTALLATION.md`). Another language adds its own guide next to it.
+/// The language of a package's installation guide. A package has the guide in
+/// one language, as a PDF.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Language {
     #[default]
@@ -212,13 +220,18 @@ impl Language {
         }
     }
 
-    /// The package path of the guide in this language.
-    pub fn guide_path(self) -> &'static str {
+    /// The title of the installation guide in this language.
+    pub fn guide_title(self) -> &'static str {
         match self {
-            Language::English => "INSTALLATION.md",
-            Language::SimplifiedChinese => "INSTALLATION.zh-Hans.md",
-            Language::TraditionalChinese => "INSTALLATION.zh-Hant.md",
+            Language::English => "GRKit Installation Guide",
+            Language::SimplifiedChinese => "GRKit 安装指南",
+            Language::TraditionalChinese => "GRKit 安裝指南",
         }
+    }
+
+    /// The package path of the PDF guide in this language: its title.
+    pub fn guide_path(self) -> String {
+        format!("{}.pdf", self.guide_title())
     }
 
     /// The guide text for a camera of `target`, before the camera names go in.
@@ -252,8 +265,8 @@ impl Language {
     }
 }
 
-/// The screenshot of the GR III guides, at its package path. The guides link it
-/// as `images/grkit-root.png`, so the link works in the repository and in the package.
+/// The screenshot of the GR III guides, at the path that the guides link, so the
+/// link works in the repository and in the guide source.
 const GUIDE_IMAGES: [(&str, &[u8]); 1] = [(
     "images/grkit-root.png",
     include_bytes!("../../../resources/images/grkit-root.png"),
@@ -277,7 +290,7 @@ pub struct Contents {
     pub effect_ids: Vec<String>,
     /// The plugins that the installer installs.
     pub plugins: Selection,
-    /// The language of the translated guide, or English if the package has none.
+    /// The language of the guide.
     pub language: Language,
 }
 
@@ -314,12 +327,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         .map(|name| format!("SD_ROOT/{name}"))
         .collect();
     mandatory.extend(activation.keys().map(|name| format!("SD_ROOT/{name}")));
-    mandatory.extend(["INSTALLATION.md", "LICENSES.md", "SHA256SUMS"].map(String::from));
-    mandatory.extend(
-        guide_images(camera)
-            .iter()
-            .map(|(name, _)| (*name).to_owned()),
-    );
+    mandatory.extend(["LICENSES.md", "SHA256SUMS"].map(String::from));
     ensure!(
         mandatory.iter().all(|name| contents.contains_key(name)),
         "Package is missing required files"
@@ -337,7 +345,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
     validate_runtime(&runtime, camera.target)?;
     let mut ids = BTreeSet::new();
     let mut plugins = Selection::ALL;
-    let mut language = Language::English;
+    let mut language = None;
     let plugins_path = format!("SD_ROOT/{}", modules::PATH);
     for (name, blob) in contents
         .iter()
@@ -353,15 +361,13 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
             ensure!(ids.insert(id.to_owned()), "Duplicate effect ID");
         } else if *name == plugins_path {
             plugins = Selection::parse(blob)?;
-        } else if let Some(translated) = Language::ALL
+        } else if let Some(guide) = Language::ALL
             .into_iter()
-            .find(|other| *other != Language::English && other.guide_path() == name)
+            .find(|language| language.guide_path() == *name)
         {
-            ensure!(
-                language == Language::English,
-                "Package has more than one translated guide"
-            );
-            language = translated;
+            ensure!(language.is_none(), "Package has more than one guide");
+            check_guide(blob)?;
+            language = Some(guide);
         } else {
             bail!("Package contains unexpected files: {name}");
         }
@@ -391,8 +397,17 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         camera,
         effect_ids: ids.into_iter().collect(),
         plugins,
-        language,
+        language: language.context("Package has no installation guide")?,
     })
+}
+
+/// Checks that `pdf` is a PDF document. The release builds the guides.
+fn check_guide(pdf: &[u8]) -> Result<()> {
+    ensure!(
+        pdf.starts_with(b"%PDF-"),
+        "The installation guide is not a PDF document"
+    );
+    Ok(())
 }
 
 fn checksum_list(contents: &Files) -> Vec<u8> {
@@ -404,8 +419,8 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
         .into_bytes()
 }
 
-/// The installation guide of a package in one language. The main resource
-/// describes GR III. GR IIIx gets its name, firmware version, and ModeSet file.
+/// The installation guide of `camera` in one language, as Markdown, the source of
+/// its PDF (`guide::source`). The main resource describes GR III. GR IIIx gets its name, firmware version, and ModeSet file.
 /// GR IV, which has fewer modules, has its own resource.
 pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
     let gr4 = camera.target == camera::GR4.target;
@@ -436,27 +451,22 @@ pub const LICENSES: &str = concat!(
     "```\n",
 );
 
-/// Builds the package ZIP for one camera with the English guide only. `plugins`
-/// names the plugins that the installer installs.
+/// The installation guide of a package: its language and the PDF that the
+/// release built from `guide::source` for the package's camera.
+pub struct Guide<'a> {
+    pub language: Language,
+    pub pdf: &'a [u8],
+}
+
+/// Builds the package ZIP for one camera. `plugins` names the plugins that the
+/// installer installs.
 pub fn assemble(
     runtime: &Files,
     build: &Value,
     effects: &Files,
     plugins: Selection,
     camera: &Camera,
-) -> Result<Vec<u8>> {
-    assemble_localized(runtime, build, effects, plugins, camera, Language::English)
-}
-
-/// Builds the package ZIP for one camera. A `language` other than English adds
-/// the guide in that language next to the English guide.
-pub fn assemble_localized(
-    runtime: &Files,
-    build: &Value,
-    effects: &Files,
-    plugins: Selection,
-    camera: &Camera,
-    language: Language,
+    guide: &Guide,
 ) -> Result<Vec<u8>> {
     ensure!(
         build.get("profile") == Some(&json!("production"))
@@ -488,19 +498,8 @@ pub fn assemble_localized(
     if let Some(file) = plugins.file() {
         contents.insert(format!("SD_ROOT/{}", modules::PATH), file);
     }
-    contents.insert(
-        Language::English.guide_path().into(),
-        installation_guide(camera, Language::English),
-    );
-    if language != Language::English {
-        contents.insert(
-            language.guide_path().into(),
-            installation_guide(camera, language),
-        );
-    }
-    for (name, image) in guide_images(camera) {
-        contents.insert((*name).into(), image.to_vec());
-    }
+    check_guide(guide.pdf)?;
+    contents.insert(guide.language.guide_path(), guide.pdf.to_vec());
     contents.insert("LICENSES.md".into(), LICENSES.as_bytes().to_vec());
     contents.insert("SHA256SUMS".into(), checksum_list(&contents));
     validate_contents(&contents)?;

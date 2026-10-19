@@ -13,7 +13,9 @@ The version is the `[workspace.package]` version in `Cargo.toml`. Each runtime `
 
 `grkit site` writes only `build.json` and `sd/` to `site/runtime/<target>/`, for `gr3-2.10` and `gr4-1.11`. It leaves out `objects/`, because the generated header there holds firmware bytes.
 `grkit effects publish` writes the v1 catalog, `.GRF` files, and preview tables to `site/effects/<target>/` for both targets.
-The tables include `preview/standard.lut` and `preview/<id>.lut`. The web build adds `index.html`, `assets/`, `samples/`, and `_headers`.
+The tables include `preview/standard.lut` and `preview/<id>.lut`.
+
+`.github/scripts/build-guides.sh` writes the installation guides to `site/guides/<camera>/<language>.pdf` with Typst. `.github/scripts/install-guide-tools.sh` pins the Typst version and the fonts. The web build adds `index.html`, `assets/`, `samples/`, and `_headers`.
 
 ## Set up
 

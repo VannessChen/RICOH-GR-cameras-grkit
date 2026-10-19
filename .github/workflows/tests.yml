@@ -50,6 +50,19 @@ jobs:
         run: GRKIT_CLANG=clang-21 GRKIT_LLD=ld.lld-21 cargo test -p grkit-build --locked synthetic_ -- --ignored
       - run: cargo build --release --locked -p grkit-cli
       - run: target/release/grkit --help
+  guides:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      - run: rustup toolchain install 1.92.0 --profile minimal
+      - run: rustup default 1.92.0
+      - run: cargo build --locked -p grkit-cli
+      - name: Build the installation guides
+        run: |
+          sh .github/scripts/install-guide-tools.sh "$RUNNER_TEMP/guide-tools"
+          sh .github/scripts/build-guides.sh target/debug/grkit "$RUNNER_TEMP/guide-tools" "$RUNNER_TEMP/guides"
   web:
     runs-on: ubuntu-24.04
     steps:

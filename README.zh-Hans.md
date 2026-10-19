@@ -40,7 +40,7 @@ GRKit 在 ADJ 模式中增加第 6 个功能 GRK，包含五个模块：
 
 ## 安装
 
-每个安装包都包含安装指南，其中有对应机型的安装步骤和菜单用法：
+每个安装包都包含对应机型的安装指南，格式为 PDF，语言是下载时选择的语言。恢复指南在其末尾。源文件：
 
 - [GR III 和 GR IIIx](resources/INSTALLATION.zh-Hans.md)
 - [GR IV 和 GR IV HDF](resources/INSTALLATION-GR4.zh-Hans.md)
@@ -55,14 +55,17 @@ GRKit 在 ADJ 模式中增加第 6 个功能 GRK，包含五个模块：
 cargo install --path crates/grkit-cli --locked
 grkit effects build --source effects --out build/effects
 grkit build --target gr3-2.10 --firmware firmware/fwdc239b.bin --out build/runtime
-grkit package --build build/runtime --effects build/effects --out dist/GRKit.zip
+sh .github/scripts/install-guide-tools.sh build/guide-tools
+sh .github/scripts/build-guides.sh grkit build/guide-tools build/guides
+grkit package --build build/runtime --effects build/effects --guide build/guides/gr3/en.pdf --out dist/GRKit.zip
 grkit verify dist/GRKit.zip
 ```
 
-- GR IIIx：在 `grkit package` 后加 `--camera gr3x`。它和 GR III 使用同一个运行时。
-- GR IV：用 `fwdc248b.bin` 和 `--target gr4-1.11` 构建，再用 `--camera gr4` 打包。
+- 指南：`install-guide-tools.sh` 下载 Typst 和 Noto Sans SC、TC 字体，并校验 SHA-256，支持 Linux x86_64 和 macOS arm64。`build-guides.sh` 生成 `build/guides/<机型>/<语言>.pdf`。
+- GR IIIx：用 `--camera gr3x` 和 `--guide build/guides/gr3x/en.pdf` 打包。它和 GR III 使用同一个运行时。
+- GR IV：用 `fwdc248b.bin` 和 `--target gr4-1.11` 构建，再用 `--camera gr4` 和 `--guide build/guides/gr4/en.pdf` 打包。
 - 减少插件：用 `--plugins` 列出要安装的插件，例如 `--plugins framing,guides`。安装器不会为其他插件修改固件。不加 `--effects` 时，安装包中没有 Image Control。
-- 指南语言：加 `--language zh-Hans` 或 `--language zh-Hant`。安装包会在英文指南旁加入对应语言的指南。
+- 指南语言：加 `--language zh-Hans` 或 `--language zh-Hant`，并给出该语言的指南，例如 `build/guides/gr3/zh-Hans.pdf`。
 
 ## 仓库结构
 

@@ -16,7 +16,7 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 /**
  * Builds GRKit.zip in the browser from the target's published runtime and the selected effects.
  * `camera` selects the ModeSet file. `omitted` names the plugins that the package does not install.
- * `language` adds the installation guide in that language next to the English guide.
+ * `language` selects the installation guide, which the site publishes as `guides/<camera>/<language>.pdf`.
  * grkit-wasm checks each runtime file against `build.json` and each effect's format.
  */
 export async function buildPackage(
@@ -33,6 +33,7 @@ export async function buildPackage(
   try {
     builder.setCamera(camera);
     builder.setLanguage(language);
+    builder.setGuide(await fetchBytes(siteUrl(`guides/${camera}/${language}.pdf`)));
     const files = await Promise.all(
       builder.runtimePaths().map(async (path) => {
         return [path, await fetchBytes(siteUrl(`${runtime}sd/${path}`))] as const;

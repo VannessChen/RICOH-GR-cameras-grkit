@@ -9,7 +9,8 @@ Menu, processing, and Framing hooks run in the camera's RTOS domain.
 - `grkit-build` checks firmware, generates patches, and invokes Clang and LLD.
 - `grkit-cli` exposes commands and enforces filesystem rules.
 - `grkit-wasm` assembles packages in the browser. It takes a runtime build as `grkit build` writes it (`build.json` and `sd/`) and compiled effects, and it uses the `grkit-core` checks that the CLI uses.
-- `web/` is the static site. It fetches the runtime, the effect catalog, and the selected effects, and calls `grkit-wasm` to build `GRKit.zip` in the browser.
+- `web/` is the static site. It fetches the runtime, the effect catalog, the selected effects, and the installation guide PDF, and calls `grkit-wasm` to build `GRKit.zip` in the browser.
+- `grkit_core::guide` converts the Markdown guides in `resources/` to Typst. The release compiles them to `guides/<camera>/<language>.pdf`. A package holds the guide of its camera in one language, with the recovery guide as an appendix.
 
 The site preview accepts original GR III and GR IIIx DNG files. A browser Worker uses LibRaw to decode sensor data into half-size 16-bit linear sRGB.
 It uses the recorded white balance and disables automatic brightness and content-dependent white-level adjustment.
