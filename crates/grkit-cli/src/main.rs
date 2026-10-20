@@ -85,6 +85,16 @@ enum Command {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Write the ZIP of the firmware dump tool, which copies the running RTOS
+    /// image of a camera to its SD card. One ZIP serves each camera.
+    Dump {
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, default_value = "clang")]
+        clang: String,
+        #[arg(long, default_value = "ld.lld")]
+        lld: String,
+    },
     /// Write a verified runtime build into a static site directory. The site
     /// must not have a runtime for the same target yet.
     Site {
@@ -308,6 +318,12 @@ fn run(command: Command) -> Result<Value> {
                 json!({"path": out, "sha256": packaging::sha256(&bytes), "camera": camera.id,
                 "modeset": camera.modeset}),
             )
+        }
+        Command::Dump { out, clang, lld } => {
+            let tools = grkit_build::Toolchain::discover(&clang, &lld)?;
+            let bytes = packaging::assemble_dump(grkit_build::dump::files(&tools)?)?;
+            storage::write_new(&out, &bytes)?;
+            Ok(json!({"path": out, "sha256": packaging::sha256(&bytes)}))
         }
         Command::Site { build, out } => {
             let (target, files) = storage::export_runtime(&build, &out)?;

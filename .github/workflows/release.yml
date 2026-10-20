@@ -1,7 +1,7 @@
 name: Release
 
-# Builds one release from its tag: the site, the device-test packages, and a draft
-# GitHub release that holds both. Merging the release pull request tags the merge
+# Builds one release from its tag: the site, a package for each camera, the
+# firmware dump tool, and a draft GitHub release that holds them. Merging the release pull request tags the merge
 # commit and starts this workflow. Then the Deploy workflow publishes the site and
 # the release. See docs/releasing.md.
 on:
@@ -210,16 +210,21 @@ jobs:
             fi
           done
           cp -R web/dist/. site/
-      - name: Package the published runtime for device testing
+      # Release assets are GRKit-<version>-<use>. A camera package holds the
+      # published runtime, each effect, and each plugin, as the site does.
+      - name: Package the published runtime for each camera
         run: |
-          mkdir "$RUNNER_TEMP/no-effects"
+          version="${TAG#v}"
+          target/release/grkit effects build --source effects --out "$RUNNER_TEMP/effects"
           for pair in gr3:gr3-2.10 gr3x:gr3-2.10 gr4:gr4-1.11; do
             camera="${pair%%:*}"
             target/release/grkit package --build "site/runtime/${pair#*:}" --camera "$camera" \
-              --effects "$RUNNER_TEMP/no-effects" --guide "site/guides/$camera/en.pdf" \
-              --out "GRKit-device-test-$camera.zip"
-            target/release/grkit verify "GRKit-device-test-$camera.zip"
+              --effects "$RUNNER_TEMP/effects" --guide "site/guides/$camera/en.pdf" \
+              --out "GRKit-$version-$camera.zip"
+            target/release/grkit verify "GRKit-$version-$camera.zip"
           done
+      - name: Build the firmware dump tool
+        run: target/release/grkit dump --out "GRKit-${TAG#v}-dump.zip" --clang clang-21 --lld ld.lld-21
       - name: Check the version of each runtime
         run: |
           for manifest in site/runtime/*/build.json; do
@@ -237,8 +242,8 @@ jobs:
           retention-days: 3
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: device-test
-          path: GRKit-device-test-*.zip
+          name: packages
+          path: GRKit-*.zip
           if-no-files-found: error
           retention-days: 3
 
@@ -262,8 +267,8 @@ jobs:
           path: site
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: device-test
-          path: device-test
+          name: packages
+          path: packages
       - name: Create or update the draft release
         run: |
           set -euo pipefail
@@ -280,10 +285,11 @@ jobs:
             fi
             gh release create "$TAG" --verify-tag --draft --title "GRKit $TAG" "${notes[@]}"
           fi
-          tar -czf "$RUNNER_TEMP/site.tar.gz" -C site .
-          gh release upload "$TAG" "$RUNNER_TEMP/site.tar.gz" device-test/GRKit-device-test-*.zip --clobber
+          site="$RUNNER_TEMP/GRKit-${TAG#v}-site.tar.gz"
+          tar -czf "$site" -C site .
+          gh release upload "$TAG" "$site" packages/GRKit-*.zip --clobber
       - name: Summary
-        run: echo "The draft release $TAG holds the site and the device-test packages." >> "$GITHUB_STEP_SUMMARY"
+        run: echo "The draft release $TAG holds the site, the camera packages, and the dump tool." >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     needs: [tag, publish]

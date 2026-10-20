@@ -50,17 +50,23 @@ jobs:
           fi
           if ! release=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,author,assets \
-            --jq '[.isDraft, .author.login, ([.assets[].name] | index("site.tar.gz") != null)] | @tsv'); then
+            --jq '[.isDraft, .author.login, ([.assets[].name] | join("/"))] | @tsv'); then
             echo "::error::There is no release $TAG. The Release workflow creates it."
             exit 1
           fi
-          IFS=$'\t' read -r draft author site <<< "$release"
-          echo "Release $TAG: draft $draft, author $author, site $site"
-          if [ "$author" != 'github-actions[bot]' ] || [ "$site" != true ]; then
-            echo "::error::$TAG was not made by the Release workflow, or it has no site.tar.gz."
+          IFS=$'\t' read -r draft author assets <<< "$release"
+          # Releases before 1.2.0 name the site site.tar.gz.
+          site=
+          for name in "GRKit-${TAG#v}-site.tar.gz" site.tar.gz; do
+            case "/$assets/" in */"$name"/*) site="$name"; break ;; esac
+          done
+          echo "Release $TAG: draft $draft, author $author, site ${site:-none}"
+          if [ "$author" != 'github-actions[bot]' ] || [ -z "$site" ]; then
+            echo "::error::$TAG was not made by the Release workflow, or it has no site archive."
             exit 1
           fi
           echo "draft=$draft" >> "$GITHUB_OUTPUT"
+          echo "site=$site" >> "$GITHUB_OUTPUT"
       # The scripts of the commit that runs this workflow.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,11 +78,13 @@ jobs:
           path: site
       - name: Commit the site to the site branch
         working-directory: site
+        env:
+          SITE_ARCHIVE: ${{ steps.release.outputs.site }}
         run: |
           set -euo pipefail
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern site.tar.gz --dir "$RUNNER_TEMP"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$SITE_ARCHIVE" --dir "$RUNNER_TEMP"
           mkdir "$RUNNER_TEMP/site"
-          tar -xzf "$RUNNER_TEMP/site.tar.gz" -C "$RUNNER_TEMP/site"
+          tar -xzf "$RUNNER_TEMP/$SITE_ARCHIVE" -C "$RUNNER_TEMP/site"
           sh ../source/.github/scripts/commit-site.sh "$RUNNER_TEMP/site" "deploy $TAG"
       - name: Wait until the site serves the release
         run: |

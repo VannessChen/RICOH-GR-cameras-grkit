@@ -89,9 +89,14 @@ jobs:
       - name: Combine the web page with the site data of the release
         run: |
           set -euo pipefail
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern site.tar.gz --dir "$RUNNER_TEMP"
+          # Releases before 1.2.0 name the site site.tar.gz.
+          archive="GRKit-${TAG#v}-site.tar.gz"
+          if ! gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$archive" --dir "$RUNNER_TEMP"; then
+            archive=site.tar.gz
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$archive" --dir "$RUNNER_TEMP"
+          fi
           mkdir "$RUNNER_TEMP/release" "$RUNNER_TEMP/site"
-          tar -xzf "$RUNNER_TEMP/site.tar.gz" -C "$RUNNER_TEMP/release"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/release"
           # The release writes these directories. The web build writes the rest.
           for data in runtime effects guides; do
             if [ ! -d "$RUNNER_TEMP/release/$data" ]; then

@@ -548,6 +548,28 @@ pub fn assemble_scripts_off(camera: &Camera) -> Result<Vec<u8>> {
     write_zip(contents)
 }
 
+/// The paths of the firmware dump ZIP, without its checksums.
+pub const DUMP_FILES: [&str; 4] = [
+    "README.txt",
+    "SD_ROOT/SCRIPT/STARTUP.TTL",
+    "SD_ROOT/SCRIPT/GRDUMP/DUMP.SH",
+    "SD_ROOT/SCRIPT/GRDUMP/DUMP.BIN",
+];
+
+/// The ZIP of the firmware dump tool: exactly `DUMP_FILES` and their
+/// checksums. The native build crate compiles the program.
+pub fn assemble_dump(mut contents: Files) -> Result<Vec<u8>> {
+    ensure!(
+        contents.len() == DUMP_FILES.len()
+            && DUMP_FILES
+                .iter()
+                .all(|name| contents.get(*name).is_some_and(|bytes| !bytes.is_empty())),
+        "The dump tool needs exactly {DUMP_FILES:?}"
+    );
+    contents.insert("SHA256SUMS".into(), checksum_list(&contents));
+    write_zip(contents)
+}
+
 /// A deterministic ZIP of `contents`, with stored entries and a fixed time.
 fn write_zip(contents: Files) -> Result<Vec<u8>> {
     let mut archive = ZipWriter::new(Cursor::new(Vec::new()));

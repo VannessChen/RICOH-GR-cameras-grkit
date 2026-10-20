@@ -833,3 +833,46 @@ fn scripts_off_packages_hold_only_the_disable_command_and_its_key() {
         assert!(verify_package(&bytes).is_err());
     }
 }
+
+#[test]
+fn dump_packages_hold_the_tool_files_and_their_checksums() {
+    let contents: Files = DUMP_FILES
+        .iter()
+        .map(|name| ((*name).to_owned(), name.as_bytes().to_vec()))
+        .collect();
+    let bytes = assemble_dump(contents.clone()).unwrap();
+    assert_eq!(bytes, assemble_dump(contents.clone()).unwrap());
+    let files = unpack(&bytes);
+    let mut expected: Vec<_> = DUMP_FILES.iter().copied().chain(["SHA256SUMS"]).collect();
+    expected.sort();
+    assert_eq!(
+        files.keys().map(String::as_str).collect::<Vec<_>>(),
+        expected
+    );
+    let sums = String::from_utf8(files["SHA256SUMS"].clone()).unwrap();
+    for name in DUMP_FILES {
+        assert!(sums.contains(&format!("{}  {name}", sha256(name.as_bytes()))));
+    }
+    // The program and the script are executable on the card.
+    let mut archive = ZipArchive::new(Cursor::new(&bytes)).unwrap();
+    for (name, mode) in [
+        ("SD_ROOT/SCRIPT/GRDUMP/DUMP.BIN", 0o755),
+        ("SD_ROOT/SCRIPT/GRDUMP/DUMP.SH", 0o755),
+        ("README.txt", 0o644),
+    ] {
+        assert_eq!(
+            archive.by_name(name).unwrap().unix_mode().unwrap() & 0o777,
+            mode
+        );
+    }
+    // A missing, empty, or extra file is refused.
+    let mut missing = contents.clone();
+    missing.remove("README.txt");
+    assert!(assemble_dump(missing).is_err());
+    let mut empty = contents.clone();
+    empty.insert("SD_ROOT/SCRIPT/GRDUMP/DUMP.BIN".into(), Vec::new());
+    assert!(assemble_dump(empty).is_err());
+    let mut extra = contents;
+    extra.insert("SD_ROOT/SCRIPT/STARTUP.BAK".into(), b"x".to_vec());
+    assert!(assemble_dump(extra).is_err());
+}

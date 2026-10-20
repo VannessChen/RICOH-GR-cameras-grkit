@@ -47,7 +47,7 @@ jobs:
       - run: cargo build --workspace --locked
       - run: cargo build -p grkit-wasm --target wasm32-unknown-unknown --release --locked
       - if: runner.os == 'Linux'
-        run: GRKIT_CLANG=clang-21 GRKIT_LLD=ld.lld-21 cargo test -p grkit-build --locked synthetic_ -- --ignored
+        run: GRKIT_CLANG=clang-21 GRKIT_LLD=ld.lld-21 cargo test -p grkit-build --locked -- --ignored synthetic_ dump_
       - run: cargo build --release --locked -p grkit-cli
       - run: target/release/grkit --help
   guides:

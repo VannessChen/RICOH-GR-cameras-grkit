@@ -1,6 +1,7 @@
 //! Native firmware build adapters. The core crate remains independent of processes and files.
 pub mod arm;
 pub mod components;
+pub mod dump;
 pub mod firmware;
 pub mod loader;
 pub mod relocation;

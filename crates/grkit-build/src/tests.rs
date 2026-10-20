@@ -856,3 +856,27 @@ fn each_point_has_its_hooks() {
     }
     assert!(components::point_of("unknown_hook").is_err());
 }
+
+#[test]
+#[ignore = "Requires ARM-capable Clang and LLD; run with --ignored"]
+fn dump_tool_is_a_static_arm_linux_program() -> Result<()> {
+    let files = dump::files(&tools()?)?;
+    let names: Vec<_> = files.keys().map(String::as_str).collect();
+    let mut expected = grkit_core::packaging::DUMP_FILES.to_vec();
+    expected.sort();
+    assert_eq!(names, expected);
+    let binary = &files["SD_ROOT/SCRIPT/GRDUMP/DUMP.BIN"];
+    let half = |offset: usize| u16::from_le_bytes([binary[offset], binary[offset + 1]]);
+    let word = |offset: usize| u32::from_le_bytes(binary[offset..offset + 4].try_into().unwrap());
+    // ELF32, little endian, an executable for ARM.
+    assert_eq!(&binary[..6], b"\x7fELF\x01\x01");
+    assert_eq!((half(16), half(18)), (2, 40));
+    // No program header asks for an interpreter, so the camera needs no libc.
+    let (table, size, count) = (word(28) as usize, half(42) as usize, half(44) as usize);
+    assert!((0..count).all(|index| word(table + index * size) != 3));
+    assert!(binary.windows(8).any(|part| part == b"/dev/mem"));
+    // The script runs the program from the folder where the program writes.
+    let script = std::str::from_utf8(&files["SD_ROOT/SCRIPT/GRDUMP/DUMP.SH"])?;
+    assert!(script.starts_with("/media/storage1/SCRIPT/GRDUMP/DUMP.BIN\n"));
+    Ok(())
+}

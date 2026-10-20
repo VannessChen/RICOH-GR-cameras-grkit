@@ -3,7 +3,7 @@
 Four workflows release GRKit:
 
 - `Release PR` keeps one pull request from the `release` branch open while change files are pending. knope sets the version in `Cargo.toml` and `Cargo.lock` and writes `CHANGELOG.md` from the change files.
-- `Release` starts when the release pull request is merged. It tags the merge commit, runs the tests, and builds the site. Then it creates a draft GitHub release that holds the site and the device-test packages.
+- `Release` starts when the release pull request is merged. It tags the merge commit, runs the tests, and builds the site. Then it creates a draft GitHub release that holds the site, a package for each camera, and the firmware dump tool.
   To build the site, it downloads the official GR III 2.10 and GR IV 1.11 firmware and checks their SHA-256. Then it builds a runtime for each with LLVM 21, publishes the effects in `effects/` with their preview tables, and deletes the firmware. It also builds the web page in `web/`.
 - `Deploy` commits the site of one release to the `site` branch. Cloudflare Pages deploys each commit on that branch. When the site serves the new version, `Deploy` publishes the release. `Release` calls `Deploy` when it has built a tag. Start `Deploy` by hand to deploy a release again.
 - `Site` starts when a push to `main` changes `web/`. It builds the web page from the source of the latest published release with `web/` from `main`, and it keeps the runtimes, effects, and guides of that release. The WebAssembly packager therefore matches the released runtimes, and the footer shows the released version. If `web/` on `main` needs a packager change that is not released yet, the build fails and the site stays as it is.
@@ -68,7 +68,10 @@ Use `major` for a change that an earlier package cannot follow, for example a ne
 
 1. Merge the `Release vX.Y.Z` pull request. `Release` starts on the merge commit. It builds the release, deploys the site, and publishes the release.
 2. If the site does not serve the version within 15 minutes, `Deploy` fails and the release stays a draft. Examine the deployment in the Cloudflare dashboard. If it failed, retry it there, because a second `Deploy` run makes no new commit. Then start `Deploy` with the tag `vX.Y.Z`.
-3. The release holds `site.tar.gz`, `GRKit-device-test-gr3.zip`, `GRKit-device-test-gr3x.zip`, and `GRKit-device-test-gr4.zip`. Each package has the published runtime and no effects. Install the package of each camera that you have, and test it.
+3. The release holds these files. Install the package of each camera that you have, and test it.
+   - `GRKit-X.Y.Z-site.tar.gz`: the site. Releases before 1.2.0 name it `site.tar.gz`, and `Deploy` and `Site` accept both names.
+   - `GRKit-X.Y.Z-gr3.zip`, `GRKit-X.Y.Z-gr3x.zip`, and `GRKit-X.Y.Z-gr4.zip`: the package of each camera, with the published runtime, each effect in `effects/`, each plugin, and the English guide. The site makes the same package by default.
+   - `GRKit-X.Y.Z-dump.zip`: the firmware dump tool of `runtime/dump/` for each camera. The site footer links to it.
 4. If a test fails, start `Deploy` with the tag of the previous release. The site then serves that release again.
 
 To release a commit on `main` without a release pull request, push a tag `vX.Y.Z` that matches the version in `Cargo.toml`. The first release, `v1.0.0`, uses this path.
@@ -76,4 +79,10 @@ To build a tag again, for example with `firmware_source` set to `backup`, start 
 
 A release keeps its files without an expiry date. To go back to an earlier version, start `Deploy` with its tag.
 
-The release toolchain is LLVM 21 on Ubuntu, not the reference Apple Clang. `Release` deploys its runtimes before a camera test, so test the device-test packages right after each release. To test a runtime before the release, build it with LLVM 21 as `release.yml` does.
+The release toolchain is LLVM 21 on Ubuntu, not the reference Apple Clang. `Release` deploys its runtimes before a camera test, so test the camera packages right after each release. To test a runtime before the release, build it with LLVM 21 as `release.yml` does.
+
+## Firmware dump tool
+
+Cameras can run a build of a firmware version that Ricoh does not publish. `grkit dump` writes the tool that copies the running RTOS image of such a camera to its SD card. `runtime/dump/README.txt` gives the user steps.
+
+The tool reads memory only. Its `INFO.TXT` gives the startup literals and the build identity, the word at RTOS + `0x2038`. To check the relocation of a runtime against a copy, compile `tests/runtime/relocation_image.c` with the generated header of that runtime, and run it on `RTOS.BIN`.

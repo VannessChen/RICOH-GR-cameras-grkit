@@ -362,6 +362,9 @@ export function App() {
             {t.recovery}
           </a>
           <a href={REPOSITORY}>{t.source}</a>
+          <a href={`${REPOSITORY}/releases/download/v${__GRKIT_VERSION__}/GRKit-${__GRKIT_VERSION__}-dump.zip`}>
+            {t.firmwareDump}
+          </a>
           <a href={`${REPOSITORY}/releases/tag/v${__GRKIT_VERSION__}`}>GRKit {__GRKIT_VERSION__}</a>
         </div>
       </footer>

@@ -827,7 +827,12 @@ fn linked_component(
     let script_path = directory.join(format!("{name}.ld"));
     fs::write(&script_path, script)?;
     let elf = directory.join(format!("{name}.elf"));
+    // A branch between ARM and Thumb code that cannot interwork goes through
+    // a thunk that LLD adds. A position-independent thunk moves with the
+    // private code. An absolute one holds its target address in MOVW and MOVT
+    // without a relocation record, so the installer cannot move it.
     let mut arguments = vec![
+        "--pic-veneer".to_owned(),
         "-T".to_owned(),
         path(&script_path)?.to_owned(),
         "-o".to_owned(),
@@ -845,6 +850,12 @@ fn linked_component(
         relocatable || relocations.is_empty(),
         "Unresolved text relocations"
     );
+    if let Some(thunk) = absolute
+        .keys()
+        .find(|symbol| symbol.contains("ABSLongThunk"))
+    {
+        anyhow::bail!("{name} has the absolute thunk {thunk}, which the installer cannot move");
+    }
     let symbols = absolute
         .into_iter()
         .map(|(symbol, value)| {
