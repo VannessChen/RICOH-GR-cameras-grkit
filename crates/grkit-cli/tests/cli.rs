@@ -645,7 +645,7 @@ fn imports_a_cube_into_a_buildable_effect_without_overwriting() {
     assert_eq!(failed.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&failed.stderr).contains("already exists"));
     assert_eq!(fs::read(&path).unwrap(), written);
-    assert!(!import(&cube, &firmware, "bad-v1", "AB", &effects)
+    assert!(!import(&cube, &firmware, "bad-v1", "ab", &effects)
         .status
         .success());
     assert!(!effects.join("bad-v1").exists());

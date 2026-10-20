@@ -101,10 +101,15 @@ grkit effects import --cube look.cube --firmware fwdc239b.bin --input srgb \
 ```
 
 1. Set `--firmware` to the official GR III 2.10 firmware file.
-2. Select `--input` for the encoding of the LUT input:
+2. Optional: select `--input` for the encoding of the LUT input. The default is `auto`.
+   - `auto`: the importer reads the LUT with each input (`fit::guess_input`). It keeps a log input only if the result is much closer to the camera's Standard rendering. Otherwise it uses `standard`. It does not read the file name, and it never selects `srgb` or `linear`.
+   - `standard`: a picture of the camera's Standard rendering, as a GR JPEG.
    - `srgb`: sRGB-encoded display RGB. The importer clips scene-linear light to 0..1 before the sRGB curve.
    - `linear`: scene-linear RGB with sRGB primaries.
    - `vlog`: Panasonic V-Log over V-Gamut primaries, as spektrafilm writes its LUTs.
+   - `flog`, `flog2`, `flog2c`: Fujifilm F-Log or F-Log2 over F-Gamut, or F-Log2 over F-Gamut C.
+
+   If you select an input and the LUT data suggests a different one, the import adds a warning.
 3. Optional: add `--exposure EV` to change the scene-linear light before the LUT. The default is 0.
 4. Optional: add `--no-post` to fit no post-curve matrix.
 5. Run the command. The command writes `OUT/ID/effect.json` and prints a JSON summary.
