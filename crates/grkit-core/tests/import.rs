@@ -877,3 +877,212 @@ fn toned_luts_share_one_matrix_row_and_no_post_matrix() {
     assert_eq!(definition["flags"], 0);
     effects::compile_definition(&definition).unwrap();
 }
+
+#[test]
+fn image_headers_too_large_fail_before_decoding() {
+    // A 1 x 1 PNG whose header claims 32768 x 32768 pixels, with the CRC updated.
+    let mut bytes = png(1, 1, RGB, 8, &[0, 0, 0]);
+    bytes[16..20].copy_from_slice(&32768u32.to_be_bytes());
+    bytes[20..24].copy_from_slice(&32768u32.to_be_bytes());
+    let crc = crc32fast::hash(&bytes[12..29]);
+    bytes[29..33].copy_from_slice(&crc.to_be_bytes());
+    let error = Cube::read(&bytes).err().unwrap().to_string();
+    assert!(error.contains("Unsupported PNG image size"), "{error}");
+}
+
+/// A baseline TIFF writer for the tests: RGB, two rows per strip, uncompressed or Deflate,
+/// with or without the horizontal predictor.
+fn tiff(
+    width: usize,
+    height: usize,
+    rgb16: &[u16],
+    little: bool,
+    depth: u16,
+    deflate: bool,
+    predictor: bool,
+) -> Vec<u8> {
+    use std::io::Write;
+    let u16b = |v: u16| {
+        if little {
+            v.to_le_bytes()
+        } else {
+            v.to_be_bytes()
+        }
+    };
+    let u32b = |v: u32| {
+        if little {
+            v.to_le_bytes()
+        } else {
+            v.to_be_bytes()
+        }
+    };
+    let bytes_per = depth as usize / 8;
+    let row = width * 3 * bytes_per;
+    let mut rows: Vec<Vec<u8>> = rgb16
+        .chunks_exact(width * 3)
+        .map(|line| {
+            let values: Vec<u16> = line
+                .iter()
+                .map(|v| {
+                    if depth == 8 {
+                        ((*v as u32 * 255 + 32767) / 65535) as u16
+                    } else {
+                        *v
+                    }
+                })
+                .collect();
+            let mut out = values.clone();
+            if predictor {
+                for i in (3..values.len()).rev() {
+                    out[i] = values[i].wrapping_sub(values[i - 3]);
+                }
+            }
+            out.iter()
+                .flat_map(|v| {
+                    if depth == 8 {
+                        vec![*v as u8]
+                    } else {
+                        u16b(*v).to_vec()
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let strips: Vec<Vec<u8>> = rows
+        .chunks_mut(2)
+        .map(|chunk| {
+            let raw = chunk.concat();
+            assert_eq!(raw.len(), chunk.len() * row);
+            if deflate {
+                let mut e =
+                    flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+                e.write_all(&raw).unwrap();
+                e.finish().unwrap()
+            } else {
+                raw
+            }
+        })
+        .collect();
+    let mut data = vec![];
+    let mut offsets = vec![];
+    for strip in &strips {
+        offsets.push(8 + data.len() as u32);
+        data.extend(strip);
+    }
+    let strip_table = 8 + data.len() as u32;
+    for o in &offsets {
+        data.extend(u32b(*o));
+    }
+    let size_table = 8 + data.len() as u32;
+    for s in &strips {
+        data.extend(u32b(s.len() as u32));
+    }
+    let bits_at = 8 + data.len() as u32;
+    for _ in 0..3 {
+        data.extend(u16b(depth));
+    }
+    let ifd = 8 + data.len() as u32;
+    let entries: Vec<(u16, u16, u32, u32)> = vec![
+        (256, 4, 1, width as u32),
+        (257, 4, 1, height as u32),
+        (258, 3, 3, bits_at),
+        (259, 3, 1, if deflate { 8 } else { 1 }),
+        (262, 3, 1, 2),
+        (273, 4, strips.len() as u32, strip_table),
+        (277, 3, 1, 3),
+        (278, 4, 1, 2),
+        (279, 4, strips.len() as u32, size_table),
+        (317, 3, 1, if predictor { 2 } else { 1 }),
+    ];
+    let mut out = if little {
+        b"II*\0".to_vec()
+    } else {
+        b"MM\0*".to_vec()
+    };
+    out.extend(u32b(ifd));
+    out.extend(data);
+    out.extend(u16b(entries.len() as u16));
+    for (tag, kind, count, value) in entries {
+        out.extend(u16b(tag));
+        out.extend(u16b(kind));
+        out.extend(u32b(count));
+        if kind == 3 && count == 1 {
+            out.extend(u16b(value as u16));
+            out.extend([0, 0]);
+        } else {
+            out.extend(u32b(value));
+        }
+    }
+    out.extend([0; 4]);
+    out
+}
+
+#[test]
+fn identity_hald_round_trips_through_png_and_tiff() {
+    use grkit_core::lut_image;
+    assert!(lut_image::identity_png(1).is_err() && lut_image::identity_png(17).is_err());
+    let png = lut_image::identity_png(4).unwrap();
+    let cube = Cube::read(&png).unwrap();
+    assert_eq!(
+        (cube.size, cube.image_layout),
+        (16, Some(cube::Layout::Hald))
+    );
+    for (i, entry) in cube.table.iter().enumerate() {
+        let expected = [i % 16, i / 16 % 16, i / 256].map(|v| v as f32 / 15.0);
+        assert!(
+            entry
+                .iter()
+                .zip(expected)
+                .all(|(a, e)| (a - e).abs() < 1e-4),
+            "{i}"
+        );
+    }
+    assert!(lut_image::noise(&cube.table, cube.size) < 1e-6);
+    // A graded look stored as TIFF in each supported variant reads as the PNG does.
+    let look = |v: f64| (0.05 + 0.9 * v.powf(0.8)).min(1.0);
+    let samples: Vec<u16> = cube
+        .table
+        .iter()
+        .flat_map(|e| e.map(|v| (look(v as f64) * 65535.0).round() as u16))
+        .collect();
+    for (little, depth, deflate, predictor) in [
+        (true, 8, false, false),
+        (true, 16, true, true),
+        (false, 16, true, false),
+        (false, 8, true, true),
+    ] {
+        let bytes = tiff(64, 64, &samples, little, depth, deflate, predictor);
+        let read = Cube::read(&bytes).unwrap();
+        let tolerance = if depth == 8 { 0.5 / 255.0 + 1e-6 } else { 1e-6 };
+        for (entry, expected) in read.table.iter().zip(samples.chunks_exact(3)) {
+            for (a, e) in entry.iter().zip(expected) {
+                assert!(
+                    (a - *e as f32 / 65535.0).abs() <= tolerance as f32,
+                    "{little} {depth}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn noisy_lut_images_warn() {
+    // A level 4 identity with grain of about 2 / 255.
+    let mut state = 7u32;
+    let mut grain = || {
+        state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        (state >> 24) as i32 % 5 - 2
+    };
+    let data: Vec<u8> = (0..64 * 64)
+        .flat_map(|i: i32| [i % 16, i / 16 % 16, i / 256].map(|v| v * 17))
+        .map(|v| (v + grain()).clamp(0, 255) as u8)
+        .collect();
+    let warnings = fit::import(
+        &png(64, 64, RGB, 8, &data),
+        &synthetic_base(),
+        &import_request(Encoding::Standard),
+    )
+    .unwrap()
+    .warnings;
+    assert!(warnings.iter().any(|w| w.contains("noisy")), "{warnings:?}");
+}

@@ -295,18 +295,19 @@ impl Cube {
         })
     }
 
-    /// Reads a `.cube` file or a HALD CLUT PNG.
+    /// Reads a `.cube` file, or a LUT image in PNG or TIFF.
     pub fn read(bytes: &[u8]) -> Result<Self> {
         if bytes.starts_with(crate::png::SIGNATURE) {
-            Self::from_hald(bytes)
+            Self::from_image(crate::png::decode(bytes)?)
+        } else if crate::tiff::is_tiff(bytes) {
+            Self::from_image(crate::tiff::decode(bytes)?)
         } else {
             Self::parse(bytes)
         }
     }
 
     /// Reads a LUT image: a HALD CLUT, square tiles, or a strip (see `lut_image`).
-    pub fn from_hald(bytes: &[u8]) -> Result<Self> {
-        let image = crate::png::decode(bytes)?;
+    pub fn from_image(image: lut_image::Image) -> Result<Self> {
         let (size, table, layout) = lut_image::table(image.width, image.height, image.pixels)?;
         Ok(Self {
             title: None,

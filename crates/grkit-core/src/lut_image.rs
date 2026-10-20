@@ -13,7 +13,70 @@
 //! fits the size and keeps the smoothest table, because a wrong layout makes jumps between
 //! neighbouring lattice points.
 
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
+
+/// Decoded samples, 0..1, with gray expanded to RGB and alpha dropped.
+pub struct Image {
+    pub width: usize,
+    pub height: usize,
+    pub pixels: Vec<[f32; 3]>,
+}
+
+/// The HALD levels that an identity image can have: 2 (8 x 8) to 16 (4096 x 4096).
+pub const LEVELS: std::ops::RangeInclusive<usize> = 2..=16;
+/// The most pixels that the PNG and TIFF readers decode: four times a HALD image of level
+/// 16. A larger header fails before any allocation.
+pub(crate) const MAX_PIXELS: usize = 1 << 26;
+
+/// A 16-bit PNG identity HALD image of `level`: apply a look to it in an editor, export it
+/// without changing its size, and import the result as a LUT.
+pub fn identity_png(level: usize) -> Result<Vec<u8>> {
+    ensure!(
+        LEVELS.contains(&level),
+        "Expected a HALD level from {} to {}",
+        LEVELS.start(),
+        LEVELS.end()
+    );
+    let c = level * level;
+    let side = level * c;
+    let step = |i: usize| ((i * 65535) as f64 / (c - 1) as f64).round() as u16;
+    let mut samples = Vec::with_capacity(side * side * 3);
+    for b in 0..c {
+        for g in 0..c {
+            for r in 0..c {
+                samples.extend([step(r), step(g), step(b)]);
+            }
+        }
+    }
+    crate::png::encode_rgb16(side, side, &samples)
+}
+
+/// A noise level above which a LUT image was probably exported with grain or sharpening.
+/// On 294 clean HALD images the noise is at most 0.024. Grain of 1/255 gives at least 0.031,
+/// and sharpening of radius 1 exceeds the bound in 260 of 294 images.
+pub const NOISE_LIMIT: f64 = 0.028;
+
+/// The 99.5th percentile of the absolute second difference of a 3D table along red, the axis
+/// whose lattice neighbours are neighbouring pixels in each layout. A smooth look stays near
+/// the quantization step there, and grain or sharpening of the image does not.
+/// Effects that change slowly across the image, such as a vignette or clarity, do not show.
+pub fn noise(table: &[[f32; 3]], c: usize) -> f64 {
+    if c < 3 {
+        return 0.0;
+    }
+    let mut values: Vec<f32> = table
+        .chunks_exact(c)
+        .flat_map(|row| {
+            row.windows(3).map(|w| {
+                (0..3)
+                    .map(|k| (w[0][k] - 2.0 * w[1][k] + w[2][k]).abs())
+                    .fold(0.0f32, f32::max)
+            })
+        })
+        .collect();
+    let rank = values.len() * 995 / 1000;
+    *values.select_nth_unstable_by(rank, f32::total_cmp).1 as f64
+}
 
 /// How an image holds its table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

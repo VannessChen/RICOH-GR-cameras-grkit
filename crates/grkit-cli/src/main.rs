@@ -156,7 +156,26 @@ enum EffectsCommand {
         #[arg(long)]
         out: PathBuf,
     },
-    /// Fit a .cube LUT or a HALD CLUT PNG into a new effect definition at OUT/ID/effect.json.
+    /// Write an identity HALD image, to turn an editor preset into a LUT for `import`.
+    ///
+    /// 1. Write the image, for example with `--level 12`.
+    /// 2. Open it in Lightroom or another editor as an ordinary image, not a raw file.
+    /// 3. Apply the preset or profile. Turn off grain, sharpening, clarity, texture, dehaze,
+    ///    vignette, lens corrections, and noise reduction: they act on neighbouring pixels,
+    ///    not on colors, and corrupt the table.
+    /// 4. Export at full size in sRGB, as 16-bit TIFF or PNG, without resizing or
+    ///    output sharpening.
+    /// 5. Import the export with `grkit effects import --lut <file> --input standard`.
+    #[command(verbatim_doc_comment)]
+    Hald {
+        /// The HALD level, 2 to 16. Level L gives an L^3 x L^3 image of L^2 points per axis.
+        #[arg(long, default_value_t = 12)]
+        level: usize,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Fit a .cube LUT or a LUT image (PNG or TIFF) into a new effect definition at
+    /// OUT/ID/effect.json.
     Import {
         #[arg(long, visible_alias = "cube")]
         lut: PathBuf,
@@ -274,6 +293,13 @@ fn run(command: Command) -> Result<Value> {
                 "check": check,
                 "output": out,
             }))
+        }
+        Command::Effects {
+            command: EffectsCommand::Hald { level, out },
+        } => {
+            let png = grkit_core::lut_image::identity_png(level)?;
+            storage::write_new(&out, &png)?;
+            Ok(json!({"output": out, "level": level, "side": level.pow(3)}))
         }
         Command::Effects {
             command: EffectsCommand::Build { source, out },

@@ -1046,6 +1046,15 @@ pub fn import(bytes: &[u8], base_gamma: &[u16; 256], request: &Import) -> Result
              channels strongly and can show color noise at high ISO."
         ));
     }
+    if cube.image_layout.is_some()
+        && crate::lut_image::noise(&cube.table, cube.size) > crate::lut_image::NOISE_LIMIT
+    {
+        warnings.push(
+            "The LUT image is noisy, as from grain or sharpening. Export it again with grain, \
+             sharpening, clarity, texture, dehaze, vignette, and noise reduction off."
+                .to_owned(),
+        );
+    }
     if let Some(layout) = cube.image_layout.filter(|l| *l != Layout::Hald) {
         warnings.push(format!(
             "Read the image as a LUT in {}, not as a HALD image",

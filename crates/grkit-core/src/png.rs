@@ -2,16 +2,11 @@
 //! at 8 or 16 bits. It uses the zlib inflater that the package writer already depends on.
 
 use anyhow::{bail, ensure, Context, Result};
-use std::io::Read;
+use std::io::{Read, Write};
+
+use crate::lut_image::{Image, MAX_PIXELS};
 
 pub const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
-
-/// Decoded samples, 0..1, with gray expanded to RGB and alpha dropped.
-pub struct Image {
-    pub width: usize,
-    pub height: usize,
-    pub pixels: Vec<[f32; 3]>,
-}
 
 fn u32_at(bytes: &[u8], at: usize) -> u32 {
     u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap())
@@ -80,6 +75,12 @@ pub fn decode(bytes: &[u8]) -> Result<Image> {
     );
     ensure!(interlace == 0, "Expected a PNG without interlacing");
     ensure!(width > 0 && height > 0, "The PNG image is empty");
+    ensure!(
+        width
+            .checked_mul(height)
+            .is_some_and(|pixels| pixels <= MAX_PIXELS),
+        "Unsupported PNG image size {width} x {height}"
+    );
     let bytes_per_pixel = channels * depth as usize / 8;
     let stride = width
         .checked_mul(bytes_per_pixel)
@@ -87,7 +88,8 @@ pub fn decode(bytes: &[u8]) -> Result<Image> {
     let size = height
         .checked_mul(stride + 1)
         .context("The PNG image is too large")?;
-    let mut raw = Vec::with_capacity(size);
+    // The decoder grows the buffer with the data, so a header alone allocates nothing.
+    let mut raw = Vec::new();
     flate2::read::ZlibDecoder::new(data.as_slice())
         .take(size as u64 + 1)
         .read_to_end(&mut raw)
@@ -140,4 +142,37 @@ pub fn decode(bytes: &[u8]) -> Result<Image> {
         height,
         pixels,
     })
+}
+
+/// Encodes 16-bit RGB samples as a PNG image without filters.
+pub fn encode_rgb16(width: usize, height: usize, samples: &[u16]) -> Result<Vec<u8>> {
+    ensure!(
+        samples.len() == width * height * 3,
+        "Expected {width} x {height} RGB samples"
+    );
+    let mut raw = Vec::with_capacity(height * (1 + width * 6));
+    for row in samples.chunks_exact(width * 3) {
+        raw.push(0);
+        raw.extend(row.iter().flat_map(|v| v.to_be_bytes()));
+    }
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(&raw)?;
+    let mut header = Vec::with_capacity(13);
+    header.extend((width as u32).to_be_bytes());
+    header.extend((height as u32).to_be_bytes());
+    header.extend([16, 2, 0, 0, 0]);
+    let mut bytes = SIGNATURE.to_vec();
+    for (kind, body) in [
+        (b"IHDR", header),
+        (b"IDAT", encoder.finish()?),
+        (b"IEND", Vec::new()),
+    ] {
+        bytes.extend((body.len() as u32).to_be_bytes());
+        let start = bytes.len();
+        bytes.extend(kind);
+        bytes.extend(&body);
+        let crc = crc32fast::hash(&bytes[start..]);
+        bytes.extend(crc.to_be_bytes());
+    }
+    Ok(bytes)
 }

@@ -817,3 +817,28 @@ fn cameras_lists_the_runtime_build_of_each_release() {
         ])
     );
 }
+
+#[test]
+fn writes_an_identity_hald_without_overwriting() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("identity.png");
+    let summary = success(&["effects", "hald", "--level", "4", "--out", text(&out)]);
+    assert_eq!(
+        (summary["level"].as_u64(), summary["side"].as_u64()),
+        (Some(4), Some(64))
+    );
+    let cube = grkit_core::cube::Cube::read(&fs::read(&out).unwrap()).unwrap();
+    assert_eq!(cube.size, 16);
+    let again = run(&["effects", "hald", "--level", "4", "--out", text(&out)]);
+    assert!(!again.status.success());
+    assert!(!run(&[
+        "effects",
+        "hald",
+        "--level",
+        "17",
+        "--out",
+        text(&tmp.path().join("b.png"))
+    ])
+    .status
+    .success());
+}
