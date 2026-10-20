@@ -113,6 +113,9 @@
 /* The UI language byte of the static settings object 0x55084dd8 (reader
    0x5329b068, +0x1497), with the GR III values. Not confirmed on a camera. */
 #define LANGUAGE_SETTING_BYTE (FIRMWARE(0x55084dd8) + 0x1497)
+/* The live-view display mode that DISP cycles, in the same object, with the
+   GR III values: 0 full, 1 simple, 2 no information, 3 display off. */
+#define DISPLAY_MODE_BYTE (FIRMWARE(0x55084dd8) + 0x1409)
 #define ADJ_TITLE 0x160
 #define ADJ_DETAIL 0x164
 #define ADJ_DETAIL_VALUE 0x168

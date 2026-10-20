@@ -77,11 +77,15 @@
 #define FW_CHANGE_CONTROLLER FIRMWARE(0x5316c9d8)
 /* AdjModeController fields. */
 #define ADJ_CANVAS 0x4
-/* The UI language: a byte of the settings object that this slot points to
-   (reader 0x532465dc). 18 is Traditional Chinese and 19 Simplified Chinese.
-   The slot is +4 in the object 0x55063f30, which firmware code loads. */
-#define LANGUAGE_SETTINGS_SLOT (FIRMWARE(0x55063f30) + 4)
+/* The current UI settings object is at this slot, +4 in the object
+   0x55063f30, which firmware code loads. LANGUAGE_SETTING is its UI language
+   byte (reader 0x532465dc): 18 is Traditional Chinese and 19 Simplified
+   Chinese. */
+#define UI_SETTINGS_SLOT (FIRMWARE(0x55063f30) + 4)
 #define LANGUAGE_SETTING 0x9ba
+/* The live-view display mode that DISP cycles, in the same settings object:
+   0 full, 1 simple, 2 no information, 3 display off. */
+#define DISPLAY_MODE_SETTING 0x912
 #define ADJ_TITLE 0x160
 #define ADJ_DETAIL 0x164
 #define ADJ_DETAIL_VALUE 0x168

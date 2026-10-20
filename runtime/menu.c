@@ -56,8 +56,8 @@ static const u16 plugins[] = {'G','R','K','i','t',0};
 /* The camera's UI language byte (runtime/targets): 0 is English, 18
    Traditional Chinese, 19 Simplified Chinese, and 20 Japanese. */
 static u32 camera_language(void) {
-#if defined(LANGUAGE_SETTINGS_SLOT)
-    u32 settings=WORD(LANGUAGE_SETTINGS_SLOT,0);
+#if defined(UI_SETTINGS_SLOT)
+    u32 settings=WORD(UI_SETTINGS_SLOT,0);
     return settings ? BYTE(settings,LANGUAGE_SETTING) : 0;
 #elif defined(LANGUAGE_SETTING_BYTE)
     return BYTE(LANGUAGE_SETTING_BYTE,0);

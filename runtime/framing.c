@@ -33,8 +33,25 @@
 #endif
 extern volatile u32 *framing_header(void);
 
+#ifndef FRAMING_DISPLAY_MODE
+/* The native display mode that DISP cycles (runtime/targets), or 0 (full)
+   before the settings exist and on a target without it. */
+static u32 framing_display_mode(void) {
+#if defined(UI_SETTINGS_SLOT) && defined(DISPLAY_MODE_SETTING)
+    u32 settings=WORD(UI_SETTINGS_SLOT,0);
+    return settings ? BYTE(settings,DISPLAY_MODE_SETTING) : 0;
+#elif defined(DISPLAY_MODE_BYTE)
+    return BYTE(DISPLAY_MODE_BYTE,0);
+#else
+    return 0;
+#endif
+}
+#define FRAMING_DISPLAY_MODE() framing_display_mode()
+#endif
+
 /* Plugin services (runtime/plugin.h). */
 static u32 framing_ratios(void) { return FRAMING_RATIO_COUNT; }
+static u32 native_info_shown(void) { return FRAMING_DISPLAY_MODE()<2; }
 
 /* The plugin handler files and PLUGIN_LAYERS. */
 #include "generated/layers.h"

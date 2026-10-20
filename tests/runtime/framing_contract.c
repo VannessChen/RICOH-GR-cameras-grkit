@@ -42,6 +42,8 @@ static volatile uint32_t *mapped_pixels(uint32_t address)
 #define FRAMING_CAPTURE_ASPECT() capture_aspect
 /* The native setter resends 0 through the property handler hook. */
 #define FRAMING_REQUEST_ASPECT() (++capture_requests, capture_aspect=framing_capture_request(0))
+static uint32_t display_mode;
+#define FRAMING_DISPLAY_MODE() display_mode
 static uint32_t invalidations, invalidated;
 #define FRAMING_INVALIDATE(view) (++invalidations, invalidated = (view))
 #include "framing.c"
@@ -73,6 +75,7 @@ static void reset(void)
     header[GRKIT_HOST_ACTIVE/4]=0x59001000;
     header[GRKIT_HOST_FRAME_RATIO/4]=1;
     native_aspect=0;
+    display_mode=0;
     capture_aspect=0;
     capture_requests=0;
     framing_bind(TEST_OWNER);
@@ -281,6 +284,34 @@ int main(void)
     BYTE(TEST_CANVAS,0xa0)=0;
     framing_prepare(TEST_CANVAS);
     assert(BYTE(TEST_CANVAS,0xa0)==0);
+    /* DISP full and simple show the guides. No information and display off
+       hide them, keep the Framing mask, and clear the old drawing once. */
+    for (u32 mode=0; mode<4; ++mode) {
+        reset();
+        header[GRKIT_HOST_FRAME_RATIO/4]=0;
+        header[GRKIT_HOST_GUIDE/4]=1;
+        framing_paint(TEST_CANVAS,TEST_BITMAP);
+        display_mode=mode;
+        BYTE(TEST_CANVAS,0xa0)=0;
+        framing_prepare(TEST_CANVAS);
+        assert(BYTE(TEST_CANVAS,0xa0)==1);
+        for(u32 i=1; i<=TEST_STRIDE*480; ++i) pixels[i]=SENTINEL;
+        framing_paint(TEST_CANVAS,TEST_BITMAP);
+        if(mode<2) assert_guides(0,1,0);
+        else {
+            for(u32 i=0; i<sizeof(pixels)/sizeof(pixels[0]); ++i) assert(pixels[i]==SENTINEL);
+            assert(header[GRKIT_HOST_FRAME_BITMAP/4]==0);
+            BYTE(TEST_CANVAS,0xa0)=0;
+            framing_prepare(TEST_CANVAS);
+            assert(BYTE(TEST_CANVAS,0xa0)==0);
+        }
+    }
+    reset();
+    header[GRKIT_HOST_FRAME_RATIO/4]=2;
+    header[GRKIT_HOST_GUIDE/4]=1;
+    display_mode=2;
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert_guides(2,0,1);
     /* Unknown styles draw nothing. */
     reset();
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
