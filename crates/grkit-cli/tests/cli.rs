@@ -768,6 +768,14 @@ fn effect_publish_writes_the_site_catalog() {
     assert_eq!(result["target"], "gr3-2.10");
     assert_eq!(result["effects"], source_count());
     let catalog = effects::parse_json(&fs::read(out.join("catalog.json")).unwrap()).unwrap();
+    // The table that `effects import` reads from the same firmware.
+    let base: Vec<u16> = catalog["base_gamma"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| u16::try_from(v.as_u64().unwrap()).unwrap())
+        .collect();
+    assert_eq!(grkit_core::site::base_gamma(&base).unwrap()[8], 7552);
     let compiled = tmp.path().join("compiled");
     compile(&source(), &compiled);
     for entry in catalog["effects"].as_array().unwrap() {

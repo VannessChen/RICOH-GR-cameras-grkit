@@ -192,9 +192,25 @@ fn text<'a>(value: &'a Value, what: &str) -> Result<&'a str> {
         .with_context(|| format!("Expected effect {what}"))
 }
 
+/// Checks a Standard base gamma table from a site catalog: 256 values from 0 that do
+/// not decrease and end near 16384, as `grkit_build::firmware::standard_base_gamma` reads them.
+pub fn base_gamma(values: &[u16]) -> Result<[u16; 256]> {
+    let table: [u16; 256] = values
+        .try_into()
+        .context("Expected 256 base gamma values")?;
+    ensure!(
+        table[0] == 0
+            && table.windows(2).all(|pair| pair[0] <= pair[1])
+            && (16000..=16384).contains(&table[255]),
+        "Unexpected Standard base gamma"
+    );
+    Ok(table)
+}
+
 /// Compiles effect definitions for the site catalog of `target`, whose firmware holds
 /// `base_gamma`. The result holds `catalog.json`, one `.GRF` per effect under its
 /// package filename, `preview/<id>.lut`, and the Standard baseline preview table.
+/// The catalog also gives `base_gamma`, so the site can import LUTs without the firmware.
 pub fn publish_effects(
     definitions: &[Value],
     base_gamma: &[u16; 256],
@@ -250,6 +266,9 @@ pub fn publish_effects(
     let catalog = json!({
         "schema": CATALOG_SCHEMA,
         "target": target,
+        // The site fits imported LUTs over this table, as `grkit effects import` does with
+        // the table that it reads from the firmware. See `base_gamma`.
+        "base_gamma": base_gamma.as_slice(),
         "preview": {
             "size": LUT_SIZE,
             "order": "rgb",

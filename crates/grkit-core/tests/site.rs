@@ -134,6 +134,20 @@ fn raw_previews_render_linear_input_without_inverting_standard() {
 }
 
 #[test]
+fn catalog_base_gamma_is_checked() {
+    let base = synthetic_base();
+    assert_eq!(site::base_gamma(&base).unwrap(), base);
+    assert!(site::base_gamma(&base[..255]).is_err());
+    let mut decreasing = base;
+    decreasing[100] = decreasing[99] - 1;
+    assert!(site::base_gamma(&decreasing).is_err());
+    let mut offset = base;
+    offset[0] = 1;
+    assert!(site::base_gamma(&offset).is_err());
+    assert!(site::base_gamma(&[0; 256]).is_err());
+}
+
+#[test]
 fn raw_standard_baseline_does_not_clip_through_effect_curves() {
     // A saturated base gamma exposes the 16320 ceiling of identity effect curves.
     let base = [16384; 256];
@@ -149,6 +163,13 @@ fn published_effects_match_their_definitions() {
     let catalog = effects::parse_json(&files["catalog.json"]).unwrap();
     assert_eq!(catalog["schema"], "grkit-site-effects-v1");
     assert_eq!(catalog["target"], "gr3-2.10");
+    let published: Vec<u16> = catalog["base_gamma"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_u64().unwrap() as u16)
+        .collect();
+    assert_eq!(site::base_gamma(&published).unwrap(), synthetic_base());
     assert_eq!(
         catalog["preview"],
         json!({
