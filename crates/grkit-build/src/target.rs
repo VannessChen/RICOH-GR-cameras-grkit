@@ -115,7 +115,8 @@ pub const GR3_210: Target = Target {
     pixel_base_indirect: false,
     layout: Some(&GR3_LAYOUT),
     image_control: Some(&GR3_IMAGE_CONTROL),
-    relocation_bases: &[],
+    // The English entry is +4 in the language table, which the text hooks load.
+    relocation_bases: &[(0x55002bb0, 0x55002bac)],
 };
 
 /// GR IV and GR IV HDF 1.11. The runtime has the private menu, Image Control,

@@ -258,10 +258,51 @@ fn firmware_symbol(planner: &mut Planner, address: u32) -> Result<usize> {
     } else if address >= relocation::DATA_START + target.data_size {
         planner.referenced(address)
     } else if address >= relocation::DATA_START {
-        planner.content(address)
+        // A table of pointers has no unique content, but code loads its start.
+        planner
+            .content(address)
+            .or_else(|_| planner.referenced(address))
     } else {
         planner.code(address)
     }
+}
+
+/// Whether the word at `address` of the pinned image changes when code or
+/// data moves: a branch, or a MOVW or MOVT of a firmware address.
+fn moves(body: &FirmwareImage, address: u32) -> Result<bool> {
+    let word = |address: u32| -> Result<u32> {
+        Ok(u32::from_le_bytes(body.read(address, 4)?.try_into()?))
+    };
+    let stock = word(address)?;
+    if (stock >> 25) & 7 == 5 {
+        return Ok(true);
+    }
+    let movw = stock & 0x0ff0_0000 == 0x0300_0000;
+    if !movw && stock & 0x0ff0_0000 != 0x0340_0000 {
+        return Ok(false);
+    }
+    // The other half of the pair: the MOVT after a MOVW, or the MOVW before a
+    // MOVT, of the same register within five words.
+    let register = stock & 0xf000;
+    for distance in 1..=5u32 {
+        let other = if movw {
+            address + distance * 4
+        } else {
+            address - distance * 4
+        };
+        let other_word = word(other)?;
+        let kind = if movw { 0x0340_0000 } else { 0x0300_0000 };
+        if other_word & 0x0ff0_0000 == kind && other_word & 0xf000 == register {
+            let (low, high) = if movw {
+                (stock, other_word)
+            } else {
+                (other_word, stock)
+            };
+            let value = relocation::move_immediate(high) << 16 | relocation::move_immediate(low);
+            return Ok((0x5300_0000..0x5600_0000).contains(&value));
+        }
+    }
+    Ok(false)
 }
 
 /// The relocation tables of the installer (`runtime/relocation.h`). Each
@@ -298,10 +339,24 @@ fn relocation_tables(
         }
     };
     let mut sites = Vec::new();
+    // How the installer compares the stock word of a firmware site: 1 under
+    // the mask, for a branch or a MOVW or MOVT of a firmware address, which
+    // can move, or 0 exactly, for a constant that the private code relies on.
+    let mut compare = Vec::new();
     for patch in &plan.patches {
         sites.push(match patch.site {
             Some(site) => anchor(&mut planner, site)? as u32,
             None => NONE,
+        });
+        compare.push(match patch.site {
+            Some(Anchor::Firmware(address)) => {
+                ensure!(
+                    patch.before.len() == 4,
+                    "A relocated patch at {address:#x} is not one word"
+                );
+                u32::from(moves(body, address)?)
+            }
+            _ => 0,
         });
     }
     let mut references = Vec::new();
@@ -439,6 +494,7 @@ fn relocation_tables(
     )?;
     result.push_str("static u32 relocated[RELOCATION_SYMBOL_COUNT];\n");
     words(result, "patch_symbols", sites);
+    words(result, "patch_compare", compare);
     writeln!(
         result,
         "#define RELOCATION_REFERENCE_COUNT {}U",

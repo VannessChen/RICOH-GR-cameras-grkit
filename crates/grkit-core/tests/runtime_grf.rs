@@ -99,6 +99,8 @@ fn compile_with(
         "-O2",
         "-Wno-int-to-pointer-cast",
         "-Wno-pointer-to-int-cast",
+        // The harness links the code without the firmware symbols.
+        "-DGRKIT_HOST_ADDRESSES",
         target,
     ]);
     if let Some(include) = include {

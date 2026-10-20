@@ -443,13 +443,13 @@ impl<'a> Planner<'a> {
         Ok(symbol)
     }
 
-    /// A BSS address, through the code that loads it: literal words and MOVW
+    /// A data address, through the code that loads it: literal words and MOVW
     /// and MOVT pairs that hold exactly this address.
     pub fn referenced(&mut self, address: u32) -> Result<usize> {
         let target = self.image.target;
         ensure!(
-            (DATA_START + target.data_size..target.heap_min).contains(&address),
-            "Referenced address {address:#x} is outside the BSS"
+            (DATA_START..target.heap_min).contains(&address),
+            "Referenced address {address:#x} is outside .data and the BSS"
         );
         let symbol = self.symbol(address);
         let raw = words(&self.image.body[..self.masked.len() * 4]);

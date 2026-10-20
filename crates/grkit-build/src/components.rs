@@ -1,5 +1,5 @@
 use crate::{
-    arm::{branch, elf_text, elf_text_relocations, undefined_symbols},
+    arm::{branch, elf_text_relocations, undefined_symbols},
     firmware::FirmwareImage,
     target::HEADER_REFERENCE,
     toolchain::{run, Toolchain},
@@ -33,7 +33,8 @@ pub const CONTEXTS: &[(u32, &str)] = &[
 /// The startup literals for the `.data` copy: source, destination, and size.
 /// Source plus size is the end of the RTOS image.
 const GR3_GUARDS: &[(u32, &str)] = &[(0x53000450, "40b507540000005580a00300")];
-// Instructions replaced by the processing hook and replayed on its stock path.
+// Instructions replaced by the processing hook. Its stock path in
+// runtime/processing.S does the same with literal words for the addresses.
 const PROCESSING_ORIGINAL: &str =
     "940d08e3f0cc08e3010545e301c545e37b9f86e201e190e74c0e08e3010545e3";
 const PROCESSING_HOOKS: &[(u32, &str, bool)] = &[
@@ -291,7 +292,7 @@ pub const GR3_LAYOUT: Layout = Layout {
     picture_hooks: PICTURE_HOOKS,
     framing_patches: FRAMING_PATCHES,
     guards: GR3_GUARDS,
-    relocatable: false,
+    relocatable: true,
 };
 
 /// GR IV 1.11 menu hooks.
@@ -603,22 +604,9 @@ pub fn processing(
             "Private processing instructions changed at {address:#x}"
         );
     }
-    let original = hex::decode(PROCESSING_ORIGINAL)?
-        .chunks_exact(4)
-        .map(|bytes| {
-            format!(
-                ".word 0x{:08x}",
-                u32::from_le_bytes(bytes.try_into().unwrap())
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n    ");
-    let assembly = layout
-        .processing_source
-        .replace("@ ORIGINAL_PROCESSING", &original);
     let source = directory.join("module-processing.S");
     let object = directory.join("module-processing.o");
-    fs::write(&source, assembly)?;
+    fs::write(&source, layout.processing_source)?;
     run(
         &tools.clang,
         [
@@ -635,21 +623,16 @@ pub fn processing(
         .into_iter()
         .chain([layout.define]),
     )?;
-    let mut component = if layout.relocatable {
-        // The firmware addresses are symbols, which the link resolves.
-        linked_component(
-            directory,
-            "module-processing",
-            &[object],
-            body,
-            tools,
-            (base, end),
-            true,
-        )?
-    } else {
-        let (code, symbols) = elf_text(&fs::read(object)?)?;
-        code_component(code, symbols, body, (base, end), None)?
-    };
+    // The firmware addresses are symbols, which the link resolves.
+    let mut component = linked_component(
+        directory,
+        "module-processing",
+        &[object],
+        body,
+        tools,
+        (base, end),
+        layout.relocatable,
+    )?;
     for &(address, name, link) in layout.processing_hooks {
         let before = body.read(address, 4)?.to_vec();
         push_hook(&mut component, layout, base, (address, name, link), before)?;
@@ -826,23 +809,20 @@ fn linked_component(
 ) -> Result<Component> {
     use std::fmt::Write;
     let mut script = format!("SECTIONS {{ . = {base:#x}; .text : {{ *(.text*) *(.rodata*) }} /DISCARD/ : {{ *(.ARM.exidx*) *(.comment*) }} }}\n");
-    if relocatable {
-        // Each firmware symbol has its address in the pinned image.
-        let mut firmware = std::collections::BTreeSet::new();
-        for object in objects {
-            // Other undefined symbols are those of another object, or LLD
-            // reports them.
-            for symbol in undefined_symbols(&fs::read(object)?)? {
-                if let Some(hex) = symbol.strip_prefix(FIRMWARE_SYMBOL) {
-                    let address = u32::from_str_radix(hex, 16)
-                        .with_context(|| format!("Invalid firmware symbol {symbol}"))?;
-                    firmware.insert(address);
-                }
+    // Each firmware symbol has its address in the pinned image. Other
+    // undefined symbols are those of another object, or LLD reports them.
+    let mut firmware = std::collections::BTreeSet::new();
+    for object in objects {
+        for symbol in undefined_symbols(&fs::read(object)?)? {
+            if let Some(hex) = symbol.strip_prefix(FIRMWARE_SYMBOL) {
+                let address = u32::from_str_radix(hex, 16)
+                    .with_context(|| format!("Invalid firmware symbol {symbol}"))?;
+                firmware.insert(address);
             }
         }
-        for address in firmware {
-            writeln!(script, "{FIRMWARE_SYMBOL}{address:x} = {address:#x};")?;
-        }
+    }
+    for address in firmware {
+        writeln!(script, "{FIRMWARE_SYMBOL}{address:x} = {address:#x};")?;
     }
     let script_path = directory.join(format!("{name}.ld"));
     fs::write(&script_path, script)?;

@@ -244,16 +244,14 @@ static int relocate(void)
         if (patch_symbols[i] == RELOCATION_NONE) continue;
         patches[i].address += symbol_delta(patch_symbols[i]);
         if (patches[i].kind) continue;
-        /* A stock B or BL can branch to a moved target, so only its masked
-           bits must be equal. Other stock words must be equal. Rollback
+        /* A stock branch, or a MOVW or MOVT of a firmware address, can
+           change when code or data moves, so only its masked bits must be
+           equal (patch_compare). Other stock words must be equal. Rollback
            restores the running bytes. */
         u8 *before = (u8 *)patches[i].before;
-        for (u32 j = 0; j < patches[i].size; j += 4) {
-            u32 live = word(patches[i].address + j), stock = get32(before + j);
-            if (((stock >> 25) & 7) == 5 ? relocation_mask(live) != relocation_mask(stock) : live != stock)
-                return 16;
-            put32(before + j, live);
-        }
+        u32 live = word(patches[i].address), stock = get32(before);
+        if (patch_compare[i] ? relocation_mask(live) != relocation_mask(stock) : live != stock) return 16;
+        put32(before, live);
     }
     for (u32 i = 0; i < RELOCATION_REFERENCE_COUNT; ++i) {
         const u32 *r = relocation_references + i * 4;

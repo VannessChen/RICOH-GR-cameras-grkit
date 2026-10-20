@@ -3,8 +3,19 @@ use super::*;
 /// The version of headers that tests pin, so a new GRKit version keeps the pins.
 const TEST_VERSION: &str = "0.0.0";
 
+/// GR III without relocation. The synthetic image is mostly zero words, so
+/// it has no unique relocation windows.
+static FIXED_LAYOUT: components::Layout = components::Layout {
+    relocatable: false,
+    ..components::GR3_LAYOUT
+};
+static FIXED_GR3: target::Target = target::Target {
+    layout: Some(&FIXED_LAYOUT),
+    ..target::GR3_210
+};
+
 fn synthetic_firmware() -> firmware::FirmwareImage {
-    let gr3 = &target::GR3_210;
+    let gr3 = &FIXED_GR3;
     let mut image = firmware::FirmwareImage {
         target: gr3,
         body: vec![0; (gr3.data_source - target::RTOS_BASE + gr3.data_size) as usize],
@@ -291,7 +302,7 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
     materialize_runtime(&runtime)?;
     let body = synthetic_firmware();
     fs::write(runtime.join("hooks.h"), components::hooks_header(&body)?)?;
-    let layout = &components::GR3_LAYOUT;
+    let layout = &FIXED_LAYOUT;
     let processing_region = layout.processing.unwrap();
     let framing_region = layout.framing.unwrap();
     let processing = components::processing(
@@ -584,6 +595,34 @@ fn gr4_relocation_resolves_other_builds() -> Result<()> {
     }
     // GR III is not a build of this version: nothing resolves.
     if let Ok(path) = std::env::var("GRKIT_TEST_FIRMWARE") {
+        let decoded = firmware::decode(&fs::read(path)?)?;
+        let (result, _) = resolve_image(&built.output, firmware::rtos_section(&decoded)?)?;
+        assert!(result.starts_with("failed"));
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "Requires local GRKIT_TEST_FIRMWARE and ARM toolchain"]
+fn gr3_relocation_resolves_its_builds() -> Result<()> {
+    let firmware =
+        PathBuf::from(std::env::var("GRKIT_TEST_FIRMWARE").context("Set GRKIT_TEST_FIRMWARE")?);
+    let tools = tools()?;
+    let body = verify_firmware(&firmware, &target::GR3_210)?;
+    let directory = tempfile::tempdir()?;
+    let built = build_image(&body, &directory.path().join("gr3"), &tools)?;
+    let (result, symbols) = resolve_image(&built.output, &body.body)?;
+    assert_eq!(result, "ok 0x540b6000");
+    assert!(symbols.iter().all(|(pinned, resolved)| pinned == resolved));
+    // GR IIIx 1.60 runs the RTOS code of GR III 2.10, if given.
+    if let Ok(path) = std::env::var("GRKIT_TEST_FIRMWARE_GR3X") {
+        let decoded = firmware::decode(&fs::read(path)?)?;
+        let (result, symbols) = resolve_image(&built.output, firmware::rtos_section(&decoded)?)?;
+        assert_eq!(result, "ok 0x540b6000");
+        assert!(symbols.iter().all(|(pinned, resolved)| pinned == resolved));
+    }
+    // GR IV is not a build of this version: nothing resolves.
+    if let Ok(path) = std::env::var("GRKIT_TEST_FIRMWARE_GR4") {
         let decoded = firmware::decode(&fs::read(path)?)?;
         let (result, _) = resolve_image(&built.output, firmware::rtos_section(&decoded)?)?;
         assert!(result.starts_with("failed"));

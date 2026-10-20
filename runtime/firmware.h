@@ -7,7 +7,10 @@
    (crates/grkit-build/src/relocation.rs). The symbol fw_<address> has the
    address of the pinned build. In C the value is opaque, so the compiler keeps
    it in one literal word instead of a direct call or a derived constant. */
-#ifdef __ASSEMBLER__
+#if defined(GRKIT_HOST_ADDRESSES)
+/* Host contract tests link the code without the firmware: plain addresses. */
+#define FIRMWARE(address) ((unsigned int)(address))
+#elif defined(__ASSEMBLER__)
 #define FIRMWARE(address) fw_##address
 #else
 #define FIRMWARE(address) ({ extern char fw_##address[]; unsigned int firmware_; \
