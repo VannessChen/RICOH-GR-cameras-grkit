@@ -197,6 +197,15 @@ int main(void)
     assert(advance_from_private(0xce, 1) == 0);
     assert(advance_from_private(0xcf, 2) == 0);
     assert(advance_from_private(0xce, 2) == 1);
+    /* ADJ exits once for the parameter page. An exit from GRKit, or MENU or OK
+       that closed ADJ from GRKit, opens GRKit at the next ADJ. Any other exit
+       ends the return. */
+    assert(exit_return(RETURN_OPENING, 0) == RETURN_PARAMETERS);
+    assert(exit_return(RETURN_CLOSING, 0) == RETURN_GRKIT);
+    assert(exit_return(0, 1) == RETURN_GRKIT);
+    assert(exit_return(0, 0) == 0);
+    assert(exit_return(RETURN_GRKIT, 0) == 0);
+    assert(exit_return(RETURN_PARAMETERS, 0) == 0);
     /* The root lists the five plugins, then About. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = 1;
     assert(count(test_header) == 6);
@@ -562,5 +571,24 @@ int main(void)
     assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0x59005000);
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0 && test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT);
+
+    /* ADJ reopens at the root, on the row of the last module. A module without
+       a row, or a module that is not valid, reopens at the first row. */
+    test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS;
+    test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
+    test_header[GRKIT_HOST_MODULE / 4] = PLUGIN_GRAIN;
+    menu_reopen(test_header);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT);
+    assert(root_module(test_header, test_header[GRKIT_HOST_MENU_CURSOR / 4]) == PLUGIN_GRAIN);
+    test_header[GRKIT_HOST_MODULE / 4] = ABOUT_MODULE;
+    menu_reopen(test_header);
+    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == count(test_header) - 1);
+    test_header[GRKIT_HOST_PLUGINS / 4] = ALL_PLUGINS & ~(1U << PLUGIN_GUIDES);
+    test_header[GRKIT_HOST_MODULE / 4] = PLUGIN_GUIDES;
+    menu_reopen(test_header);
+    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
+    test_header[GRKIT_HOST_MODULE / 4] = 999;
+    menu_reopen(test_header);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     return 0;
 }

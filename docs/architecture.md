@@ -224,6 +224,10 @@ A private LineView draws the native translucent background before the shared sel
 
 The ADJ controller owns both objects. Exit hides them and restores the native geometry. Destruction unlinks and releases them. Movie mode keeps the five-entry layout.
 
+The private menu uses the native value list of ADJ. The native refresh sizes that list for the values of the focused slot: rows are 60 pixels high, a list of five or fewer rows ends at y=420, and a longer list fills y=60 to 420 and scrolls. The private menu replaces that refresh, so it sizes the list in the same way for the rows of the root or page.
+
+The list has as many rows as the longest native slot (32 on GR III). If the rows of the root or page fit, the list holds all of them and scrolls them as a native list does. Up and Down use the native list move, which keeps one row of context, animates the scroll, and wraps at the ends. If the rows do not fit, the list holds the page of six rows around the cursor.
+
 `runtime/modules.h` lists the page of each plugin in registry order (`runtime/generated/pages.h`). The core About row (`runtime/about.h`) follows the plugin rows.
 Each page owns its title, summary, rows, labels, icons, selection checks, activation, and committed row. A page opens at its committed row.
 
@@ -232,12 +236,15 @@ A page returns its icons as tiles of its own artwork (`GRKIT_ICON_TILE`). The me
 Two page callbacks are optional. `highlight` receives each change of the highlighted row, and Image Control previews the row in the live view. `parameters` makes Fn apply the row and open the native parameter page.
 
 The root lists only the installed plugins (header `+56`), in registry order, then About. A plugin that needs effects, such as Image Control, shows only with effects.
-If no plugin is installed, the installer installs no menu hook, so the GRKit entry does not appear. ADJ always opens at the root.
+If no plugin is installed, the installer installs no menu hook, so the GRKit entry does not appear. GRKit opens at the root, on the row of the module that was highlighted or open when the last ADJ session ended (header `+188`).
+If ADJ closed while GRKit was open, the next ADJ opens on GRKit, as a native ADJ opens on its last entry (header `+252` is 3). The native refresh first sets the list of the native slot, so that leaving GRKit restores the value of that slot.
 Module state stays in the private host header.
 
 About is not a plugin, so `PLUGINS.TXT` does not select it. It uses the GRKit tile, and its summary gives the version, for example `Version 0.1.0`. It has no page: OK on it changes nothing.
 
-MENU on a page returns to the GRKit root. MENU on the root closes ADJ, as on a native entry: the menu restores the native list and passes the MENU events to it. The private menu restores the native list on its supported exit paths.
+OK on a root row opens its page. OK on a page row commits that row and closes ADJ, as OK on a native value does: the menu restores the native list and passes the confirm to it.
+MENU on a page returns to the GRKit root. MENU on the root closes ADJ, as on a native entry: the menu restores the native list and passes the MENU events to it.
+Left and Right move to the next ADJ entry from the root and from a page. The private menu restores the native list on its supported exit paths.
 List restoration suppresses the native selection callbacks.
 
 ### Menu text

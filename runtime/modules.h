@@ -106,6 +106,15 @@ static void menu_start(volatile u32 *h) {
     h[GRKIT_HOST_MENU_CURSOR/4]=0;
     h[GRKIT_HOST_MODULE/4]=0;
 }
+/* Each ADJ session opens at the root, on the row of the module that was
+   highlighted or open when the last session ended. */
+static void menu_normalize(volatile u32 *h);
+static void menu_reopen(volatile u32 *h) {
+    u32 module=h[GRKIT_HOST_MODULE/4];
+    h[GRKIT_HOST_MENU_LEVEL/4]=MENU_ROOT;
+    h[GRKIT_HOST_MENU_CURSOR/4]=module<ARRAY_COUNT(modules) && visible_modules(h)>>module&1 ? root_row(h,module) : 0;
+    menu_normalize(h);
+}
 static void menu_normalize(volatile u32 *h) {
     u32 module=h[GRKIT_HOST_MODULE/4];
     if(h[GRKIT_HOST_MENU_LEVEL/4]<MENU_ROOT || h[GRKIT_HOST_MENU_LEVEL/4]>MENU_MODULE || module>=ARRAY_COUNT(modules) ||

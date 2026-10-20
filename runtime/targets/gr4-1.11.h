@@ -72,8 +72,13 @@
 #define FW_LIST_ROW FIRMWARE(0x53570a9c)
 #define FW_LIST_SAVE FIRMWARE(0x53570b3c)
 #define FW_LIST_CURSOR FIRMWARE(0x53570b6c)
+#define FW_LIST_WIDTH FIRMWARE(0x53570c10)
 #define FW_LIST_RESTORE FIRMWARE(0x5357157c)
 #define FW_LIST_SET_CURSOR FIRMWARE(0x53571788)
+#define FW_LIST_MOVE FIRMWARE(0x535715b8)
+/* The list\'s row vector (first and end pointers) and its shown row count. */
+#define LIST_ROWS 0xf4
+#define LIST_COUNT 0x108
 #define FW_ROW_SET_ICON FIRMWARE(0x5357dd98)
 #define FW_ROW_SET_CHECK FIRMWARE(0x5357e018)
 

@@ -89,7 +89,9 @@
 #define GRKIT_HOST_TOOLBAR_WIDGET 180
 /* ADJ controller of the private toolbar cell. */
 #define GRKIT_HOST_TOOLBAR_OWNER 184
-/* Module that the private menu shows at MENU_MODULE. */
+/* Module that the private menu shows at MENU_MODULE. At the end of a private
+   session it holds the module of the root row where the next session opens
+   (menu_reopen). */
 #define GRKIT_HOST_MODULE 188
 /* Reserved and zero. */
 #define GRKIT_HOST_RESERVED_192 192
@@ -127,7 +129,8 @@
    diagnostic: capture metadata and the encode read the shot ring. */
 #define GRKIT_HOST_STILL 248
 /* Return to GRKit Image Control after the native parameter page: 1 opening, 2
-   away. */
+   away. 3: ADJ exited from GRKit, so the next ADJ opens GRKit. 4: MENU or OK
+   on GRKit passed the event that closes ADJ to the native list. */
 #define GRKIT_HOST_RETURN 252
 /* The words of the plugins (grkit_core::plugins::Plugin::words), in plugin
    order, then zero words. GRKIT_PLUGIN_<PLUGIN>_<WORD> gives each offset. */

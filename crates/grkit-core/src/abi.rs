@@ -111,7 +111,9 @@ fields!(HEADER_FIELDS {
     HOST_TOOLBAR_WIDGET = 180, 4;
     /// ADJ controller of the private toolbar cell.
     HOST_TOOLBAR_OWNER = 184, 4;
-    /// Module that the private menu shows at MENU_MODULE.
+    /// Module that the private menu shows at MENU_MODULE. At the end of a
+    /// private session it holds the module of the root row where the next
+    /// session opens (menu_reopen).
     HOST_MODULE = 188, 4;
     /// Reserved and zero.
     HOST_RESERVED_192 = 192, 4;
@@ -148,7 +150,8 @@ fields!(HEADER_FIELDS {
     /// diagnostic: capture metadata and the encode read the shot ring.
     HOST_STILL = 248, 4;
     /// Return to GRKit Image Control after the native parameter page: 1 opening,
-    /// 2 away.
+    /// 2 away. 3: ADJ exited from GRKit, so the next ADJ opens GRKit. 4: MENU
+    /// or OK on GRKit passed the event that closes ADJ to the native list.
     HOST_RETURN = 252, 4;
     /// The words of the plugins (grkit_core::plugins::Plugin::words), in plugin
     /// order, then zero words. GRKIT_PLUGIN_<PLUGIN>_<WORD> gives each offset.

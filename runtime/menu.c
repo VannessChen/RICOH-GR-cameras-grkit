@@ -22,6 +22,20 @@ extern u32 menu_destroy_original(u32);
 /* The plugin interface, before the services that it declares. */
 #include "plugin.h"
 #define PAGE 6U
+/* GRKIT_HOST_RETURN: the native parameter page is opening (1) or open (2).
+   ADJ exited while GRKit was open (3), so the next ADJ opens GRKit. MENU or
+   OK on GRKit passes the event that closes ADJ to the native list (4); the
+   exit then sets 3. Only an exit sets 3, because leaving GRKit refreshes ADJ. */
+#define RETURN_OPENING 1U
+#define RETURN_PARAMETERS 2U
+#define RETURN_GRKIT 3U
+#define RETURN_CLOSING 4U
+/* The return state after an ADJ exit. `in_grkit` is set for an exit while
+   GRKit was open. */
+static u32 exit_return(u32 value,u32 in_grkit) {
+    if(value==RETURN_OPENING) return RETURN_PARAMETERS;
+    return in_grkit || value==RETURN_CLOSING ? RETURN_GRKIT : 0;
+}
 /* Menu C is Thumb-2 for size. Firmware hooks and thunks enter with A32 B/BL,
    which cannot change state, so their targets stay A32. */
 #ifdef __arm__
@@ -31,6 +45,7 @@ extern u32 menu_destroy_original(u32);
 #endif
 static void plugin_touch(u32 controller);
 static void render(u32 controller);
+static void render_step(u32 controller,u32 step);
 static void enter(u32 controller,u32 edge);
 static const u16 plugins[] = {'G','R','K','i','t',0};
 #ifndef MENU_TEXT
@@ -258,7 +273,7 @@ A32_ENTRY void menu_refresh(u32 controller) {
     parameter_title(h)[0]=0;
 #endif
     if(private_mode(controller)) { render(controller); return; }
-    if(h[GRKIT_HOST_RETURN/4]==2 && ADJ_MOVIE(controller)!=1) {
+    if(h[GRKIT_HOST_RETURN/4]==RETURN_PARAMETERS && ADJ_MOVIE(controller)!=1) {
         h[GRKIT_HOST_RETURN/4]=0;
 #ifdef PARAMETER_KINDS
         /* The page has ended. A record that no page started stays unused. */
@@ -270,6 +285,17 @@ A32_ENTRY void menu_refresh(u32 controller) {
         render(controller);
         return;
     }
+    if(h[GRKIT_HOST_RETURN/4]==RETURN_GRKIT) {
+        h[GRKIT_HOST_RETURN/4]=0;
+        /* ADJ opens on GRKit, as a native ADJ opens on its last entry. The
+           native refresh first sets the list of the native slot, so that
+           leaving GRKit restores the value of that slot. */
+        if(ADJ_MOVIE(controller)!=1) {
+            menu_refresh_original(controller);
+            enter(controller,h[GRKIT_HOST_MENU_EDGE/4]);
+            return;
+        }
+    }
     menu_refresh_original(controller);
     toolbar(controller);
     frame_preview(h,WORD(controller,ADJ_CANVAS),ADJ_MOVIE(controller)==1);
@@ -277,6 +303,14 @@ A32_ENTRY void menu_refresh(u32 controller) {
 /* First row of the cursor's page. The reciprocal equals row/6 for rows below 2^15
    and avoids a division helper, which the freestanding link does not provide. */
 static u32 page_start(u32 row) { return (row*0xaaabU>>18)*PAGE; }
+/* The list has as many rows as the longest native slot of the controller
+   (32 on GR III). It holds all rows of the root or page when they fit, and
+   scrolls them as a native list does. Otherwise it holds the page of six rows
+   around the cursor. Each native ADJ list holds more than six rows. */
+static u32 list_capacity(u32 view) { return (WORD(view,LIST_ROWS+4)-WORD(view,LIST_ROWS))>>2; }
+static u32 list_start(volatile u32 *h,u32 view) {
+    return count(h)>list_capacity(view) ? page_start(h[GRKIT_HOST_MENU_CURSOR/4]) : 0;
+}
 static void descriptor(volatile u32 *at, const u16 *name) {
     u32 length=0;
     while (length<GRKIT_SUMMARY_UNITS-1 && name[length]) ++length;
@@ -291,6 +325,17 @@ static void label(u32 object) {
 static __attribute__((noinline)) void detail_width(u32 controller,u32 width) {
     u32 object=WORD(controller,ADJ_DETAIL), rectangle[4]={0,50,width,40};
     CALL2(WORD(WORD(object,0),0x18))(object,(u32)rectangle);
+}
+/* Size the list for `rows` rows, as the native refresh does for the values of
+   a slot: rows are 60 pixels high, a short list ends at y=420, and six or more
+   rows fill y=60..420 and scroll. The private menu replaces the native
+   refresh, so without this the list keeps the size of the last native slot. */
+static void list_frame(u32 view,u32 rows) {
+    u32 width=CALL1(FW_LIST_WIDTH)(view), rectangle[4];
+    if(rows>PAGE) rows=PAGE;
+    rectangle[0]=720-width; rectangle[1]=60+60*(PAGE-rows);
+    rectangle[2]=width; rectangle[3]=60*rows;
+    CALL2(WORD(WORD(view,0),0x18))(view,(u32)rectangle);
 }
 /* Show the Fn hint where Fn opens the parameter page. The native refresh
    fills the hint only on a native slot that offers Fn, so a hint that GRKit
@@ -307,15 +352,33 @@ static void fn_guide(u32 controller) {
 #endif
     CALL2(FW_VIEW_SET_VISIBLE)(guide,shown);
 }
-static void render(u32 controller) {
+/* Put the list cursor on the cursor row. After one Up or Down step (`step`
+   is 1 or -1), move it as the native list does: the list keeps one row of
+   context, animates the scroll, and wraps at the ends. If the list keeps its
+   rows and is already on the row, as after a touch or a refresh, it keeps its
+   scroll. Otherwise a jump scrolls the row into view without animation. */
+static void list_cursor(u32 view,u32 row,u32 rows,u32 step,u32 kept) {
+    u32 at=CALL1(FW_LIST_CURSOR)(view);
+    u32 before=step==1 ? (row ? row-1 : rows-1) : (row+1==rows ? 0 : row+1);
+    if(kept && step && at==before) CALL3(FW_LIST_MOVE)(view,step,1);
+    else if(!kept || at!=row) CALL2(FW_LIST_SET_CURSOR)(view,row);
+}
+static void render(u32 controller) { render_step(controller,0); }
+static void render_step(u32 controller,u32 step) {
     volatile u32 *h=menu_header();
-    u32 cursor, start, n, i;
+    u32 cursor, start, n, i, total, kept;
     u32 view=WORD(controller,ADJ_LIST);
     const Module *module;
     menu_normalize(h);
-    cursor=h[GRKIT_HOST_MENU_CURSOR/4]; start=page_start(cursor); n=count(h)-start;
+    cursor=h[GRKIT_HOST_MENU_CURSOR/4]; total=count(h);
+    start=list_start(h,view); n=total-start;
     module=current_module(h);
-    if(n>PAGE)n=PAGE;
+    if(total>list_capacity(view)) {
+        /* Paged rows move one page at a time. */
+        step=0;
+        if(n>PAGE) n=PAGE;
+    }
+    kept=BYTE(view,LIST_COUNT)==n;
     /* Suppress the native list callback while replacing private rows. */
     h[GRKIT_HOST_MENU_REBUILDING/4]=1;
     CALL2(FW_LIST_SET_COUNT)(view,n);
@@ -328,7 +391,10 @@ static void render(u32 controller) {
         CALL2(FW_ROW_SET_ICON)(row,icon);
         CALL2(FW_ROW_SET_CHECK)(row,h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_ROOT && module->checked(h,index));
     }
-    CALL2(FW_LIST_SET_CURSOR)(view,cursor-start);
+    /* The size comes from all rows, so that a short last page keeps the
+       position of the full pages. The cursor needs the new size. */
+    list_frame(view,total);
+    list_cursor(view,cursor-start,n,step,kept);
     descriptor(h+GRKIT_HOST_MENU_TITLE/4,h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? plugins : module->title(h));
     descriptor(h+GRKIT_HOST_MENU_DETAIL/4,h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? module->summary(h) : module->label(h,cursor));
     label(WORD(controller,ADJ_TITLE));
@@ -347,6 +413,8 @@ static void render(u32 controller) {
 static void leave(u32 controller) {
     volatile u32 *h=menu_header();
     if(!private_mode(controller)) return;
+    /* The next ADJ session opens at the row of this module (menu_reopen). */
+    if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT) h[GRKIT_HOST_MODULE/4]=root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]);
     h[GRKIT_HOST_MENU_LEVEL/4]=0; h[GRKIT_HOST_MENU_REBUILDING/4]=1;
     h[GRKIT_HOST_PREVIEW/4]=0;
     detail_width(controller,400);
@@ -359,7 +427,7 @@ static void leave(u32 controller) {
 static void enter(u32 controller,u32 edge) {
     volatile u32 *h=menu_header();
     u32 view=WORD(controller,ADJ_LIST);
-    h[GRKIT_HOST_MENU_CONTROLLER/4]=controller; menu_start(h);
+    h[GRKIT_HOST_MENU_CONTROLLER/4]=controller; menu_reopen(h);
     h[GRKIT_HOST_MENU_SLOT/4]=BYTE(controller,ADJ_SLOT); h[GRKIT_HOST_MENU_EDGE/4]=edge;
     h[GRKIT_HOST_PREVIEW/4]=0;
     CALL3(FW_LIST_SAVE)(view,(u32)(h+GRKIT_HOST_MENU_LIST/4),(u32)(h+GRKIT_HOST_MENU_LIST/4+1));
@@ -468,7 +536,7 @@ static u32 open_parameters(u32 controller) {
     leave(controller);
     /* The page returns to ADJ (0x2000000) with the native Image Control slot
        focused, where OK would confirm Standard. Come back to GRKit instead. */
-    menu_header()[GRKIT_HOST_RETURN/4]=1;
+    menu_header()[GRKIT_HOST_RETURN/4]=RETURN_OPENING;
     CALL3(FW_CHANGE_CONTROLLER)(controller,IC_PARAMETERS_CONTROLLER,0x2000000);
 #endif
     return 1;
@@ -480,14 +548,16 @@ A32_ENTRY void menu_native_touch(u32 controller,u32 slot) {
 }
 A32_ENTRY void menu_exit(u32 controller) {
     volatile u32 *h=menu_header();
+    u32 in_grkit=private_mode(controller);
     leave(controller);
     h[GRKIT_HOST_BACK_PENDING/4]=0;
     h[GRKIT_HOST_PREVIEW/4]=0;
     h[GRKIT_HOST_FRAME_PREVIEW/4]=0;
-    /* ADJ exits once for the parameter page itself. Any other exit cancels the return. */
-    h[GRKIT_HOST_RETURN/4]=h[GRKIT_HOST_RETURN/4]==1 ? 2 : 0;
+    /* The next ADJ returns to the parameter page's GRKit page, opens on
+       GRKit, or opens as native ADJ does (exit_return). */
+    h[GRKIT_HOST_RETURN/4]=exit_return(h[GRKIT_HOST_RETURN/4],in_grkit);
 #ifdef PARAMETER_KINDS
-    if(!h[GRKIT_HOST_RETURN/4] && (h[GRKIT_HOST_PARAMETERS/4]&1U)) h[GRKIT_HOST_PARAMETERS/4]=0;
+    if(h[GRKIT_HOST_RETURN/4]!=RETURN_PARAMETERS && (h[GRKIT_HOST_PARAMETERS/4]&1U)) h[GRKIT_HOST_PARAMETERS/4]=0;
     parameter_title(h)[0]=0;
 #endif
     menu_exit_original(controller);
@@ -520,8 +590,9 @@ A32_ENTRY void menu_changed(u32 controller) {
     /* Restoration sets the level to native before rebuilding the list. */
     if(h[GRKIT_HOST_MENU_REBUILDING/4]) return;
     if(h[GRKIT_HOST_MENU_CONTROLLER/4]==controller && h[GRKIT_HOST_MENU_LEVEL/4]) {
-        u32 next=page_start(h[GRKIT_HOST_MENU_CURSOR/4])+CALL1(FW_LIST_CURSOR)(WORD(controller,ADJ_LIST));
-        if(next<count(h)) { h[GRKIT_HOST_MENU_CURSOR/4]=next; highlight(h); render(controller); }
+        u32 view=WORD(controller,ADJ_LIST);
+        u32 next=list_start(h,view)+CALL1(FW_LIST_CURSOR)(view);
+        if(next<count(h) && next!=h[GRKIT_HOST_MENU_CURSOR/4]) { h[GRKIT_HOST_MENU_CURSOR/4]=next; highlight(h); render(controller); }
         return;
     }
     menu_changed_original(controller);
@@ -541,12 +612,13 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
            native list gets this switch event and the confirm after it. */
         h[GRKIT_HOST_BACK_PENDING/4]=0;
         leave(controller);
+        h[GRKIT_HOST_RETURN/4]=RETURN_CLOSING;
         return menu_event_original(controller,event);
     }
 #ifdef EV_FN_ACTION
     /* The Fn press that opened a GRKit parameter page also sends its native
        action. The native page must not open for it. */
-    if(kind==EV_FN_ACTION && h[GRKIT_HOST_RETURN/4]) return 0;
+    if(kind==EV_FN_ACTION && (h[GRKIT_HOST_RETURN/4]==RETURN_OPENING || h[GRKIT_HOST_RETURN/4]==RETURN_PARAMETERS)) return 0;
 #endif
     if(!private_mode(controller)) {
         /* OK or ADJ press on the native Image Control slot confirms a native value.
@@ -579,36 +651,42 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
         if(!open_parameters(controller)) render(controller);
         return 0;
     }
+    /* Left and Right move to the next ADJ entry from the root and from a
+       page, as on a native entry. MENU returns from a page to the root. */
     if(kind==EV_LEFT || kind==EV_RIGHT) {
-        if(h[GRKIT_HOST_MENU_LEVEL/4]>MENU_ROOT && kind==EV_LEFT && menu_back(h)) {
-            render(controller); return 0;
-        }
-        {
-            u32 edge=h[GRKIT_HOST_MENU_EDGE/4], advance=advance_from_private(kind,edge);
-            leave(controller);
-            if(edge==3) {
-                u32 i;
-                for(i=0;i<5;++i) {
-                    u32 slot=kind==EV_LEFT ? 4-i : i;
-                    if(!CALL2(FW_ADJ_SLOT_TYPE)(controller,slot)) continue;
-                    menu_native_touch(controller,slot);
-                    if(BYTE(controller,ADJ_SLOT)==slot) break;
-                }
-                return 0;
+        u32 edge=h[GRKIT_HOST_MENU_EDGE/4], advance=advance_from_private(kind,edge);
+        leave(controller);
+        if(edge==3) {
+            u32 i;
+            for(i=0;i<5;++i) {
+                u32 slot=kind==EV_LEFT ? 4-i : i;
+                if(!CALL2(FW_ADJ_SLOT_TYPE)(controller,slot)) continue;
+                menu_native_touch(controller,slot);
+                if(BYTE(controller,ADJ_SLOT)==slot) break;
             }
-            return advance ? menu_event_original(controller,event) : 0;
+            return 0;
         }
+        return advance ? menu_event_original(controller,event) : 0;
     }
     if(kind==EV_UP || kind==EV_DIAL_UP || kind==EV_DOWN || kind==EV_DIAL_DOWN) {
         u32 n=count(h);
         if(kind==EV_UP || kind==EV_DIAL_UP) h[GRKIT_HOST_MENU_CURSOR/4]=h[GRKIT_HOST_MENU_CURSOR/4] ? h[GRKIT_HOST_MENU_CURSOR/4]-1 : n-1;
         else { ++h[GRKIT_HOST_MENU_CURSOR/4]; if(h[GRKIT_HOST_MENU_CURSOR/4]==n) h[GRKIT_HOST_MENU_CURSOR/4]=0; }
         highlight(h);
-        render(controller); return 0;
+        render_step(controller,kind==EV_UP || kind==EV_DIAL_UP ? (u32)-1 : 1); return 0;
     }
-    /* Confirm is 0xd8. Press and release events do not activate a profile. */
+    /* Confirm is 0xd8. Press and release events do not activate a profile.
+       OK on a root row opens its page. OK on a page row commits it and closes
+       ADJ, as OK on a native value does: the restored native list gets the
+       confirm, as after MENU on the root. */
     if(kind==EV_CONFIRM) {
+        u32 page=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE;
         menu_confirm(h);
+        if(page) {
+            leave(controller);
+            h[GRKIT_HOST_RETURN/4]=RETURN_CLOSING;
+            return menu_event_original(controller,event);
+        }
         render(controller); return 0;
     }
     /* Ordinary touch notifications must not dismiss a private page. */
