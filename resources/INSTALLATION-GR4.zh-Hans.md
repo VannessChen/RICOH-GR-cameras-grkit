@@ -34,6 +34,13 @@
 
 要移除 GRKit，先关闭相机。然后从存储卡删除 `SCRIPT` 文件夹。
 
+SD 脚本设置会保持打开。要关闭它：
+
+1. 在 https://grkit.app 下载你的相机对应的关闭 SD 脚本的文件。按钮在安装步骤下方。
+2. 把 `SD_ROOT` 中的内容复制到存储卡根目录。
+3. 插入存储卡。按住 MENU 按钮开机，等待相机自动关机。
+4. 从存储卡根目录删除 `00078560.636` 和 `DEVELOP.MOD`。
+
 如果相机在启动时停止响应，取出电池和存储卡。然后不插存储卡开机。如果仍然无法启动，请参阅[恢复指南](https://github.com/ahonn/grkit/blob/main/resources/RECOVERY.zh-Hans.md)。
 
 GRKit 与 Ricoh 无关。源代码和许可：https://github.com/ahonn/grkit

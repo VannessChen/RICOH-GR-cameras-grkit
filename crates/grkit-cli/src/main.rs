@@ -77,6 +77,14 @@ enum Command {
     },
     /// Check package layout, profiles and checksums.
     Verify { archive: PathBuf },
+    /// Write the ZIP that turns SD scripts off on a camera: its ModeSet file
+    /// with the disable command and DEVELOP.MOD.
+    ScriptsOff {
+        #[arg(long, value_parser = grkit_core::camera::CAMERAS.map(|camera| camera.id))]
+        camera: String,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Write a verified runtime build into a static site directory. The site
     /// must not have a runtime for the same target yet.
     Site {
@@ -290,6 +298,15 @@ fn run(command: Command) -> Result<Value> {
                 json!({"valid": true, "camera": verified["camera"], "target": verified["target"],
                 "effects": verified["effect_ids"].as_array().map_or(0, Vec::len),
                 "plugins": verified["plugins"], "language": verified["language"]}),
+            )
+        }
+        Command::ScriptsOff { camera, out } => {
+            let camera = grkit_core::camera::find(&camera)?;
+            let bytes = packaging::assemble_scripts_off(camera)?;
+            storage::write_new(&out, &bytes)?;
+            Ok(
+                json!({"path": out, "sha256": packaging::sha256(&bytes), "camera": camera.id,
+                "modeset": camera.modeset}),
             )
         }
         Command::Site { build, out } => {

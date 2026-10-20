@@ -604,7 +604,7 @@ fn each_camera_gets_its_modeset_file_and_guide() {
 }
 
 #[test]
-fn the_guide_names_the_camera_once_and_the_modeset_file_once() {
+fn the_guide_names_the_camera_once_and_the_modeset_file_twice() {
     // installation_guide replaces these strings, so each must occur exactly once.
     for (language, guide) in [
         (
@@ -627,9 +627,10 @@ fn the_guide_names_the_camera_once_and_the_modeset_file_once() {
         let phrase = language.camera_phrase(&camera::GR3);
         assert_eq!(guide.matches(&phrase).count(), 1, "{phrase}");
         assert_eq!(guide.matches(camera::GR3.hdf).count(), 1, "{language:?}");
+        // After the installation, and in the steps that turn SD scripts off.
         assert_eq!(
             guide.matches(camera::GR3.modeset).count(),
-            1,
+            2,
             "{language:?}"
         );
     }
@@ -801,4 +802,34 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
         &english()
     )
     .is_err());
+}
+
+#[test]
+fn scripts_off_packages_hold_only_the_disable_command_and_its_key() {
+    for camera in camera::CAMERAS {
+        let bytes = assemble_scripts_off(camera).unwrap();
+        assert_eq!(bytes, assemble_scripts_off(camera).unwrap());
+        let files = unpack(&bytes);
+        let names: Vec<_> = files.keys().map(String::as_str).collect();
+        let mut expected = [
+            "SD_ROOT/DEVELOP.MOD".to_owned(),
+            format!("SD_ROOT/{}", camera.modeset),
+            "SHA256SUMS".to_owned(),
+        ];
+        expected.sort();
+        assert_eq!(
+            names,
+            expected.iter().map(String::as_str).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            files[&format!("SD_ROOT/{}", camera.modeset)],
+            b"[SCRIPT_EN_MODE DIS]\r\n"
+        );
+        // The same key file as the activation, which only the command differs from.
+        let activation = runtime::activation_files(camera);
+        assert_eq!(files["SD_ROOT/DEVELOP.MOD"], activation["DEVELOP.MOD"]);
+        assert_eq!(activation[camera.modeset], b"[SCRIPT_EN_MODE EN]\r\n");
+        // It holds no GRKit code, so it is not a GRKit package.
+        assert!(verify_package(&bytes).is_err());
+    }
 }

@@ -38,6 +38,13 @@ Press MENU to go back one level. GRKit keeps your settings after power-off.
 
 To remove GRKit, turn the camera off. Then delete the `SCRIPT` folder from the card.
 
+The SD script setting stays on. To turn it off:
+
+1. On https://grkit.app, download the files that turn SD scripts off for your camera. The button is below the installation steps.
+2. Copy the contents of `SD_ROOT` to the root of the SD card.
+3. Insert the card. Hold MENU while you turn the camera on. Wait until the camera turns itself off.
+4. Remove `00078350.588` and `DEVELOP.MOD` from the card root.
+
 If the camera stops during startup, remove the battery and the card. Then start the camera without the card. If it still does not start, see the [recovery guide](https://github.com/ahonn/grkit/blob/main/resources/RECOVERY.md).
 
 GRKit is not affiliated with Ricoh. Source code and licenses: https://github.com/ahonn/grkit

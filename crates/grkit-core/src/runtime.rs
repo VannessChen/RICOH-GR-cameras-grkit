@@ -88,8 +88,18 @@ pub fn layout(count: usize) -> Result<Value> {
 
 /// The files that enable SD scripts when the camera starts with MENU held.
 pub fn activation_files(camera: &Camera) -> Files {
+    modeset_files(camera, b"[SCRIPT_EN_MODE EN]\r\n")
+}
+
+/// The files that turn SD scripts off again, in the same way. The firmware
+/// has this command next to the one that enables them.
+pub fn deactivation_files(camera: &Camera) -> Files {
+    modeset_files(camera, b"[SCRIPT_EN_MODE DIS]\r\n")
+}
+
+fn modeset_files(camera: &Camera, command: &[u8]) -> Files {
     Files::from([
-        (camera.modeset.into(), b"[SCRIPT_EN_MODE EN]\r\n".to_vec()),
+        (camera.modeset.into(), command.to_vec()),
         (
             "DEVELOP.MOD".into(),
             vec![7, 1, 44, 31, 16, 3, 30, 22, 5, 45],

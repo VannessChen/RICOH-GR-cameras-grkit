@@ -205,6 +205,14 @@ impl Package {
     }
 }
 
+/// Returns the ZIP that turns SD scripts off on a camera: `gr3`, `gr3x`, or `gr4`.
+#[wasm_bindgen(js_name = scriptsOffPackage)]
+pub fn scripts_off_package(camera: &str) -> Result<Vec<u8>, JsError> {
+    grkit_core::camera::find(camera)
+        .and_then(grkit_core::packaging::assemble_scripts_off)
+        .map_err(js_error)
+}
+
 fn js_error(error: anyhow::Error) -> JsError {
     JsError::new(&format!("{error:#}"))
 }

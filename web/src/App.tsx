@@ -7,7 +7,7 @@ import { RichText } from './components/RichText';
 import { loadFonts } from './fonts';
 import { applyLanguage, initialLanguage, LANGUAGES, STRINGS, type Language } from './i18n';
 import { ALL_MODULES, MODULES, planModules, type ModuleKey } from './modules';
-import { buildPackage, prefetchPackage, save } from './package';
+import { buildPackage, buildScriptsOff, prefetchPackage, save } from './package';
 
 const DEFAULT_SELECTION = ['portra-400-endura-v1', 'vision3-250d-2383-v1'];
 const REPOSITORY = 'https://github.com/ahonn/grkit';
@@ -89,6 +89,19 @@ export function App() {
     }
     setEnabled(next);
     resetBuild();
+  }
+
+  const [scriptsOff, setScriptsOff] = useState<'idle' | 'building' | 'failed'>('idle');
+
+  async function downloadScriptsOff() {
+    setScriptsOff('building');
+    try {
+      save(await buildScriptsOff(camera.id), 'GRKit-scripts-off.zip');
+      setScriptsOff('idle');
+    } catch (error) {
+      console.error(error);
+      setScriptsOff('failed');
+    }
   }
 
   async function download() {
@@ -308,6 +321,35 @@ export function App() {
               </li>
             ))}
           </ol>
+        </section>
+
+        <section className="section" aria-labelledby="remove-label">
+          <h2 id="remove-label">{t.remove}</h2>
+          <ol className="steps">
+            {t.removeSteps.map((parts, index) => (
+              <li key={index}>
+                <RichText
+                  parts={parts.map((part) =>
+                    part === MODESET_TOKEN ? `\`${support?.modeset ?? ''}` : part,
+                  )}
+                />
+              </li>
+            ))}
+          </ol>
+          <div className="package-action">
+            <button
+              type="button"
+              className="download secondary"
+              disabled={!support || scriptsOff === 'building'}
+              aria-busy={scriptsOff === 'building'}
+              onClick={downloadScriptsOff}
+            >
+              {t.scriptsOff}
+            </button>
+            <div aria-live="polite">
+              {scriptsOff === 'failed' && <p className="status error">{t.scriptsOffError}</p>}
+            </div>
+          </div>
         </section>
       </main>
 

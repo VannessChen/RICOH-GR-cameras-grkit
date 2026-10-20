@@ -32,6 +32,7 @@ None of these bytes is a patch site or a firmware input of GRKit. A runtime buil
 
 The cameras differ in the ModeSet file that enables SD scripts: `00078350.588` on GR III and `00078490.609` on GR IIIx. `grkit_core::camera` lists the cameras.
 A package holds the ModeSet file of one camera, and its installation guide names that camera and file. `grkit verify` identifies the camera from that file.
+`grkit scripts-off` and the site give a separate ZIP with the same two files and the command `[SCRIPT_EN_MODE DIS]`, which turns SD scripts off. It holds no GRKit code.
 
 Ricoh publishes the GR III 2.10 firmware also for GR III HDF, and GR IIIx 1.60 also for GR IIIx HDF. The RTOS selects the HDF model from a factory adjustment, not from the ModeSet numbers.
 An HDF camera therefore uses the ModeSet file and the package of its base camera. `Camera::hdf` names the model, and the guides name both models. GRKit has not been tested on an HDF camera.

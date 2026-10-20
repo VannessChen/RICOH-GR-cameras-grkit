@@ -40,7 +40,7 @@ Each HDF model runs the firmware of its base camera and uses the same package. O
 
 > [!WARNING]
 > GRKit is experimental. Use it at your own risk.
-> GRKit changes the camera memory only until the camera turns off. The installation turns on the camera's SD script setting, and this setting stays on.
+> GRKit changes the camera memory only until the camera turns off. The installation turns on the camera's SD script setting, and this setting stays on until you turn it off.
 > If GRKit fails, the camera can stop during startup. Read the [recovery guide](resources/RECOVERY.md) before you install GRKit.
 
 ## Install
@@ -53,6 +53,7 @@ Each package contains the installation guide for its camera as a PDF, in the lan
 - [GR IV and GR IV HDF](resources/INSTALLATION-GR4.md)
 
 To remove GRKit, turn the camera off and delete the `SCRIPT` folder from the card.
+To turn the SD script setting off, use the files that [grkit.app](https://grkit.app) gives below the installation steps. The installation guide gives the steps.
 
 ## Build from source
 

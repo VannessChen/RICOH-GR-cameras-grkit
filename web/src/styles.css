@@ -122,6 +122,21 @@ button {
   cursor: progress;
 }
 
+/* A download that most visitors do not need, below the install steps. */
+.download.secondary {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.download.secondary:disabled {
+  border-color: var(--line);
+  background: transparent;
+}
+
 /* Header */
 
 .languages {

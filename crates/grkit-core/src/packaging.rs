@@ -531,6 +531,25 @@ pub fn assemble(
     contents.insert("LICENSES.md".into(), LICENSES.as_bytes().to_vec());
     contents.insert("SHA256SUMS".into(), checksum_list(&contents));
     validate_contents(&contents)?;
+    let bytes = write_zip(contents)?;
+    verify_package(&bytes)?;
+    Ok(bytes)
+}
+
+/// The ZIP of the files that turn SD scripts off on `camera`: its ModeSet
+/// file with the disable command, `DEVELOP.MOD`, and their checksums. It holds
+/// no GRKit code.
+pub fn assemble_scripts_off(camera: &Camera) -> Result<Vec<u8>> {
+    let mut contents: Files = runtime::deactivation_files(camera)
+        .into_iter()
+        .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob))
+        .collect();
+    contents.insert("SHA256SUMS".into(), checksum_list(&contents));
+    write_zip(contents)
+}
+
+/// A deterministic ZIP of `contents`, with stored entries and a fixed time.
+fn write_zip(contents: Files) -> Result<Vec<u8>> {
     let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
     for (name, blob) in contents {
         let mode = if name.ends_with(".BIN") || name.ends_with(".SH") {
@@ -547,9 +566,7 @@ pub fn assemble(
         archive.start_file(name, options)?;
         archive.write_all(&blob)?;
     }
-    let bytes = archive.finish()?.into_inner();
-    verify_package(&bytes)?;
-    Ok(bytes)
+    Ok(archive.finish()?.into_inner())
 }
 
 pub fn verify_package(bytes: &[u8]) -> Result<Value> {

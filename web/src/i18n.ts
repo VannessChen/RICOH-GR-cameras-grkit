@@ -102,6 +102,19 @@ const en = {
     ['Turn the camera on. In ADJ, select the sixth entry, GRK.'],
     ['Optional: remove ', '`{modeset}', ' and ', '`DEVELOP.MOD', ' from the card root.'],
   ] as readonly RichText[],
+  remove: 'Remove GRKit',
+  removeSteps: [
+    ['Turn the camera off. Delete the ', '`SCRIPT', ' folder from the card.'],
+    [
+      'To turn SD scripts off too, download the files below. Copy the contents of ',
+      '`SD_ROOT',
+      ' to the card root.',
+    ],
+    ['Insert the card. Hold MENU while you turn the camera on, then wait until it turns itself off.'],
+    ['Remove ', '`{modeset}', ' and ', '`DEVELOP.MOD', ' from the card root.'],
+  ] as readonly RichText[],
+  scriptsOff: 'Download the files that turn SD scripts off',
+  scriptsOffError: 'The files cannot be prepared. Try again.',
   looks: {
     'portra-400-endura-v1': 'Kodak Portra 400 on Portra Endura paper',
     'gold-200-premier-v1': 'Kodak Gold 200 on Endura Premier paper',
@@ -209,6 +222,15 @@ const zhHans: Strings = {
     ['正常开机，在 ADJ 模式中选择第 6 个功能 GRK。'],
     ['可选：从存储卡根目录删除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
   ],
+  remove: '移除 GRKit',
+  removeSteps: [
+    ['关闭相机。从存储卡删除 ', '`SCRIPT', ' 文件夹。'],
+    ['如需同时关闭 SD 脚本，下载下面的文件，把 ', '`SD_ROOT', ' 中的内容复制到存储卡根目录。'],
+    ['插入存储卡。按住 MENU 按钮开机，等待相机自动关机。'],
+    ['从存储卡根目录删除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
+  ],
+  scriptsOff: '下载关闭 SD 脚本的文件',
+  scriptsOffError: '无法准备文件。请重试。',
   looks: {
     'portra-400-endura-v1': 'Kodak Portra 400，Portra Endura 相纸',
     'gold-200-premier-v1': 'Kodak Gold 200，Endura Premier 相纸',
@@ -314,6 +336,15 @@ const zhHant: Strings = {
     ['正常開機，在 ADJ 模式中選擇第 6 個功能 GRK。'],
     ['選用：從記憶卡根目錄刪除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
   ],
+  remove: '移除 GRKit',
+  removeSteps: [
+    ['關閉相機。從記憶卡刪除 ', '`SCRIPT', ' 資料夾。'],
+    ['如需同時關閉 SD 腳本，下載下方的檔案，把 ', '`SD_ROOT', ' 中的內容複製到記憶卡根目錄。'],
+    ['插入記憶卡。按住 MENU 按鈕開機，等待相機自動關機。'],
+    ['從記憶卡根目錄刪除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
+  ],
+  scriptsOff: '下載關閉 SD 腳本的檔案',
+  scriptsOffError: '無法準備檔案。請再試一次。',
   looks: {
     'portra-400-endura-v1': 'Kodak Portra 400，Portra Endura 相紙',
     'gold-200-premier-v1': 'Kodak Gold 200，Endura Premier 相紙',
@@ -420,6 +451,15 @@ const ja: Strings = {
     ['電源を入れ、撮影モードで ADJ レバーを押し込んで ADJ モードにし、6 番目の項目「GRK」を選びます。'],
     ['任意：カードのルートから ', '`{modeset}', ' と ', '`DEVELOP.MOD', ' を削除します。'],
   ],
+  remove: 'GRKit の削除',
+  removeSteps: [
+    ['カメラの電源を切ります。カードから ', '`SCRIPT', ' フォルダを削除します。'],
+    ['SD スクリプトもオフにする場合は、下のファイルをダウンロードし、', '`SD_ROOT', ' の中身をカードのルートにコピーします。'],
+    ['カードを入れます。MENU ボタンを押したまま電源を入れ、電源が自動で切れるまで待ちます。'],
+    ['カードのルートから ', '`{modeset}', ' と ', '`DEVELOP.MOD', ' を削除します。'],
+  ],
+  scriptsOff: 'SD スクリプトをオフにするファイルをダウンロード',
+  scriptsOffError: 'ファイルを準備できません。もう一度お試しください。',
   looks: {
     'portra-400-endura-v1': 'Kodak Portra 400、Portra Endura 印画紙',
     'gold-200-premier-v1': 'Kodak Gold 200、Endura Premier 印画紙',
