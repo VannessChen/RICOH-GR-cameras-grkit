@@ -52,11 +52,11 @@ fn starter_definitions_match_existing_golden_bytes() {
 fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
     assert_eq!(
         hex::encode(Sha256::digest(artwork::plugins_pixels())),
-        "994c7df1e812485f987680a32ff1e4d02fbd49ff21039a098f7f849de7709e25"
+        "b23d6ffc030a2cca58b8e9795cf8bfe3e235cc04ad951469eb0998418be7ea54"
     );
     assert_eq!(
         hex::encode(Sha256::digest(artwork::version_pixels())),
-        "2657e8f394ac14a3756eeac8be89a73f1b0f135c8f7291bf5eeb318b61fab360"
+        "fa7c45417f33ad7212039ed188f884d91bca0b67d0db415cb10d3c53a12f038f"
     );
     let modules = grkit_core::plugins::tiles();
     // Four Framing, six Guides, six Date Stamp, and four Grain tiles,

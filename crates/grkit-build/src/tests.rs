@@ -698,7 +698,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
     assert_eq!(
         sha256(header.as_bytes()),
-        "6068c3fee194d594005938f4072f8a2e9dd6bd24161a1e48ccd795798fe309bf"
+        "29c0ff1423f99787df1aa2e75520535d6dd2b8a5c6dbd61ccbd46e0eb65a1ed9"
     );
     Ok(())
 }

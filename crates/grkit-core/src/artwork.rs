@@ -1,7 +1,8 @@
 //! Deterministic 40 × 40 RGBA menu tiles.
 //!
 //! Tiles follow the camera's own menu icons: a dark square with a gray frame
-//! and anti-aliased text. Effect icons can instead be gray film covers
+//! and anti-aliased text. The native list icons have a 38 x 36 frame, and the
+//! icons of the ADJ toolbar a 38 x 38 frame. Effect icons can instead be gray film covers
 //! (`render_box`, `render_cine`) that span the tile width. Alpha is binary;
 //! text edges blend in RGB.
 
@@ -12,33 +13,39 @@ use anyhow::{bail, ensure, Context, Result};
 const FONT: &[u8] = include_bytes!("../assets/Inter-Medium.ttf");
 /// Effect icon labels use capitals and digits, as the native text tiles do.
 const LABEL_CHARACTERS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-/// Native text tiles, such as "Std", use about 15-pixel capitals.
-const LABEL_SIZE: f32 = 21.0;
-/// Text stays inside the frame with a small margin.
-const LABEL_WIDTH: f32 = 30.0;
+/// The largest label size. Its capitals are about 10 pixels high, close to the
+/// 11 pixels of the native toolbar text, such as "Focus". A label that does
+/// not fit `LABEL_WIDTH` at this size shrinks.
+const LABEL_SIZE: f32 = 18.0;
+/// Text keeps at least 4 pixels from each side of the 36-pixel frame inside.
+const LABEL_WIDTH: f32 = 28.0;
 
 fn dot(rgba: &mut [u8], x: usize, y: usize, shade: u8) {
     let offset = (y * 40 + x) * 4;
     rgba[offset..offset + 4].copy_from_slice(&[shade, shade, shade, 255]);
 }
 
-fn background() -> Vec<u8> {
+/// A dark square with a gray frame on columns `left..=right` and rows
+/// `top..=bottom`. The rest of the tile stays transparent.
+fn frame(left: usize, top: usize, right: usize, bottom: usize) -> Vec<u8> {
     let mut rgba = vec![0; 40 * 40 * 4];
-    for y in 3..37 {
-        for x in 3..37 {
-            dot(
-                &mut rgba,
-                x,
-                y,
-                if x == 3 || x == 36 || y == 3 || y == 36 {
-                    128
-                } else {
-                    51
-                },
-            );
+    for y in top..=bottom {
+        for x in left..=right {
+            let edge = x == left || x == right || y == top || y == bottom;
+            dot(&mut rgba, x, y, if edge { 128 } else { 51 });
         }
     }
     rgba
+}
+
+/// The frame of a list row, as the native list icons have it.
+fn background() -> Vec<u8> {
+    frame(1, 2, 38, 37)
+}
+
+/// The frame of the ADJ toolbar, as the native toolbar icons have it.
+fn toolbar_background() -> Vec<u8> {
+    frame(1, 1, 38, 38)
 }
 
 /// Blend `ink` over an opaque tile pixel by glyph coverage.
@@ -169,8 +176,7 @@ const COVER_FONT: &[u8] = include_bytes!("../assets/Inter-Black.ttf");
 const LIGHT: u8 = 214;
 const DARK: u8 = 40;
 const BODY: u8 = 51;
-/// The cover rows. Above and below, the 3-pixel transparent margin of the
-/// other tiles stays. The cover spans the full tile width, so that a name
+/// The cover rows, with a 3-pixel transparent margin above and below. The cover spans the full tile width, so that a name
 /// such as KODACHROME fits on one line.
 const COVER: i32 = 3;
 const COVER_END: i32 = 37;
@@ -462,7 +468,7 @@ fn ratio_pixels(label: &str, width: usize, height: usize) -> Vec<u8> {
             dot(&mut rgba, x, y, if edge { 255 } else { 20 });
         }
     }
-    text(&mut rgba, label, 11.0, 32.0, 30.5, 255);
+    text(&mut rgba, label, 11.0, LABEL_WIDTH, 30.5, 255);
     rgba
 }
 
@@ -542,7 +548,7 @@ fn guide_frame(rgba: &mut [u8], top: usize, guide: Guide) {
 fn guide_pixels(label: &str, guide: Guide) -> Vec<u8> {
     let mut rgba = background();
     guide_frame(&mut rgba, 6, guide);
-    text(&mut rgba, label, 11.0, 32.0, 30.5, 255);
+    text(&mut rgba, label, 11.0, LABEL_WIDTH, 30.5, 255);
     rgba
 }
 
@@ -606,14 +612,15 @@ pub fn grain_tiles() -> Vec<Vec<u8>> {
     for (label, period) in [("Weak", 9), ("Med", 5), ("Strong", 3)] {
         let mut rgba = background();
         speckles(&mut rgba, 6, 24, period);
-        text(&mut rgba, label, 11.0, 32.0, 30.5, 255);
+        text(&mut rgba, label, 11.0, LABEL_WIDTH, 30.5, 255);
         tiles.push(rgba);
     }
     tiles
 }
 
+/// The GRKit entry of the ADJ toolbar.
 pub fn plugins_pixels() -> Vec<u8> {
-    let mut rgba = background();
+    let mut rgba = toolbar_background();
     text(&mut rgba, "GRK", LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
     rgba
 }
