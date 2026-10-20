@@ -5,7 +5,9 @@ name: Site
 # built from the source of that release with web/ from main, so its WebAssembly
 # packager writes packages that the released runtimes accept, and the footer
 # shows the released version. If web/ on main needs a packager change that is
-# not released yet, the build fails and the site stays as it is.
+# not released yet, the type check fails and the site stays as it is. The page
+# loads the packager with a dynamic import, so the Vite build alone does not
+# find a missing export.
 on:
   push:
     branches: [main]
@@ -82,6 +84,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm wasm
+          pnpm typecheck
           pnpm build
       - name: Combine the web page with the site data of the release
         run: |
