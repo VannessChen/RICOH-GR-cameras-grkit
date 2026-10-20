@@ -1,3 +1,22 @@
+## 1.1.0 (2026-10-20)
+
+### Features
+
+- Left and Right on a GRKit page move to the next ADJ entry, as they do on the GRKit root.
+- OK or an ADJ press on a GRKit page selects the highlighted row and closes ADJ.
+- GRKit opens on the row that was last used, and ADJ opens on GRKit if ADJ closed while GRKit was open.
+- GRKit in ADJ shows all of its rows and scrolls a long page one row at a time, as a native ADJ entry does.
+- Add a Date Stamp style with the day first and the time: `D M 'YY  H:MM`.
+- Add a Guides style that shows the thirds grid and the center cross together.
+
+### Fixes
+
+- The About row of the GRKit menu shows a VER icon, so the GRKit root shows only one GRK icon.
+- An ADJ press or one MENU press on the GRKit root closes ADJ.
+- GR IV and GR IV HDF install effects from an exFAT card with long file names, such as the `._` files that macOS writes.
+- On another build of firmware 1.11, GR IV and GR IV HDF install GRKit, or stop with status 47 and list missing addresses in `INSTALL.ERR`.
+- The camera runtime has room for more plugins, and saved selections, Fn adjustments, and effects keep working after the update.
+
 ## 1.0.1 (2026-10-19)
 
 ### Fixes
