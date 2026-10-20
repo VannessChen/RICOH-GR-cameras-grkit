@@ -730,6 +730,8 @@ A32_ENTRY u32 menu_icon(u32 id) {
     if(id-PLUGIN_ICON<PLUGIN_TILES)
         return h[GRKIT_HOST_TILE_ICON/4]+(id-PLUGIN_ICON)*GRKIT_ICON_STRIDE;
     if(id==GRKIT_ICON_GRKIT) return h[GRKIT_HOST_PLUGINS_ICON/4];
+    /* The installer puts the Version icon after the GRKit icon. */
+    if(id==GRKIT_ICON_VERSION) return h[GRKIT_HOST_PLUGINS_ICON/4] ? h[GRKIT_HOST_PLUGINS_ICON/4]+GRKIT_ICON_STRIDE : 0;
     if(id==0x7fff) return h[GRKIT_HOST_OFF_ICON/4] ? h[GRKIT_HOST_OFF_ICON/4] : NATIVE_OFF_ICON();
     if(index>=h[GRKIT_HOST_COUNT/4]) return 0;
     return WORD(h[GRKIT_HOST_RECORDS/4]+index*GRKIT_RECORD_SIZE,GRKIT_RECORD_ICON);

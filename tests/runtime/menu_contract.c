@@ -188,6 +188,8 @@ int main(void)
     assert(!native_action_release(0, 1));
     assert(native_action_release(10, 1));
     assert(menu_icon(0x7ffe) == 0x59003000);
+    /* The Version icon follows the GRKit icon in chunk 0. */
+    assert(menu_icon(GRKIT_ICON_VERSION) == 0x59003000 + GRKIT_ICON_STRIDE);
     assert(toolbar_x(0) == 415 && toolbar_x(5) == 665);
     assert(menu_icon(0x7fff) == 0x59001000);
     assert(menu_icon(0x166) == 0);
@@ -229,17 +231,18 @@ int main(void)
     /* Guides tiles follow the Framing tiles. */
     assert(menu_icon(GUIDES_ICON) == 0x59007000 + FRAMING_TILES * GRKIT_ICON_STRIDE);
     assert(menu_icon(GUIDE_STYLE_ICON(5)) == 0x59007000 + 9 * GRKIT_ICON_STRIDE);
-    /* Module tiles fill 0x7fea..0x7ffd; the GRKit tile (0x7ffe) follows them. */
+    /* Module tiles fill 0x7fe9..0x7ffc; the Version tile (0x7ffd) and the
+       GRKit tile (0x7ffe) follow them. */
     assert(menu_icon(PLUGIN_ICON - 1) == 0);
-    assert(PLUGIN_ICON + PLUGIN_TILES <= 0x7ffe);
+    assert(PLUGIN_ICON + PLUGIN_TILES == GRKIT_ICON_VERSION);
     assert(module_icon_count() == PLUGIN_TILES);
     /* Date Stamp tiles follow the Guides tiles. */
     assert(menu_icon(STAMP_ICON) == 0x59007000 + 10 * GRKIT_ICON_STRIDE);
     assert(menu_icon(STAMP_STYLE_ICON(5)) == 0x59007000 + 15 * GRKIT_ICON_STRIDE);
-    /* Grain tiles follow the Date Stamp tiles and end below the GRKit tile. */
+    /* Grain tiles follow the Date Stamp tiles and end below the Version tile. */
     assert(menu_icon(GRAIN_ICON) == 0x59007000 + 16 * GRKIT_ICON_STRIDE);
     assert(menu_icon(GRAIN_LEVEL_ICON(3)) == 0x59007000 + 19 * GRKIT_ICON_STRIDE);
-    assert(GRAIN_LEVEL_ICON(3) == 0x7ffd);
+    assert(GRAIN_LEVEL_ICON(3) == 0x7ffc);
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     assert(current_module(test_header) == &modules[1]);
@@ -491,7 +494,7 @@ int main(void)
     assert(count(test_header) == 6 && root_module(test_header, 5) == ABOUT_MODULE);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 5;
     assert(same(current_module(test_header)->summary(test_header), "Version 0.0.0"));
-    assert(PAGE_ICON(ABOUT_MODULE, 5) == GRKIT_ICON_GRKIT);
+    assert(PAGE_ICON(ABOUT_MODULE, 5) == GRKIT_ICON_VERSION);
     {
         u32 active = test_header[GRKIT_HOST_ACTIVE / 4], requests = framing_requests;
         highlight(test_header);

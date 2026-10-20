@@ -54,6 +54,10 @@ fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
         hex::encode(Sha256::digest(artwork::plugins_pixels())),
         "994c7df1e812485f987680a32ff1e4d02fbd49ff21039a098f7f849de7709e25"
     );
+    assert_eq!(
+        hex::encode(Sha256::digest(artwork::version_pixels())),
+        "2657e8f394ac14a3756eeac8be89a73f1b0f135c8f7291bf5eeb318b61fab360"
+    );
     let modules = grkit_core::plugins::tiles();
     // Four Framing, six Guides, six Date Stamp, and four Grain tiles,
     // addressed by offset from the first.
@@ -61,6 +65,7 @@ fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
     assert_eq!(modules[0], artwork::framing_pixels());
     for pixels in [
         artwork::plugins_pixels(),
+        artwork::version_pixels(),
         artwork::off_pixels(),
         artwork::render_tile("OFF", "film").unwrap(),
         artwork::render_tile("OFF", "filter").unwrap(),

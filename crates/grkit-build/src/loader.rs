@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{ensure, Context, Result};
 use grkit_core::{
-    artwork::{off_pixels, plugins_pixels},
+    artwork::{off_pixels, plugins_pixels, version_pixels},
     runtime::{
         icon_stride, HOST_ICON_COUNT, ICONS_PER_CHUNK, LINUX_DIRECTORY, MAX_CHUNKS, MAX_COUNT,
     },
@@ -157,6 +157,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         }
         array(&mut result, "off_pixels", &off_pixels(), true);
         array(&mut result, "plugins_pixels", &plugins_pixels(), true);
+        array(&mut result, "version_pixels", &version_pixels(), true);
         array(
             &mut result,
             "module_pixels",

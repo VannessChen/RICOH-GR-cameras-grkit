@@ -617,3 +617,11 @@ pub fn plugins_pixels() -> Vec<u8> {
     text(&mut rgba, "GRK", LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
     rgba
 }
+
+/// The About row, which gives the version. Its own tile keeps a second GRK
+/// tile out of the GRKit root.
+pub fn version_pixels() -> Vec<u8> {
+    let mut rgba = background();
+    text(&mut rgba, "VER", LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
+    rgba
+}

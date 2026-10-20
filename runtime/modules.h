@@ -11,10 +11,10 @@
 
 static const Module modules[] = {PLUGIN_PAGES, ABOUT_PAGE};
 
-/* Plugin artwork is contiguous and ends below the GRKit tile: the tiles of
+/* Plugin artwork is contiguous and ends below the Version tile: the tiles of
    each plugin in plugin order, from PLUGIN_ICON. The installer copies
    grkit_core::plugins::tiles in the same order. */
-#define PLUGIN_ICON (GRKIT_ICON_GRKIT-PLUGIN_TILES)
+#define PLUGIN_ICON (GRKIT_ICON_VERSION-PLUGIN_TILES)
 /* The tiles of the pages. A host test compares it with PLUGIN_TILES. */
 GRKIT_MAYBE_UNUSED static u32 module_icon_count(void) {
     u32 i, n=0;

@@ -109,11 +109,11 @@ The registry script array holds the header, the records, the picture scratch, an
 The scratch has 141,376 bytes for the date stamp masks, then the 72-byte shot ring (see Recorded pictures).
 
 The icons are in chunks. Each chunk is one script array with 40 icon slots, and the header holds the address of each chunk (`GRKIT_HOST_ICON_CHUNKS`, at most 5).
-Chunk 0 starts with the host icons: Off, GRKit, and the twenty module tiles (four Framing, six Guides, six Date Stamp, four Grain).
-The effect icons follow them in record order, and continue in the next chunk. Chunk 0 holds 18 effect icons, so 19 or 20 effects use two chunks.
-The host icons must fit in chunk 0, because the menu finds each plugin tile by its offset from the first one.
+Chunk 0 starts with the host icons: Off, GRKit, Version, and the twenty module tiles (four Framing, six Guides, six Date Stamp, four Grain). The Version tile reads VER, and the About row shows it, so the GRKit root shows only one GRK tile.
+The effect icons follow them in record order, and continue in the next chunk. Chunk 0 holds 17 effect icons, so 18 to 20 effects use two chunks.
+The host icons must fit in chunk 0, because the menu finds the Version icon by its offset from the GRKit icon, and each plugin tile by its offset from the first one.
 
-The module tiles are contiguous from icon ID `0x7fec` to `0x7ffd`, below the GRKit tile (`0x7ffe`) and Off (`0x7fff`). The menu derives each one from the first Framing tile.
+The module tiles are contiguous from icon ID `0x7fe9` to `0x7ffc`, below the Version tile (`0x7ffd`), the GRKit tile (`0x7ffe`), and Off (`0x7fff`). The menu derives each one from the first Framing tile.
 
 `grkit_core::abi` defines the header, the records, and the scratch. The header has 128 words.
 The first 64 words are core fields. Each has a name, and a test checks that each byte belongs to exactly one field.
@@ -232,7 +232,7 @@ The list has as many rows as the longest native slot (32 on GR III). If the rows
 `runtime/modules.h` lists the page of each plugin in registry order (`runtime/generated/pages.h`). The core About row (`runtime/about.h`) follows the plugin rows.
 Each page owns its title, summary, rows, labels, icons, selection checks, activation, and committed row. A page opens at its committed row.
 
-A page returns its icons as tiles of its own artwork (`GRKIT_ICON_TILE`). The menu maps them to global IDs. The tiles of all plugins follow each other in registry order and end below the GRKit tile `0x7ffe`.
+A page returns its icons as tiles of its own artwork (`GRKIT_ICON_TILE`). The menu maps them to global IDs. The tiles of all plugins follow each other in registry order and end below the Version tile `0x7ffd`.
 
 Two page callbacks are optional. `highlight` receives each change of the highlighted row, and Image Control previews the row in the live view. `parameters` makes Fn apply the row and open the native parameter page.
 

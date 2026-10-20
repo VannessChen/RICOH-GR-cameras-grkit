@@ -25,10 +25,11 @@ pub fn icon_stride(target: &str) -> Result<usize> {
     }
 }
 pub const ICONS_PER_CHUNK: usize = 40;
-/// Off, GRKit, then the tiles of each plugin (`plugins::TILES`).
-/// The menu addresses plugin tiles by offset, so the host icons come first in
-/// chunk 0, and they must fit in it. The effect icons follow them.
-pub const HOST_ICON_COUNT: usize = 2 + plugins::TILES;
+/// Off, GRKit, Version, then the tiles of each plugin (`plugins::TILES`).
+/// The menu addresses the Version icon and the plugin tiles by offset, so the
+/// host icons come first in chunk 0, and they must fit in it. The effect icons
+/// follow them.
+pub const HOST_ICON_COUNT: usize = 3 + plugins::TILES;
 const _: () = assert!(HOST_ICON_COUNT <= ICONS_PER_CHUNK);
 /// Product limit for private Image Control effects.
 pub const MAX_COUNT: usize = 20;

@@ -434,10 +434,12 @@ static int install(void)
     for (u32 i = 0; i < HOST_ICON_COUNT; ++i) {
         u32 icon = icon_bases[0] + i * ICON_STRIDE;
         ICON_HEADER(icon);
-        const u8 *artwork = i >= 2 ? module_pixels + (i - 2) * 6400 : i ? plugins_pixels : off_pixels;
+        const u8 *artwork = i >= 3 ? module_pixels + (i - 3) * 6400 :
+            i == 2 ? version_pixels : i ? plugins_pixels : off_pixels;
         copy(at(icon + ICON_PIXELS), artwork, 6400);
-        /* The menu derives the other plugin tiles from the first one. */
-        if (i <= 2) store(base + (i == 2 ? GRKIT_HOST_TILE_ICON : i ? GRKIT_HOST_PLUGINS_ICON : GRKIT_HOST_OFF_ICON), icon);
+        /* The menu derives the Version icon from the GRKit icon, and the other
+           plugin tiles from the first one. */
+        if (i != 2 && i <= 3) store(base + (i == 3 ? GRKIT_HOST_TILE_ICON : i ? GRKIT_HOST_PLUGINS_ICON : GRKIT_HOST_OFF_ICON), icon);
     }
 #endif
     for (u32 i = 0; i < CODE_RELOCATION_COUNT; ++i) {
