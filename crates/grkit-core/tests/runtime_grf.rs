@@ -99,6 +99,8 @@ fn compile_with(
         "-O2",
         "-Wno-int-to-pointer-cast",
         "-Wno-pointer-to-int-cast",
+        // The harness links the code without the firmware symbols.
+        "-DGRKIT_HOST_ADDRESSES",
         target,
     ]);
     if let Some(include) = include {
@@ -513,6 +515,22 @@ fn native_directory_contract_skips_long_names_and_a_stale_listing() {
     compile(
         &compiler,
         &root().join("tests/runtime/directory_contract.c"),
+        &executable,
+        &[],
+    );
+    checked(&mut Command::new(&executable));
+}
+
+#[test]
+fn native_relocation_contract_finds_moved_windows_and_rejects_changes() {
+    let Some(compiler) = compiler() else {
+        return;
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("relocation_contract");
+    compile(
+        &compiler,
+        &root().join("tests/runtime/relocation_contract.c"),
         &executable,
         &[],
     );

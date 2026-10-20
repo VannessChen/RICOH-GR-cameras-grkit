@@ -1,51 +1,53 @@
 /* RICOH GR III 2.10 (also GR IIIx 1.60): firmware entry points, data, and
-   object layouts that the runtime uses. */
+   object layouts that the runtime uses. The addresses are those of the
+   pinned 2.10 image. Each is a FIRMWARE() symbol that the installer
+   relocates, as on GR IV. */
 #ifndef GRKIT_TARGET_H
 #define GRKIT_TARGET_H
 
 /* Camera settings and the still aspect property. */
-#define FW_SETTINGS 0x5320b31c
-#define FW_STILL_ASPECT_GET 0x53245260
-#define FW_STILL_ASPECT_SET 0x532525a4
-#define FW_CAPTURE_PROPERTIES 0x53525d5c
+#define FW_SETTINGS FIRMWARE(0x5320b31c)
+#define FW_STILL_ASPECT_GET FIRMWARE(0x53245260)
+#define FW_STILL_ASPECT_SET FIRMWARE(0x532525a4)
+#define FW_CAPTURE_PROPERTIES FIRMWARE(0x53525d5c)
 /* Settings domain: +0x518 -> control -> payload with the native Image Control
    type at +0x77c. Standard is type 11. */
-#define FW_SETTINGS_DOMAIN 0x553458b0
+#define FW_SETTINGS_DOMAIN FIRMWARE(0x553458b0)
 #define SETTINGS_IC_TYPE 0x77c
 
 /* Allocation and the vector helpers of View children. */
-#define FW_ALLOCATE 0x536af2a8
-#define FW_VECTOR_INSERT 0x536b6de4
-#define FW_VECTOR_ERASE 0x536b6f68
+#define FW_ALLOCATE FIRMWARE(0x536af2a8)
+#define FW_VECTOR_INSERT FIRMWARE(0x536b6de4)
+#define FW_VECTOR_ERASE FIRMWARE(0x536b6f68)
 
 /* View classes. */
-#define FW_VIEW_SET_TOUCH 0x533abeb0
-#define FW_VIEW_SET_PARENT 0x533ac120
-#define FW_VIEW_SET_TOUCHABLE 0x533ac1b4
-#define FW_VIEW_SET_X 0x533ac568
-#define FW_VIEW_INVALIDATE 0x533ad308
-#define FW_VIEW_SET_VISIBLE 0x533ad3c0
-#define FW_LINE_VIEW_INIT 0x53393d84
-#define FW_LINE_VIEW_SET_STYLE 0x53393e00
-#define FW_LINE_VIEW_DESTROY 0x53393d54
-#define FW_ICON_VIEW_INIT 0x5339a908
-#define FW_ICON_VIEW_SET_ICON 0x5339a9a0
-#define FW_ICON_VIEW_DESTROY 0x5339a874
-#define FW_STRING_VIEW_RESET 0x53396f80
-#define FW_LIST_SET_COUNT 0x53394e8c
-#define FW_LIST_ROW 0x53394758
-#define FW_LIST_SAVE 0x533947f0
-#define FW_LIST_CURSOR 0x53394820
-#define FW_LIST_RESTORE 0x53395224
-#define FW_LIST_SET_CURSOR 0x53395430
-#define FW_ROW_SET_ICON 0x533a1734
-#define FW_ROW_SET_CHECK 0x533a19b4
+#define FW_VIEW_SET_TOUCH FIRMWARE(0x533abeb0)
+#define FW_VIEW_SET_PARENT FIRMWARE(0x533ac120)
+#define FW_VIEW_SET_TOUCHABLE FIRMWARE(0x533ac1b4)
+#define FW_VIEW_SET_X FIRMWARE(0x533ac568)
+#define FW_VIEW_INVALIDATE FIRMWARE(0x533ad308)
+#define FW_VIEW_SET_VISIBLE FIRMWARE(0x533ad3c0)
+#define FW_LINE_VIEW_INIT FIRMWARE(0x53393d84)
+#define FW_LINE_VIEW_SET_STYLE FIRMWARE(0x53393e00)
+#define FW_LINE_VIEW_DESTROY FIRMWARE(0x53393d54)
+#define FW_ICON_VIEW_INIT FIRMWARE(0x5339a908)
+#define FW_ICON_VIEW_SET_ICON FIRMWARE(0x5339a9a0)
+#define FW_ICON_VIEW_DESTROY FIRMWARE(0x5339a874)
+#define FW_STRING_VIEW_RESET FIRMWARE(0x53396f80)
+#define FW_LIST_SET_COUNT FIRMWARE(0x53394e8c)
+#define FW_LIST_ROW FIRMWARE(0x53394758)
+#define FW_LIST_SAVE FIRMWARE(0x533947f0)
+#define FW_LIST_CURSOR FIRMWARE(0x53394820)
+#define FW_LIST_RESTORE FIRMWARE(0x53395224)
+#define FW_LIST_SET_CURSOR FIRMWARE(0x53395430)
+#define FW_ROW_SET_ICON FIRMWARE(0x533a1734)
+#define FW_ROW_SET_CHECK FIRMWARE(0x533a19b4)
 
 /* AdjModeController: methods and the touch callback pair of a toolbar icon. */
-#define FW_ADJ_SNAPSHOT 0x531a0150
-#define FW_ADJ_TOUCH_ENTER 0x531a16c4
-#define FW_ADJ_TOUCH_LEAVE 0x531a1874
-#define FW_ADJ_SLOT_TYPE 0x531a2820
+#define FW_ADJ_SNAPSHOT FIRMWARE(0x531a0150)
+#define FW_ADJ_TOUCH_ENTER FIRMWARE(0x531a16c4)
+#define FW_ADJ_TOUCH_LEAVE FIRMWARE(0x531a1874)
+#define FW_ADJ_SLOT_TYPE FIRMWARE(0x531a2820)
 /* The slot type of the native Image Control slot, and the controller of its
    Standard parameter page (still mode). */
 #define ADJ_IC_SLOT_TYPE 12
@@ -65,14 +67,15 @@
 #define PARAMETER_KINDS {0,1,2,3,4,5,6,13,14}
 /* The page event that opens another controller (0x2000015) from the page. */
 #define DETAIL_EV_SUBPAGE 0x88
-#define FW_ADJ_REFRESH 0x531a4114
-#define FW_ADJ_SELECT_SLOT 0x531a4864
-#define FW_CHANGE_CONTROLLER 0x5316c9d8
+#define FW_ADJ_REFRESH FIRMWARE(0x531a4114)
+#define FW_ADJ_SELECT_SLOT FIRMWARE(0x531a4864)
+#define FW_CHANGE_CONTROLLER FIRMWARE(0x5316c9d8)
 /* AdjModeController fields. */
 #define ADJ_CANVAS 0x4
 /* The UI language: a byte of the settings object that this slot points to
-   (reader 0x532465dc). 18 is Traditional Chinese and 19 Simplified Chinese. */
-#define LANGUAGE_SETTINGS_SLOT 0x55063f34
+   (reader 0x532465dc). 18 is Traditional Chinese and 19 Simplified Chinese.
+   The slot is +4 in the object 0x55063f30, which firmware code loads. */
+#define LANGUAGE_SETTINGS_SLOT (FIRMWARE(0x55063f30) + 4)
 #define LANGUAGE_SETTING 0x9ba
 #define ADJ_TITLE 0x160
 #define ADJ_DETAIL 0x164
@@ -84,7 +87,7 @@
 /* The ADJ refresh fills the Fn hint only on a native slot that offers Fn. For
    the Image Control slot, it uses the Fn label, layout 10, and the settings
    icon. A new ADJ starts with an empty hint. */
-#define FW_GUIDE_SET_CONTENT 0x5339b7d4
+#define FW_GUIDE_SET_CONTENT FIRMWARE(0x5339b7d4)
 #define FN_GUIDE_TEXT 0x1cf
 #define FN_GUIDE_ICON 0x233
 #define ADJ_LIST 0x1f0
@@ -110,13 +113,13 @@
 
 /* Playback metadata singleton (+0x220 holds key 0x25, the Image Control tag)
    and the native icon table. */
-#define FW_PLAYBACK_METADATA 0x5320b97c
+#define FW_PLAYBACK_METADATA FIRMWARE(0x5320b97c)
 #define METADATA_TONE 0x220
-#define FW_ICON_TABLE 0x550020fc
+#define FW_ICON_TABLE FIRMWARE(0x550020fc)
 /* The native Off icon, used until the installer provides the GRKit one. */
 #define NATIVE_OFF_ICON() WORD(FW_ICON_TABLE,0x166*4)
 /* Maker-note IFD entry setter: (entry, 0, value) stores a u16 value. */
-#define FW_IFD_SET_SHORT 0x535d02c8
+#define FW_IFD_SET_SHORT FIRMWARE(0x535d02c8)
 /* LiveViewController: nonzero in movie mode, and the LCD canvas. */
 #define LIVEVIEW_MOVIE 0x2d2
 #define LIVEVIEW_CANVAS 0x15c
@@ -124,11 +127,11 @@
 /* Picture processing. GAMMA_BUILT: the word of the gamma object that is 1
    after the native curves are built. */
 #define GAMMA_BUILT 0x3230
-#define FW_YCBCR_CALC 0x536e4720
+#define FW_YCBCR_CALC FIRMWARE(0x536e4720)
 /* DigitalFilterProcess plan: the grain stage flag that the stage gate sets. */
 #define GRAIN_GATE_FLAG 0x24
-#define FW_CACHE_FLUSH 0x5383c8a8
-#define FW_CLOCK 0x536bd838
-#define FW_LOCAL_TIME 0x536b6510
+#define FW_CACHE_FLUSH FIRMWARE(0x5383c8a8)
+#define FW_CLOCK FIRMWARE(0x536bd838)
+#define FW_LOCAL_TIME FIRMWARE(0x536b6510)
 
 #endif

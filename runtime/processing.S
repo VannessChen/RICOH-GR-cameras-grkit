@@ -1,8 +1,11 @@
-// Private Image Control processing hooks for the pinned GR III 2.10 image.
-// The header fields are those of abi.h.
+// Private Image Control processing hooks for GR III 2.10.
+// The header fields are those of abi.h. The firmware addresses are FIRMWARE()
+// symbols (hooks.h and runtime/firmware.h), which the installer relocates.
 // Records are immutable, contiguous GRKIT_RECORD_SIZE allocations retained until reboot.
 // The live-view dirty hook lives in picture.S.
+#include "firmware.h"
 #include "abi.h"
+#include "hooks.h"
 .syntax unified
 .arm
 .text
@@ -130,7 +133,7 @@ parameters_stock:
     // Other non-live-view builds, such as in-camera RAW development, record no effect.
     .word 0xeb000000 | (((.Lshot_store - . - 8) >> 2) & 0x00ffffff)
     pop {r0-r3, r12, lr}
-    ldr pc, =0x536db7d8
+    ldr pc, =HOOK_MODULE_PARAMETERS_TARGET
 
 module_processing:
     push {r0-r3, r12, lr}
@@ -140,15 +143,21 @@ module_processing:
     pop {r0-r3, r12, lr}
     mov r1, #11
     mov r2, #11
-    ldr r12, =0x55018cf0
+    ldr r12, =FIRMWARE(0x55018cf0)
     add r9, r6, #492
     ldr lr, [r4, #8]
-    ldr r0, =0x55018e4c
-    ldr pc, =0x536dc2ac
+    ldr r0, =FIRMWARE(0x55018e4c)
+    ldr pc, =FIRMWARE(0x536dc2ac)
 processing_stock:
     pop {r0-r3, r12, lr}
-    @ ORIGINAL_PROCESSING
-    ldr pc, =0x536dc2ac
+    // The eight replaced instructions (components::PROCESSING_ORIGINAL), with
+    // literal words for the three type tables instead of MOVW and MOVT pairs.
+    ldr r0, =FIRMWARE(0x55018d94)
+    ldr r12, =FIRMWARE(0x55018cf0)
+    add r9, r6, #0x1ec
+    ldr lr, [r0, r1, lsl #2]
+    ldr r0, =FIRMWARE(0x55018e4c)
+    ldr pc, =FIRMWARE(0x536dc2ac)
 
 module_packet:
     str r3, [r4, #0x90]
@@ -177,9 +186,9 @@ module_packet:
     pop {r12, lr}
     msr cpsr_f, r12
     pop {r0-r3, r12, lr}
-    ldr r12, =0x536f00c4
+    ldr r12, =FIRMWARE(0x536f00c4)
     blx r12
-    ldr r12, =0x536eff34
+    ldr r12, =FIRMWARE(0x536eff34)
     blx r12
     sub sp, r11, #40
     ldm sp, {r4-r11, sp, pc}
@@ -187,7 +196,7 @@ packet_stock:
     pop {r12, lr}
     msr cpsr_f, r12
     pop {r0-r3, r12, lr}
-    ldr pc, =0x536dc690
+    ldr pc, =HOOK_MODULE_PACKET_RESUME
 
 module_gamma_flag:
     push {r0-r2, lr}
@@ -196,7 +205,7 @@ module_gamma_flag:
     ldrbne r3, [r4, #0x9b]
     moveq r3, #1
     pop {r0-r2, lr}
-    ldr pc, =0x536e8698
+    ldr pc, =HOOK_MODULE_GAMMA_FLAG_RESUME
 
 module_gamma_curves:
     push {r0, r5, r12, lr}
@@ -212,5 +221,5 @@ module_gamma_curves:
     pop {r0, r5, r12, pc}
 curves_stock:
     pop {r0, r5, r12, lr}
-    ldr pc, =0x536eedf0
+    ldr pc, =HOOK_MODULE_GAMMA_CURVES_TARGET
 .ltorg

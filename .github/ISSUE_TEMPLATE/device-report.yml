@@ -65,7 +65,7 @@ body:
     id: status
     attributes:
       label: INSTALL.ERR status
-      description: If the card has `SCRIPT/PLUGINS/INSTALL.ERR`, give the number in it.
+      description: If the card has `SCRIPT/PLUGINS/INSTALL.ERR`, give the number in it. If the number is 47, also copy the other lines of the file into Details.
   - type: textarea
     id: details
     attributes:

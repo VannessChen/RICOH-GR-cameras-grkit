@@ -1,8 +1,11 @@
 // Private Image Control processing hooks for GR IV 1.11 (runtime/processing.S
 // describes the GR III 2.10 version). The build places this
-// code after the RTOS image. It has no relocations: local calls use BL words.
+// code after the RTOS image. Local calls use BL words. The firmware addresses
+// are FIRMWARE() symbols (hooks.h), which the installer relocates.
 // The header fields are those of abi.h.
+#include "firmware.h"
 #include "abi.h"
+#include "hooks.h"
 .syntax unified
 .arm
 .text
@@ -136,7 +139,7 @@ parameters_stock:
     // Other non-live-view builds, such as in-camera RAW development, record no effect.
     .word 0xeb000000 | (((.Lshot_store - . - 8) >> 2) & 0x00ffffff)
     pop {r0-r3, r12, lr}
-    ldr pc, =0x539113d8
+    ldr pc, =HOOK_MODULE_PARAMETERS_TARGET
 
 // Replaces `mov r1, sl` at 0x53912d40, where every type path joins before the
 // type-table getters. sl is the table index. A private record uses the
@@ -212,5 +215,5 @@ module_gamma_curves:
     pop {r0, r5, r12, pc}
 curves_stock:
     pop {r0, r5, r12, lr}
-    ldr pc, =0x53925000
+    ldr pc, =HOOK_MODULE_GAMMA_CURVES_TARGET
 .ltorg

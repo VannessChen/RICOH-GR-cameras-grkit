@@ -3,6 +3,7 @@ pub mod arm;
 pub mod components;
 pub mod firmware;
 pub mod loader;
+pub mod relocation;
 pub mod target;
 pub mod toolchain;
 
@@ -29,11 +30,37 @@ pub struct Patch {
     pub points: u32,
     pub before: Vec<u8>,
     pub after: Vec<u8>,
+    /// On a relocatable target, what the address moves with. `None` keeps it.
+    pub site: Option<Anchor>,
 }
+
+/// An address that moves when the installer relocates the private code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Anchor {
+    /// A firmware address of the pinned image.
+    Firmware(u32),
+    /// The private tail.
+    Tail,
+}
+
+/// A word of a patch that the installer changes when it relocates the
+/// private code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reference {
+    pub patch: usize,
+    pub offset: usize,
+    /// A B or BL whose target is the anchor, or else a word that holds an
+    /// address of the anchor.
+    pub branch: bool,
+    pub anchor: Anchor,
+}
+
 #[derive(Debug)]
 pub struct PatchPlan {
     pub patches: Vec<Patch>,
     pub relocations: Vec<(usize, usize)>,
+    /// The firmware references of a relocatable target.
+    pub references: Vec<Reference>,
 }
 #[derive(Debug)]
 pub struct BuildResult {
@@ -92,6 +119,7 @@ pub fn source_hashes() -> BTreeMap<String, String> {
         ("toolchain.rs", include_bytes!("toolchain.rs").as_slice()),
         ("components.rs", include_bytes!("components.rs").as_slice()),
         ("loader.rs", include_bytes!("loader.rs").as_slice()),
+        ("relocation.rs", include_bytes!("relocation.rs").as_slice()),
     ] {
         sources.insert(format!("crates/grkit-build/src/{name}"), sha256(bytes));
     }
@@ -203,7 +231,9 @@ fn build_image(
     let components: Vec<_> = built.iter().map(|(_, component)| component).collect();
     // The installer publishes every code payload before any firmware change.
     let mut patches: Vec<_> = components.iter().map(|c| c.patches[0].clone()).collect();
+    let mut first = Vec::new();
     for component in &components {
+        first.push(patches.len());
         patches.extend_from_slice(&component.patches[1..]);
     }
     let relocations = components
@@ -211,9 +241,26 @@ fn build_image(
         .enumerate()
         .flat_map(|(index, c)| c.relocations.iter().map(move |offset| (index, *offset)))
         .collect();
+    // Component patch 0 is the payload; patch j > 0 follows the payloads.
+    let references = components
+        .iter()
+        .enumerate()
+        .flat_map(|(index, c)| {
+            let first = first[index];
+            c.references.iter().map(move |reference| Reference {
+                patch: if reference.patch == 0 {
+                    index
+                } else {
+                    first + reference.patch - 1
+                },
+                ..*reference
+            })
+        })
+        .collect();
     let plan = PatchPlan {
         patches,
         relocations,
+        references,
     };
     validate_plan(&plan)?;
     let generated = loader::header(&plan, image, env!("CARGO_PKG_VERSION"))?;
