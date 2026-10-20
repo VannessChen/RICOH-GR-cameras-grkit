@@ -146,6 +146,24 @@ module_processing:
     ldr r12, =FIRMWARE(0x55018cf0)
     add r9, r6, #492
     ldr lr, [r4, #8]
+    // A record with hue sectors (feature 8) gives its own MultiAxial set: the
+    // native load reads [r12 + 11 * 4], so point r12 44 bytes before the word at
+    // RECORD_MULTIAXIAL that holds the set address. With highlight correction on
+    // this capture (the native flag at [fp - 0x30], which the function stored
+    // before this hook), point it at the next word, the address of the set for
+    // half the stage input.
+    ldr r0, [lr, #GRKIT_RECORD_FEATURES]
+    tst r0, #8
+.if GRKIT_RECORD_MULTIAXIAL - 44 != 0x714
+.error "Update the MultiAxial set offset"
+.endif
+    beq 1f
+    add r12, lr, #0x700
+    add r12, r12, #0x14
+    ldr r0, [fp, #-0x30]
+    cmp r0, #0
+    addne r12, r12, #4
+1:
     ldr r0, =FIRMWARE(0x55018e4c)
     ldr pc, =FIRMWARE(0x536dc2ac)
 processing_stock:

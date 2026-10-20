@@ -162,7 +162,7 @@ fn rust_and_installer_c_accept_the_same_grf_records() {
 int main(int argc, char **argv) {
     if (grkit_grf_validate(NULL, GRKIT_GRF_SIZE) != 0) return 2;
     for (int i = 1; i < argc; ++i) {
-        unsigned char bytes[GRKIT_GRF_SIZE + 1];
+        unsigned char bytes[GRKIT_GRF_MAX_SIZE + 1];
         FILE *file = fopen(argv[i], "rb");
         if (!file) return 3;
         size_t count = fread(bytes, 1, sizeof(bytes), file);
@@ -331,6 +331,66 @@ int main(int argc, char **argv) {
     let extended = effects::encode(&extended_effect, &vec![0; effects::ICON_SIZE]).unwrap();
     assert_eq!(&extended[..8], effects::MAGIC);
     corpus.push(("extended post".into(), extended.clone(), Some(true)));
+    // Hue sectors: 66 coefficients, then the control fields 10..20 at 8150.
+    let mut hue_effect = sample(false);
+    let matrices: Vec<Vec<i64>> = (0..11).map(|k| vec![3 - k, -2, k, 0, -4, 5 + k]).collect();
+    hue_effect["hue_sectors"] = json!({"matrices": matrices, "weight": [0, 128, 255, 200]});
+    let hue = effects::encode(&hue_effect, &vec![0; effects::ICON_SIZE]).unwrap();
+    corpus.push(("hue sectors".into(), hue.clone(), Some(true)));
+    let hue_fields: Vec<(&str, usize, Vec<u8>)> = vec![
+        ("coefficient -128", 8084, vec![0x80]),
+        ("row past the register", 8084, vec![0x9c, 0x9c]),
+        (
+            "start weight past 1024",
+            8150,
+            1025_u16.to_le_bytes().to_vec(),
+        ),
+        ("slope past 9 bits", 8158, 0x200_u16.to_le_bytes().to_vec()),
+        ("moved breakpoint", 8166, 165_u16.to_le_bytes().to_vec()),
+        ("byte after the sectors", 8172, vec![1]),
+        ("without the feature bit", 84, 0_u32.to_le_bytes().to_vec()),
+    ];
+    for (description, offset, bytes) in hue_fields {
+        let mut changed = hue.clone();
+        changed[offset..offset + bytes.len()].copy_from_slice(&bytes);
+        repair_crc(&mut changed);
+        corpus.push((format!("hue sectors: {description}"), changed, Some(false)));
+    }
+    let mut mono_hue = mono.clone();
+    mono_hue[84] = 8;
+    mono_hue[8084..8172].copy_from_slice(&hue[8084..8172]);
+    repair_crc(&mut mono_hue);
+    corpus.push(("monochrome hue sectors".into(), mono_hue, Some(false)));
+    // Hue levels: feature 16 with feature 8, 198 coefficients at 8192, and 8704 bytes.
+    let mut level_effect = hue_effect.clone();
+    let level: Vec<Vec<i64>> = (0..11).map(|k| vec![k - 5, 2, 0, -k, 7, 1]).collect();
+    level_effect["hue_sectors"]["levels"] = json!([&level, &level, &level]);
+    let levels = effects::encode(&level_effect, &vec![0; effects::ICON_SIZE]).unwrap();
+    assert_eq!(levels.len(), effects::SIZE_WITH_LEVELS);
+    corpus.push(("hue levels".into(), levels.clone(), Some(true)));
+    let level_fields: Vec<(&str, usize, Vec<u8>)> = vec![
+        ("coefficient -128", 8192, vec![0x80]),
+        ("row past the register", 8300, vec![0x9c, 0x9c]),
+        ("byte after the levels", 8390, vec![1]),
+        ("last byte", 8703, vec![1]),
+        ("without the levels bit", 84, 8_u32.to_le_bytes().to_vec()),
+        ("without the sectors bit", 84, 16_u32.to_le_bytes().to_vec()),
+        ("smaller size field", 8, 8192_u32.to_le_bytes().to_vec()),
+    ];
+    for (description, offset, bytes) in level_fields {
+        let mut changed = levels.clone();
+        changed[offset..offset + bytes.len()].copy_from_slice(&bytes);
+        repair_crc(&mut changed);
+        corpus.push((format!("hue levels: {description}"), changed, Some(false)));
+    }
+    let mut short_levels = levels[..effects::SIZE].to_vec();
+    short_levels[8..12].copy_from_slice(&(effects::SIZE as u32).to_le_bytes());
+    repair_crc(&mut short_levels);
+    corpus.push(("hue levels in 8192 bytes".into(), short_levels, Some(false)));
+    let mut long_hue = [hue.as_slice(), &[0; 512]].concat();
+    long_hue[8..12].copy_from_slice(&(effects::SIZE_WITH_LEVELS as u32).to_le_bytes());
+    repair_crc(&mut long_hue);
+    corpus.push(("8704 bytes without levels".into(), long_hue, Some(false)));
     // Glow is not an effect field.
     let mut glow_effect = sample(false);
     glow_effect["glow"] = json!(1);

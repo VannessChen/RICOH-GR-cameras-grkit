@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use crate::cube::{self, Matrix};
 use crate::fit::{self, Model, Params};
 use crate::selective::{self, Selective};
-use crate::{effects, packaging, Files};
+use crate::{effects, hue, packaging, Files};
 
 /// Points on each axis of a preview table.
 pub const LUT_SIZE: usize = 33;
@@ -51,6 +51,10 @@ pub fn params(effect: &Value) -> Result<Params> {
         matrix: q13(&effect["matrix"])?,
         curves: [[0.0; 256]; 3],
         post: fit::IDENTITY,
+        sectors: effect
+            .get("hue_sectors")
+            .map(|value| hue::HueSectors::from_json(value).map(|s| s.stage()))
+            .transpose()?,
     };
     for (slot, curve) in result.curves.iter_mut().zip(curves) {
         *slot = coefficients::<256>(curve, "curve")?.map(|v| v as f64);
@@ -90,9 +94,11 @@ impl Standard {
         }
     }
 
-    /// Scene-linear light that Standard renders as the sRGB-encoded `display`.
+    /// Scene-linear light that Standard renders as the sRGB-encoded `display`. A Standard JPEG
+    /// has the camera's chroma suppression, which this undoes first.
     fn linear(&self, display: [f64; 3]) -> [f64; 3] {
-        let mixed = display.map(|v| inverse_base_gamma(&self.base, v * 16384.0) / fit::K);
+        let codes = fit::undisplay(display).map(|v| v.clamp(0.0, 1.0));
+        let mixed = codes.map(|v| inverse_base_gamma(&self.base, v * 16384.0) / fit::K);
         cube::mul(&self.inverse, mixed)
     }
 }
@@ -163,7 +169,10 @@ pub fn standard_linear_preview_lut(base_gamma: &[u16; 256]) -> Vec<u8> {
     let model = Model::new(base_gamma);
     let look = unit(&fit::STANDARD_LOOK);
     let matrix: Matrix = std::array::from_fn(|r| std::array::from_fn(|c| look[r * 3 + c]));
-    linear_lut(|linear| cube::mul(&matrix, linear).map(|value| model.base_gamma(value) / 16384.0))
+    // The Standard JPEG has the same chroma suppression as an effect.
+    linear_lut(|linear| {
+        fit::display(cube::mul(&matrix, linear).map(|value| model.base_gamma(value) / 16384.0))
+    })
 }
 
 /// Standard base64 with padding. The catalog carries each 40 x 40 RGBA icon

@@ -147,7 +147,7 @@
 #define GRKIT_PLUGIN_GRAIN_LEVEL 260
 
 /* An Image Control record. The records follow the header. */
-#define GRKIT_RECORD_SIZE 0x740
+#define GRKIT_RECORD_SIZE 0x1100
 /* The native processing record: a prefix, then the tone curves. */
 #define GRKIT_RECORD_COEFFICIENTS 0x54
 /* UTF-16 effect name with its NUL. */
@@ -175,8 +175,37 @@
    is (native value - 4) mod 9, so zero is neutral. A native value is 0..8, and
    4 is neutral. */
 #define GRKIT_RECORD_PARAMETERS 0x72c
+/* The MultiAxial parameter set that INSTALL expands from the hue sectors of
+   the GRF (feature 8): the address of the set at +0, the address of the
+   highlight-correction set at +4, the set (six pointers) at +8, the bounds at
+   +0x20, the bank selectors at +0x40, the matrix header at +0x58, the control
+   fields at +0x6c, 60 3x3 i32 Q10 matrices at +0x98, the highlight-correction
+   set at +0x908, and its control fields at +0x920. Zero without hue sectors. */
+#define GRKIT_RECORD_MULTIAXIAL 0x740
 #define GRKIT_FEATURE_POST 1U
 #define GRKIT_FEATURE_SELECTIVE 2U
+#define GRKIT_FEATURE_HUE 8U
+#define GRKIT_FEATURE_HUE_LEVELS 16U
+/* Hue sectors of feature 8 in a GRF: 11 x 6 i8 coefficients
+   (GRKIT_HUE_MATRICES bytes), then the u16 control fields 10..20 of the weight
+   curve. */
+#define GRKIT_HUE_OFFSET 8084U
+#define GRKIT_HUE_SIZE 88U
+#define GRKIT_HUE_MATRICES 66U
+/* Hue levels of feature 16: the sectors of levels 1 to 3 after the first
+   GRKIT_GRF_SIZE bytes. */
+#define GRKIT_HUE_LEVEL_OFFSET 8192U
+#define GRKIT_HUE_LEVEL_SIZE 198U
+/* The fixed breakpoints of the weight curve, control fields 18..20. */
+#define GRKIT_HUE_BORDERS { 164, 655, 4095 }
+/* The quadrant bounds and the bank of each segment: 11 equal sectors, sector k
+   in bank k + 1. */
+#define GRKIT_HUE_BOUNDS { 1490, 745, 0, 0, 1304, 559, 0, 0, 1862, 1118, 373, 0, 1676, 931, 187, 0 }
+#define GRKIT_HUE_SELECTORS { 3, 2, 1, 0, 0, 11, 10, 9, 0, 0, 9, 8, 7, 6, 0, 6, 5, 4, 3, 0 }
+/* Control fields 1..8 that spread the levels, and those for a capture with
+   highlight correction, which halves the stage's input. */
+#define GRKIT_HUE_LEVEL_CONTROL { 656, 656, 656, 586, 150, 650, 1150, 1650 }
+#define GRKIT_HUE_LEVEL_CONTROL_HALVED { 1312, 1312, 1312, 1172, 75, 325, 575, 825 }
 /* The longest menu string, with its NUL: an Image Control summary is a prefix
    and a 16-character effect name. */
 #define GRKIT_SUMMARY_UNITS 32

@@ -4,7 +4,7 @@
 
 use std::fmt::Write;
 
-use crate::{menu_text, plugins, runtime};
+use crate::{effects, hue, menu_text, plugins, runtime};
 
 /// A byte range of the private header or of a record.
 pub struct Field {
@@ -161,7 +161,7 @@ fields!(HEADER_FIELDS {
     HOST_PLUGIN_AREA = 256, HOST_HEADER_SIZE - 256;
 });
 
-pub const RECORD_SIZE: usize = 0x740;
+pub const RECORD_SIZE: usize = 0x1100;
 
 fields!(RECORD_FIELDS {
     /// The native processing record: a prefix, then the tone curves.
@@ -191,6 +191,13 @@ fields!(RECORD_FIELDS {
     /// byte is (native value - 4) mod 9, so zero is neutral. A native value is
     /// 0..8, and 4 is neutral.
     RECORD_PARAMETERS = 0x72c, 9;
+    /// The MultiAxial parameter set that INSTALL expands from the hue sectors of the GRF
+    /// (feature 8): the address of the set at +0, the address of the highlight-correction
+    /// set at +4, the set (six pointers) at +8, the bounds at +0x20, the bank selectors at
+    /// +0x40, the matrix header at +0x58, the control fields at +0x6c, 60 3x3 i32 Q10
+    /// matrices at +0x98, the highlight-correction set at +0x908, and its control fields
+    /// at +0x920. Zero without hue sectors.
+    RECORD_MULTIAXIAL = 0x740, 0x980;
 });
 
 /// Bytes of the date stamp core and halo masks at the start of the picture scratch.
@@ -257,6 +264,79 @@ fn table(out: &mut String, fields: &[Field], hex: bool) {
     }
 }
 
+fn array(out: &mut String, doc: &str, name: &str, values: &[impl std::fmt::Display]) {
+    let values: Vec<String> = values.iter().map(ToString::to_string).collect();
+    define(out, doc, name, format!("{{ {} }}", values.join(", ")));
+}
+
+/// The GRF extension features, and the hue sectors that INSTALL expands into the
+/// MultiAxial set of a record (`effects`, `hue`).
+fn hue_tables(out: &mut String) {
+    writeln!(out, "#define GRKIT_FEATURE_POST {}U", effects::FEATURE_POST).unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_FEATURE_SELECTIVE {}U",
+        effects::FEATURE_SELECTIVE
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_FEATURE_HUE {}U",
+        effects::FEATURE_HUE_SECTORS
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_FEATURE_HUE_LEVELS {}U",
+        effects::FEATURE_HUE_LEVELS
+    )
+    .unwrap();
+    define(
+        out,
+        "Hue sectors of feature 8 in a GRF: 11 x 6 i8 coefficients (GRKIT_HUE_MATRICES \
+         bytes), then the u16 control fields 10..20 of the weight curve.",
+        "HUE_OFFSET",
+        format!("{}U", effects::HUE_OFFSET),
+    );
+    writeln!(out, "#define GRKIT_HUE_SIZE {}U", hue::SIZE).unwrap();
+    writeln!(out, "#define GRKIT_HUE_MATRICES {}U", hue::SECTORS * 6).unwrap();
+    define(
+        out,
+        "Hue levels of feature 16: the sectors of levels 1 to 3 after the first \
+         GRKIT_GRF_SIZE bytes.",
+        "HUE_LEVEL_OFFSET",
+        format!("{}U", effects::SIZE),
+    );
+    writeln!(out, "#define GRKIT_HUE_LEVEL_SIZE {}U", hue::LEVEL_SIZE).unwrap();
+    array(
+        out,
+        "The fixed breakpoints of the weight curve, control fields 18..20.",
+        "HUE_BORDERS",
+        &hue::BORDERS,
+    );
+    array(
+        out,
+        "The quadrant bounds and the bank of each segment: 11 equal sectors, sector k \
+         in bank k + 1.",
+        "HUE_BOUNDS",
+        &hue::BOUNDS,
+    );
+    array(out, "", "HUE_SELECTORS", &hue::SELECTORS);
+    array(
+        out,
+        "Control fields 1..8 that spread the levels, and those for a capture with \
+         highlight correction, which halves the stage's input.",
+        "HUE_LEVEL_CONTROL",
+        &hue::LEVEL_CONTROL,
+    );
+    array(
+        out,
+        "",
+        "HUE_LEVEL_CONTROL_HALVED",
+        &hue::LEVEL_CONTROL_HALVED,
+    );
+}
+
 /// The contents of `runtime/abi.h`.
 pub fn header() -> String {
     let mut out = String::new();
@@ -289,7 +369,7 @@ pub fn header() -> String {
     );
     writeln!(out, "#define GRKIT_RECORD_SIZE {RECORD_SIZE:#x}").unwrap();
     table(&mut out, RECORD_FIELDS, true);
-    out.push_str("#define GRKIT_FEATURE_POST 1U\n#define GRKIT_FEATURE_SELECTIVE 2U\n");
+    hue_tables(&mut out);
     define(
         &mut out,
         "The longest menu string, with its NUL: an Image Control summary is a \

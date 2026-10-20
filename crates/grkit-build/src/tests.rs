@@ -834,7 +834,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/PLUGINS/PLUGINS.TTL",
-            "ea5efcc18970ffd814fc523ef26430703c7341ff89f279d569a4af212c390e08",
+            "6c701c20bfdcee3a6d336800894b7462b59dd86420eecd51483ab4abc7b793d6",
         ),
         (
             "SCRIPT/PLUGINS/INSTALL.BIN",
@@ -910,7 +910,7 @@ fn each_point_has_its_hooks() {
     for target in target::TARGETS {
         let expected = match target.family {
             "gr3" => [30, 48, 5, 9, 1, 2],
-            "gr4" => [29, 49, 5, 11, 1, 4],
+            "gr4" => [29, 50, 5, 11, 1, 4],
             family => panic!("No hook counts for the {family} family"),
         };
         let mut counts = [0; 6];

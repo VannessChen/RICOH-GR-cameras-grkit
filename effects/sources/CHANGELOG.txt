@@ -3,7 +3,8 @@ Changes to third-party LUTs (as asked by SPEKTRAFILM_LICENSE.txt)
 No LUT, profile, or rendered LUT output is included in this repository. Each effect encodes the
 look of one LUT as GR III effect parameters: a 3 x 3 look matrix, three 256-entry tone curves, and
 an optional 3 x 3 post-curve matrix. `grkit effects import` fits them to the LUT output on a gray
-ramp, the ColorChecker 24 from -2 to +2 EV, and 6000 seeded random colors. The fit quantizes each
+ramp, the ColorChecker 24 from -2 to +2 EV, and 6000 seeded colors with the chroma of natural
+scenes, from -2 to +2 EV. The fit quantizes each
 matrix to signed Q13 with rows that sum to 8192.
 
 spektrafilm LUTs (Andrea Volpato, https://github.com/andreavolpato/spektrafilm, spektrafilm 0.3.4,

@@ -20,8 +20,9 @@ The compiler writes self-contained GRFX0001 files with a 40 x 40 icon. CRC32 det
 | `attribution` | Yes | An object with the origin, source, and license |
 | `post_matrix` | No | Nine signed Q13 coefficients, row-major, after the tone curves |
 | `selective_color` | No | `hue` in degrees (0 to 360), `lower` and `higher` `[inner, outer]` half widths in degrees (0 to 75), and `chroma` `[c0, c1]` (c0 < c1 <= 181) |
+| `hue_sectors` | No | `matrices`: 11 sectors of six off-diagonal coefficients in 1/128 (-127 to 127; the two of a row sum to -127 or more). `weight`: four values 0 to 255 at luminance 0, 0.055, 0.218, and 1.365 (`hue::KNOTS`); the first two differ by at most about 160, because highlight correction doubles the slopes. Optional `levels`: the sectors of levels 1 to 3, three sets like `matrices` |
 
-A monochrome effect cannot have `post_matrix` or `selective_color`.
+A monochrome effect cannot have `post_matrix`, `selective_color`, or `hue_sectors`.
 
 `selective_color` keeps the chroma of one hue range in recorded pictures and removes it elsewhere. The viewfinder shows the effect in monochrome. `crates/grkit-core/src/selective.rs` defines the hue angle and the half widths.
 
@@ -90,6 +91,8 @@ The two monochrome fits have identical matrix rows and curves. Set `flags` to 1 
 
 Effects run in the camera's processing: the matrix acts before the Standard base gamma, and the curves and `post_matrix` act after it. They are not display-sRGB JPEG transforms. Effects add no grain or glow.
 
+`hue_sectors` drives the camera's hue-sector stage after the matrix, in recorded pictures and the live view. With `levels`, the sector matrices also change with luminance. `crates/grkit-core/src/hue.rs` describes the stage.
+
 ## Import a .cube preset
 
 `grkit effects import` fits a 3D or 1D `.cube` LUT to the effect model and writes a new definition.
@@ -119,4 +122,4 @@ If `OUT/ID` exists or a check fails, the command stops and writes nothing.
 
 The fit follows [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)). `crates/grkit-core/src/fit.rs` describes the model and its assumptions.
 
-`attribution.fit` records the color error of the fit on a ColorChecker. A matrix, three curves, and a post matrix cannot copy hue-selective changes. Examine the errors before you use an imported effect.
+`attribution.fit` records the color error of the fit on a ColorChecker. A matrix, three curves, a post matrix, and 11 hue sectors copy hue-selective changes only in part. Examine the errors before you use an imported effect.

@@ -7,7 +7,7 @@ typedef unsigned int u32;
 
 #define CAPACITY 3U
 #define MARK 100U
-static u8 profiles[CAPACITY][GRKIT_GRF_SIZE];
+static u8 profiles[CAPACITY][GRKIT_GRF_MAX_SIZE];
 static char names[CAPACITY][CATALOG_NAME_SIZE];
 
 struct candidate { const char *id, *name; u8 mark; };
@@ -21,7 +21,7 @@ static const struct candidate candidates[] = {
 
 static u32 offer(u32 count, const struct candidate *c)
 {
-    static u8 record[GRKIT_GRF_SIZE];
+    static u8 record[GRKIT_GRF_MAX_SIZE];
     memset(record, 0, sizeof(record));
     strcpy((char *)record + CATALOG_ID, c->id);
     record[MARK] = c->mark;

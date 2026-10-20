@@ -72,10 +72,23 @@ fn standard_preview_returns_each_input() {
     let table = site::preview_lut(&synthetic_base(), &standard).unwrap();
     assert_eq!(table.len(), site::LUT_SIZE.pow(3) * 3);
     let level = |i: usize| (i as f64 * 255.0 / (site::LUT_SIZE - 1) as f64).round() as i32;
+    let step = |i: usize| i as f64 / (site::LUT_SIZE - 1) as f64;
+    // The highest code of the curves above.
+    let highest = curve[255] as f64 / 16384.0;
+    let mut checked = 0;
     for b in 0..site::LUT_SIZE {
         for g in 0..site::LUT_SIZE {
             for r in 0..site::LUT_SIZE {
                 let actual = entry(&table, r, g, b);
+                // A Standard JPEG has the camera's chroma suppression. Near black and white,
+                // the camera cannot write a saturated color: its codes before the suppression
+                // leave the range of the curves. The table returns each color that the
+                // camera can write.
+                let codes = fit::undisplay([step(r), step(g), step(b)]);
+                if codes.iter().any(|v| !(-1e-9..=highest).contains(v)) {
+                    continue;
+                }
+                checked += 1;
                 for (value, expected) in actual.iter().zip([level(r), level(g), level(b)]) {
                     assert!(
                         (*value as i32 - expected).abs() <= 1,
@@ -85,6 +98,7 @@ fn standard_preview_returns_each_input() {
             }
         }
     }
+    assert!(checked * 10 > site::LUT_SIZE.pow(3) * 8, "{checked}");
 }
 
 #[test]

@@ -478,15 +478,20 @@ const GR4_PROCESSING_HOOKS: &[(u32, &str, bool)] = &[
     (0x53912c70, "module_parameters", true),
     (0x53912d40, "module_processing", true),
     (0x53912d4c, "module_record", true),
+    (0x53912d5c, "module_multiaxial", true),
     (0x53913188, "module_packet", true),
     (0x5391e360, "module_gamma_flag", true),
     (0x5391e76c, "module_gamma_curves", true),
 ];
 /// The stock instructions around the GR IV processing hooks.
 const GR4_CONTEXTS: &[(u32, &str)] = &[
-    // Normalizer BL, then the type-table getters and the record store.
+    // Normalizer BL, then the type-table getters, the record store, and the MultiAxial
+    // set store.
     (0x53912c70, "d8f9ffeb"),
-    (0x53912d3c, "34a01be50a10a0e10600a0e18d4c00eb080084e5"),
+    (
+        0x53912d3c,
+        "34a01be50a10a0e10600a0e18d4c00eb080084e50a10a0e10600a0e1944c00eb0c0084e5",
+    ),
     // Packet: the last field store before the native tail.
     (0x53913184, "943195e5903084e5255000eb"),
     // Gamma stage: the custom-curve flag and the curve getter BL.
@@ -680,16 +685,20 @@ const GR4_120_PROCESSING_HOOKS: &[(u32, &str, bool)] = &[
     (0x5393aa10, "module_parameters", true),
     (0x5393af68, "module_processing", true),
     (0x5393af74, "module_record", true),
+    (0x5393af84, "module_multiaxial", true),
     (0x5393ae74, "module_packet", true),
     (0x53946150, "module_gamma_flag", true),
     (0x5394655c, "module_gamma_curves", true),
 ];
 /// The stock instructions around the GR IV processing hooks.
 const GR4_120_CONTEXTS: &[(u32, &str)] = &[
-    // Normalizer BL, then the type-table getters and the record store. 1.20
-    // keeps the table index in fp-0x30.
+    // Normalizer BL, then the type-table getters, the record store, and the MultiAxial
+    // set store. 1.20 keeps the table index in fp-0x30.
     (0x5393aa10, "c4f9ffeb"),
-    (0x5393af64, "30a01be50a10a0e10600a0e1094c00eb080084e5"),
+    (
+        0x5393af64,
+        "30a01be50a10a0e10600a0e1094c00eb080084e50a10a0e10600a0e1104c00eb0c0084e5",
+    ),
     // Packet: the last field store before the native tail.
     (0x5393ae70, "943195e5903084e5f05000eb"),
     // Gamma stage: the custom-curve flag and the curve getter BL.
