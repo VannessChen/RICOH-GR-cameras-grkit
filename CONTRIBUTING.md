@@ -35,6 +35,22 @@ GRKIT_TEST_FIRMWARE="$PWD/firmware/fwdc239b.bin" GRKIT_CLANG=clang GRKIT_LLD=ld.
   cargo test -p grkit-build --locked pinned_firmware_build_is_reproducible -- --ignored
 ```
 
+The GR IV relocation test builds from the pinned official 1.11 container. With
+the complete local February 18, 2026 GR IV HDF RTOS capture from issue #9, it also
+checks relocation against independently verified addresses in that build:
+
+```sh
+GRKIT_TEST_FIRMWARE_GR4="$PWD/firmware/fwdc248b.bin" \
+  GRKIT_TEST_RTOS_GR4_111_20260218="$PWD/firmware/gr4-hdf-20260218-rtos.bin" \
+  GRKIT_CLANG=clang GRKIT_LLD=ld.lld \
+  cargo test -p grkit-build --locked gr4_relocation_resolves_other_builds -- --ignored
+```
+
+The capture must be 20,791,616 bytes with SHA-256
+`60250bf7c497af13d6579fc58736cfddbffa32ffb4f8ff3a1403854b9da40d5e`.
+It is test input, not a firmware update. Keep it out of Git. The regression
+checks address resolution; it does not establish camera operation of a release.
+
 For the web site, see [web/README.md](web/README.md).
 
 ## Rules

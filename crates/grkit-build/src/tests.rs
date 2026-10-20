@@ -593,6 +593,46 @@ fn gr4_relocation_resolves_other_builds() -> Result<()> {
         assert_eq!(resolved[&0x533b7110], 0x533b7004);
         assert_eq!(resolved[&0x5537960c], 0x553795fc);
     }
+    // GR IV HDF also reports 1.11 for the February 18 build from issue #9.
+    // This is a complete, unpatched RTOS capture, not an update container.
+    // Keep the input local; these expected addresses were checked independently
+    // while preparing a fixed-address runtime tested on that camera.
+    if let Some(path) = std::env::var_os("GRKIT_TEST_RTOS_GR4_111_20260218") {
+        let image = fs::read(path)?;
+        ensure!(
+            image.len() == 0x013d4140
+                && firmware::sha256(&image)
+                    == "60250bf7c497af13d6579fc58736cfddbffa32ffb4f8ff3a1403854b9da40d5e",
+            "Expected the complete, unpatched GR IV HDF February 18 RTOS capture"
+        );
+        let (result, symbols) = resolve_image(&built.output, &image)?;
+        assert_eq!(result, "ok 0x543d5000");
+        let resolved: BTreeMap<_, _> = symbols.into_iter().collect();
+        for (pinned, expected) in [
+            (0x543d3000, 0x543d5000), // Tail after the larger image.
+            (0x553b2ab0, 0x553b2ae0), // Script array count and table.
+            (0x553b3ec4, 0x553b3ef4),
+            (0x558372d4, 0x55837314), // BSS end / minimum heap address.
+            (0x531bf9d8, 0x531bfad0), // ADJ touch and icon lookup hooks.
+            (0x5323db68, 0x5323dc60),
+            (0x533b7110, 0x533b72f0), // Parameter getter found through a caller.
+            (0x5537960c, 0x5537962c), // Settings singleton.
+            (0x5500211c, 0x5500211c), // English slot does not move.
+            (0x5501adbc, 0x5501adc4), // Standard record and native tables.
+            (0x55053780, 0x55053788),
+            (0x55053504, 0x5505350c),
+            (0x55052cf4, 0x55052cfc),
+            (0x540498d8, 0x5404a888), // Four initialized Standard-record pointers.
+            (0x54049a70, 0x5404aa20),
+            (0x54049b28, 0x5404aad8),
+            (0x54049518, 0x5404a4c8),
+        ] {
+            assert_eq!(
+                resolved[&pinned], expected,
+                "February-build relocation of {pinned:#x}"
+            );
+        }
+    }
     // GR III is not a build of this version: nothing resolves.
     if let Ok(path) = std::env::var("GRKIT_TEST_FIRMWARE") {
         let decoded = firmware::decode(&fs::read(path)?)?;
