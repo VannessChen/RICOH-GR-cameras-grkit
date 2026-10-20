@@ -42,6 +42,9 @@ Its RTOS image is larger (0x13d2ac0 bytes), and its data, functions, and object 
 The build defines `GRKIT_TARGET_<target>` (`components::Layout::define`), and `runtime/firmware.h` selects the header from it. Without a known definition, the compilation stops.
 `components::Layout` holds the regions and hooks of each target, and the build generates `hooks.h` from it.
 
+Some GR IV and GR IV HDF cameras show version 1.11 but run another build of it, with the RTOS build time 2026/02/18 (issue #9). Its code and data are at other addresses, and its image ends at `0x543d4140`.
+Ricoh does not publish that build. The GR IV installer therefore relocates the private code to the running build (see [Relocation](#relocation)).
+
 The GR IV runtime has the menu, Image Control, Framing, Guides, Date Stamp, and Grain. GR IV Framing offers only XPan (see Framing).
 GR IV processing hooks are in `runtime/targets/gr4-1.11-processing.S`, after the Framing region. GR IV reads the type tables through getters.
 A private record therefore sets the Standard index (11) where all type paths join, and the record store keeps the private record.
@@ -80,6 +83,9 @@ On GR IV, the guards also include the icon catalog getter (`0x533ef604`).
 A statically patched firmware that extends the RTOS image changes them. Its additions can lie in the private regions after the image, which INSTALL would otherwise overwrite without a check.
 One such GR IV firmware extends the image from `0x543d2ac0` to `0x5440eac0`, over the Framing and processing regions.
 That firmware also changes three GRKit hook sites, so the hook check (status 16) would stop it too. A patched firmware that changes no hook site passes that check, but not the guards.
+
+On GR IV, the relocation replaces these guards. It reads the startup literals of the running image, and the tail follows the image end that they give.
+The icon catalog getter must not give an address between the image end and `0x55000000`. Otherwise INSTALL stops with status 45.
 
 The tail reservation itself has no content that INSTALL can check. On a GR III camera after power-on, it holds the noise of uninitialized DRAM. No word of it was zero, and most bytes were `0x55` or `0xd5`. After a restart, it can hold the code of an earlier GRKit session. The guards are therefore the check for a firmware that uses the tail.
 
@@ -467,6 +473,65 @@ If the largest plane has digits of 24 pixels or less, its mask has twice that si
 The masks use the picture scratch after the records, before the shot ring. The blur line copy is on the stack (1280 bytes), because the code region is read-only.
 Every encode that passes through the hook gets the stamp, including in-camera RAW development and edits. Those show the time of the edit.
 
+## Relocation
+
+The GR IV runtime is built from the published 1.11 image, the pinned build. INSTALL finds each firmware address of the runtime in the running image, and moves each reference to it.
+The pinned build gives each address unchanged, so the installed bytes are those of the build. `grkit_build::relocation` makes the tables, and `runtime/relocation.h` resolves them.
+
+### References
+
+The GR IV target header names each firmware address with `FIRMWARE(address)`, and `hooks.h` does the same for the hook resume and target addresses.
+The macro gives the symbol `fw_<address>`, which the link defines at the pinned address. In C, the value is opaque, so the compiler keeps each address in one literal word.
+The build compiles the GR IV C code with `-mno-movt` and links with `--emit-relocs`. Each reference is then an `R_ARM_ABS32` word that names its symbol.
+
+The installer moves a word by the difference between the new and the pinned address of its symbol.
+A literal that holds a private address moves with the tail. A hook branch moves with its site and with the tail.
+
+Data that no firmware code loads directly is an offset from an address that code loads. The settings domain is the capture property singleton plus 4, and the language byte is the static settings object plus `0x1497`.
+
+### Windows
+
+A mask clears the bits of an ARM word that change when code or data moves. These are the offset of B and BL, an RTOS address (`0x53000000` to `0x56000000`), and the immediate of MOVW and MOVT.
+A window is a range of masked words of the pinned image. The build makes a window around each address, and grows it until it occurs only once within 64 KiB of its start.
+
+| Address | Window | New address |
+| --- | --- | --- |
+| Code | The function, from the previous prologue to the next one | The match plus the offset of the address |
+| Equal functions, such as the parameter getters | A window around a caller | The target of the BL, if the function window matches there |
+| Hook target | The window of the hook site | The target of the branch at the site |
+| Read-only data and `.data` | 16 words before and 48 words after | The match. A `.data` window matches in the copy source of the image. |
+| BSS | Up to 3 functions that load the address | The literal or the MOVW and MOVT pair in each, which must agree |
+| Heap start | None | The BSS end of the startup literals |
+
+The other bits of each window must be equal. A window around a hook therefore also checks the instructions and the offsets that the hook code uses.
+
+INSTALL reads the startup literals at `0x53000450` and compares the startup code before them. Then it searches each window within 64 KiB of its pinned start, and reads the address of each symbol. Each window must match once, and the sources of each symbol must agree.
+The search compares the least frequent word of a window first, and reads about 4.9 million words for the GR IV tables.
+
+The relocated checks compare the native data with its startup value at the `.data` copy source. The record and the type tables must also have the pinned layout under the mask.
+
+### Results
+
+A failure stops INSTALL with status 47 before it changes the firmware. `INSTALL.ERR` then has one line for each failure, with up to 8 lines. Each line gives four hexadecimal numbers: the reason, the index, the pinned address, and a count or a value.
+
+| Reason | Meaning |
+| --- | --- |
+| 1 | The startup literals or the startup code differ |
+| 2 | A window has no match, or a symbol has no source |
+| 3 | A window has more than one match |
+| 4 | A source word is not a B or a BL |
+| 5 | The window of a function does not match at the branch target |
+| 6 | A symbol lies outside its region |
+| 7 | The sources of a symbol differ |
+
+Tests with the published images:
+
+- The pinned 1.11 build resolves each symbol to its pinned address, and the tail to `0x543d3000`.
+- GR IV 1.04 (2025/11/14) resolves each of 204 symbols. 141 agree with a word alignment of the two images, and none disagrees. The others are at places where the alignment has no anchor.
+- GR III 2.10 resolves no window.
+
+The 2026/02/18 build has not been tested, because its image is not available.
+
 ## Code areas
 
 All private code lives in the tail reservation after the decoded RTOS image. GRKit changes no byte of the image except the hook sites and the in-place patches.
@@ -480,6 +545,8 @@ All private code lives in the tail reservation after the decoded RTOS image. GRK
 
 `build.json` gives the size and the limit of each component. The freestanding link has no division helpers, so menu C must not divide.
 Picture code divides with its own shift-subtract routine, once per picture for each reciprocal.
+
+On GR IV, the table gives the regions of the pinned build. The tail starts at the first 4 KiB boundary after the image end of the running build, and the regions keep their offsets from it.
 
 The decoded RTOS image ends at `0x540b55c0` on GR III and `0x543d2ac0` on GR IV. The RTOS maps the tail read-only and executable up to `0x55000000`, and no firmware code refers to it. On GR IV, a camera test has not confirmed this mapping.
 

@@ -1,9 +1,9 @@
 use crate::{
-    arm::{branch, elf_text},
+    arm::{branch, elf_text, elf_text_relocations, undefined_symbols},
     firmware::FirmwareImage,
     target::HEADER_REFERENCE,
     toolchain::{run, Toolchain},
-    Patch,
+    Anchor, Patch, Reference,
 };
 use anyhow::{ensure, Context, Result};
 use std::{collections::BTreeMap, fs, path::Path};
@@ -267,6 +267,10 @@ pub struct Layout {
     /// RTOS image into the private tail regions. The installer checks them
     /// before it writes anything.
     pub guards: &'static [(u32, &'static str)],
+    /// The installer relocates the private code to the running build of the
+    /// firmware version (`crate::relocation`). The firmware addresses of the
+    /// code are then `FIRMWARE()` symbols, and the tail follows the image end.
+    pub relocatable: bool,
 }
 
 pub const GR3_LAYOUT: Layout = Layout {
@@ -287,6 +291,7 @@ pub const GR3_LAYOUT: Layout = Layout {
     picture_hooks: PICTURE_HOOKS,
     framing_patches: FRAMING_PATCHES,
     guards: GR3_GUARDS,
+    relocatable: false,
 };
 
 /// GR IV 1.11 menu hooks.
@@ -465,6 +470,7 @@ pub const GR4_LAYOUT: Layout = Layout {
     picture_hooks: GR4_PICTURE_HOOKS,
     framing_patches: &[],
     guards: GR4_GUARDS,
+    relocatable: true,
 };
 
 /// Every hook of a layout: (address, symbol).
@@ -499,16 +505,23 @@ pub fn hooks_header(body: &FirmwareImage) -> Result<String> {
     let Some(layout) = body.target.layout else {
         return Ok(result);
     };
+    // A relocatable target names each firmware address that the code uses
+    // with `FIRMWARE()` (runtime/firmware.h).
+    let value = |address: u32| {
+        if layout.relocatable {
+            format!("FIRMWARE({address:#x})")
+        } else {
+            format!("{address:#x}")
+        }
+    };
     for (address, name) in hook_sites(layout) {
         let word = u32::from_le_bytes(body.read(address, 4)?.try_into()?);
         let name = name.to_ascii_uppercase();
         writeln!(result, "#define HOOK_{name} {address:#x}")?;
-        writeln!(result, "#define HOOK_{name}_RESUME {:#x}", address + 4)?;
+        writeln!(result, "#define HOOK_{name}_RESUME {}", value(address + 4))?;
         writeln!(result, "#define HOOK_{name}_STOCK {word:#010x}")?;
-        if (word >> 25) & 7 == 5 && word >> 28 != 0xf {
-            let offset = ((word << 8) as i32 >> 6) as u32;
-            let target = address.wrapping_add(8).wrapping_add(offset);
-            writeln!(result, "#define HOOK_{name}_TARGET {target:#x}")?;
+        if let Some(target) = crate::relocation::branch_target(address, word) {
+            writeln!(result, "#define HOOK_{name}_TARGET {}", value(target))?;
         }
     }
     Ok(result)
@@ -522,6 +535,9 @@ const FRAMING_FRAME_LIMIT: &str = "-Wframe-larger-than=1536";
 pub struct Component {
     pub patches: Vec<Patch>,
     pub relocations: Vec<usize>,
+    /// The firmware and tail references of a relocatable target. Patch 0 is
+    /// the payload.
+    pub references: Vec<Reference>,
     pub symbols: BTreeMap<String, u32>,
     pub code_size: usize,
     /// The size of the reserved code region.
@@ -532,8 +548,8 @@ fn code_component(
     code: Vec<u8>,
     symbols: BTreeMap<String, u32>,
     body: &FirmwareImage,
-    base: u32,
-    end: u32,
+    (base, end): (u32, u32),
+    references: Option<Vec<Reference>>,
 ) -> Result<Component> {
     ensure!(
         u64::from(base) + code.len() as u64 <= u64::from(end),
@@ -554,14 +570,19 @@ fn code_component(
         .collect();
     ensure!(!relocations.is_empty(), "Missing private header literal");
     let code_size = code.len();
+    // On a relocatable target the payload moves with the tail.
+    let site = references.is_some().then_some(Anchor::Tail);
+    let references = references.unwrap_or_default();
     Ok(Component {
         patches: vec![Patch {
             address: base,
             points: 0,
             before: vec![0; code_size],
             after: code,
+            site,
         }],
         relocations,
+        references,
         symbols,
         code_size,
         limit: (end - base) as usize,
@@ -614,27 +635,24 @@ pub fn processing(
         .into_iter()
         .chain([layout.define]),
     )?;
-    let (code, symbols) = elf_text(&fs::read(object)?)?;
-    let mut component = code_component(code, symbols, body, base, end)?;
+    let mut component = if layout.relocatable {
+        // The firmware addresses are symbols, which the link resolves.
+        linked_component(
+            directory,
+            "module-processing",
+            &[object],
+            body,
+            tools,
+            (base, end),
+            true,
+        )?
+    } else {
+        let (code, symbols) = elf_text(&fs::read(object)?)?;
+        code_component(code, symbols, body, (base, end), None)?
+    };
     for &(address, name, link) in layout.processing_hooks {
-        let target = base
-            .checked_add(
-                *component
-                    .symbols
-                    .get(name)
-                    .with_context(|| format!("Missing symbol {name}"))?,
-            )
-            .context("Symbol overflow")?;
-        let mut instruction = u32::from_le_bytes(branch(address, target, 14)?);
-        if link {
-            instruction |= 0x01000000;
-        }
-        component.patches.push(Patch {
-            address,
-            points: point_of(name)?.bit(),
-            before: body.read(address, 4)?.to_vec(),
-            after: instruction.to_le_bytes().to_vec(),
-        });
+        let before = body.read(address, 4)?.to_vec();
+        push_hook(&mut component, layout, base, (address, name, link), before)?;
     }
     Ok(component)
 }
@@ -672,7 +690,7 @@ pub fn menu(
             path(&object)?,
         ]
         .into_iter()
-        .chain([layout.define]),
+        .chain(target_flags(layout)),
     )?;
     run(
         &tools.clang,
@@ -696,8 +714,8 @@ pub fn menu(
         &[object, assembly_object],
         body,
         tools,
-        base,
-        end,
+        (base, end),
+        layout.relocatable,
     )?;
     let hooks = layout
         .menu_hooks
@@ -709,6 +727,7 @@ pub fn menu(
     add_patches(
         &mut component,
         body,
+        layout,
         base,
         (Point::Tuning, layout.instruction_patches),
         hooks,
@@ -756,7 +775,7 @@ pub fn framing(
                 path(object)?,
             ]
             .into_iter()
-            .chain([layout.define]),
+            .chain(target_flags(layout)),
         )?;
     }
     let mut component = linked_component(
@@ -765,14 +784,15 @@ pub fn framing(
         &[object, assembly_object, picture, picture_assembly],
         body,
         tools,
-        base,
-        end,
+        (base, end),
+        layout.relocatable,
     )?;
     // The capture hook changes nothing until a Framing ratio is selected, so
     // the data patches can follow it.
     add_patches(
         &mut component,
         body,
+        layout,
         base,
         (Point::CaptureAspect, layout.framing_patches),
         layout
@@ -784,29 +804,67 @@ pub fn framing(
     Ok(component)
 }
 
+/// The preprocessor definition of the target, and on a relocatable target
+/// no MOVW and MOVT pairs for addresses: a literal word holds each one, so
+/// the installer moves it with one addition.
+fn target_flags<'a>(layout: &Layout) -> impl Iterator<Item = &'a str> {
+    let define: &'a str = layout.define;
+    std::iter::once(define).chain(layout.relocatable.then_some("-mno-movt"))
+}
+
+/// The prefix of the symbol that `FIRMWARE(address)` names (runtime/firmware.h).
+const FIRMWARE_SYMBOL: &str = "fw_0x";
+
 fn linked_component(
     directory: &Path,
     name: &str,
     objects: &[std::path::PathBuf],
     body: &FirmwareImage,
     tools: &Toolchain,
-    base: u32,
-    end: u32,
+    (base, end): (u32, u32),
+    relocatable: bool,
 ) -> Result<Component> {
-    let script = directory.join(format!("{name}.ld"));
-    fs::write(&script, format!("SECTIONS {{ . = {base:#x}; .text : {{ *(.text*) *(.rodata*) }} /DISCARD/ : {{ *(.ARM.exidx*) *(.comment*) }} }}"))?;
+    use std::fmt::Write;
+    let mut script = format!("SECTIONS {{ . = {base:#x}; .text : {{ *(.text*) *(.rodata*) }} /DISCARD/ : {{ *(.ARM.exidx*) *(.comment*) }} }}\n");
+    if relocatable {
+        // Each firmware symbol has its address in the pinned image.
+        let mut firmware = std::collections::BTreeSet::new();
+        for object in objects {
+            // Other undefined symbols are those of another object, or LLD
+            // reports them.
+            for symbol in undefined_symbols(&fs::read(object)?)? {
+                if let Some(hex) = symbol.strip_prefix(FIRMWARE_SYMBOL) {
+                    let address = u32::from_str_radix(hex, 16)
+                        .with_context(|| format!("Invalid firmware symbol {symbol}"))?;
+                    firmware.insert(address);
+                }
+            }
+        }
+        for address in firmware {
+            writeln!(script, "{FIRMWARE_SYMBOL}{address:x} = {address:#x};")?;
+        }
+    }
+    let script_path = directory.join(format!("{name}.ld"));
+    fs::write(&script_path, script)?;
     let elf = directory.join(format!("{name}.elf"));
     let mut arguments = vec![
         "-T".to_owned(),
-        path(&script)?.to_owned(),
+        path(&script_path)?.to_owned(),
         "-o".to_owned(),
         path(&elf)?.to_owned(),
     ];
+    if relocatable {
+        arguments.push("--emit-relocs".to_owned());
+    }
     for object in objects {
         arguments.push(path(object)?.to_owned());
     }
     run(&tools.lld, arguments.iter().map(String::as_str))?;
-    let (code, absolute) = elf_text(&fs::read(elf)?)?;
+    let (code, absolute, relocations) = elf_text_relocations(&fs::read(elf)?)?;
+    ensure!(
+        relocatable || relocations.is_empty(),
+        "Unresolved text relocations"
+    );
     let symbols = absolute
         .into_iter()
         .map(|(symbol, value)| {
@@ -818,13 +876,100 @@ fn linked_component(
             ))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
-    code_component(code, symbols, body, base, end)
+    let mut references = Vec::new();
+    for relocation in relocations {
+        // R_ARM_ABS32 and R_ARM_TARGET1 hold an address. Other types against
+        // the private code are PC-relative, so they move with it.
+        let word = matches!(relocation.kind, 2 | 38);
+        let anchor = if relocation.internal {
+            if !word {
+                ensure!(
+                    !matches!(relocation.kind, 5 | 6 | 8 | 43 | 44 | 47 | 48),
+                    "Unsupported relocation type {} of {} in {name}",
+                    relocation.kind,
+                    relocation.symbol
+                );
+                continue;
+            }
+            Anchor::Tail
+        } else {
+            let address = relocation
+                .symbol
+                .strip_prefix(FIRMWARE_SYMBOL)
+                .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+                .filter(|address| *address == relocation.value)
+                .with_context(|| format!("Unexpected symbol {} in {name}", relocation.symbol))?;
+            // R_ARM_CALL and R_ARM_JUMP24: an ARM B or BL to the firmware.
+            ensure!(
+                word || matches!(relocation.kind, 28 | 29),
+                "Unsupported relocation type {} of {} in {name}",
+                relocation.kind,
+                relocation.symbol
+            );
+            Anchor::Firmware(address)
+        };
+        ensure!(relocation.offset % 4 == 0, "Unaligned relocation in {name}");
+        references.push(Reference {
+            patch: 0,
+            offset: relocation.offset as usize,
+            branch: !word,
+            anchor,
+        });
+    }
+    code_component(
+        code,
+        symbols,
+        body,
+        (base, end),
+        relocatable.then_some(references),
+    )
+}
+
+/// Append the entry branch of a hook into the component code. On a
+/// relocatable target the branch moves with its site and with the tail.
+fn push_hook(
+    component: &mut Component,
+    layout: &Layout,
+    base: u32,
+    (address, name, link): (u32, &str, bool),
+    before: Vec<u8>,
+) -> Result<()> {
+    let target = base
+        .checked_add(
+            *component
+                .symbols
+                .get(name)
+                .with_context(|| format!("Missing symbol {name}"))?,
+        )
+        .context("Symbol overflow")?;
+    let mut instruction = u32::from_le_bytes(branch(address, target, 14)?);
+    if link {
+        instruction |= 0x01000000;
+    }
+    let site = layout.relocatable.then_some(Anchor::Firmware(address));
+    if site.is_some() {
+        component.references.push(Reference {
+            patch: component.patches.len(),
+            offset: 0,
+            branch: true,
+            anchor: Anchor::Tail,
+        });
+    }
+    component.patches.push(Patch {
+        address,
+        points: point_of(name)?.bit(),
+        before,
+        after: instruction.to_le_bytes().to_vec(),
+        site,
+    });
+    Ok(())
 }
 
 /// Append entry branches into the component code, then in-place changes.
 fn add_patches<'a>(
     component: &mut Component,
     body: &FirmwareImage,
+    layout: &Layout,
     base: u32,
     instructions: (Point, &[(u32, &str, &str)]),
     hooks: impl Iterator<Item = (u32, &'a str, &'a str, bool)>,
@@ -835,24 +980,7 @@ fn add_patches<'a>(
             body.read(address, 4)? == before,
             "Private hook instruction differs at {address:#x}"
         );
-        let target = base
-            .checked_add(
-                *component
-                    .symbols
-                    .get(name)
-                    .with_context(|| format!("Missing symbol {name}"))?,
-            )
-            .context("Symbol overflow")?;
-        let mut instruction = u32::from_le_bytes(branch(address, target, 14)?);
-        if link {
-            instruction |= 0x01000000;
-        }
-        component.patches.push(Patch {
-            address,
-            points: point_of(name)?.bit(),
-            before,
-            after: instruction.to_le_bytes().to_vec(),
-        });
+        push_hook(component, layout, base, (address, name, link), before)?;
     }
     let (point, instructions) = instructions;
     for &(address, before, after) in instructions {
@@ -866,6 +994,7 @@ fn add_patches<'a>(
             points: point.bit(),
             before,
             after: hex::decode(after)?,
+            site: layout.relocatable.then_some(Anchor::Firmware(address)),
         });
     }
     Ok(())

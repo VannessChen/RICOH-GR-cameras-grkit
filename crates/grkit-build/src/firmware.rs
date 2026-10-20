@@ -140,6 +140,16 @@ pub fn verify_firmware(path: &Path, target: &'static Target) -> Result<FirmwareI
         decoded_identity == target.decoded_sha256,
         "Decoded firmware SHA-256 mismatch"
     );
+    Ok(FirmwareImage {
+        target,
+        body: rtos_section(&decoded)?.to_vec(),
+        sha256: identity,
+        decoded_sha256: decoded_identity,
+    })
+}
+
+/// The RTOS image of a decoded firmware file.
+pub fn rtos_section(decoded: &[u8]) -> Result<&[u8]> {
     let mut pos = 0;
     while pos + 16 <= decoded.len() {
         let name = &decoded[pos..pos + 8];
@@ -151,12 +161,7 @@ pub fn verify_firmware(path: &Path, target: &'static Target) -> Result<FirmwareI
         ensure!(end <= decoded.len(), "Truncated firmware section");
         if name == b"RTOS\0\0\0\0" {
             ensure!(group == 1, "Unexpected RTOS group");
-            return Ok(FirmwareImage {
-                target,
-                body: decoded[pos + 16..end].to_vec(),
-                sha256: identity,
-                decoded_sha256: decoded_identity,
-            });
+            return Ok(&decoded[pos + 16..end]);
         }
         pos = end;
     }

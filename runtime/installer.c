@@ -8,7 +8,12 @@ typedef unsigned int u32;
 struct patch { u32 address, size, kind; const u8 *before; u8 *after; };
 /* Stock bytes that statically patched firmware changes. */
 struct guard { u32 address, size; const u8 *bytes; };
+#include "relocation.h"
 #include "module_payload.h"
+#ifndef TABLE_ADDRESS
+/* The native type tables. A relocatable target resolves them. */
+#define TABLE_ADDRESS(i) table_addresses[i]
+#endif
 
 static long syscall6(u32 number, u32 a, u32 b, u32 c, u32 d, u32 e, u32 f)
 {
@@ -211,6 +216,55 @@ static void publish(struct patch *p, const u8 *bytes)
     else copy(at(p->address), bytes, p->size);
     __asm__ volatile("dsb sy" ::: "memory");
 }
+#ifdef GRKIT_RELOCATE
+/* Relocation of the private code to the running build of the firmware
+   version (relocation.h). The report of a failure goes to INSTALL.ERR. */
+static u32 window_at[RELOCATION_WINDOW_COUNT];
+static struct relocation_state relocation;
+static u32 read_word(u32 address) { return word(address); }
+static u32 symbol_delta(u32 symbol) { return relocation_delta(&relocation_tables, &relocation, symbol); }
+static u32 pair_value(u32 address)
+{
+    u32 low = word(address), high = word(address + 4);
+    return (((high >> 4) & 0xf000U) | (high & 0xfffU)) << 16 | ((low >> 4) & 0xf000U) | (low & 0xfffU);
+}
+static int relocate(void)
+{
+    relocation.read = read_word;
+    relocation.window_at = window_at;
+    relocation.symbol_at = relocated;
+    if (!relocation_resolve(&relocation_tables, &relocation)) return 47;
+    /* Patched firmware can keep data after the image end that the startup
+       literals give, where the private code goes. */
+    for (u32 i = 0; i < GUARD_PAIR_COUNT; ++i) {
+        u32 value = pair_value(relocated[guard_symbols[i]]);
+        if (value >= relocation.image_end && value < RELOCATION_DATA_START) return 45;
+    }
+    for (u32 i = 0; i < PATCH_COUNT; ++i) {
+        if (patch_symbols[i] == RELOCATION_NONE) continue;
+        patches[i].address += symbol_delta(patch_symbols[i]);
+        if (patches[i].kind) continue;
+        /* A stock B or BL can branch to a moved target, so only its masked
+           bits must be equal. Other stock words must be equal. Rollback
+           restores the running bytes. */
+        u8 *before = (u8 *)patches[i].before;
+        for (u32 j = 0; j < patches[i].size; j += 4) {
+            u32 live = word(patches[i].address + j), stock = get32(before + j);
+            if (((stock >> 25) & 7) == 5 ? relocation_mask(live) != relocation_mask(stock) : live != stock)
+                return 16;
+            put32(before + j, live);
+        }
+    }
+    for (u32 i = 0; i < RELOCATION_REFERENCE_COUNT; ++i) {
+        const u32 *r = relocation_references + i * 4;
+        u32 patch = r[0], site = patch_symbols[patch];
+        if (r[1] + 4 > patches[patch].size ||
+            !relocation_move(patches[patch].after + r[1], r[3], symbol_delta(r[2]), symbol_delta(site)))
+            return 47;
+    }
+    return 0;
+}
+#endif
 static int install(void)
 {
     u32 selected;
@@ -228,6 +282,9 @@ static int install(void)
         get32(plan + 12) != icon_chunks || get32(plan + 16) != 20 + count * 8192) return 37;
     for (u32 i = 0; i < count; ++i)
         if (!equal(plan + 20 + i * 8192, profiles[i], 8192)) return 37;
+#ifdef GRKIT_RELOCATE
+    if ((status = relocate())) return status;
+#endif
     if (*(volatile u16 *)at(ARRAY_COUNT) != 1 + icon_chunks || word(ARRAY_TABLE) != size / 4) return 10;
     u32 base = word(ARRAY_TABLE + 4), icon_bases[MAX_CHUNKS];
     if (!heap(base, size)) return 11;
@@ -251,13 +308,30 @@ static int install(void)
        earlier GRKit session, so its content cannot show that it is free. The
        guards above detect a firmware that extends the image into it. */
 #ifndef GRKIT_NO_MODULES
+#ifdef GRKIT_RELOCATE
+    /* The .data values of the running image are those at its copy source. */
+#define INITIAL(address) ((address) - RELOCATION_DATA_START + relocation.data_source)
+    if (word(ENGLISH_SLOT) != word(INITIAL(ENGLISH_SLOT))) return 12;
+#else
     if (word(ENGLISH_SLOT) != ORIGINAL_ENGLISH) return 12;
+#endif
 #ifndef GRKIT_NO_IMAGE_CONTROL
+#ifdef GRKIT_RELOCATE
+    /* The record is unchanged since startup and has the pinned layout. */
+    if (!equal(at(STOCK_RECORD), (const u8 *)at(INITIAL(STOCK_RECORD)), 68)) return 13;
+    for (u32 i = 0; i < 68; i += 4)
+        if (relocation_mask(word(STOCK_RECORD + i)) != relocation_mask(get32(stock_record + i))) return 13;
+    for (u32 i = 0; i < 4; ++i) {
+        if (word(STOCK_RECORD + 68 + i * 4) == relocated[initialized_symbols[i]]) continue;
+        return equal(at(STOCK_RECORD + 68), (const u8 *)at(INITIAL(STOCK_RECORD + 68)), 16) ? 14 : 13;
+    }
+#else
     if (!equal(at(STOCK_RECORD), stock_record, 68)) return 13;
     /* Firmware fills four pointers at +0x44 after the image copy. Records copied
        before that would miss them, so an image-copy tail means not ready yet. */
     if (!equal(at(STOCK_RECORD + 68), initialized_tail, 16))
         return equal(at(STOCK_RECORD + 68), stock_record + 68, 16) ? 14 : 13;
+#endif
 #endif
     /* No firmware code refers to the RTOS tail, so earlier GRKit code there is
        overwritten. Every other patch must still find its stock bytes. */
@@ -266,8 +340,20 @@ static int install(void)
         if (!patches[i].kind && applies(i) && !equal(at(patches[i].address), patches[i].before, patches[i].size)) return 16;
 #ifndef GRKIT_NO_MODULES
 #ifndef GRKIT_NO_IMAGE_CONTROL
+#ifdef GRKIT_RELOCATE
+    /* Each table is unchanged since startup and has the pinned layout, and
+       entry 11 of the first one is the Standard record. */
+    for (u32 i = 0; i < 3; ++i) {
+        if (!equal(at(TABLE_ADDRESS(i)), (const u8 *)at(INITIAL(TABLE_ADDRESS(i))), TABLE_BYTES)) return 17;
+        for (u32 j = 0; j < TABLE_BYTES; j += 4)
+            if (relocation_mask(word(TABLE_ADDRESS(i) + j)) !=
+                relocation_mask(get32(stock_tables + i * TABLE_BYTES + j))) return 17;
+    }
+    if (word(TABLE_ADDRESS(0) + 11 * 4) != STOCK_RECORD) return 17;
+#else
     for (u32 i = 0; i < 3; ++i)
-        if (!equal(at(table_addresses[i]), stock_tables + i * TABLE_BYTES, TABLE_BYTES)) return 17;
+        if (!equal(at(TABLE_ADDRESS(i)), stock_tables + i * TABLE_BYTES, TABLE_BYTES)) return 17;
+#endif
     /* Reject stale native types; never attempt an in-place settings repair. */
     u32 domain = word(SETTINGS_DOMAIN);
     if (!heap(domain, 0x51c)) return 39;
@@ -386,6 +472,12 @@ static int install(void)
 /* Diagnostic builds can select profiles independently of the menu. */
 static int select_profile(const char *id)
 {
+#ifdef GRKIT_RELOCATE
+    relocation.read = read_word;
+    relocation.window_at = window_at;
+    relocation.symbol_at = relocated;
+    if (!relocation_resolve(&relocation_tables, &relocation)) return 47;
+#endif
     u32 base = word(ARRAY_TABLE + 4);
     if (!heap(base, GRKIT_HOST_HEADER_SIZE) || word(base + GRKIT_HOST_MAGIC) != GRKIT_HOST_MAGIC_VALUE || word(base + GRKIT_HOST_VERSION) != GRKIT_HOST_VERSION_VALUE) return 41;
     u32 n = word(base + GRKIT_HOST_COUNT), records = word(base + GRKIT_HOST_RECORDS), selected = 0;
@@ -411,10 +503,31 @@ static int create(const char *path, u32 status)
     long fd = syscall6(5, (u32)path, 0xc1, 0600, 0, 0, 0);
     if (fd < 0) return 0;
     if (status) {
-        char text[12]; u32 n = sizeof(text) - 1;
+        char text[12]; u32 n = sizeof(text) - 1, code = status;
         text[n] = '\n';
         do { text[--n] = '0' + status % 10; status /= 10; } while (status);
         syscall6(4, fd, (u32)(text + n), sizeof(text) - n, 0, 0, 0);
+#ifdef GRKIT_RELOCATE
+        /* After the status: one line for each relocation failure, with the
+           reason, the window or symbol index, the pinned address, and a
+           count or value (runtime/relocation.h). */
+        if (code == 47) {
+            u32 shown = relocation.failures < RELOCATION_REPORT ? relocation.failures : RELOCATION_REPORT;
+            for (u32 i = 0; i < shown; ++i) {
+                const struct relocation_failure *f = &relocation.failure[i];
+                u32 fields[4] = {f->reason, f->index, f->address, f->count};
+                char line[48]; u32 m = 0;
+                for (u32 k = 0; k < 4; ++k) {
+                    for (int shift = 28; shift >= 0; shift -= 4)
+                        line[m++] = "0123456789abcdef"[(fields[k] >> shift) & 15];
+                    line[m++] = k == 3 ? '\n' : ' ';
+                }
+                syscall6(4, fd, (u32)line, m, 0, 0, 0);
+            }
+        }
+#else
+        (void)code;
+#endif
     }
     syscall6(6, fd, 0, 0, 0, 0, 0);
     return 1;

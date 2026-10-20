@@ -1,4 +1,8 @@
-use crate::{firmware::FirmwareImage, target, PatchPlan};
+use crate::{
+    firmware::FirmwareImage,
+    relocation::{self, Planner, Region, Source},
+    target, Anchor, PatchPlan,
+};
 use anyhow::{ensure, Context, Result};
 use grkit_core::{
     artwork::{off_pixels, plugins_pixels},
@@ -86,6 +90,28 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         };
         constants.push((name, target.pixel_base_slot));
     }
+    // A relocatable target finds these addresses in the running image.
+    let relocatable = target.layout.is_some_and(|layout| layout.relocatable);
+    let mut addresses = Vec::new();
+    if relocatable {
+        constants.retain(|&(name, value)| {
+            let moves = matches!(
+                name,
+                "ARRAY_COUNT"
+                    | "ARRAY_TABLE"
+                    | "HEAP_MIN"
+                    | "ENGLISH_SLOT"
+                    | "STOCK_RECORD"
+                    | "SETTINGS_DOMAIN"
+                    | "ICON_DRAWER_SLOT"
+                    | "ICON_PIXEL_BASE_SLOT"
+            );
+            if moves {
+                addresses.push((name, value));
+            }
+            !moves
+        });
+    }
     constants.extend([
         ("PATCH_COUNT", plan.patches.len() as u32),
         ("CODE_RELOCATION_COUNT", plan.relocations.len() as u32),
@@ -106,6 +132,9 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
     }
     for (name, value) in constants {
         writeln!(result, "#define {name} {value:#x}U")?;
+    }
+    if relocatable {
+        relocation_tables(&mut result, plan, body, &addresses)?;
     }
     for (name, suffix) in [
         ("EFFECTS_PATH", "EFFECTS"),
@@ -161,10 +190,18 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
             .flat_map(|(index, offset)| [*index as u32, *offset as u32]),
     );
     for (i, patch) in plan.patches.iter().enumerate() {
-        array(&mut result, &format!("before_{i}"), &patch.before, true);
+        // The installer replaces the stock bytes of a relocated patch with
+        // those of the running image.
+        let fixed = patch.site.is_none();
+        array(&mut result, &format!("before_{i}"), &patch.before, fixed);
         array(&mut result, &format!("after_{i}"), &patch.after, false);
     }
-    if let Some(layout) = target.layout.filter(|layout| !layout.guards.is_empty()) {
+    // On a relocatable target, the relocation checks the startup literals,
+    // and the installer checks the other guards (`relocation_tables`).
+    if let Some(layout) = target
+        .layout
+        .filter(|layout| !layout.guards.is_empty() && !layout.relocatable)
+    {
         let mut entries = String::new();
         for (i, &(address, expected)) in layout.guards.iter().enumerate() {
             let bytes = hex::decode(expected)?;
@@ -210,4 +247,217 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         plan.patches.iter().map(|patch| patch.points),
     );
     Ok(result)
+}
+
+/// The symbol of a firmware address that the private code or the installer
+/// uses, by the region that holds it.
+fn firmware_symbol(planner: &mut Planner, address: u32) -> Result<usize> {
+    let target = planner.target();
+    if address == target.heap_min {
+        planner.startup(4)
+    } else if address >= relocation::DATA_START + target.data_size {
+        planner.referenced(address)
+    } else if address >= relocation::DATA_START {
+        planner.content(address)
+    } else {
+        planner.code(address)
+    }
+}
+
+/// The relocation tables of the installer (`runtime/relocation.h`). Each
+/// address in `addresses` becomes a macro of its resolved symbol.
+fn relocation_tables(
+    result: &mut String,
+    plan: &PatchPlan,
+    body: &FirmwareImage,
+    addresses: &[(&str, u32)],
+) -> Result<()> {
+    const NONE: u32 = 0xffff;
+    let target = body.target;
+    let layout = target.layout.context("A relocatable target has a layout")?;
+    let mut planner = Planner::new(body)?;
+    let tail = planner.tail(layout.tail.0);
+    // The hooks that replace a branch: the private code calls its target.
+    let mut targets = std::collections::BTreeMap::new();
+    for patch in &plan.patches {
+        if let (Some(Anchor::Firmware(site)), Ok(word)) =
+            (patch.site, <[u8; 4]>::try_from(patch.before.as_slice()))
+        {
+            if let Some(address) = relocation::branch_target(site, u32::from_le_bytes(word)) {
+                targets.insert(address, site);
+            }
+        }
+    }
+    let anchor = |planner: &mut Planner, anchor: Anchor| -> Result<usize> {
+        match anchor {
+            Anchor::Tail => Ok(tail),
+            Anchor::Firmware(address) => match targets.get(&address) {
+                Some(&site) => planner.branch_target(site),
+                None => firmware_symbol(planner, address),
+            },
+        }
+    };
+    let mut sites = Vec::new();
+    for patch in &plan.patches {
+        sites.push(match patch.site {
+            Some(site) => anchor(&mut planner, site)? as u32,
+            None => NONE,
+        });
+    }
+    let mut references = Vec::new();
+    for reference in &plan.references {
+        let symbol = anchor(&mut planner, reference.anchor)?;
+        ensure!(
+            sites[reference.patch] != NONE,
+            "A reference lies in a fixed patch"
+        );
+        references.push([
+            reference.patch as u32,
+            reference.offset as u32,
+            symbol as u32,
+            u32::from(reference.branch),
+        ]);
+    }
+    // The installer addresses.
+    let mut defines = Vec::new();
+    for &(name, address) in addresses {
+        let (base, offset) = target
+            .relocation_bases
+            .iter()
+            .find(|(field, _)| *field == address)
+            .map_or((address, 0), |&(field, base)| (base, field - base));
+        let symbol = firmware_symbol(&mut planner, base)?;
+        defines.push(format!(
+            "#define {name} (relocated[{symbol}] + {offset:#x}U)"
+        ));
+    }
+    let mut tables = Vec::new();
+    let mut initialized = Vec::new();
+    if let Some(native) = target.image_control {
+        for address in native.tables {
+            tables.push(planner.content(address)? as u32);
+        }
+        for address in native.record_tail {
+            initialized.push(planner.content(address)? as u32);
+        }
+    }
+    // A guard other than the startup literals is a MOVW and MOVT pair whose
+    // address must not lie after the image, where the private code goes.
+    let mut guards = Vec::new();
+    for &(address, expected) in layout.guards {
+        if address == relocation::STARTUP_LITERALS {
+            continue;
+        }
+        let bytes = hex::decode(expected)?;
+        ensure!(
+            bytes.len() == 8 && body.read(address, 8)? == bytes,
+            "Firmware guard differs at {address:#x}"
+        );
+        let movw = u32::from_le_bytes(bytes[..4].try_into()?);
+        let movt = u32::from_le_bytes(bytes[4..].try_into()?);
+        ensure!(
+            movw & 0x0ff0_0000 == 0x0300_0000 && movt & 0x0ff0_0000 == 0x0340_0000,
+            "A relocatable guard is a MOVW and MOVT pair"
+        );
+        guards.push(planner.code(address)? as u32);
+    }
+    let relocation = planner.finish();
+    let startup =
+        relocation::startup_window(&relocation).context("The relocation has no startup window")?;
+
+    // The tables, in the order of runtime/relocation.h.
+    let mut pool = Vec::new();
+    let mut windows = String::new();
+    for window in &relocation.windows {
+        writeln!(
+            windows,
+            "{{{:#x},{},{},{},{},{}}},",
+            window.start,
+            pool.len(),
+            window.words.len(),
+            window.probe,
+            u32::from(window.region == Region::Data),
+            u32::from(window.search)
+        )?;
+        pool.extend_from_slice(&window.words);
+    }
+    words(result, "relocation_words", pool);
+    writeln!(
+        result,
+        "static const struct relocation_window relocation_windows[] = {{\n{windows}}};"
+    )?;
+    words(
+        result,
+        "relocation_symbols",
+        relocation.symbols.iter().map(|symbol| symbol.address),
+    );
+    result.push_str("static const struct relocation_source relocation_sources[] = {\n");
+    let mut count = 0;
+    for (index, symbol) in relocation.symbols.iter().enumerate() {
+        ensure!(
+            !symbol.sources.is_empty(),
+            "Symbol {:#x} has no source",
+            symbol.address
+        );
+        for source in &symbol.sources {
+            // kind, window, b, a
+            let (kind, window, b, a) = match *source {
+                Source::Window { window, offset } => (0, window as u32, NONE, offset),
+                Source::Branch {
+                    window,
+                    index,
+                    verify,
+                } => (1, window as u32, verify.map_or(NONE, |v| v as u32), index),
+                Source::Literal { window, index } => (2, window as u32, NONE, index),
+                Source::Pair { window, movw, movt } => (3, window as u32, movt, movw),
+                Source::Startup { index } => (4, 0, NONE, index),
+                Source::Tail => (5, 0, NONE, 0),
+            };
+            writeln!(result, "{{{index},{kind},0,{window},{b:#x},{a}}},")?;
+            count += 1;
+        }
+    }
+    result.push_str("};\n");
+    writeln!(result, "#define GRKIT_RELOCATE 1")?;
+    writeln!(
+        result,
+        "#define RELOCATION_SYMBOL_COUNT {}U",
+        relocation.symbols.len()
+    )?;
+    writeln!(
+        result,
+        "#define RELOCATION_WINDOW_COUNT {}U",
+        relocation.windows.len()
+    )?;
+    writeln!(
+        result,
+        "static const struct relocation_tables relocation_tables = {{relocation_windows,{},relocation_words,relocation_symbols,{},relocation_sources,{count},{startup},{:#x},{:#x}}};",
+        relocation.windows.len(),
+        relocation.symbols.len(),
+        relocation::RADIUS,
+        layout.tail.1 - layout.tail.0,
+    )?;
+    result.push_str("static u32 relocated[RELOCATION_SYMBOL_COUNT];\n");
+    words(result, "patch_symbols", sites);
+    writeln!(
+        result,
+        "#define RELOCATION_REFERENCE_COUNT {}U",
+        references.len()
+    )?;
+    words(
+        result,
+        "relocation_references",
+        references.into_iter().flatten(),
+    );
+    for define in defines {
+        writeln!(result, "{define}")?;
+    }
+    if !tables.is_empty() {
+        words(result, "table_symbols", tables);
+        result.push_str("#define TABLE_ADDRESS(i) relocated[table_symbols[i]]\n");
+        words(result, "initialized_symbols", initialized);
+    }
+    writeln!(result, "#define GUARD_PAIR_COUNT {}U", guards.len())?;
+    words(result, "guard_symbols", guards);
+    Ok(())
 }

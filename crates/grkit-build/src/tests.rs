@@ -116,10 +116,12 @@ fn patch_and_branch_validation() {
         points: 0,
         before: vec![0; 4],
         after: target::HEADER_REFERENCE.to_le_bytes().to_vec(),
+        site: None,
     };
     let mut plan = PatchPlan {
         patches: vec![patch.clone()],
         relocations: vec![(0, 0)],
+        references: Vec::new(),
     };
     validate_plan(&plan).unwrap();
     for relocations in [
@@ -515,6 +517,80 @@ fn pinned_firmware_build_is_reproducible() -> Result<()> {
     Ok(())
 }
 
+/// Resolves the relocation tables of `objects/module_payload.h` against an RTOS
+/// image: the result line, then each symbol as (pinned, resolved).
+fn resolve_image(output: &Path, image: &[u8]) -> Result<(String, Vec<(u32, u32)>)> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("rtos.bin");
+    fs::write(&path, image)?;
+    let executable = directory.path().join("relocation_image");
+    let compiler = std::env::var("GRKIT_HOST_CC").unwrap_or_else(|_| "cc".into());
+    let objects = output.join("objects");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let status = std::process::Command::new(compiler)
+        .args(["-std=c11", "-O2", "-w", "-I"])
+        .arg(objects.join("runtime"))
+        .arg("-I")
+        .arg(&objects)
+        .arg(root.join("tests/runtime/relocation_image.c"))
+        .arg("-o")
+        .arg(&executable)
+        .status()?;
+    ensure!(status.success(), "Compile the relocation harness");
+    let output = std::process::Command::new(&executable)
+        .arg(&path)
+        .output()?;
+    ensure!(output.status.success(), "Run the relocation harness");
+    let text = String::from_utf8(output.stdout)?;
+    let mut lines = text.lines();
+    let result = lines.next().context("No result")?.to_owned();
+    let hex = |value: &str| u32::from_str_radix(value.trim_start_matches("0x"), 16);
+    let symbols = lines
+        .filter_map(|line| line.strip_prefix("symbol "))
+        .map(|line| {
+            let (pinned, resolved) = line.split_once(' ').context("Invalid symbol line")?;
+            Ok((hex(pinned)?, hex(resolved)?))
+        })
+        .collect::<Result<_>>()?;
+    Ok((result, symbols))
+}
+
+#[test]
+#[ignore = "Requires local GRKIT_TEST_FIRMWARE_GR4 and ARM toolchain"]
+fn gr4_relocation_resolves_other_builds() -> Result<()> {
+    let firmware = PathBuf::from(
+        std::env::var("GRKIT_TEST_FIRMWARE_GR4").context("Set GRKIT_TEST_FIRMWARE_GR4")?,
+    );
+    let tools = tools()?;
+    let body = verify_firmware(&firmware, &target::GR4_111)?;
+    let directory = tempfile::tempdir()?;
+    let built = build_image(&body, &directory.path().join("gr4"), &tools)?;
+    // The pinned image resolves each symbol to its pinned address, so the
+    // installer changes nothing on it.
+    let (result, symbols) = resolve_image(&built.output, &body.body)?;
+    assert_eq!(result, "ok 0x543d3000");
+    assert!(symbols.iter().all(|(pinned, resolved)| pinned == resolved));
+    // GR IV 1.04, another build with other addresses, if given.
+    if let Ok(path) = std::env::var("GRKIT_TEST_FIRMWARE_GR4_104") {
+        let decoded = firmware::decode(&fs::read(path)?)?;
+        let (result, symbols) = resolve_image(&built.output, firmware::rtos_section(&decoded)?)?;
+        assert_eq!(result, "ok 0x543d2000");
+        let resolved: BTreeMap<_, _> = symbols.into_iter().collect();
+        // FW_SETTINGS, a template getter found through its caller, and the
+        // capture property singleton in the BSS.
+        assert_eq!(resolved[&0x5323f018], 0x5323ef40);
+        assert_eq!(resolved[&0x533b7110], 0x533b7004);
+        assert_eq!(resolved[&0x5537960c], 0x553795fc);
+    }
+    // GR III is not a build of this version: nothing resolves.
+    if let Ok(path) = std::env::var("GRKIT_TEST_FIRMWARE") {
+        let decoded = firmware::decode(&fs::read(path)?)?;
+        let (result, _) = resolve_image(&built.output, firmware::rtos_section(&decoded)?)?;
+        assert!(result.starts_with("failed"));
+    }
+    Ok(())
+}
+
 // Fixed contracts captured from the retired implementation using synthetic data only.
 // These checks deliberately do not derive their expected bytes from the Rust producer.
 #[test]
@@ -526,15 +602,18 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
                 points: 0,
                 before: vec![0; 8],
                 after: hex::decode("4023015801020304")?,
+                site: None,
             },
             Patch {
                 address: 0x531a48f0,
                 points: 0,
                 before: hex::decode("f431d0e5")?,
                 after: hex::decode("000000ea")?,
+                site: None,
             },
         ],
         relocations: vec![(0, 0)],
+        references: Vec::new(),
     };
     validate_plan(&plan)?;
     let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
@@ -554,15 +633,18 @@ fn generated_header_marks_only_rtos_tail_patches_as_unchecked() -> Result<()> {
                 points: 0,
                 before: vec![0; 8],
                 after: hex::decode("4023015801020304")?,
+                site: None,
             },
             Patch {
                 address: components::TAIL_BASE,
                 points: 0,
                 before: vec![0; 4],
                 after: vec![1, 2, 3, 4],
+                site: None,
             },
         ],
         relocations: vec![(0, 0)],
+        references: Vec::new(),
     };
     let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
     assert!(header.contains("{0x53002080,8,0,before_0,after_0},"));
@@ -608,8 +690,10 @@ fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
             points: 0,
             before: vec![0; 4],
             after: vec![1, 2, 3, 4],
+            site: None,
         }],
         relocations: vec![],
+        references: Vec::new(),
     };
     let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
     assert!(header.contains("{0x540b6000,4,1,before_0,after_0},"));

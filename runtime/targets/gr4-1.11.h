@@ -1,5 +1,8 @@
 /* RICOH GR IV 1.11 (also GR IV HDF): firmware entry points, data, and object
-   layouts that the runtime uses. */
+   layouts that the runtime uses. The addresses are those of the pinned 1.11
+   build. Cameras also run other 1.11 builds, so each address is a FIRMWARE()
+   symbol that the installer relocates. Data that no firmware code loads
+   directly is an offset from an address that it does load. */
 #ifndef GRKIT_TARGET_H
 #define GRKIT_TARGET_H
 
@@ -8,12 +11,12 @@
 
 /* Camera settings and the still aspect getter. The native ids are those of
    GR III: 0 = 3:2, 1 = 4:3, 2 = 16:9, 3 = 1:1. GR IV offers all four. */
-#define FW_SETTINGS 0x5323f018
-#define FW_STILL_ASPECT_GET 0x5329c09c
+#define FW_SETTINGS FIRMWARE(0x5323f018)
+#define FW_STILL_ASPECT_GET FIRMWARE(0x5329c09c)
 /* Settings domain: the capture property singleton (0x5537960c) starts with a
    vtable, then the domain. Domain +0x518 -> control -> payload with the native
    Image Control type at +0x79c. Standard is type 11. */
-#define FW_SETTINGS_DOMAIN 0x55379610
+#define FW_SETTINGS_DOMAIN (FIRMWARE(0x5537960c) + 4)
 #define SETTINGS_IC_TYPE 0x79c
 /* Framing: GR IV has native 4:3 and 16:9, so Framing offers Off and XPan.
    XPan uses capture aspect id 2 with the 65:24 heights. In native 3:2 the
@@ -24,11 +27,11 @@
 #define FRAMING_XPAN_NATIVE 2
 /* Capture aspect (property 0xdf, CommonProperty +0x7da) getter. The live-view
    mode function 0x5388c7b8 and the mode check 0x5363fa84 call it. */
-#define FW_CAPTURE_ASPECT_GET 0x5375840c
+#define FW_CAPTURE_ASPECT_GET FIRMWARE(0x5375840c)
 /* Resend the still aspect: with the UI aspect (+0x49f) equal to the applied
    aspect (+0xf8b) it posts no UI event and, in still mode, sends property
    0xdf with the applied value. */
-#define FW_STILL_ASPECT_RESEND 0x53284454
+#define FW_STILL_ASPECT_RESEND FIRMWARE(0x53284454)
 /* The next copy of the capture aspect: domain +0x518 -> control, +4 -> next. */
 #define FRAMING_CAPTURE_ASPECT() BYTE(WORD(WORD(WORD(FW_SETTINGS_DOMAIN,0),0x518),4),0x7da)
 #define FRAMING_REQUEST_ASPECT() (((void (*)(u32))FW_STILL_ASPECT_RESEND)(FRAMING_SETTINGS()))
@@ -47,38 +50,38 @@
 #define CLASSIFY_RETURN ldm sp, {r3,r4,r5,r6,fp,sp,pc}
 
 /* Allocation and the vector helpers of View children. */
-#define FW_ALLOCATE 0x538e09b0
-#define FW_VECTOR_INSERT 0x538eb348
-#define FW_VECTOR_ERASE 0x538eb4cc
+#define FW_ALLOCATE FIRMWARE(0x538e09b0)
+#define FW_VECTOR_INSERT FIRMWARE(0x538eb348)
+#define FW_VECTOR_ERASE FIRMWARE(0x538eb4cc)
 
 /* View classes. Their vtables and object sizes equal those of GR III 2.10. */
-#define FW_VIEW_SET_TOUCH 0x535885a4
-#define FW_VIEW_SET_PARENT 0x53588814
-#define FW_VIEW_SET_TOUCHABLE 0x535888a8
-#define FW_VIEW_SET_X 0x53588c5c
-#define FW_VIEW_INVALIDATE 0x535899fc
-#define FW_VIEW_SET_VISIBLE 0x53589ab4
-#define FW_LINE_VIEW_INIT 0x535700c0
-#define FW_LINE_VIEW_SET_STYLE 0x5357013c
-#define FW_LINE_VIEW_DESTROY 0x53570090
-#define FW_ICON_VIEW_INIT 0x53576da0
-#define FW_ICON_VIEW_SET_ICON 0x53576e38
-#define FW_ICON_VIEW_DESTROY 0x53576d0c
-#define FW_STRING_VIEW_RESET 0x5357338c
-#define FW_LIST_SET_COUNT 0x535711e4
-#define FW_LIST_ROW 0x53570a9c
-#define FW_LIST_SAVE 0x53570b3c
-#define FW_LIST_CURSOR 0x53570b6c
-#define FW_LIST_RESTORE 0x5357157c
-#define FW_LIST_SET_CURSOR 0x53571788
-#define FW_ROW_SET_ICON 0x5357dd98
-#define FW_ROW_SET_CHECK 0x5357e018
+#define FW_VIEW_SET_TOUCH FIRMWARE(0x535885a4)
+#define FW_VIEW_SET_PARENT FIRMWARE(0x53588814)
+#define FW_VIEW_SET_TOUCHABLE FIRMWARE(0x535888a8)
+#define FW_VIEW_SET_X FIRMWARE(0x53588c5c)
+#define FW_VIEW_INVALIDATE FIRMWARE(0x535899fc)
+#define FW_VIEW_SET_VISIBLE FIRMWARE(0x53589ab4)
+#define FW_LINE_VIEW_INIT FIRMWARE(0x535700c0)
+#define FW_LINE_VIEW_SET_STYLE FIRMWARE(0x5357013c)
+#define FW_LINE_VIEW_DESTROY FIRMWARE(0x53570090)
+#define FW_ICON_VIEW_INIT FIRMWARE(0x53576da0)
+#define FW_ICON_VIEW_SET_ICON FIRMWARE(0x53576e38)
+#define FW_ICON_VIEW_DESTROY FIRMWARE(0x53576d0c)
+#define FW_STRING_VIEW_RESET FIRMWARE(0x5357338c)
+#define FW_LIST_SET_COUNT FIRMWARE(0x535711e4)
+#define FW_LIST_ROW FIRMWARE(0x53570a9c)
+#define FW_LIST_SAVE FIRMWARE(0x53570b3c)
+#define FW_LIST_CURSOR FIRMWARE(0x53570b6c)
+#define FW_LIST_RESTORE FIRMWARE(0x5357157c)
+#define FW_LIST_SET_CURSOR FIRMWARE(0x53571788)
+#define FW_ROW_SET_ICON FIRMWARE(0x5357dd98)
+#define FW_ROW_SET_CHECK FIRMWARE(0x5357e018)
 
 /* AdjModeController: methods and the touch callback pair of a toolbar icon. */
-#define FW_ADJ_TOUCH_ENTER 0x531bb7c0
-#define FW_ADJ_TOUCH_LEAVE 0x531bb8ec
-#define FW_ADJ_SLOT_TYPE 0x531bd580
-#define FW_ADJ_SNAPSHOT 0x531bcdf0
+#define FW_ADJ_TOUCH_ENTER FIRMWARE(0x531bb7c0)
+#define FW_ADJ_TOUCH_LEAVE FIRMWARE(0x531bb8ec)
+#define FW_ADJ_SLOT_TYPE FIRMWARE(0x531bd580)
+#define FW_ADJ_SNAPSHOT FIRMWARE(0x531bcdf0)
 /* The slot type of the native Image Control slot, and the controller of its
    Standard parameter page (still mode). */
 #define ADJ_IC_SLOT_TYPE 15
@@ -96,15 +99,15 @@
 #define MODEL_SNAPSHOT 3
 #define PARAMETER_KINDS {0,1,2,3,4,5,6,14,15}
 #define DETAIL_EV_SUBPAGE 0x8c
-#define FW_ADJ_REFRESH 0x531bf3c8
-#define FW_ADJ_SELECT_SLOT 0x531bf94c
-#define FW_CHANGE_CONTROLLER 0x53182e4c
+#define FW_ADJ_REFRESH FIRMWARE(0x531bf3c8)
+#define FW_ADJ_SELECT_SLOT FIRMWARE(0x531bf94c)
+#define FW_CHANGE_CONTROLLER FIRMWARE(0x53182e4c)
 /* AdjModeController fields. GR IV adds two FunctionGuideViews before the list,
    which moves the list and the slot byte by 8. */
 #define ADJ_CANVAS 0x4
 /* The UI language byte of the static settings object 0x55084dd8 (reader
    0x5329b068, +0x1497), with the GR III values. Not confirmed on a camera. */
-#define LANGUAGE_SETTING_BYTE 0x5508626f
+#define LANGUAGE_SETTING_BYTE (FIRMWARE(0x55084dd8) + 0x1497)
 #define ADJ_TITLE 0x160
 #define ADJ_DETAIL 0x164
 #define ADJ_DETAIL_VALUE 0x168
@@ -115,7 +118,7 @@
 /* The Image Control slot method of the ADJ refresh fills the Fn hint with the
    Fn label, layout 10, and the settings icon, and moves it to x 300. A new ADJ
    starts with an empty hint. */
-#define FW_GUIDE_SET_CONTENT 0x53577c6c
+#define FW_GUIDE_SET_CONTENT FIRMWARE(0x53577c6c)
 #define FN_GUIDE_TEXT 0x1de
 #define FN_GUIDE_ICON 0x240
 #define FN_GUIDE_X 300
@@ -123,7 +126,7 @@
 #define ADJ_SLOT 0x1fc
 #define ADJ_ACTION 0x281
 /* 1 in movie mode. GR IV computes the mode from the camera settings. */
-#define ADJ_MOVIE(controller) (((u32 (*)(u32))0x531bcd00)(controller))
+#define ADJ_MOVIE(controller) (((u32 (*)(u32))FIRMWARE(0x531bcd00))(controller))
 
 /* AdjModeController events (the first halfword of an event). Measured, except
    the dial events, which follow the +6 offset of the direction events. The
@@ -153,10 +156,10 @@
 #define NATIVE_OFF_ICON() 0
 
 /* Playback metadata singleton (+0x228 holds key 0x25, the Image Control tag). */
-#define FW_PLAYBACK_METADATA 0x5323f67c
+#define FW_PLAYBACK_METADATA FIRMWARE(0x5323f67c)
 #define METADATA_TONE 0x228
 /* Maker-note IFD entry setter: (entry, 0, value) stores a u16 value. */
-#define FW_IFD_SET_SHORT 0x537e7148
+#define FW_IFD_SET_SHORT FIRMWARE(0x537e7148)
 
 /* LiveViewController: nonzero in movie mode, and the LCD canvas. GR IV adds a
    FrameView at 0x2d0, which moves the movie flag by 4. */
@@ -166,14 +169,14 @@
 /* Picture processing. GAMMA_BUILT: the word of the gamma object that is 1
    after the native curves are built. */
 #define GAMMA_BUILT 0x382c
-#define FW_YCBCR_CALC 0x5391a650
+#define FW_YCBCR_CALC FIRMWARE(0x5391a650)
 /* DigitalFilterProcess plan: the grain stage flag that the stage gate sets. */
 #define GRAIN_GATE_FLAG 0x25
 
 /* Date stamp: cache maintenance and the local time. */
-#define FW_CACHE_FLUSH 0x53a95804
-#define FW_CLOCK 0x538f21a0
-#define FW_LOCAL_TIME 0x538ea9b0
+#define FW_CACHE_FLUSH FIRMWARE(0x53a95804)
+#define FW_CLOCK FIRMWARE(0x538f21a0)
+#define FW_LOCAL_TIME FIRMWARE(0x538ea9b0)
 /* Each native aspect has its own visible area in a preview picture. */
 #define PICTURE_NATIVE_ID(native) ((native)<=3 ? (native) : 0)
 

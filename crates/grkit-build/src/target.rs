@@ -42,6 +42,10 @@ pub struct Target {
     pub layout: Option<&'static Layout>,
     /// Native Image Control data, if the layout has processing hooks.
     pub image_control: Option<&'static ImageControl>,
+    /// On a relocatable target, the installer data that no firmware code
+    /// loads directly: (address, the address that code loads). The address
+    /// keeps its offset from the loaded one.
+    pub relocation_bases: &'static [(u32, u32)],
 }
 
 /// The native Image Control data that the installer checks and copies.
@@ -111,6 +115,7 @@ pub const GR3_210: Target = Target {
     pixel_base_indirect: false,
     layout: Some(&GR3_LAYOUT),
     image_control: Some(&GR3_IMAGE_CONTROL),
+    relocation_bases: &[],
 };
 
 /// GR IV and GR IV HDF 1.11. The runtime has the private menu, Image Control,
@@ -134,6 +139,9 @@ pub const GR4_111: Target = Target {
     pixel_base_indirect: true,
     layout: Some(&GR4_LAYOUT),
     image_control: Some(&GR4_IMAGE_CONTROL),
+    // The settings domain follows the vtable of the capture property
+    // singleton, and the icon drawer is +0x10 in the icon manager singleton.
+    relocation_bases: &[(0x55379610, 0x5537960c), (0x55082038, 0x55082028)],
 };
 
 pub const TARGETS: [&Target; 2] = [&GR3_210, &GR4_111];
