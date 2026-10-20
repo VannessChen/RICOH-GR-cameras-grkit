@@ -2,4 +2,4 @@
 default: patch
 ---
 
-Make room in the camera runtime for more plugins. Your saved selections, Fn adjustments, and effects keep working after the update.
+The camera runtime has room for more plugins, and saved selections, Fn adjustments, and effects keep working after the update.
