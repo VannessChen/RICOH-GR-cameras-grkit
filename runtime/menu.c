@@ -129,6 +129,12 @@ static u32 back_event(volatile u32 *h,u32 kind,u32 enabled) {
 static u32 after_menu_switch(volatile u32 *h) {
     return (h[GRKIT_HOST_MENU_EVENT_RING/4+((h[GRKIT_HOST_MENU_EVENTS/4]-2)&(GRKIT_HOST_MENU_EVENT_RING_WORDS-1))]&0xffff)==EV_SWITCH;
 }
+#ifdef EV_ADJ_PRESS
+/* An ADJ press emits EV_ADJ_PRESS followed by the confirm that OK also sends. */
+static u32 after_adj_press(volatile u32 *h) {
+    return (h[GRKIT_HOST_MENU_EVENT_RING/4+((h[GRKIT_HOST_MENU_EVENTS/4]-2)&(GRKIT_HOST_MENU_EVENT_RING_WORDS-1))]&0xffff)==EV_ADJ_PRESS;
+}
+#endif
 static u32 native_action_release(u32 action,u32 active) {
     return action==10 && active;
 }
@@ -678,11 +684,15 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
     /* Confirm is 0xd8. Press and release events do not activate a profile.
        OK on a root row opens its page. OK on a page row commits it and closes
        ADJ, as OK on a native value does: the restored native list gets the
-       confirm, as after MENU on the root. */
+       confirm, as after MENU on the root. An ADJ press closes ADJ from the
+       root too, as on a native entry; on a page it commits the row first. */
     if(kind==EV_CONFIRM) {
-        u32 page=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE;
-        menu_confirm(h);
-        if(page) {
+        u32 page=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE, close=page;
+#ifdef EV_ADJ_PRESS
+        if(after_adj_press(h)) close=1;
+#endif
+        if(page || !close) menu_confirm(h);
+        if(close) {
             leave(controller);
             h[GRKIT_HOST_RETURN/4]=RETURN_CLOSING;
             return menu_event_original(controller,event);

@@ -105,6 +105,8 @@
 #define EV_SWITCH 5
 #define EV_SWITCH_END 8
 #define EV_FN 0x1b
+/* An ADJ press, before the confirm that OK also sends. */
+#define EV_ADJ_PRESS 0x1e
 /* The argument of an Fn press. ADJ opens the native parameters on it. */
 #define FN_PRESS_ARG 2
 #define EV_TOUCH 0x30

@@ -165,6 +165,12 @@ int main(void)
     assert(!after_menu_switch(test_header));
     test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = 0x1e;
     assert(!after_menu_switch(test_header));
+    /* An ADJ press is EV_ADJ_PRESS, then the confirm. OK and MENU are not. */
+    assert(after_adj_press(test_header));
+    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = 8 | (2 << 16);
+    assert(!after_adj_press(test_header));
+    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = 5 | (2 << 16);
+    assert(!after_adj_press(test_header));
     test_header[GRKIT_HOST_MENU_EVENTS / 4] = 0;
     test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = test_header[GRKIT_HOST_MENU_EVENT_RING / 4 + 1] = 0;
     /* Playback matches only extracted non-native tags with the private code bit. */

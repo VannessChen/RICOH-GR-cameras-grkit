@@ -144,6 +144,9 @@
    EV_FN and acts on EV_FN_ACTION (0x531bd388). */
 #define FN_PRESS_ARG 2
 #define EV_FN_ACTION 0x187
+/* A press of the rear dial, which opens and closes ADJ, before the confirm
+   that OK also sends. */
+#define EV_ADJ_PRESS 0x23
 #define EV_TOUCH 0x31
 #define EV_LEFT 0xd4
 #define EV_RIGHT 0xd5

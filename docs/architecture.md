@@ -244,6 +244,7 @@ Module state stays in the private host header.
 About is not a plugin, so `PLUGINS.TXT` does not select it. It uses the GRKit tile, and its summary gives the version, for example `Version 0.1.0`. It has no page: OK on it changes nothing.
 
 OK on a root row opens its page. OK on a page row commits that row and closes ADJ, as OK on a native value does: the menu restores the native list and passes the confirm to it.
+An ADJ press (the ADJ lever on GR III, the rear dial on GR IV) closes ADJ from the root and from a page, as on a native entry. On a page, it commits the row first. It sends `EV_ADJ_PRESS`, then the confirm that OK also sends.
 MENU on a page returns to the GRKit root. MENU on the root closes ADJ, as on a native entry: the menu restores the native list and passes the MENU events to it.
 Left and Right move to the next ADJ entry from the root and from a page. The private menu restores the native list on its supported exit paths.
 List restoration suppresses the native selection callbacks.
