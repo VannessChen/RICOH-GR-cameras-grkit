@@ -30,14 +30,14 @@ GRKit 在 ADJ 模式中增加第 6 个功能 GRK，包含五个模块：
 | 机型 | 固件 | 状态 |
 | --- | --- | --- |
 | RICOH GR III | 2.10 | 已经过真机测试 |
-| RICOH GR III HDF | 2.10 | 已支持，与 GR III 使用同一个固件和运行时 |
-| RICOH GR IIIx | 1.60 | 已支持，与经过真机测试的 GR III 使用同一个运行时 |
-| RICOH GR IIIx HDF | 1.60 | 已支持，与 GR IIIx 使用同一个固件和运行时 |
-| RICOH GR IV | 1.11 | 已经过真机测试。画幅只提供 XPan。 |
-| RICOH GR IV HDF | 1.11 | 已支持，与 GR IV 使用同一个固件和运行时。画幅只提供 XPan。 |
-| RICOH GR IV Monochrome | 1.00 | 实验性。运行 GR IV 1.11 的固件，相机显示的版本为 1.00。使用不含影像控制的 GR IV 包。未经真机测试。画幅只提供 XPan。 |
+| RICOH GR III HDF | 2.10 | 已支持 |
+| RICOH GR IIIx | 1.60 | 已支持 |
+| RICOH GR IIIx HDF | 1.60 | 已支持 |
+| RICOH GR IV | 1.11 | 已经过真机测试 |
+| RICOH GR IV HDF | 1.11 | 已支持 |
+| RICOH GR IV Monochrome | 1.00 | 实验性，不含影像控制 |
 
-HDF 机型运行基础机型的固件，使用同一个包。不支持其他机型和固件版本。你可以在相机菜单中查看固件版本。
+“已支持”表示该机型与经过真机测试的机型使用同一个运行时，但本身未经真机测试。HDF 机型运行基础机型的固件，使用同一个包。GR IV Monochrome 运行 GR IV 1.11 的固件，相机显示的版本为 1.00。GR IV 系列的画幅只提供 XPan。不支持其他机型和固件版本。你可以在相机菜单中查看固件版本。
 
 同一个固件版本可能有不同的构建。如果 GRKit 在受支持的相机上不加载，[固件导出指南](resources/DUMP.zh-Hans.md)说明了如何发送相机的固件映像。
 
@@ -72,27 +72,7 @@ grkit package --build build/runtime --effects build/effects --guide build/guides
 grkit verify dist/GRKit.zip
 ```
 
-- 指南：`install-guide-tools.sh` 下载 Typst 和 Noto Sans SC、TC、JP 字体，并校验 SHA-256，支持 Linux x86_64 和 macOS arm64。`build-guides.sh` 生成 `build/guides/<机型>/<语言>.pdf`。
-- GR IIIx：用 `--camera gr3x` 和 `--guide build/guides/gr3x/en.pdf` 打包。它和 GR III 使用同一个运行时。
-- HDF 机型：按基础机型打包，例如 GR III HDF 用 `--camera gr3`。
-- GR IV：用 `fwdc248b.bin` 和 `--target gr4-1.11` 构建，再用 `--camera gr4` 和 `--guide build/guides/gr4/en.pdf` 打包。
-- GR IV Monochrome：按 GR IV 的方式打包，加上 `--plugins framing,guides,date-stamp,grain`，不加 `--effects`。
-- 减少插件：用 `--plugins` 列出要安装的插件，例如 `--plugins framing,guides`。安装器不会为其他插件修改固件。不加 `--effects` 时，安装包中没有 Image Control。
-- 指南语言：加 `--language zh-Hans`、`--language zh-Hant` 或 `--language ja`，并给出该语言的指南，例如 `build/guides/gr3/zh-Hans.pdf`。
-
-## 仓库结构
-
-| 路径 | 内容 |
-| --- | --- |
-| `crates/grkit-core` | 效果格式和安装包规则，不含平台 I/O |
-| `crates/grkit-build` | 从固件文件构建运行时 |
-| `crates/grkit-cli` | `grkit` 命令 |
-| `crates/grkit-wasm` | 在浏览器中组装安装包 |
-| `runtime/` | 在相机上运行的代码 |
-| `effects/` | Image Control 效果的源文件 |
-| `web/` | 在浏览器中制作安装包的网站 |
-| `resources/` | 安装指南、恢复指南和固件导出指南 |
-| `docs/` | 架构和发布流程 |
+`install-guide-tools.sh` 会下载 Typst 和字体，支持 Linux x86_64 和 macOS arm64。其他机型、减少插件和其他指南语言的打包方法见 [CONTRIBUTING.md](CONTRIBUTING.md#build-packages)（英文）。
 
 ## 参与贡献
 

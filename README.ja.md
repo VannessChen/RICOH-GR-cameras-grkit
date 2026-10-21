@@ -30,14 +30,14 @@ GRKit は ADJ モードに 6 番目の項目 GRK を追加します。GRK には
 | カメラ | ファームウェア | 状態 |
 | --- | --- | --- |
 | RICOH GR III | 2.10 | 実機でテスト済み |
-| RICOH GR III HDF | 2.10 | 対応済み。GR III と同じファームウェアとランタイムです。 |
-| RICOH GR IIIx | 1.60 | 対応済み。実機でテスト済みの GR III と同じランタイムです。 |
-| RICOH GR IIIx HDF | 1.60 | 対応済み。GR IIIx と同じファームウェアとランタイムです。 |
-| RICOH GR IV | 1.11 | 実機でテスト済み。フレーミングは XPan のみです。 |
-| RICOH GR IV HDF | 1.11 | 対応済み。GR IV と同じファームウェアとランタイムです。フレーミングは XPan のみです。 |
-| RICOH GR IV Monochrome | 1.00 | 試験的。GR IV 1.11 のファームウェアで動作し、カメラではバージョン 1.00 と表示されます。イメージコントロールのない GR IV 用パッケージを使います。実機ではテストしていません。フレーミングは XPan のみです。 |
+| RICOH GR III HDF | 2.10 | 対応済み |
+| RICOH GR IIIx | 1.60 | 対応済み |
+| RICOH GR IIIx HDF | 1.60 | 対応済み |
+| RICOH GR IV | 1.11 | 実機でテスト済み |
+| RICOH GR IV HDF | 1.11 | 対応済み |
+| RICOH GR IV Monochrome | 1.00 | 試験的。イメージコントロールなし |
 
-HDF モデルはベースのカメラと同じファームウェアで動作し、同じパッケージを使います。ほかの機種やファームウェアのバージョンには対応していません。ファームウェアのバージョンは、カメラのメニューで確認できます。
+「対応済み」のカメラは、実機でテスト済みのカメラと同じランタイムで動作しますが、そのカメラ自体はテストしていません。HDF モデルはベースのカメラと同じファームウェアで動作し、同じパッケージを使います。GR IV Monochrome は GR IV 1.11 のファームウェアで動作し、カメラではバージョン 1.00 と表示されます。GR IV シリーズでは、フレーミングは XPan のみです。ほかの機種やファームウェアのバージョンには対応していません。ファームウェアのバージョンは、カメラのメニューで確認できます。
 
 対応するファームウェアのバージョンにも、別のビルドがあることがあります。対応するカメラで GRKit が読み込まれない場合は、[ファームウェア書き出しガイド](resources/DUMP.ja.md)の手順でファームウェアイメージを送ってください。
 
@@ -72,27 +72,7 @@ grkit package --build build/runtime --effects build/effects --guide build/guides
 grkit verify dist/GRKit.zip
 ```
 
-- ガイド：`install-guide-tools.sh` は Typst と Noto Sans SC・TC・JP フォントをダウンロードし、SHA-256 を検証します。Linux x86_64 と macOS arm64 に対応しています。`build-guides.sh` は `build/guides/<カメラ>/<言語>.pdf` を書き出します。
-- GR IIIx：`--camera gr3x` と `--guide build/guides/gr3x/en.pdf` を指定してパッケージを作成します。ランタイムは GR III と同じです。
-- HDF モデル：ベースのカメラ用のパッケージを作成します。たとえば GR III HDF では `--camera gr3` を指定します。
-- GR IV：`fwdc248b.bin` から `--target gr4-1.11` でビルドし、`--camera gr4` と `--guide build/guides/gr4/en.pdf` を指定してパッケージを作成します。
-- GR IV Monochrome：GR IV と同じ方法で、`--plugins framing,guides,date-stamp,grain` を指定し、`--effects` を指定せずにパッケージを作成します。
-- プラグインを減らす：インストールするプラグインを `--plugins` で指定します。例：`--plugins framing,guides`。インストーラーは、ほかのプラグインのためにファームウェアを変更しません。`--effects` を指定しない場合、パッケージにイメージコントロールは含まれません。
-- ガイドの言語：`--language zh-Hans`、`--language zh-Hant`、`--language ja` のいずれかを追加し、その言語のガイドを指定します。例：`build/guides/gr3/zh-Hans.pdf`。
-
-## リポジトリの構成
-
-| パス | 内容 |
-| --- | --- |
-| `crates/grkit-core` | エフェクトの形式とパッケージの規則。プラットフォームの I/O は含みません |
-| `crates/grkit-build` | ファームウェアファイルからのランタイムのビルド |
-| `crates/grkit-cli` | `grkit` コマンド |
-| `crates/grkit-wasm` | ブラウザーでのパッケージの組み立て |
-| `runtime/` | カメラ上で動作するコード |
-| `effects/` | イメージコントロールのエフェクトのソース |
-| `web/` | ブラウザーでパッケージを作成するサイト |
-| `resources/` | インストールガイド、復旧ガイド、ファームウェア書き出しガイド |
-| `docs/` | アーキテクチャとリリース手順 |
+`install-guide-tools.sh` は Typst とフォントをダウンロードします。Linux x86_64 と macOS arm64 に対応しています。ほかのカメラ、プラグインを減らす場合、ほかの言語のガイドについては [CONTRIBUTING.md](CONTRIBUTING.md#build-packages)（英語）を参照してください。
 
 ## コントリビューション
 

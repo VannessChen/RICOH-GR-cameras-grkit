@@ -30,14 +30,14 @@ You select the modules when you make a package. The menu shows only those module
 | Camera | Firmware | Status |
 | --- | --- | --- |
 | RICOH GR III | 2.10 | Tested on a camera |
-| RICOH GR III HDF | 2.10 | Supported. It runs the same firmware and runtime as GR III. |
-| RICOH GR IIIx | 1.60 | Supported. It runs the same runtime as GR III, which has been tested on a camera. |
-| RICOH GR IIIx HDF | 1.60 | Supported. It runs the same firmware and runtime as GR IIIx. |
-| RICOH GR IV | 1.11 | Tested on a camera. Framing offers only XPan. |
-| RICOH GR IV HDF | 1.11 | Supported. It runs the same firmware and runtime as GR IV. Framing offers only XPan. |
-| RICOH GR IV Monochrome | 1.00 | Experimental. It runs the firmware of GR IV 1.11 and shows it as version 1.00. It uses the GR IV package without Image Control. Not tested on a camera. Framing offers only XPan. |
+| RICOH GR III HDF | 2.10 | Supported |
+| RICOH GR IIIx | 1.60 | Supported |
+| RICOH GR IIIx HDF | 1.60 | Supported |
+| RICOH GR IV | 1.11 | Tested on a camera |
+| RICOH GR IV HDF | 1.11 | Supported |
+| RICOH GR IV Monochrome | 1.00 | Experimental, without Image Control |
 
-Each HDF model runs the firmware of its base camera and uses the same package. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
+A supported camera runs the same runtime as a tested camera, but is not tested itself. Each HDF model runs the firmware of its base camera and uses the same package. GR IV Monochrome runs the firmware of GR IV 1.11 and shows it as version 1.00. On the GR IV models, Framing offers only XPan. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
 
 A camera can run another build of a supported firmware version. If GRKit does not load on a supported camera, the [firmware dump guide](resources/DUMP.md) tells you how to send its firmware image.
 
@@ -72,27 +72,7 @@ grkit package --build build/runtime --effects build/effects --guide build/guides
 grkit verify dist/GRKit.zip
 ```
 
-- Guides: `install-guide-tools.sh` downloads Typst and the Noto Sans SC, TC, and JP fonts and checks their SHA-256, on Linux x86_64 or macOS arm64. `build-guides.sh` writes `build/guides/<camera>/<language>.pdf`.
-- GR IIIx: package with `--camera gr3x` and `--guide build/guides/gr3x/en.pdf`. The runtime is the same as for GR III.
-- HDF models: package for the base camera, for example `--camera gr3` for GR III HDF.
-- GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4` and `--guide build/guides/gr4/en.pdf`.
-- GR IV Monochrome: package as for GR IV, with `--plugins framing,guides,date-stamp,grain` and without `--effects`.
-- Fewer plugins: add `--plugins` with the plugins to install, for example `--plugins framing,guides`. The installer makes no firmware change for the other plugins. Without `--effects`, the package has no Image Control.
-- Guide language: add `--language zh-Hans`, `--language zh-Hant`, or `--language ja`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
-
-## Repository layout
-
-| Path | Contents |
-| --- | --- |
-| `crates/grkit-core` | Effect formats and package rules, with no platform I/O |
-| `crates/grkit-build` | Runtime builds from the firmware file |
-| `crates/grkit-cli` | The `grkit` command |
-| `crates/grkit-wasm` | Package assembly in the browser |
-| `runtime/` | The code that runs on the camera |
-| `effects/` | The sources of the Image Control effects |
-| `web/` | The site that makes packages in the browser |
-| `resources/` | The installation, recovery, and firmware dump guides |
-| `docs/` | The architecture and the release process |
+`install-guide-tools.sh` downloads Typst and the fonts, on Linux x86_64 or macOS arm64. For other cameras, fewer plugins, and other guide languages, see [Build packages](CONTRIBUTING.md#build-packages).
 
 ## Contributing
 

@@ -30,14 +30,14 @@ GRKit 在 ADJ 模式中加入第 6 個功能 GRK，包含五個模組：
 | 機型 | 韌體 | 狀態 |
 | --- | --- | --- |
 | RICOH GR III | 2.10 | 已經過實機測試 |
-| RICOH GR III HDF | 2.10 | 已支援，與 GR III 使用同一個韌體和執行環境 |
-| RICOH GR IIIx | 1.60 | 已支援，與經過實機測試的 GR III 使用同一個執行環境 |
-| RICOH GR IIIx HDF | 1.60 | 已支援，與 GR IIIx 使用同一個韌體和執行環境 |
-| RICOH GR IV | 1.11 | 已經過實機測試。畫幅只提供 XPan。 |
-| RICOH GR IV HDF | 1.11 | 已支援，與 GR IV 使用同一個韌體和執行環境。畫幅只提供 XPan。 |
-| RICOH GR IV Monochrome | 1.00 | 實驗性。執行 GR IV 1.11 的韌體，相機顯示的版本為 1.00。使用不含影像控制的 GR IV 套件。未經實機測試。畫幅只提供 XPan。 |
+| RICOH GR III HDF | 2.10 | 已支援 |
+| RICOH GR IIIx | 1.60 | 已支援 |
+| RICOH GR IIIx HDF | 1.60 | 已支援 |
+| RICOH GR IV | 1.11 | 已經過實機測試 |
+| RICOH GR IV HDF | 1.11 | 已支援 |
+| RICOH GR IV Monochrome | 1.00 | 實驗性，不含影像控制 |
 
-HDF 機型執行基礎機型的韌體，使用同一個套件。不支援其他機型與韌體版本。你可以在相機功能表中查看韌體版本。
+「已支援」表示該機型與經過實機測試的機型使用同一個執行環境，但本身未經實機測試。HDF 機型執行基礎機型的韌體，使用同一個套件。GR IV Monochrome 執行 GR IV 1.11 的韌體，相機顯示的版本為 1.00。GR IV 系列的畫幅只提供 XPan。不支援其他機型與韌體版本。你可以在相機功能表中查看韌體版本。
 
 同一個韌體版本可能有不同的建置。如果 GRKit 在支援的相機上沒有載入，[韌體匯出指南](resources/DUMP.zh-Hant.md)說明了如何傳送相機的韌體映像。
 
@@ -72,27 +72,7 @@ grkit package --build build/runtime --effects build/effects --guide build/guides
 grkit verify dist/GRKit.zip
 ```
 
-- 指南：`install-guide-tools.sh` 下載 Typst 與 Noto Sans SC、TC、JP 字型，並校驗 SHA-256，支援 Linux x86_64 與 macOS arm64。`build-guides.sh` 產生 `build/guides/<機型>/<語言>.pdf`。
-- GR IIIx：用 `--camera gr3x` 與 `--guide build/guides/gr3x/en.pdf` 打包。它與 GR III 使用同一個執行環境。
-- HDF 機型：按基礎機型打包，例如 GR III HDF 用 `--camera gr3`。
-- GR IV：用 `fwdc248b.bin` 與 `--target gr4-1.11` 建置，再用 `--camera gr4` 與 `--guide build/guides/gr4/en.pdf` 打包。
-- GR IV Monochrome：依 GR IV 的方式打包，加上 `--plugins framing,guides,date-stamp,grain`，不加 `--effects`。
-- 減少外掛：用 `--plugins` 列出要安裝的外掛，例如 `--plugins framing,guides`。安裝器不會為其他外掛修改韌體。不加 `--effects` 時，安裝包中沒有 Image Control。
-- 指南語言：加上 `--language zh-Hans`、`--language zh-Hant` 或 `--language ja`，並提供該語言的指南，例如 `build/guides/gr3/zh-Hans.pdf`。
-
-## 儲存庫結構
-
-| 路徑 | 內容 |
-| --- | --- |
-| `crates/grkit-core` | 效果格式與安裝包規則，不含平台 I/O |
-| `crates/grkit-build` | 從韌體檔案建置執行環境 |
-| `crates/grkit-cli` | `grkit` 命令 |
-| `crates/grkit-wasm` | 在瀏覽器中組裝安裝包 |
-| `runtime/` | 在相機上執行的程式碼 |
-| `effects/` | Image Control 效果的原始檔 |
-| `web/` | 在瀏覽器中製作安裝包的網站 |
-| `resources/` | 安裝指南、復原指南與韌體匯出指南 |
-| `docs/` | 架構與發布流程 |
+`install-guide-tools.sh` 會下載 Typst 與字型，支援 Linux x86_64 與 macOS arm64。其他機型、減少外掛與其他指南語言的打包方法請見 [CONTRIBUTING.md](CONTRIBUTING.md#build-packages)（英文）。
 
 ## 參與貢獻
 
