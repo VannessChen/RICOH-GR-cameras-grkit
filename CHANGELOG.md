@@ -1,3 +1,12 @@
+## 1.1.1 (2026-10-21)
+
+### Fixes
+
+- On another build of firmware 1.11, GR IV and GR IV HDF no longer stop when GRKit loads.
+- The GRK icon in the ADJ toolbar has the size of the native toolbar icons.
+- Guides hide while DISP hides the live-view information, and the Framing ratio label shows only with the full display.
+- The GRKit menu icons have the size of the native list icons, and their text keeps clear of the frame.
+
 ## 1.1.0 (2026-10-20)
 
 ### Features
