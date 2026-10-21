@@ -16,10 +16,13 @@ pub const TEXT_SUMMARY: usize = 8192;
 /// The last 16 bytes of the text area: the parameter page title of a GRKit
 /// session. Words: the page, its vtable, then the descriptor of the effect name.
 pub const TEXT_PARAMETER_TITLE: usize = TEXT_SIZE - 16;
+/// The 256 bytes before the parameter page title: the native settings page of
+/// a GRKit session (`runtime/menu.c`).
+pub const TEXT_SETTINGS: usize = TEXT_PARAMETER_TITLE - 256;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).
-pub const STRINGS: usize = 45;
+pub const STRINGS: usize = 50;
 /// The longest effect name in a record.
 const NAME_UNITS: usize = 16;
 
@@ -27,8 +30,8 @@ const NAME_UNITS: usize = 16;
 /// after Off. The Chinese and Japanese words reuse the terms of the camera
 /// menus where they have them (影像控制, 关闭/關閉, 弱/中/强, 颗粒感/粒紋感;
 /// イメージコントロール, オフ, 粒状感, グリッド, 9分割, 画面中央, 弱/中/強).
-/// 加印日期 and 日付入れ come from the date imprint of earlier GR models
-/// (日付入れ撮影 in the Japanese GR DIGITAL III manual).
+/// The Date Imprint names are those of the GR II menu (Date Imprint, 加印日期摄影,
+/// 加印日期攝像, 日付入れ撮影 in its firmware).
 /// The camera's Chinese and Japanese fonts draw each of these characters only
 /// while the camera language is that language, which is when the menu shows
 /// them.
@@ -39,6 +42,10 @@ struct Words {
     framing: &'static str,
     guides: &'static str,
     date_stamp: &'static str,
+    /// The Date Imprint settings: the date style and the look of the digits
+    /// (classic, GR1s, GR II).
+    date_style: &'static str,
+    date_look: &'static str,
     grain: &'static str,
     /// Before the version in the About row.
     version: &'static str,
@@ -48,6 +55,7 @@ struct Words {
     ratio_values: [&'static str; 3],
     guide_styles: [&'static str; 5],
     stamp_styles: [&'static str; 5],
+    looks: [&'static str; 3],
     grain_levels: [&'static str; 3],
 }
 
@@ -56,7 +64,9 @@ const ENGLISH: Words = Words {
     image_control: "Image Control",
     framing: "Framing",
     guides: "Guides",
-    date_stamp: "Date Stamp",
+    date_stamp: "Date Imprint",
+    date_style: "Date Style",
+    date_look: "Date Look",
     grain: "Grain",
     version: "Version",
     off: "Off",
@@ -76,6 +86,7 @@ const ENGLISH: Words = Words {
         "D M 'YY",
         "D M 'YY H:MM",
     ],
+    looks: ["Classic", "GR1s", "GR II"],
     grain_levels: ["Weak", "Medium", "Strong"],
 };
 
@@ -84,7 +95,9 @@ const SIMPLIFIED_CHINESE: Words = Words {
     image_control: "影像控制",
     framing: "画幅",
     guides: "辅助线",
-    date_stamp: "加印日期",
+    date_stamp: "加印日期摄影",
+    date_style: "日期样式",
+    date_look: "日期字体",
     grain: "颗粒感",
     version: "版本",
     off: "关闭",
@@ -98,6 +111,7 @@ const SIMPLIFIED_CHINESE: Words = Words {
         "D M 'YY",
         "D M 'YY H:MM",
     ],
+    looks: ["经典", "GR1s", "GR II"],
     grain_levels: ["弱", "中", "强"],
 };
 
@@ -106,7 +120,9 @@ const TRADITIONAL_CHINESE: Words = Words {
     image_control: "影像控制",
     framing: "畫幅",
     guides: "輔助線",
-    date_stamp: "加印日期",
+    date_stamp: "加印日期攝像",
+    date_style: "日期樣式",
+    date_look: "日期字體",
     grain: "粒紋感",
     version: "版本",
     off: "關閉",
@@ -120,6 +136,7 @@ const TRADITIONAL_CHINESE: Words = Words {
         "D M 'YY",
         "D M 'YY H:MM",
     ],
+    looks: ["經典", "GR1s", "GR II"],
     grain_levels: ["弱", "中", "強"],
 };
 
@@ -130,7 +147,9 @@ const JAPANESE: Words = Words {
     image_control: "イメージコントロール",
     framing: "フレーミング",
     guides: "グリッド",
-    date_stamp: "日付入れ",
+    date_stamp: "日付入れ撮影",
+    date_style: "日付のスタイル",
+    date_look: "日付の書体",
     grain: "粒状感",
     version: "バージョン",
     off: "オフ",
@@ -144,6 +163,7 @@ const JAPANESE: Words = Words {
         "D M 'YY",
         "D M 'YY H:MM",
     ],
+    looks: ["クラシック", "GR1s", "GR II"],
     grain_levels: ["弱", "中", "強"],
 };
 
@@ -174,6 +194,8 @@ pub const RUNS: &[Run] = &[
     run("FRAMING", 1, ""),
     run("GUIDES", 1, ""),
     run("DATE_STAMP", 1, ""),
+    run("DATE_STYLE", 1, ""),
+    run("DATE_LOOK", 1, ""),
     run("GRAIN", 1, ""),
     run("OFF", 1, ""),
     run("RATIO", 3, "Framing rows 1..3: XPan 65:24, 16:9, 4:3."),
@@ -183,6 +205,7 @@ pub const RUNS: &[Run] = &[
         "Guides rows 1..5: thirds, center, golden ratio, diagonals, thirds and center.",
     ),
     run("STAMP", 5, "Date Stamp rows 1..5: the date styles."),
+    run("LOOK", 3, "Date Look values 0..2: classic, GR1s, GR II."),
     run("GRAIN_LEVEL", 3, "Grain rows 1..3: weak, medium, strong."),
     run("IMAGE_OFF_SUMMARY", 1, ""),
     run("FRAMING_SUMMARY", 4, "Summaries for each value, Off first."),
@@ -229,11 +252,14 @@ fn run_strings(w: &Words, name: &str, version: &str) -> Vec<String> {
         "FRAMING" => words(&[w.framing]),
         "GUIDES" => words(&[w.guides]),
         "DATE_STAMP" => words(&[w.date_stamp]),
+        "DATE_STYLE" => words(&[w.date_style]),
+        "DATE_LOOK" => words(&[w.date_look]),
         "GRAIN" => words(&[w.grain]),
         "OFF" => words(&[w.off]),
         "RATIO" => words(&w.ratios),
         "GUIDE" => words(&w.guide_styles),
         "STAMP" => words(&w.stamp_styles),
+        "LOOK" => words(&w.looks),
         "GRAIN_LEVEL" => words(&w.grain_levels),
         "IMAGE_OFF_SUMMARY" => vec![summary(w.image_control, w.off)],
         "FRAMING_SUMMARY" => summaries(w.framing, &w.ratio_values),

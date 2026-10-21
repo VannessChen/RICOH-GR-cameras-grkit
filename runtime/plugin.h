@@ -49,6 +49,19 @@ typedef short s16;
 #define GRKIT_ICON_EFFECT(n) (0x8000U+(n))
 #define GRKIT_ICON_TILE(n) (0x10000U+(n))
 
+/* One setting of a native settings page: its row label, its values (at most
+   SETTING_VALUES), the text of a value, and the stored value. */
+#define SETTING_VALUES 6U
+typedef struct {
+    const u16 *(*label)(volatile u32 *);
+    u32 (*values)(volatile u32 *);
+    const u16 *(*value_text)(volatile u32 *,u32);
+    u32 (*get)(volatile u32 *);
+    void (*set)(volatile u32 *,u32);
+} Setting;
+/* The rows of a native settings page. */
+#define SETTING_ROWS 2U
+
 typedef struct {
     const u16 *(*title)(volatile u32 *);
     /* The root row text. */
@@ -69,6 +82,10 @@ typedef struct {
     u32 (*parameters)(volatile u32 *,u32);
     /* Artwork tiles: <ID>_TILES (generated/plugins.h), from the registry. */
     u32 tiles;
+    /* Optional: SETTING_ROWS settings. Where the target has a native settings
+       page, OK on the root row opens that page with these settings instead
+       of the page of the module. The page title is the module title. */
+    const Setting *settings;
 } Module;
 
 /* Core services for pages. */

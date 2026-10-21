@@ -22,12 +22,12 @@ extern u32 menu_destroy_original(u32);
 /* The plugin interface, before the services that it declares. */
 #include "plugin.h"
 #define PAGE 6U
-/* GRKIT_HOST_RETURN: the native parameter page is opening (1) or open (2).
-   ADJ exited while GRKit was open (3), so the next ADJ opens GRKit. MENU or
-   OK on GRKit passes the event that closes ADJ to the native list (4); the
-   exit then sets 3. Only an exit sets 3, because leaving GRKit refreshes ADJ.
-   RETURN_ROOT marks a parameter page that Fn opened from the root, so the
-   page returns to the root instead of the page of the module. */
+/* GRKIT_HOST_RETURN: a native page (the parameter page or a settings page)
+   is opening (1) or open (2). ADJ exited while GRKit was open (3), so the next
+   ADJ opens GRKit. MENU or OK on GRKit passes the event that closes ADJ to the
+   native list (4); the exit then sets 3. Only an exit sets 3, because leaving
+   GRKit refreshes ADJ. RETURN_ROOT marks a page that opened from the root, so
+   the page returns to the root instead of the page of the module. */
 #define RETURN_OPENING 1U
 #define RETURN_PARAMETERS 2U
 #define RETURN_GRKIT 3U
@@ -292,7 +292,7 @@ A32_ENTRY void menu_refresh(u32 controller) {
 #endif
         /* GRKit reopens at the root row of the module (menu_reopen). Fn on a
            page returns to that page. Fn starts only from Image Control, so it
-           is visible. */
+           is visible. A settings page returns to the root. */
         enter(controller,3);
         if(!root) {
             menu_open(h,0);
@@ -523,7 +523,7 @@ A32_ENTRY void menu_parameter_page_snapshot(u32 model) {
 /* The text descriptor for `view`: the effect name for the title of a page
    that GRKit started, or 0 for native text. A page whose first word is no
    longer its vtable has ended, and its memory may hold another object. */
-A32_ENTRY u32 menu_parameter_title(u32 view) {
+static u32 menu_parameter_title(u32 view) {
 #ifdef PARAMETER_KINDS
     volatile u32 *title;
     u32 page;
@@ -535,6 +535,175 @@ A32_ENTRY u32 menu_parameter_title(u32 view) {
     (void)view;
 #endif
     return 0;
+}
+#ifdef SETTINGS_SUBMENU
+/* The native settings page of a root row (Module::settings). GRKit opens the
+   MENU submenu SETTINGS_SUBMENU from ADJ, as the Fn page opens. While
+   GRKIT_HOST_SETTINGS holds the module + 1, the submenu reads a private copy
+   of its kind table entry with SETTING_ROWS rows, and the value pages of the
+   rows show and set the settings of the module. The text hooks show the
+   module title, the row labels, and the values. A value view shows the text
+   ID SETTINGS_TITLE_TEXT, so that the text hooks find the view.
+
+   The settings block (GRKIT_TEXT_SETTINGS): the entry, the descriptors of the
+   title and of the row labels, then for each value view the view and its
+   descriptor: the submenu value of each row, then the value page rows.
+
+   The return to ADJ is a controller change, which ends the page. ADJ
+   refreshes also while GRKit opens the page (leave), so its refresh must not
+   end the page. */
+#ifndef SETTINGS_MAP
+#define SETTINGS_MAP(address) ((volatile u32 *)MENU_TEXT(address))
+#endif
+#define SETTINGS_LABELS 0x80
+#define SETTINGS_VIEWS 0x98
+#define SETTINGS_VIEW_SLOTS (SETTING_ROWS+SETTING_VALUES)
+_Static_assert(SUBMENU_KIND_SIZE<=SETTINGS_LABELS && SETTINGS_LABELS+(1+SETTING_ROWS)*8<=SETTINGS_VIEWS &&
+               SETTINGS_VIEWS+SETTINGS_VIEW_SLOTS*12<=GRKIT_TEXT_PARAMETER_TITLE-GRKIT_TEXT_SETTINGS,
+               "The settings page fits its block");
+static const u32 settings_pages[SETTING_ROWS]=SETTINGS_PAGES;
+static const u16 settings_row_texts[SETTING_ROWS]=SETTINGS_ROW_TEXTS;
+static volatile u32 *settings_block(volatile u32 *h) { return SETTINGS_MAP(GRKIT_TEXT(h)+GRKIT_TEXT_SETTINGS); }
+/* The settings of the open page, or 0. */
+static const Setting *settings_page(volatile u32 *h) {
+    u32 module=h[GRKIT_HOST_SETTINGS/4]-1;
+    return module<ARRAY_COUNT(modules) ? modules[module].settings : 0;
+}
+/* A controller change. The page ends at any controller outside it. */
+A32_ENTRY void menu_settings_controller(u32 id) {
+    u32 i;
+    if(id==SETTINGS_SUBMENU) return;
+    for(i=0;i<SETTING_ROWS;++i) if(id==settings_pages[i]) return;
+    menu_header()[GRKIT_HOST_SETTINGS/4]=0;
+}
+/* The kind table that the submenu reads: the private entry at the index of
+   the borrowed entry, or the native table. */
+A32_ENTRY u32 menu_settings_kinds(void) {
+    volatile u32 *h=menu_header();
+    if(!settings_page(h)) return FW_SUBMENU_KINDS;
+    return (u32)settings_block(h)-SETTINGS_SUBMENU_KIND*SUBMENU_KIND_SIZE;
+}
+/* Show `name` in `view` of value slot `slot`. Reset the text ID first: the
+   view measures its text only when its ID changes. */
+static void settings_view(volatile u32 *h,u32 slot,u32 view,const u16 *name) {
+    volatile u32 *at=settings_block(h)+SETTINGS_VIEWS/4+slot*3;
+    at[0]=view;
+    descriptor(at+1,name);
+    CALL3(FW_STRING_VIEW_RESET)(view,0,0);
+}
+/* The text descriptor of a settings page text, with bit 0 set (the text hooks
+   then select the font of the menu language), or 0. */
+static u32 settings_text(volatile u32 *h,u32 view,u32 id) {
+    volatile u32 *block=settings_block(h);
+    u32 i;
+    if(!settings_page(h)) return 0;
+    if(id==SETTINGS_TITLE_TEXT)
+        for(i=0;i<SETTINGS_VIEW_SLOTS;++i)
+            if(block[SETTINGS_VIEWS/4+i*3]==view) return (u32)(block+SETTINGS_VIEWS/4+i*3+1)|1U;
+    if(id==SETTINGS_TITLE_TEXT) return (u32)(block+SETTINGS_LABELS/4)|1U;
+    for(i=0;i<SETTING_ROWS;++i)
+        if(id==settings_row_texts[i]) return (u32)(block+SETTINGS_LABELS/4+(i+1)*2)|1U;
+    return 0;
+}
+/* The value method of submenu row `setting`, from the private entry. */
+static void settings_row(u32 row,u32 setting) {
+    volatile u32 *h=menu_header();
+    const Setting *page=settings_page(h);
+    if(!page) return;
+    settings_view(h,setting,WORD(row,ROW_VALUE_VIEW),page[setting].value_text(h,page[setting].get(h)));
+    CALL2(FW_ROW_VALUE)(row,SETTINGS_TITLE_TEXT);
+}
+A32_ENTRY void menu_settings_value_0(u32 submenu,u32 row) { (void)submenu; settings_row(row,0); }
+A32_ENTRY void menu_settings_value_1(u32 submenu,u32 row) { (void)submenu; settings_row(row,1); }
+static u32 settings_values(volatile u32 *h,const Setting *setting) {
+    u32 n=setting->values(h);
+    return n<SETTING_VALUES ? n : SETTING_VALUES;
+}
+/* The methods of the value page of row `setting`. Each returns 0 for the
+   native method, else its result + 1. The row count: */
+A32_ENTRY u32 menu_settings_count(u32 unused,u32 unused2,u32 setting) {
+    volatile u32 *h=menu_header();
+    const Setting *page=settings_page(h);
+    (void)unused; (void)unused2;
+    return page ? settings_values(h,&page[setting])+1 : 0;
+}
+/* The text of value row `row`, which shows value `value`: */
+A32_ENTRY u32 menu_settings_draw(u32 row,u32 value,u32 setting) {
+    volatile u32 *h=menu_header();
+    const Setting *page=settings_page(h);
+    if(!page) return 0;
+    if(value<settings_values(h,&page[setting]))
+        settings_view(h,SETTING_ROWS+value,WORD(row,ROW_TEXT_VIEW),page[setting].value_text(h,value));
+    CALL2(FW_ROW_TEXT)(row,SETTINGS_TITLE_TEXT);
+    return 1;
+}
+/* OK on value `value`: */
+A32_ENTRY u32 menu_settings_apply(u32 value,u32 unused,u32 setting) {
+    volatile u32 *h=menu_header();
+    const Setting *page=settings_page(h);
+    (void)unused;
+    if(!page) return 0;
+    if(value<settings_values(h,&page[setting])) page[setting].set(h,value);
+    return 1;
+}
+/* Whether value `value` is the stored value: */
+A32_ENTRY u32 menu_settings_current(u32 value,u32 unused,u32 setting) {
+    volatile u32 *h=menu_header();
+    const Setting *page=settings_page(h);
+    (void)unused;
+    return page ? (page[setting].get(h)==value)+1 : 0;
+}
+/* Start a page for `module`: copy the borrowed entry with SETTING_ROWS rows
+   and the private value methods, and fill the descriptors of the labels. The
+   menu language does not change while the page is open. */
+static void settings_start(volatile u32 *h,u32 module) {
+    static void (*const values[SETTING_ROWS])(u32,u32)={menu_settings_value_0,menu_settings_value_1};
+    volatile u32 *block=settings_block(h);
+    const Setting *page=modules[module].settings;
+    u32 stock=FW_SUBMENU_KINDS+SETTINGS_SUBMENU_KIND*SUBMENU_KIND_SIZE, i;
+    for(i=0;i<SUBMENU_KIND_SIZE/4;++i) block[i]=WORD(stock,i*4);
+    ((volatile u8 *)block)[SUBMENU_KIND_ROWS]=SETTING_ROWS;
+    for(i=0;i<SETTING_ROWS;++i) {
+        /* A C++ member pointer: the function, then the adjustment of `this`. */
+        block[SUBMENU_KIND_VALUES/4+i*2]=(u32)values[i];
+        block[SUBMENU_KIND_VALUES/4+i*2+1]=0;
+        descriptor(block+SETTINGS_LABELS/4+(i+1)*2,page[i].label(h));
+    }
+    descriptor(block+SETTINGS_LABELS/4,modules[module].title(h));
+    for(i=0;i<SETTINGS_VIEW_SLOTS*3;++i) block[SETTINGS_VIEWS/4+i]=0;
+    h[GRKIT_HOST_SETTINGS/4]=module+1;
+}
+#endif
+/* The text descriptor for `view` and text ID `id`, or 0 for the native text.
+   Bit 0 selects the font of the menu language. */
+A32_ENTRY u32 menu_text_override(u32 view,u32 id) {
+    u32 title=menu_parameter_title(view);
+    if(title) return title;
+#ifdef SETTINGS_SUBMENU
+    return settings_text(menu_header(),view,id);
+#else
+    (void)id;
+    return 0;
+#endif
+}
+/* OK on a root row with settings opens the native settings page where the
+   target has one. The page returns to the root (menu_refresh). */
+static u32 open_settings(u32 controller) {
+#ifdef SETTINGS_SUBMENU
+    volatile u32 *h=menu_header();
+    u32 module;
+    if(h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_ROOT || ADJ_MOVIE(controller)==1) return 0;
+    module=root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]);
+    if(!modules[module].settings) return 0;
+    leave(controller);
+    settings_start(h,module);
+    h[GRKIT_HOST_RETURN/4]=RETURN_OPENING|RETURN_ROOT;
+    CALL3(FW_CHANGE_CONTROLLER)(controller,SETTINGS_SUBMENU,0x2000000);
+    return 1;
+#else
+    (void)controller;
+    return 0;
+#endif
 }
 /* Open the native parameter page, as the native ADJ Image Control slot does
    for event 0x1b with argument 2. Refresh the model snapshot first: a cancel
@@ -701,6 +870,7 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
 #ifdef EV_ADJ_PRESS
         if(after_adj_press(h)) close=1;
 #endif
+        if(!close && open_settings(controller)) return 0;
         if(page || !close) menu_confirm(h);
         if(close) {
             leave(controller);

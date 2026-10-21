@@ -77,6 +77,31 @@
 #define PARAMETER_KINDS {0,1,2,3,4,5,6,13,14}
 /* The page event that opens another controller (0x2000015) from the page. */
 #define DETAIL_EV_SUBPAGE 0x88
+/* The native settings page of a GRKit root row (runtime/menu.c). It borrows
+   the MENU submenu Instant Review (controller 0x20000be, entry 10 of the
+   submenu kind table) and its value pages Display Time (0x20000c3) and Zoom
+   Review (0x20000c4). A kind table entry holds the row count at +6, the row
+   label IDs (u16) at +8, the row controllers (u32) at +0x14, and the row value
+   methods (C++ member pointers, 8 bytes) at +0x3c. A value method gets the
+   submenu and the row. */
+#define FW_SUBMENU_KINDS FIRMWARE(0x53b3fb10)
+#define SUBMENU_KIND_SIZE 0x64
+#define SUBMENU_KIND_ROWS 6
+#define SUBMENU_KIND_CONTROLLERS 0x14
+#define SUBMENU_KIND_VALUES 0x3c
+#define SETTINGS_SUBMENU 0x20000beU
+#define SETTINGS_SUBMENU_KIND 10
+#define SETTINGS_PAGES {0x20000c3U,0x20000c4U}
+/* The text IDs of the submenu title and of its two rows. The value pages show
+   the label of their row as title. */
+#define SETTINGS_TITLE_TEXT 0x1e7
+#define SETTINGS_ROW_TEXTS {0x1e9,0x1eb}
+/* Row text setters: a value page row sets the string view at +0xf8, and a
+   submenu row its value view at +0xfc. Each sets a text ID. */
+#define FW_ROW_TEXT FIRMWARE(0x5339e7a0)
+#define ROW_TEXT_VIEW 0xf8
+#define FW_ROW_VALUE FIRMWARE(0x533a6ad0)
+#define ROW_VALUE_VIEW 0xfc
 #define FW_ADJ_REFRESH FIRMWARE(0x531a4114)
 #define FW_ADJ_SELECT_SLOT FIRMWARE(0x531a4864)
 #define FW_CHANGE_CONTROLLER FIRMWARE(0x5316c9d8)

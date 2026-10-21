@@ -13,15 +13,26 @@ menu_header:
 .global menu_text_measure
 .type menu_text_measure, %function
 menu_text_measure:
-    /* r7 is the text ID and r5 the view. The title of a GRKit parameter page
-       takes the effect name instead of the table entry. Flags survive pop. */
+    /* r7 is the text ID and r5 the view. A text that menu.c gives
+       (menu_text_override) replaces the table entry: the effect name in the
+       title of a GRKit parameter page, or a settings page text. Bit 0 of the
+       result asks for the font of the menu language. */
     push {r0-r3, r12, lr}
     mov r0, r5
-    bl menu_parameter_title
-    cmp r0, #0
-    movne r7, r0
+    mov r1, r7
+    bl menu_text_override
+    movs r1, r0
+    beq measure_table
+    bic r7, r1, #1
+    tst r1, #1
+    beq measure_override_done
+    bl menu_table_index
+    mov r9, r0
+measure_override_done:
     pop {r0-r3, r12, lr}
-    bne measure_resume
+    b measure_resume
+measure_table:
+    pop {r0-r3, r12, lr}
     ldr r7, [r3, r7, lsl #2]
     push {r0-r3, lr}
     ldr r0, =GRKIT_HEADER_REFERENCE
@@ -51,16 +62,26 @@ measure_resume:
 .global menu_text_draw
 .type menu_text_draw, %function
 menu_text_draw:
-    /* r7 is the text ID, r4 the view, and r3 the table. As at the measure
-       hook, the title of a GRKit parameter page takes the effect name. The
-       name replaces the saved r3, so pop loads it. Flags survive pop. */
+    /* r7 is the text ID, r4 the view, r3 the table, and r0 the language table
+       index. As at the measure hook, a text that menu.c gives replaces the
+       table entry. It replaces the saved r3, so the pop loads it. */
     push {r0-r3, r12, lr}
     mov r0, r4
-    bl menu_parameter_title
-    cmp r0, #0
-    strne r0, [sp, #12]
+    mov r1, r7
+    bl menu_text_override
+    movs r1, r0
+    beq draw_table
+    bic r2, r1, #1
+    str r2, [sp, #12]
+    tst r1, #1
+    beq draw_override_done
+    bl menu_table_index
+    str r0, [sp]
+draw_override_done:
     pop {r0-r3, r12, lr}
-    bne draw_resume
+    b draw_resume
+draw_table:
+    pop {r0-r3, r12, lr}
     ldr r3, [r3, r7, lsl #2]
     push {r1, r2, r12, lr}
     ldr r12, =GRKIT_HEADER_REFERENCE
@@ -474,5 +495,87 @@ menu_parameter_event:
     bxne lr
 parameter_event_resume:
     ldr pc, =HOOK_MENU_PARAMETER_EVENT_RESUME
+.ltorg
+#endif
+
+#ifdef HOOK_MENU_SETTINGS_CHANGE
+/* The native settings page of a GRKit root row (menu.c). ChangeController
+   entry: r1 is the controller that opens. */
+.global menu_settings_change
+.type menu_settings_change, %function
+menu_settings_change:
+    push {r0-r3, r12, lr}
+    mov r0, r1
+    bl menu_settings_controller
+    pop {r0-r3, r12, lr}
+    .inst HOOK_MENU_SETTINGS_CHANGE_STOCK
+    ldr pc, =HOOK_MENU_SETTINGS_CHANGE_RESUME
+
+/* Each replaces the MOVT of the submenu kind table base with a BL, after the
+   function has saved lr. The register gets the whole base. Other registers and
+   the flags keep their values. A base in r0 to r3 goes to its saved slot. */
+.macro SETTINGS_KINDS_SAVED name, slot
+.global \name
+.type \name, %function
+\name:
+    push {r0-r3, r12, lr}
+    mrs r0, cpsr
+    push {r0, r1}
+    bl menu_settings_kinds
+    str r0, [sp, #8+4*\slot]
+    pop {r0, r1}
+    msr APSR_nzcvq, r0
+    pop {r0-r3, r12, pc}
+.endm
+.macro SETTINGS_KINDS_REGISTER name, register
+.global \name
+.type \name, %function
+\name:
+    push {r0-r3, r12, lr}
+    mrs r0, cpsr
+    push {r0, r1}
+    bl menu_settings_kinds
+    mov \register, r0
+    pop {r0, r1}
+    msr APSR_nzcvq, r0
+    pop {r0-r3, r12, pc}
+.endm
+SETTINGS_KINDS_SAVED menu_settings_kinds_r3_0, 3
+SETTINGS_KINDS_SAVED menu_settings_kinds_r2, 2
+SETTINGS_KINDS_REGISTER menu_settings_kinds_r8, r8
+SETTINGS_KINDS_REGISTER menu_settings_kinds_r5, r5
+SETTINGS_KINDS_SAVED menu_settings_kinds_r3_1, 3
+
+/* The entry of a value page method: r0 is the page, r1 and r2 the arguments.
+   The C function gets r1, r2, and the row of the setting. It returns 0 for
+   the native method, else the result + 1. */
+.macro SETTINGS_METHOD name, function, setting, stock, resume
+.global \name
+.type \name, %function
+\name:
+    push {r0-r3, r12, lr}
+    mov r0, r1
+    mov r1, r2
+    mov r2, #\setting
+    bl \function
+    subs r3, r0, #1
+    blt 1f
+    mov r0, r3
+    add sp, sp, #4
+    pop {r1-r3, r12, pc}
+1:
+    pop {r0-r3, r12, lr}
+    .inst \stock
+    ldr pc, =\resume
+.endm
+SETTINGS_METHOD menu_settings_count_0, menu_settings_count, 0, HOOK_MENU_SETTINGS_COUNT_0_STOCK, HOOK_MENU_SETTINGS_COUNT_0_RESUME
+SETTINGS_METHOD menu_settings_draw_0, menu_settings_draw, 0, HOOK_MENU_SETTINGS_DRAW_0_STOCK, HOOK_MENU_SETTINGS_DRAW_0_RESUME
+SETTINGS_METHOD menu_settings_apply_0, menu_settings_apply, 0, HOOK_MENU_SETTINGS_APPLY_0_STOCK, HOOK_MENU_SETTINGS_APPLY_0_RESUME
+SETTINGS_METHOD menu_settings_current_0, menu_settings_current, 0, HOOK_MENU_SETTINGS_CURRENT_0_STOCK, HOOK_MENU_SETTINGS_CURRENT_0_RESUME
+.ltorg
+SETTINGS_METHOD menu_settings_count_1, menu_settings_count, 1, HOOK_MENU_SETTINGS_COUNT_1_STOCK, HOOK_MENU_SETTINGS_COUNT_1_RESUME
+SETTINGS_METHOD menu_settings_draw_1, menu_settings_draw, 1, HOOK_MENU_SETTINGS_DRAW_1_STOCK, HOOK_MENU_SETTINGS_DRAW_1_RESUME
+SETTINGS_METHOD menu_settings_apply_1, menu_settings_apply, 1, HOOK_MENU_SETTINGS_APPLY_1_STOCK, HOOK_MENU_SETTINGS_APPLY_1_RESUME
+SETTINGS_METHOD menu_settings_current_1, menu_settings_current, 1, HOOK_MENU_SETTINGS_CURRENT_1_STOCK, HOOK_MENU_SETTINGS_CURRENT_1_RESUME
 .ltorg
 #endif

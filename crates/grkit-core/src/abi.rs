@@ -74,8 +74,11 @@ fields!(HEADER_FIELDS {
     HOST_MENU_REBUILDING = 60, 4;
     /// Native list position, saved when the private menu opens.
     HOST_MENU_LIST = 64, 8;
-    /// Reserved and zero.
-    HOST_RESERVED_72 = 72, 4;
+    /// The module + 1 whose native settings page the menu opened from its root
+    /// row (Module.settings, runtime/plugin.h), or 0. While it is set, the
+    /// hooks of the borrowed native page show the settings of that module. A
+    /// change to a controller outside the page clears it.
+    HOST_SETTINGS = 72, 4;
     /// Number of ADJ events. GRKIT_HOST_MENU_EVENT_RING holds the last ones.
     HOST_MENU_EVENTS = 76, 4;
     /// Number of Image Control selections. A diagnostic.
@@ -204,7 +207,7 @@ pub const TAIL_SIZE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE;
 const _: () = assert!(
     menu_text::TEXT_SUMMARY
         + runtime::MAX_COUNT * crate::packaging::Language::ALL.len() * menu_text::SUMMARY_UNITS * 2
-        <= menu_text::TEXT_PARAMETER_TITLE
+        <= menu_text::TEXT_SETTINGS
 );
 
 /// Wraps `text` into a C comment.
@@ -359,6 +362,14 @@ pub fn header() -> String {
          page, its vtable, and the descriptor of the effect name.",
         "TEXT_PARAMETER_TITLE",
         menu_text::TEXT_PARAMETER_TITLE,
+    );
+    define(
+        &mut out,
+        "The native settings page of a GRKit session, before the parameter page \
+         title: the borrowed submenu entry, the text descriptors, and the views \
+         that show settings (runtime/menu.c).",
+        "TEXT_SETTINGS",
+        menu_text::TEXT_SETTINGS,
     );
     writeln!(
         out,

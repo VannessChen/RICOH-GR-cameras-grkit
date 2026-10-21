@@ -43,6 +43,7 @@ fn synthetic_firmware() -> firmware::FirmwareImage {
         .chain(components::METADATA_HOOKS.iter())
         .chain(components::PICTURE_HOOKS.iter())
         .chain(components::PARAMETER_HOOKS.iter())
+        .chain(components::SETTINGS_HOOKS.iter())
     {
         write(address, &hex::decode(bytes).unwrap());
     }
@@ -408,6 +409,22 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
         (0x532ac66c, "menu_parameter_row_6", "94760aeb", true),
         (0x532acc88, "menu_parameter_row_7", "95750aeb", true),
         (0x532acda4, "menu_parameter_row_8", "5f750aeb", true),
+        // The settings page: ChangeController, the five kind table bases, then
+        // the count, text, apply, and current methods of the two value pages.
+        (0x5316c9d8, "menu_settings_change", "0dc0a0e1", false),
+        (0x531c5d20, "menu_settings_kinds_r3_0", "b33345e3", true),
+        (0x531c5d88, "menu_settings_kinds_r2", "b32345e3", true),
+        (0x531c60f4, "menu_settings_kinds_r8", "b38345e3", true),
+        (0x531c631c, "menu_settings_kinds_r5", "b35345e3", true),
+        (0x531c63f0, "menu_settings_kinds_r3_1", "b33345e3", true),
+        (0x531b3c84, "menu_settings_count_0", "0600a0e3", false),
+        (0x531b5b34, "menu_settings_draw_0", "0dc0a0e1", false),
+        (0x531b7514, "menu_settings_apply_0", "0dc0a0e1", false),
+        (0x531b8ce4, "menu_settings_current_0", "0dc0a0e1", false),
+        (0x531b3c8c, "menu_settings_count_1", "0200a0e3", false),
+        (0x531b5b74, "menu_settings_draw_1", "0dc0a0e1", false),
+        (0x531b7544, "menu_settings_apply_1", "0dc0a0e1", false),
+        (0x531b8d18, "menu_settings_current_1", "0dc0a0e1", false),
     ];
     let menu_instructions = [(0x535c251c, "0020a083", "01288083")];
     let framing_hooks = [
@@ -699,7 +716,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
     assert_eq!(
         sha256(header.as_bytes()),
-        "29c0ff1423f99787df1aa2e75520535d6dd2b8a5c6dbd61ccbd46e0eb65a1ed9"
+        "fcacd00a0fbbbbb3bd5ba7ed2e8d6455585bd847183f492875765ad515d83bc5"
     );
     Ok(())
 }
@@ -815,7 +832,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/PLUGINS/PLUGINS.TTL",
-            "a1f211f11787ca42b1ce3fcbf461e46d21c695c33e5f9b0f2fa13bdf5c20ac6a",
+            "656ae5814a9336775c16f56b57e94d3a4f40c978145dfd7884a3f1d3a5e6c4e1",
         ),
         (
             "SCRIPT/PLUGINS/INSTALL.BIN",
@@ -886,8 +903,8 @@ fn each_point_has_its_hooks() {
     // The hooks of each point. The in-place patches add 1 to tuning, and on
     // GR III 5 to capture.aspect (build.json "points" counts both).
     for (layout, expected) in [
-        (&components::GR3_LAYOUT, [16, 48, 5, 9, 1, 2]),
-        (&components::GR4_LAYOUT, [15, 49, 5, 11, 1, 4]),
+        (&components::GR3_LAYOUT, [30, 48, 5, 9, 1, 2]),
+        (&components::GR4_LAYOUT, [29, 49, 5, 11, 1, 4]),
     ] {
         let mut counts = [0; 6];
         for (_, symbol) in components::hook_sites(layout) {

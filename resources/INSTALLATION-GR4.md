@@ -24,7 +24,7 @@ Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-
 - **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. On the GRK menu, press Fn on the Image Control row to adjust the selected effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings. The effects were made for GR III, so their colors can differ on GR IV.
 - **Framing:** select XPan. The viewfinder stays 3:2 and dims the area outside the photo. XPan also works when the native aspect ratio is 16:9.
 - **Guides:** select a guide style. The lines show only in the viewfinder.
-- **Date Stamp:** select a date style. Photos get the date at the bottom right.
+- **Date Imprint:** press OK to open its settings. In **Date Style**, select a date style. In **Date Look**, select the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.
 
 Highlight the last row, GRK, to see the GRKit version.

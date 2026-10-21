@@ -170,6 +170,30 @@ pub const PARAMETER_HOOKS: &[Hook] = &[
     (0x532acda4, "menu_parameter_row_8", "5f750aeb", true),
 ];
 
+/// A GRKit root row opens a borrowed native MENU submenu as its settings page
+/// (`runtime/menu.c`, `Module.settings`). The Instant Review submenu shows
+/// the rows, and the Display Time and Zoom Review value pages show the values
+/// of the two settings. ChangeController (its entry) ends the session at any
+/// other controller. The five MOVT of the submenu kind table base load a
+/// private copy of the Instant Review entry instead. Then the row count, row
+/// text, apply, and current-value methods of the two value pages.
+pub const SETTINGS_HOOKS: &[Hook] = &[
+    (0x5316c9d8, "menu_settings_change", "0dc0a0e1", false),
+    (0x531c5d20, "menu_settings_kinds_r3_0", "b33345e3", true),
+    (0x531c5d88, "menu_settings_kinds_r2", "b32345e3", true),
+    (0x531c60f4, "menu_settings_kinds_r8", "b38345e3", true),
+    (0x531c631c, "menu_settings_kinds_r5", "b35345e3", true),
+    (0x531c63f0, "menu_settings_kinds_r3_1", "b33345e3", true),
+    (0x531b3c84, "menu_settings_count_0", "0600a0e3", false),
+    (0x531b5b34, "menu_settings_draw_0", "0dc0a0e1", false),
+    (0x531b7514, "menu_settings_apply_0", "0dc0a0e1", false),
+    (0x531b8ce4, "menu_settings_current_0", "0dc0a0e1", false),
+    (0x531b3c8c, "menu_settings_count_1", "0200a0e3", false),
+    (0x531b5b74, "menu_settings_draw_1", "0dc0a0e1", false),
+    (0x531b7544, "menu_settings_apply_1", "0dc0a0e1", false),
+    (0x531b8d18, "menu_settings_current_1", "0dc0a0e1", false),
+];
+
 pub const VIEWFINDER_HOOKS: &[(u32, &str, &str, bool)] =
     &[(0x531710c4, "menu_viewfinder_icon", "97e204eb", true)];
 
@@ -264,6 +288,9 @@ pub struct Layout {
     pub metadata_hooks: &'static [Hook],
     /// The Fn parameter page hooks of the menu.
     pub parameter_hooks: &'static [Hook],
+    /// The native settings page hooks of the menu, or none where the target
+    /// has no settings page.
+    pub settings_hooks: &'static [Hook],
     pub instruction_patches: &'static [InstructionPatch],
     pub framing_hooks: &'static [Hook],
     pub picture_hooks: &'static [Hook],
@@ -291,6 +318,7 @@ pub const GR3_LAYOUT: Layout = Layout {
     viewfinder_hooks: VIEWFINDER_HOOKS,
     metadata_hooks: METADATA_HOOKS,
     parameter_hooks: PARAMETER_HOOKS,
+    settings_hooks: SETTINGS_HOOKS,
     instruction_patches: INSTRUCTION_PATCHES,
     framing_hooks: FRAMING_HOOKS,
     picture_hooks: PICTURE_HOOKS,
@@ -414,6 +442,24 @@ const GR4_PARAMETER_HOOKS: &[Hook] = &[
     (0x5339b56c, "menu_parameter_row_8", "70f20eeb", true),
 ];
 
+/// GR IV 1.11 settings page hooks, as `SETTINGS_HOOKS` on GR III.
+const GR4_SETTINGS_HOOKS: &[Hook] = &[
+    (0x53182e4c, "menu_settings_change", "0dc0a0e1", false),
+    (0x531e206c, "menu_settings_kinds_r3_0", "da3345e3", true),
+    (0x531e20d4, "menu_settings_kinds_r2", "da2345e3", true),
+    (0x531e2444, "menu_settings_kinds_r8", "da8345e3", true),
+    (0x531e266c, "menu_settings_kinds_r5", "da5345e3", true),
+    (0x531e2740, "menu_settings_kinds_r3_1", "da3345e3", true),
+    (0x531cf4d4, "menu_settings_count_0", "0600a0e3", false),
+    (0x531d1cb0, "menu_settings_draw_0", "0dc0a0e1", false),
+    (0x531d39ac, "menu_settings_apply_0", "0dc0a0e1", false),
+    (0x531d5364, "menu_settings_current_0", "0dc0a0e1", false),
+    (0x531cf4dc, "menu_settings_count_1", "0200a0e3", false),
+    (0x531d1cf4, "menu_settings_draw_1", "0dc0a0e1", false),
+    (0x531d39dc, "menu_settings_apply_1", "0dc0a0e1", false),
+    (0x531d5398, "menu_settings_current_1", "0dc0a0e1", false),
+];
+
 const GR4_VIEWFINDER_HOOKS: &[Hook] = &[(0x53187f90, "menu_viewfinder_icon", "2e3d08eb", true)];
 
 /// GR IV 1.11 Image Control tag, as `METADATA_HOOKS` on GR III: the playback
@@ -472,6 +518,7 @@ pub const GR4_LAYOUT: Layout = Layout {
     viewfinder_hooks: GR4_VIEWFINDER_HOOKS,
     metadata_hooks: GR4_METADATA_HOOKS,
     parameter_hooks: GR4_PARAMETER_HOOKS,
+    settings_hooks: GR4_SETTINGS_HOOKS,
     instruction_patches: GR4_INSTRUCTION_PATCHES,
     framing_hooks: GR4_FRAMING_HOOKS,
     picture_hooks: GR4_PICTURE_HOOKS,
@@ -498,6 +545,7 @@ pub(crate) fn hook_sites(layout: &Layout) -> impl Iterator<Item = (u32, &'static
                 .iter()
                 .chain(layout.metadata_hooks)
                 .chain(layout.parameter_hooks)
+                .chain(layout.settings_hooks)
                 .chain(layout.framing_hooks)
                 .chain(layout.picture_hooks)
                 .map(|&(address, name, _, _)| (address, name)),
@@ -712,7 +760,8 @@ pub fn menu(
         .map(|&(a, n, b)| (a, n, b, false))
         .chain(layout.viewfinder_hooks.iter().copied())
         .chain(layout.metadata_hooks.iter().copied())
-        .chain(layout.parameter_hooks.iter().copied());
+        .chain(layout.parameter_hooks.iter().copied())
+        .chain(layout.settings_hooks.iter().copied());
     add_patches(
         &mut component,
         body,

@@ -109,6 +109,23 @@
 #define MODEL_SNAPSHOT 3
 #define PARAMETER_KINDS {0,1,2,3,4,5,6,14,15}
 #define DETAIL_EV_SUBPAGE 0x8c
+/* The native settings page of a GRKit root row, as on GR III: the MENU
+   submenu Instant Review (0x20000d4, entry 11) and its value pages Display
+   Time (0x20000d9) and Zoom Review (0x20000da). */
+#define FW_SUBMENU_KINDS FIRMWARE(0x53da6718)
+#define SUBMENU_KIND_SIZE 0x64
+#define SUBMENU_KIND_ROWS 6
+#define SUBMENU_KIND_CONTROLLERS 0x14
+#define SUBMENU_KIND_VALUES 0x3c
+#define SETTINGS_SUBMENU 0x20000d4U
+#define SETTINGS_SUBMENU_KIND 11
+#define SETTINGS_PAGES {0x20000d9U,0x20000daU}
+#define SETTINGS_TITLE_TEXT 0x204
+#define SETTINGS_ROW_TEXTS {0x206,0x208}
+#define FW_ROW_TEXT FIRMWARE(0x5357ade0)
+#define ROW_TEXT_VIEW 0xf8
+#define FW_ROW_VALUE FIRMWARE(0x535831e8)
+#define ROW_VALUE_VIEW 0xfc
 #define FW_ADJ_REFRESH FIRMWARE(0x531bf3c8)
 #define FW_ADJ_SELECT_SLOT FIRMWARE(0x531bf94c)
 #define FW_CHANGE_CONTROLLER FIRMWARE(0x53182e4c)

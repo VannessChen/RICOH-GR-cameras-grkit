@@ -249,12 +249,23 @@ pub const PLUGINS: [Plugin; 5] = [
         id: "date-stamp",
         points: &[Point::MenuPage, Point::PictureEncode],
         needs_effects: false,
-        words: &[],
-        state: &[StateKey {
-            name: "style",
-            slot: Slot::Core(HOST_STAMP),
-            max: 5,
+        words: &[Word {
+            name: "look",
+            doc: "Date Imprint look: 0 classic seven-segment digits, 1 GR1s dot-matrix \
+                  digits, 2 GR II digits.",
         }],
+        state: &[
+            StateKey {
+                name: "style",
+                slot: Slot::Core(HOST_STAMP),
+                max: 5,
+            },
+            StateKey {
+                name: "look",
+                slot: Slot::Own(0),
+                max: 2,
+            },
+        ],
         tiles: 6,
         artwork: artwork::stamp_tiles,
         handlers: Some("stamp.c"),

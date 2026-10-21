@@ -18,6 +18,23 @@ static u32 stamp_checked(volatile u32 *h,u32 row) { return row==stamp_style(h); 
 /* Recorded pictures only: the encode handler prints the capture date. */
 static void stamp_apply(volatile u32 *h,u32 row) { h[GRKIT_HOST_STAMP/4]=row; }
 
+/* The settings page: the date style, then the look of the digits. */
+static const u16 *style_label(volatile u32 *h) { return text(h,TEXT_DATE_STYLE); }
+static u32 style_values(volatile u32 *h) { return stamp_rows(h); }
+#define LOOK_COUNT (DATE_STAMP_LOOK_MAX+1U)
+static const u16 *look_label(volatile u32 *h) { return text(h,TEXT_DATE_LOOK); }
+static u32 look_values(volatile u32 *h) { (void)h; return LOOK_COUNT; }
+static const u16 *look_text(volatile u32 *h,u32 value) { return text(h,TEXT_LOOK+value); }
+static u32 stamp_look(volatile u32 *h) {
+    u32 value=h[GRKIT_PLUGIN_DATE_STAMP_LOOK/4];
+    return value<LOOK_COUNT ? value : 0;
+}
+static void look_apply(volatile u32 *h,u32 value) { h[GRKIT_PLUGIN_DATE_STAMP_LOOK/4]=value; }
+static const Setting stamp_settings[SETTING_ROWS]={
+    {style_label,style_values,stamp_label,stamp_style,stamp_apply},
+    {look_label,look_values,look_text,stamp_look,look_apply},
+};
+
 /* The module tile, then the five styles. */
 #define DATE_STAMP_PAGE {stamp_title,stamp_summary,stamp_rows,stamp_label,stamp_icon, \
-    stamp_checked,stamp_apply,stamp_style,0,0,DATE_STAMP_TILES}
+    stamp_checked,stamp_apply,stamp_style,0,0,DATE_STAMP_TILES,stamp_settings}

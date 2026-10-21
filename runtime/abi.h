@@ -48,8 +48,11 @@
 /* Native list position, saved when the private menu opens. */
 #define GRKIT_HOST_MENU_LIST 64
 #define GRKIT_HOST_MENU_LIST_WORDS 2
-/* Reserved and zero. */
-#define GRKIT_HOST_RESERVED_72 72
+/* The module + 1 whose native settings page the menu opened from its root row
+   (Module.settings, runtime/plugin.h), or 0. While it is set, the hooks of the
+   borrowed native page show the settings of that module. A change to a
+   controller outside the page clears it. */
+#define GRKIT_HOST_SETTINGS 72
 /* Number of ADJ events. GRKIT_HOST_MENU_EVENT_RING holds the last ones. */
 #define GRKIT_HOST_MENU_EVENTS 76
 /* Number of Image Control selections. A diagnostic. */
@@ -136,9 +139,12 @@
    order, then zero words. GRKIT_PLUGIN_<PLUGIN>_<WORD> gives each offset. */
 #define GRKIT_HOST_PLUGIN_AREA 256
 #define GRKIT_HOST_PLUGIN_AREA_WORDS 64
+/* Date Imprint look: 0 classic seven-segment digits, 1 GR1s dot-matrix digits,
+   2 GR II digits. */
+#define GRKIT_PLUGIN_DATE_STAMP_LOOK 256
 /* Grain level: 0 Off, 1 weak, 2 medium, 3 strong. The native grain stage of
    recorded pictures uses it instead of the native grain settings. */
-#define GRKIT_PLUGIN_GRAIN_LEVEL 256
+#define GRKIT_PLUGIN_GRAIN_LEVEL 260
 
 /* An Image Control record. The records follow the header. */
 #define GRKIT_RECORD_SIZE 0x740
@@ -207,6 +213,10 @@
 /* The parameter page title of a GRKit session, after the summaries: the page,
    its vtable, and the descriptor of the effect name. */
 #define GRKIT_TEXT_PARAMETER_TITLE 16368
+/* The native settings page of a GRKit session, before the parameter page
+   title: the borrowed submenu entry, the text descriptors, and the views that
+   show settings (runtime/menu.c). */
+#define GRKIT_TEXT_SETTINGS 16112
 #define GRKIT_TEXT_LANGUAGES 4
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE+GRKIT_PICTURE_SCRATCH)
@@ -216,27 +226,31 @@
 #define TEXT_FRAMING 1
 #define TEXT_GUIDES 2
 #define TEXT_DATE_STAMP 3
-#define TEXT_GRAIN 4
-#define TEXT_OFF 5
+#define TEXT_DATE_STYLE 4
+#define TEXT_DATE_LOOK 5
+#define TEXT_GRAIN 6
+#define TEXT_OFF 7
 /* Framing rows 1..3: XPan 65:24, 16:9, 4:3. */
-#define TEXT_RATIO 6
+#define TEXT_RATIO 8
 /* Guides rows 1..5: thirds, center, golden ratio, diagonals, thirds and
    center. */
-#define TEXT_GUIDE 9
+#define TEXT_GUIDE 11
 /* Date Stamp rows 1..5: the date styles. */
-#define TEXT_STAMP 14
+#define TEXT_STAMP 16
+/* Date Look values 0..2: classic, GR1s, GR II. */
+#define TEXT_LOOK 21
 /* Grain rows 1..3: weak, medium, strong. */
-#define TEXT_GRAIN_LEVEL 19
-#define TEXT_IMAGE_OFF_SUMMARY 22
+#define TEXT_GRAIN_LEVEL 24
+#define TEXT_IMAGE_OFF_SUMMARY 27
 /* Summaries for each value, Off first. */
-#define TEXT_FRAMING_SUMMARY 23
-#define TEXT_GUIDES_SUMMARY 27
-#define TEXT_STAMP_SUMMARY 33
-#define TEXT_GRAIN_SUMMARY 39
+#define TEXT_FRAMING_SUMMARY 28
+#define TEXT_GUIDES_SUMMARY 32
+#define TEXT_STAMP_SUMMARY 38
+#define TEXT_GRAIN_SUMMARY 44
 /* The Image Control summary before an effect name, for the installer. */
-#define TEXT_IMAGE_PREFIX 43
+#define TEXT_IMAGE_PREFIX 48
 /* The About row: the GRKit version. */
-#define TEXT_VERSION 44
-#define GRKIT_TEXT_STRINGS 45
+#define TEXT_VERSION 49
+#define GRKIT_TEXT_STRINGS 50
 
 #endif

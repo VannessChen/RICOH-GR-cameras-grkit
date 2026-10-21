@@ -25,7 +25,7 @@ static unsigned test_language;
 #define CURRENT_ICON(row) module_icon(current_index(test_header), current_module(test_header)->icon(test_header, (row)))
 
 static volatile u32 test_header[GRKIT_HOST_HEADER_SIZE / 4];
-static u16 text_arena[GRKIT_TEXT_SIZE / 2];
+static u16 text_arena[GRKIT_TEXT_SIZE / 2] __attribute__((aligned(4)));
 static const u16 *text_at(u32 address)
 {
     u32 offset = address - GRKIT_TEXT(test_header);
@@ -373,14 +373,14 @@ int main(void)
     /* Date Stamp lists its styles, opens at the committed one, and changes nothing else. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 3;
-    assert(same(current_module(test_header)->summary(test_header), "Date Stamp: Off"));
+    assert(same(current_module(test_header)->summary(test_header), "Date Imprint: Off"));
     assert(PAGE_ICON(3, 3) == STAMP_ICON);
     test_header[GRKIT_HOST_STAMP / 4] = 2;
     assert(PAGE_ICON(3, 3) == STAMP_STYLE_ICON(2));
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_DATE_STAMP);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2 && count(test_header) == 6);
-    assert(same(current_module(test_header)->title(test_header), "Date Stamp"));
+    assert(same(current_module(test_header)->title(test_header), "Date Imprint"));
     for (u32 row = 0; row < 6; ++row) {
         test_header[GRKIT_HOST_MENU_CURSOR / 4] = row;
         menu_confirm(test_header);
@@ -395,7 +395,7 @@ int main(void)
     frame_preview(test_header, 0x5c000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 4 && test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 0);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3);
-    assert(same(current_module(test_header)->summary(test_header), "Date Stamp: D M 'YY H:MM"));
+    assert(same(current_module(test_header)->summary(test_header), "Date Imprint: D M 'YY H:MM"));
     test_header[GRKIT_HOST_STAMP / 4] = 999;
     assert(stamp_style(test_header) == 0);
     test_header[GRKIT_HOST_STAMP / 4] = 0;
@@ -533,7 +533,7 @@ int main(void)
     assert(current_module(test_header) == &modules[0]);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
     assert(current_module(test_header) == &modules[PLUGIN_DATE_STAMP]);
-    assert(same(current_module(test_header)->summary(test_header), "Date Stamp: Off"));
+    assert(same(current_module(test_header)->summary(test_header), "Date Imprint: Off"));
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == PLUGIN_DATE_STAMP);
     assert(menu_back(test_header));
@@ -613,5 +613,67 @@ int main(void)
     test_header[GRKIT_HOST_MODULE / 4] = 999;
     menu_reopen(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
+
+    /* The settings page of Date Imprint: the date style, then the look. Only
+       Date Imprint has one. */
+    for (u32 module = 0; module < ARRAY_COUNT(modules); ++module)
+        assert(!modules[module].settings == (module != PLUGIN_DATE_STAMP));
+    {
+        const Setting *page = modules[PLUGIN_DATE_STAMP].settings;
+        volatile u32 *block = settings_block(test_header);
+        const u32 view = 0x59100000;
+        assert(same(page[0].label(test_header), "Date Style") && same(page[1].label(test_header), "Date Look"));
+        assert(page[0].values(test_header) == 6 && page[1].values(test_header) == 3);
+        for (u32 value = 0; value < 6; ++value)
+            assert(same(page[0].value_text(test_header, value), stamp_names[value]));
+        assert(same(page[1].value_text(test_header, 0), "Classic") && same(page[1].value_text(test_header, 2), "GR II"));
+        /* Without a page the native table, methods, and text stay. */
+        test_header[GRKIT_HOST_SETTINGS / 4] = 0;
+        assert(menu_settings_kinds() == FW_SUBMENU_KINDS);
+        assert(!menu_settings_count(0, 0, 1) && !menu_settings_apply(1, 0, 0) && !menu_settings_current(0, 0, 0));
+        assert(!menu_text_override(view, SETTINGS_TITLE_TEXT));
+        /* A page reads the private entry at the index of the borrowed one. */
+        test_header[GRKIT_HOST_SETTINGS / 4] = PLUGIN_DATE_STAMP + 1;
+        assert(settings_page(test_header) == page);
+        assert(menu_settings_kinds() + SETTINGS_SUBMENU_KIND * SUBMENU_KIND_SIZE == (u32)block);
+        assert(menu_settings_count(0, 0, 0) == 7 && menu_settings_count(0, 0, 1) == 4);
+        /* OK stores a value of the row's setting, and the page marks it. */
+        test_header[GRKIT_HOST_STAMP / 4] = 0;
+        test_header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 0;
+        assert(menu_settings_apply(4, 0, 0) == 1 && test_header[GRKIT_HOST_STAMP / 4] == 4);
+        assert(menu_settings_apply(2, 0, 1) == 1 && test_header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] == 2);
+        assert(menu_settings_apply(3, 0, 1) == 1 && test_header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] == 2);
+        assert(menu_settings_current(4, 0, 0) == 2 && menu_settings_current(3, 0, 0) == 1);
+        assert(menu_settings_current(2, 0, 1) == 2 && menu_settings_current(0, 0, 1) == 1);
+        /* A stored look out of range reads as classic. */
+        test_header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 7;
+        assert(menu_settings_current(0, 0, 1) == 2);
+        /* The title and the row labels replace their text IDs, in the font of
+           the menu language. A value view shows its value for the title ID. */
+        for (u32 i = 0; i < SETTINGS_VIEW_SLOTS * 3; ++i) block[SETTINGS_VIEWS / 4 + i] = 0;
+        block[SETTINGS_VIEWS / 4 + 3] = view;
+        block[SETTINGS_VIEWS / 4 + 4] = 0x104;
+        assert(menu_text_override(view, SETTINGS_TITLE_TEXT) == ((u32)(block + SETTINGS_VIEWS / 4 + 4) | 1U));
+        assert(menu_text_override(view + 4, SETTINGS_TITLE_TEXT) == ((u32)(block + SETTINGS_LABELS / 4) | 1U));
+        assert(menu_text_override(view, 0x1e9) == ((u32)(block + SETTINGS_LABELS / 4 + 2) | 1U));
+        assert(menu_text_override(view, 0x1eb) == ((u32)(block + SETTINGS_LABELS / 4 + 4) | 1U));
+        assert(!menu_text_override(view, 0x16e));
+        /* A change to the submenu or to its value pages keeps the page. Any
+           other controller, such as ADJ (0x2000000), ends it. */
+        menu_settings_controller(0x20000be);
+        menu_settings_controller(0x20000c3);
+        menu_settings_controller(0x20000c4);
+        assert(test_header[GRKIT_HOST_SETTINGS / 4] == PLUGIN_DATE_STAMP + 1);
+        menu_settings_controller(0x2000000);
+        assert(!test_header[GRKIT_HOST_SETTINGS / 4] && !menu_text_override(view, SETTINGS_TITLE_TEXT));
+        /* A stored module without settings, or out of range, has no page. */
+        test_header[GRKIT_HOST_SETTINGS / 4] = PLUGIN_GRAIN + 1;
+        assert(!settings_page(test_header));
+        test_header[GRKIT_HOST_SETTINGS / 4] = 99;
+        assert(!settings_page(test_header) && menu_settings_kinds() == FW_SUBMENU_KINDS);
+        test_header[GRKIT_HOST_SETTINGS / 4] = 0;
+        test_header[GRKIT_HOST_STAMP / 4] = 0;
+        test_header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 0;
+    }
     return 0;
 }

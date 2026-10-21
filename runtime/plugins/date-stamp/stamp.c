@@ -22,30 +22,24 @@ static void blur_line(u8 *line,u32 step,u32 n,u32 r) {
     }
 }
 
-/* Date stamp in the style of a film data back: italic seven-segment digits
-   that light the picture like an LED exposure, an amber core in a red-orange
-   halo. A monochrome picture gets white light instead, in its luma only.
-   The digits render into a small coverage mask (at most STAMP_CELLS
-   rows), which two box blurs turn into the core and the halo, then the mask is
-   scaled up and added to the picture with a screen blend.
-   Segments: a top, b upper right, c lower right, d bottom, e lower left,
-   f upper left, g middle. */
+/* The looks of the date stamp (GRKIT_PLUGIN_DATE_STAMP_LOOK). The classic and
+   GR1s looks light the picture like an LED exposure of a film data back: an
+   amber core in a red-orange halo, or white light in the luma only on a
+   monochrome picture. Their characters render into a small coverage mask (at
+   most STAMP_CELLS rows); the halo is a box blur of it. The mask is then scaled
+   up and added to the picture with a screen blend. The GR II look prints flat
+   pixel digits, as the date imprint of that camera does. */
+#define LOOK_CLASSIC 0U
+#define LOOK_DOTS 1U
+#define LOOK_GR2 2U
 /* Mask digit height: up to 48 cells, or 32 when the text would exceed the
    mask width. Higher masks keep the strokes sharper after scaling. */
 #define STAMP_CELLS 48U
 #define STAMP_CELLS_LONG 32U
+
+/* Classic: italic seven-segment digits. Segments: a top, b upper right, c
+   lower right, d bottom, e lower left, f upper left, g middle. */
 static const u8 segments[10]={0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f};
-/* Mask advance of one character for digit height m. */
-static u32 advance(char c,u32 m) {
-    if(c>='0' && c<='9') return (m*54395)>>16;
-    return c==' ' ? (m*22938)>>16 : (m*19661)>>16;
-}
-static u32 text_width(const char *text,u32 n,u32 m) {
-    u32 i,total=0;
-    for(i=0;i<n;++i) total+=advance(text[i],m);
-    /* Every style ends in a digit: drop its trailing gap. */
-    return total-((m*18000)>>16);
-}
 /* Cover mask row y from x0 to x1 (Q8 cells), keeping the larger coverage. */
 static void span(u8 *row,u32 width,int x0,int x1) {
     int i;
@@ -66,7 +60,7 @@ static void bar(u8 *mask,u32 width,int x,u32 top,u32 m,int x0,int x1,u32 y0,u32 
         span(mask+(top+y)*width,width,x+x0+lean,x+x1+lean);
     }
 }
-static void glyph(u8 *mask,u32 width,char c,int x,u32 top,u32 m) {
+static void classic_glyph(u8 *mask,u32 width,char c,int x,u32 top,u32 m) {
     int w=(int)((m*36045)>>8), t=(int)((m*8520)>>8), g=(int)((m*1966)>>8);
     u32 rows=(u32)t>>8, half=m>>1, bits;
     if(!rows) rows=1;
@@ -86,6 +80,97 @@ static void glyph(u8 *mask,u32 width,char c,int x,u32 top,u32 m) {
     if(bits&16) bar(mask,width,x,top,m,0,t,half+1,m-(rows>>1)-1);
     if(bits&4) bar(mask,width,x,top,m,w-t,w,half+1,m-(rows>>1)-1);
 }
+
+/* GR1s: 5 x 7 dot-matrix characters, as the data back of the GR1s prints
+   them: digits, then the apostrophe and the colon. One byte for each of the 7
+   rows, bit 4 the left column. The zero is slashed; the apostrophe and the
+   colon are 2 columns wide. */
+static const u8 dots[12][7]={
+    {0x0e,0x11,0x13,0x15,0x19,0x11,0x0e},{0x04,0x0c,0x04,0x04,0x04,0x04,0x0e},
+    {0x0e,0x11,0x01,0x02,0x04,0x08,0x1f},{0x1f,0x02,0x04,0x02,0x01,0x11,0x0e},
+    {0x02,0x06,0x0a,0x12,0x1f,0x02,0x02},{0x1f,0x10,0x1e,0x01,0x01,0x11,0x0e},
+    {0x06,0x08,0x10,0x1e,0x11,0x11,0x0e},{0x1f,0x01,0x02,0x04,0x08,0x08,0x08},
+    {0x0e,0x11,0x11,0x0e,0x11,0x11,0x0e},{0x0e,0x11,0x11,0x0f,0x01,0x02,0x0c},
+    {0x18,0x08,0x10,0x00,0x00,0x00,0x00},{0x00,0x18,0x18,0x00,0x18,0x18,0x00}
+};
+/* Row pitch (Q8 cells) for digit height m: 7 rows span m. Columns are 0.8 of
+   a row apart, and a dot is 0.56 of a row wide, so the dots stay apart as on
+   GR1s prints. */
+static int pitch_row(u32 m) { return (int)((m*9362)>>8); }
+static int pitch_column(u32 m) { return (pitch_row(m)*205)>>8; }
+/* Cover a round dot of radius r around (cx,cy), all Q8 cells, with 4 x 4
+   samples per cell, keeping the larger coverage. */
+static void dot(u8 *mask,u32 width,u32 height,int cx,int cy,int r) {
+    int x, y, s;
+    for(y=(cy-r)>>8;y<=(cy+r)>>8;++y) for(x=(cx-r)>>8;x<=(cx+r)>>8;++x) {
+        u32 inside=0, cover;
+        if(x<0 || y<0 || x>=(int)width || y>=(int)height) continue;
+        for(s=0;s<16;++s) {
+            int dx=(x<<8)+((s&3)<<6)+32-cx, dy=(y<<8)+((s>>2)<<6)+32-cy;
+            inside+=dx*dx+dy*dy<=r*r;
+        }
+        cover=(inside*255)>>4;
+        if(cover>mask[y*width+x]) mask[y*width+x]=(u8)cover;
+    }
+}
+static void dots_glyph(u8 *mask,u32 width,u32 height,char c,int x,u32 top,u32 m) {
+    int row=pitch_row(m), column=pitch_column(m), r=(row*72)>>8;
+    u32 i, j, k=c=='\'' ? 10 : c==':' ? 11 : (u32)(c-'0');
+    if(k>11) return;
+    for(j=0;j<7;++j) for(i=0;i<5;++i)
+        if(dots[k][j]&(0x10>>i))
+            dot(mask,width,height,x+(int)i*column+(column>>1),(int)(top<<8)+(int)j*row+(row>>1),r);
+}
+
+/* The digit height of a mask look as a fraction of the short side (Q16), the
+   smallest height in pixels, and the halo blur radius in cells. Classic digits
+   are 4.5% of the short side; GR1s digits 3%, as on its prints, with a halo of
+   about half a dot row so the dots stay apart. */
+static u32 look_size(u32 look) { return look==LOOK_DOTS ? 1966 : 2949; }
+static u32 look_least(u32 look) { return look==LOOK_DOTS ? 14 : 8; }
+static u32 look_halo(u32 m,u32 look) {
+    u32 r=look==LOOK_DOTS ? (m*2)>>5 : (m*5)>>5;
+    return r ? r : 1;
+}
+/* Mask advance of one character in Q8 cells. Classic: whole cells, as 1.1
+   drew them. GR1s: a digit is 5 columns and a gap; a space, the apostrophe,
+   and the colon 3 columns. */
+static int advance(char c,u32 m,u32 look) {
+    if(look==LOOK_DOTS) return pitch_column(m)*(c>='0' && c<='9' ? 6 : 3);
+    if(c>='0' && c<='9') return (int)((m*54395)>>16)<<8;
+    return (int)(c==' ' ? (m*22938)>>16 : (m*19661)>>16)<<8;
+}
+/* The width of the text in cells, without the gap after its last digit, and
+   with the lean of the classic digits. Every style ends in a digit. */
+static u32 text_width(const char *text,u32 n,u32 m,u32 look) {
+    u32 i;
+    int total=0;
+    for(i=0;i<n;++i) total+=advance(text[i],m,look);
+    if(look==LOOK_DOTS) return (u32)((total-pitch_column(m)+255)>>8);
+    return (u32)(total>>8)-((m*18000)>>16)+((m*31)>>8);
+}
+static void glyph(u8 *mask,u32 width,u32 height,char c,int x,u32 top,u32 m,u32 look) {
+    if(look==LOOK_DOTS) dots_glyph(mask,width,height,c,x,top,m);
+    else classic_glyph(mask,width,c,x,top,m);
+}
+
+/* GR II: the 1-bit digits of the GR II date imprint, 16 x 24 cells, rows 3 to
+   20 (the others are empty), bit 15 the left column. Order: slash, colon,
+   0 to 9. */
+static const u16 gr2_glyphs[12][18]={
+    {0,0,0,0x000c,0x001c,0x0038,0x0070,0x00e0,0x01c0,0x0380,0x0700,0x0e00,0x1c00,0x3800,0x3000,0,0,0},
+    {0,0,0,0,0x0300,0x0300,0,0,0,0,0,0,0x0300,0x0300,0,0,0,0},
+    {0x03c0,0x07e0,0x0e70,0x1c38,0x1818,0x1818,0x1818,0x1818,0x1818,0x1818,0x1818,0x1818,0x1818,0x1818,0x1c38,0x0e70,0x07e0,0x03c0},
+    {0x0180,0x0380,0x0780,0x0f80,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0ff0,0x0ff0},
+    {0x03c0,0x07e0,0x0e70,0x1c38,0x1818,0x0018,0x0018,0x0038,0x0070,0x00e0,0x01c0,0x0380,0x0700,0x0e00,0x1c00,0x1800,0x1ff8,0x1ff8},
+    {0x03c0,0x07e0,0x0e70,0x1c38,0x1818,0x0018,0x0038,0x0070,0x07e0,0x07e0,0x0070,0x0038,0x0018,0x1818,0x1c38,0x0e70,0x07e0,0x03c0},
+    {0x0060,0x00e0,0x00e0,0x01e0,0x01e0,0x0360,0x0360,0x0660,0x0660,0x0c60,0x0c60,0x1860,0x1ff8,0x1ff8,0x0060,0x0060,0x0060,0x0060},
+    {0x1ff8,0x1ff8,0x1800,0x1800,0x1800,0x1800,0x1fc0,0x1fe0,0x0070,0x0038,0x0018,0x0018,0x0018,0x0018,0x1838,0x1c70,0x0fe0,0x07c0},
+    {0x03c0,0x07e0,0x0e70,0x1c38,0x1818,0x1800,0x1800,0x1800,0x1fe0,0x1ff0,0x1838,0x1818,0x1818,0x1818,0x1c38,0x0e70,0x07e0,0x03c0},
+    {0x1ff8,0x1ff8,0x1818,0x0030,0x0030,0x0060,0x0060,0x00c0,0x00c0,0x0180,0x0180,0x0300,0x0300,0x0300,0x0300,0x0300,0x0300,0x0300},
+    {0x03c0,0x07e0,0x0e70,0x1c38,0x1818,0x1818,0x1c38,0x0e70,0x07e0,0x07e0,0x0e70,0x1c38,0x1818,0x1818,0x1818,0x1c38,0x0ff0,0x07e0},
+    {0x03c0,0x07e0,0x0e70,0x1c38,0x1818,0x1818,0x1818,0x1c18,0x0ff8,0x07f8,0x0018,0x0018,0x0018,0x1818,0x1c38,0x0e70,0x07e0,0x03c0}
+};
 /* Digits without leading zeros, as a data back prints them. */
 static char *number(char *o,u32 v) {
     char d[4];
@@ -145,26 +230,26 @@ static void light_pair(const Plane *p,u32 x,u32 y,const u32 *core,const u32 *hal
 /* A rendered stamp mask and where it lies on its picture: one cell spans
    f / ss pixels, and cell (0,0) is at pixel (ox, oy). */
 typedef struct { const u8 *core,*halo; u32 mw,mh,f,ss; int ox,oy; } Stamp;
-/* Bottom right of the visible area, digits at 4.5% of its short side. Small
+/* The mask looks at the bottom right of the visible area (look_size). Small
    pictures (the screennail that playback shows first, and the thumbnail) render
    the mask at twice their resolution and average 2 x 2 cells per pixel, so their
    strokes stay as sharp as on the main picture: there, one mask cell spans
    several pixels instead. Returns 1 and describes the mask in `out` when it drew. */
-static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,Stamp *out) {
+static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 look,Stamp *out) {
     u32 width=p->right-p->left, height=p->bottom-p->top, size, f, ss=1, m, pad, cw, mw, mh, margin;
     u32 i, x, y, sx, sy, dx, dy, step, total;
     int caret;
     u8 *core=scratch, *halo;
-    size=((width<height ? width : height)*2949)>>16;
-    if(size<8) size=8;
+    size=((width<height ? width : height)*look_size(look))>>16;
+    if(size<look_least(look)) size=look_least(look);
     for(i=0;i<2;++i) {
         u32 cells=i ? STAMP_CELLS_LONG : STAMP_CELLS;
         f=size<=cells ? 1 : divide(size+cells-1,cells);
         ss=f==1 && 2*size<=cells ? 2 : 1;
         m=ss==2 ? 2*size : divide(size+f/2,f);
-        pad=((m*5)>>5)*2+2;
-        total=text_width(text,n,m);
-        cw=total+((m*31)>>8)+1;
+        pad=look_halo(m,look)*2+2;
+        total=text_width(text,n,m,look);
+        cw=total+1;
         mw=cw+2*pad; mh=m+2*pad;
         if(mw<=BLUR_WIDTH && mw*mh*2<=GRKIT_PICTURE_MASKS) break;
     }
@@ -173,10 +258,17 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,Stam
     if((((mw-pad)*f)>>(ss-1))+margin>width || (((mh-pad)*f)>>(ss-1))+margin>height) return 0;
     halo=core+mw*mh;
     for(i=0;i<mw*mh;++i) core[i]=0;
-    for(i=0,caret=(int)pad<<8;i<n;++i) { glyph(core,mw,text[i],caret,pad,m); caret+=(int)advance(text[i],m)<<8; }
+    for(i=0,caret=(int)pad<<8;i<n;++i) { glyph(core,mw,mh,text[i],caret,pad,m,look); caret+=advance(text[i],m,look); }
     for(i=0;i<mw*mh;++i) halo[i]=core[i];
-    for(y=0;y<mh;++y) { blur_line(core+y*mw,1,mw,1); blur_line(halo+y*mw,1,mw,(m*5)>>5 ? (m*5)>>5 : 1); }
-    for(x=0;x<mw;++x) { blur_line(core+x,mw,mh,1); blur_line(halo+x,mw,mh,(m*5)>>5 ? (m*5)>>5 : 1); }
+    /* Classic strokes soften with a core blur. The dots are anti-aliased. */
+    for(y=0;y<mh;++y) {
+        if(look!=LOOK_DOTS) blur_line(core+y*mw,1,mw,1);
+        blur_line(halo+y*mw,1,mw,look_halo(m,look));
+    }
+    for(x=0;x<mw;++x) {
+        if(look!=LOOK_DOTS) blur_line(core+x,mw,mh,1);
+        blur_line(halo+x,mw,mh,look_halo(m,look));
+    }
     if(ss==2) {
         /* Pixel origin of the mask, on an even column so CbCr pairs line up. */
         int ox=(int)p->right-(int)margin-(int)((mw-pad)>>1), oy=(int)p->bottom-(int)margin-(int)((mh-pad)>>1);
@@ -298,6 +390,90 @@ static void stamp_scaled(const Plane *dst,const Plane *src,const Stamp *st,u32 m
     #undef CELL
 }
 
+/* GR II: the date in the order of the style, with slashes and a four-digit
+   year. Month, day, and hour are two characters with a leading space, as the
+   GR II prints them (%4d/%2d/%2d %2d:%02d). */
+static char *spaced(char *o,u32 v) {
+    if(v<10) *o++=' ';
+    return number(o,v);
+}
+static u32 gr2_text(char *o,const u8 *dt,u32 style) {
+    char *start=o;
+    u32 year=dt[0]|dt[1]<<8;
+    if(style<=2) { o=number(o,year); *o++='/'; o=spaced(o,dt[2]); *o++='/'; o=spaced(o,dt[3]); }
+    else {
+        o=spaced(o,style==3 ? dt[2] : dt[3]); *o++='/'; o=spaced(o,style==3 ? dt[3] : dt[2]);
+        *o++='/'; o=number(o,year);
+    }
+    if(style==2 || style==5) { *o++=' '; o=spaced(o,dt[4]); *o++=':'; o=two(o,dt[5]); }
+    return (u32)(o-start);
+}
+/* Whether GR II glyph pixel (x,y) of the text is ink: x across the text, y in
+   the 24 rows of a cell. Spaces and unknown characters are empty. */
+static u32 gr2_ink(const char *text,u32 n,u32 x,u32 y) {
+    u32 i=x>>4, k;
+    char c;
+    if(i>=n || y<3 || y>20) return 0;
+    c=text[i];
+    k=c=='/' ? 0 : c==':' ? 1 : c>='0' && c<='9' ? (u32)(c-'0')+2 : 12;
+    return k<12 && (gr2_glyphs[k][y-3]>>(15-(x&15))&1);
+}
+/* The GR II imprint, painted on `dst` with the geometry of the main picture
+   `src`. On the main picture each glyph pixel is s x s pixels, about 1.65% of
+   the short side for 18 rows of digits, as on the GR II (3 for its 3264 rows).
+   The text ends 3 cells before the right edge, and the cells end 48 glyph
+   pixels above the bottom. The pixels get flat orange (Y 146, Cb 46,
+   Cr 225), or white luma on a monochrome picture. A smaller picture samples
+   the same geometry at 2 x 2 points for each pixel. */
+#define GR2_Y 146
+#define GR2_CB 46
+#define GR2_CR 225
+static void gr2_paint(const Plane *dst,const Plane *src,const char *text,u32 n,u32 mono) {
+    u32 sw=src->right-src->left, sh=src->bottom-src->top, dw=dst->right-dst->left, dh=dst->bottom-dst->top;
+    u32 s=(((sw<sh ? sw : sh)*60)+32768)>>16, kx, ky, rs, x, y, k, q;
+    int bx, by, x0, x1, y0, y1;
+    if(!s) s=1;
+    bx=(int)src->right-(int)(16*s*(n+3)); by=(int)src->bottom-(int)(72*s);
+    if(bx<(int)src->left || by<(int)src->top) return;
+    kx=divide(sw<<16,dw); ky=divide(sh<<16,dh); rs=divide(65536,s);
+    /* The box of the ink rows in dst pixels. */
+    x0=(int)dst->left+(int)divide((u32)(bx-(int)src->left)<<8,(kx+128)>>8)-1;
+    x1=(int)dst->left+(int)divide((u32)(bx+(int)(16*s*n)-(int)src->left)<<8,(kx+128)>>8)+2;
+    y0=(int)dst->top+(int)divide((u32)(by+(int)(3*s)-(int)src->top)<<8,(ky+128)>>8)-1;
+    y1=(int)dst->top+(int)divide((u32)(by+(int)(21*s)-(int)src->top)<<8,(ky+128)>>8)+2;
+    if(x0<(int)dst->left) x0=(int)dst->left;
+    if(y0<(int)dst->top) y0=(int)dst->top;
+    if(x1>(int)dst->right) x1=(int)dst->right;
+    if(y1>(int)dst->bottom) y1=(int)dst->bottom;
+    x0&=~1;
+    for(y=(u32)y0;(int)y<y1;++y) {
+        u32 crow=chroma_row(dst,y), chroma=!dst->half || !(y&1);
+        for(x=(u32)x0;(int)x+1<x1 && x+1<dst->right;x+=2) {
+            u32 cover[2], most=0;
+            for(k=0;k<2;++k) {
+                cover[k]=0;
+                for(q=0;q<4;++q) {
+                    /* Q16 source pixel of a sample, then its glyph pixel. */
+                    u32 px=(src->left<<16)+(x+k-dst->left)*kx+(q&1 ? (3*kx)>>2 : kx>>2);
+                    u32 py=(src->top<<16)+(y-dst->top)*ky+(q&2 ? (3*ky)>>2 : ky>>2);
+                    int gx=(int)(px>>16)-bx, gy=(int)(py>>16)-by;
+                    if(gx>=0 && gy>=0) cover[k]+=gr2_ink(text,n,((u32)gx*rs)>>16,((u32)gy*rs)>>16);
+                }
+                if(cover[k]>most) most=cover[k];
+            }
+            if(!most) continue;
+            for(k=0;k<2;++k) {
+                u32 at=y*dst->pitch+x+k, v=BYTE(dst->y,at), target=mono ? 255 : GR2_Y;
+                BYTE(dst->y,at)=(u8)((int)v+(((int)target-(int)v)*(int)cover[k])/4);
+            }
+            if(!mono && chroma) {
+                u32 cb=BYTE(crow,x), cr=BYTE(crow,x+1);
+                BYTE(crow,x)=(u8)((int)cb+((GR2_CB-(int)cb)*(int)most)/4);
+                BYTE(crow,x+1)=(u8)((int)cr+((GR2_CR-(int)cr)*(int)most)/4);
+            }
+        }
+    }
+}
 /* Off and unknown styles print nothing. */
 static u32 stamp_wanted(volatile u32 *h,const PictureSet *set) {
     u32 style=h[GRKIT_HOST_STAMP/4];
@@ -308,15 +484,21 @@ static u32 stamp_wanted(volatile u32 *h,const PictureSet *set) {
    playback keeps the stamp's place and width when it switches from the
    screennail to the main picture. */
 static void stamp_encode(volatile u32 *h,PictureSet *set) {
-    u32 date[3], n, i, main=0;
+    u32 date[3], n, i, main=0, look=h[GRKIT_PLUGIN_DATE_STAMP_LOOK/4];
     u8 *dt=(u8 *)date;
     char text[20];
     Stamp st;
+    if(look>DATE_STAMP_LOOK_MAX) look=LOOK_CLASSIC;
     local_time(dt);
-    n=date_text(text,dt,h[GRKIT_HOST_STAMP/4]);
     for(i=1;i<set->count;++i)
         if(set->planes[i].width*set->planes[i].height>set->planes[main].width*set->planes[main].height) main=i;
-    if(stamp(set->scratch,&set->planes[main],text,n,set->mono,&st)) {
+    if(look==LOOK_GR2) {
+        n=gr2_text(text,dt,h[GRKIT_HOST_STAMP/4]);
+        for(i=0;i<set->count;++i) gr2_paint(&set->planes[i],&set->planes[main],text,n,set->mono);
+        return;
+    }
+    n=date_text(text,dt,h[GRKIT_HOST_STAMP/4]);
+    if(stamp(set->scratch,&set->planes[main],text,n,set->mono,look,&st)) {
         for(i=0;i<set->count;++i)
             if(i!=main) stamp_scaled(&set->planes[i],&set->planes[main],&st,set->mono);
     }

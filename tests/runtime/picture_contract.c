@@ -402,6 +402,68 @@ int main(void)
         picture_encode(0, MESSAGE);
         assert(changes(0, 0).orange);
     }
+    /* The GR1s look lights orange dots on a color picture and white dots on a
+       monochrome one. */
+    {
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 1;
+        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 1;
+        picture_encode(0, MESSAGE);
+        struct box b = changes(0, 0);
+        assert(b.lit && b.lighter && b.orange && b.left > planes[0].width / 3);
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 1;
+        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 1;
+        BYTE(SHOT, SETTINGS_IC_TYPE) = 13;
+        picture_encode(0, MESSAGE);
+        for (u32 j = 0; j < 3; ++j) { struct box m = changes(j, 1); assert(m.lit && m.lighter && !m.orange); }
+    }
+    /* The GR II look paints flat GR II orange (Y 146, Cb 46, Cr 225) in its
+       16 x 24 cells: on a 720 x 480 picture one glyph pixel is one pixel. The
+       text ends 3 cells before the right edge, and the ink rows end 51 rows
+       above the bottom. A monochrome picture gets white luma only. */
+    {
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 1;
+        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 2;
+        picture_encode(0, MESSAGE);
+        const struct test_plane *p = &planes[1];
+        struct box b = changes(1, 0);
+        /* "2026/10/17": ten cells end at 720 - 48. */
+        assert(b.lit && b.right <= 720 - 48 && b.right > 720 - 48 - 16);
+        assert(b.left >= 720 - 16 * 13 && b.left < 720 - 16 * 13 + 16);
+        assert(b.top == 480 - 72 + 3 && b.bottom == 480 - 72 + 21);
+        u32 flat = 0;
+        for (u32 y = b.top; y < b.bottom; ++y) for (u32 x = b.left; x < b.right; ++x) {
+            uint8_t luma = BYTE(p->y, y * p->pitch + x);
+            assert(luma == 40 || luma == 146);
+            if (luma == 146) {
+                ++flat;
+                assert(BYTE(p->c, y * p->pitch + (x & ~1u)) == 46 && BYTE(p->c, y * p->pitch + (x | 1)) == 225);
+            }
+        }
+        assert(flat > 100);
+        /* The main picture and the thumbnail get the stamp at the same place. */
+        assert(changes(0, 0).lit && changes(2, 0).lit);
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 1;
+        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 2;
+        BYTE(SHOT, SETTINGS_IC_TYPE) = 13;
+        picture_encode(0, MESSAGE);
+        for (u32 j = 0; j < 3; ++j) { struct box m = changes(j, 1); assert(m.lit && m.lighter && !m.orange); }
+        /* An unknown look prints the classic digits. */
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 1;
+        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 7;
+        picture_encode(0, MESSAGE);
+        assert(changes(0, 0).orange);
+        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 0;
+    }
     /* Unusable descriptors are skipped. */
     encode_setup();
     header[GRKIT_HOST_STAMP / 4] = 1;
