@@ -363,6 +363,45 @@ int main(void)
     WORD(record(2), GRKIT_RECORD_MONOCHROME) = 1;
     picture_encode(0, MESSAGE);
     for (u32 i = 0; i < 3; ++i) { struct box b = changes(i, 1); assert(b.lit && b.lighter && !b.orange); }
+    /* Its light is white: brighter in luma than the amber light of a color picture. */
+    assert(changes(0, 1).lift > dark_lift);
+    /* A native monochrome Image Control type of the shot also keeps neutral
+       chroma. A GRKit record decides over the native type. */
+    {
+        static const uint8_t mono[] = {13, 14, 15, 16
+#ifdef FRAMING_XPAN_NATIVE
+            , 25, 26, 27, 28, 29, 30
+#endif
+        };
+        static const uint8_t color[] = {11, 12, 17, 22
+#ifdef FRAMING_XPAN_NATIVE
+            , 23, 24
+#endif
+        };
+        for (u32 i = 0; i < sizeof(mono); ++i) {
+            encode_setup();
+            fill_planes(40, 128, 128);
+            header[GRKIT_HOST_STAMP / 4] = 1;
+            BYTE(SHOT, SETTINGS_IC_TYPE) = mono[i];
+            picture_encode(0, MESSAGE);
+            for (u32 j = 0; j < 3; ++j) { struct box b = changes(j, 1); assert(b.lit && b.lighter && !b.orange); }
+        }
+        for (u32 i = 0; i < sizeof(color); ++i) {
+            encode_setup();
+            fill_planes(40, 128, 128);
+            header[GRKIT_HOST_STAMP / 4] = 1;
+            BYTE(SHOT, SETTINGS_IC_TYPE) = color[i];
+            picture_encode(0, MESSAGE);
+            assert(changes(0, 0).orange);
+        }
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 1;
+        BYTE(SHOT, SETTINGS_IC_TYPE) = 13;
+        still(record(2));
+        picture_encode(0, MESSAGE);
+        assert(changes(0, 0).orange);
+    }
     /* Unusable descriptors are skipped. */
     encode_setup();
     header[GRKIT_HOST_STAMP / 4] = 1;

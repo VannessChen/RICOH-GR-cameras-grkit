@@ -126,7 +126,7 @@ typedef struct { u32 y,c,width,height,pitch,half,left,top,right,bottom; } Plane;
 static inline u32 chroma_row(const Plane *p,u32 y) { return p->c+(p->half ? y>>1 : y)*p->pitch; }
 /* The deduplicated planes of one encode. `record` is the processing record of
    the shot, or 0 for native processing, and `mono` is set for a monochrome
-   record. `scratch` holds GRKIT_PICTURE_MASKS bytes for this call. */
+   record or a native monochrome Image Control type. `scratch` holds GRKIT_PICTURE_MASKS bytes for this call. */
 typedef struct {
     Plane planes[4];
     u32 count;

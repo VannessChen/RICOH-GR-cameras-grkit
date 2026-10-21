@@ -14,6 +14,11 @@
    type at +0x77c. Standard is type 11. */
 #define FW_SETTINGS_DOMAIN FIRMWARE(0x553458b0)
 #define SETTINGS_IC_TYPE 0x77c
+/* The native monochrome types, as a bit mask of the type: 13 to 16 are
+   Monotone, Soft Monotone, Hard Monotone, and Hi-Contrast B&W (ImageTone 258
+   to 261, table 0x53d2b6f4). The shot settings hold the type at the same
+   offset as the settings payload. */
+#define NATIVE_MONOCHROME_TYPES 0x0001e000U
 
 /* Allocation and the vector helpers of View children. */
 #define FW_ALLOCATE FIRMWARE(0x536af2a8)

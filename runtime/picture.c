@@ -178,6 +178,19 @@ void picture_record_parameters(u32 entry,u32 shot) {
         PICTURE_IFD_SET_SHORT(entry,elements[i],stored>8 ? 0 : stored<=4 ? stored : (stored-9)&0xffffU);
     }
 }
+/* Whether the native Image Control type of a shot makes a monochrome picture,
+   such as Monotone or a type of GR IV Monochrome. */
+static u32 native_monochrome(u32 shot) {
+#ifdef NATIVE_MONOCHROME_TYPES
+    u32 type;
+    if(shot<0x40000000U || shot>0xbfffff00U) return 0;
+    type=BYTE(shot,SETTINGS_IC_TYPE);
+    return type<32 && (NATIVE_MONOCHROME_TYPES>>type&1);
+#else
+    (void)shot;
+    return 0;
+#endif
+}
 /* The encode handlers in call order (Encoder.order in the registry). */
 static const Encoder encoders[]={PLUGIN_ENCODERS};
 #define ENCODER_COUNT (sizeof(encoders)/sizeof(encoders[0]))
@@ -199,6 +212,7 @@ void picture_encode(u32 process,u32 message) {
         set.record=record;
         set.mono=WORD(record,GRKIT_RECORD_MONOCHROME)&1;
     }
+    else set.mono=native_monochrome(WORD(config,0x34));
     for(i=0;i<ENCODER_COUNT;++i) {
         wanted[i]=PLUGIN_INSTALLED(h,encoders[i].plugin) && encoders[i].wanted(h,&set);
         any|=wanted[i];

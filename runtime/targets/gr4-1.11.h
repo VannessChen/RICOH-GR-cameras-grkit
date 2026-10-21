@@ -18,6 +18,11 @@
    Image Control type at +0x79c. Standard is type 11. */
 #define FW_SETTINGS_DOMAIN (FIRMWARE(0x5537960c) + 4)
 #define SETTINGS_IC_TYPE 0x79c
+/* The native monochrome types, as a bit mask of the type: 13 to 16 as on
+   GR III, and 25 to 30, the types of GR IV Monochrome (ImageTone 0x8100 to
+   0x8105, table 0x53fa1758). The shot settings hold the type at the same
+   offset as the settings payload. */
+#define NATIVE_MONOCHROME_TYPES 0x7e01e000U
 /* Framing: GR IV has native 4:3 and 16:9, so Framing offers Off and XPan.
    XPan uses capture aspect id 2 with the 65:24 heights. In native 3:2 the
    capture request hook maps the 3:2 request to id 2, and the live-view hooks

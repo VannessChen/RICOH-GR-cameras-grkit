@@ -24,7 +24,8 @@ static void blur_line(u8 *line,u32 step,u32 n,u32 r) {
 
 /* Date stamp in the style of a film data back: italic seven-segment digits
    that light the picture like an LED exposure, an amber core in a red-orange
-   halo. The digits render into a small coverage mask (at most STAMP_CELLS
+   halo. A monochrome picture gets white light instead, in its luma only.
+   The digits render into a small coverage mask (at most STAMP_CELLS
    rows), which two box blurs turn into the core and the halo, then the mask is
    scaled up and added to the picture with a screen blend.
    Segments: a top, b upper right, c lower right, d bottom, e lower left,
@@ -125,7 +126,8 @@ static void light_pair(const Plane *p,u32 x,u32 y,const u32 *core,const u32 *hal
         u32 lr=core[i]+((halo[i]*180)>>8), lg=((core[i]*150)>>8)+((halo[i]*40)>>8), lb=(core[i]*40)>>8;
         u32 luma=BYTE(p->y,y*p->pitch+x+i), r, g, b;
         if(lr>255) lr=255;
-        if(mono) { yv[i]=screen(luma,(19595*lr+38470*lg+7471*lb+32768)>>16); continue; }
+        /* White light: the red channel holds the full core and halo. */
+        if(mono) { yv[i]=screen(luma,lr); continue; }
         r=screen(clamp255((int)luma+((91881*cr)>>16)),lr);
         g=screen(clamp255((int)luma-((22554*cb+46802*cr)>>16)),lg);
         b=screen(clamp255((int)luma+((116130*cb)>>16)),lb);
