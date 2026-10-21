@@ -35,6 +35,7 @@ GRKit 在 ADJ 模式中增加第 6 个功能 GRK，包含五个模块：
 | RICOH GR IIIx HDF | 1.60 | 已支持，与 GR IIIx 使用同一个固件和运行时 |
 | RICOH GR IV | 1.11 | 已经过真机测试。画幅只提供 XPan。 |
 | RICOH GR IV HDF | 1.11 | 已支持，与 GR IV 使用同一个固件和运行时。画幅只提供 XPan。 |
+| RICOH GR IV Monochrome | 1.00 | 实验性。运行 GR IV 1.11 的固件，相机显示的版本为 1.00。使用不含影像控制的 GR IV 包。未经真机测试。画幅只提供 XPan。 |
 
 HDF 机型运行基础机型的固件，使用同一个包。不支持其他机型和固件版本。你可以在相机菜单中查看固件版本。
 
@@ -52,7 +53,7 @@ HDF 机型运行基础机型的固件，使用同一个包。不支持其他机�
 每个安装包都包含对应机型的安装指南，格式为 PDF，语言是下载时选择的语言。恢复指南在其末尾。源文件：
 
 - [GR III、GR IIIx 及其 HDF 机型](resources/INSTALLATION.zh-Hans.md)
-- [GR IV 和 GR IV HDF](resources/INSTALLATION-GR4.zh-Hans.md)
+- [GR IV、GR IV HDF 和 GR IV Monochrome](resources/INSTALLATION-GR4.zh-Hans.md)
 
 要移除 GRKit，请先关闭相机，再删除存储卡中的 `SCRIPT` 文件夹。
 要关闭 SD 脚本设置，请使用 [grkit.app](https://grkit.app) 安装步骤下方提供的文件。具体步骤见安装指南。
@@ -75,6 +76,7 @@ grkit verify dist/GRKit.zip
 - GR IIIx：用 `--camera gr3x` 和 `--guide build/guides/gr3x/en.pdf` 打包。它和 GR III 使用同一个运行时。
 - HDF 机型：按基础机型打包，例如 GR III HDF 用 `--camera gr3`。
 - GR IV：用 `fwdc248b.bin` 和 `--target gr4-1.11` 构建，再用 `--camera gr4` 和 `--guide build/guides/gr4/en.pdf` 打包。
+- GR IV Monochrome：按 GR IV 的方式打包，加上 `--plugins framing,guides,date-stamp,grain`，不加 `--effects`。
 - 减少插件：用 `--plugins` 列出要安装的插件，例如 `--plugins framing,guides`。安装器不会为其他插件修改固件。不加 `--effects` 时，安装包中没有 Image Control。
 - 指南语言：加 `--language zh-Hans`、`--language zh-Hant` 或 `--language ja`，并给出该语言的指南，例如 `build/guides/gr3/zh-Hans.pdf`。
 

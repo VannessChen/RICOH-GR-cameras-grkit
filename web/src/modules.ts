@@ -23,19 +23,25 @@ export interface ModulePlan {
 }
 
 /**
- * `available` names the plugins that the camera's runtime has, in menu order.
- * Plugins outside it are neither shown nor omitted.
+ * `available` names the plugins that the site offers for the camera, in menu order.
+ * Plugins outside it are not shown. Of those, the package omits only the
+ * `excluded` plugins, which the runtime has but the camera must not install.
  */
 export function planModules(
   enabled: ReadonlySet<ModuleKey>,
   effectCount: number,
   available: readonly ModuleKey[] = MODULES.map((module) => module.key),
+  excluded: readonly ModuleKey[] = [],
 ): ModulePlan {
   const offered = MODULES.filter((module) => available.includes(module.key));
   const includeEffects = offered.some((module) => module.needsEffects && enabled.has(module.key));
   return {
     includeEffects,
-    omitted: offered.flatMap((module) => (enabled.has(module.key) ? [] : [module.plugin])),
+    omitted: MODULES.flatMap((module) =>
+      excluded.includes(module.key) || (offered.includes(module) && !enabled.has(module.key))
+        ? [module.plugin]
+        : [],
+    ),
     visible: offered
       .filter((module) => enabled.has(module.key) && (!module.needsEffects || effectCount > 0))
       .map((module) => module.key),

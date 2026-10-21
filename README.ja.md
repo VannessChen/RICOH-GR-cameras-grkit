@@ -35,6 +35,7 @@ GRKit は ADJ モードに 6 番目の項目 GRK を追加します。GRK には
 | RICOH GR IIIx HDF | 1.60 | 対応済み。GR IIIx と同じファームウェアとランタイムです。 |
 | RICOH GR IV | 1.11 | 実機でテスト済み。フレーミングは XPan のみです。 |
 | RICOH GR IV HDF | 1.11 | 対応済み。GR IV と同じファームウェアとランタイムです。フレーミングは XPan のみです。 |
+| RICOH GR IV Monochrome | 1.00 | 試験的。GR IV 1.11 のファームウェアで動作し、カメラではバージョン 1.00 と表示されます。イメージコントロールのない GR IV 用パッケージを使います。実機ではテストしていません。フレーミングは XPan のみです。 |
 
 HDF モデルはベースのカメラと同じファームウェアで動作し、同じパッケージを使います。ほかの機種やファームウェアのバージョンには対応していません。ファームウェアのバージョンは、カメラのメニューで確認できます。
 
@@ -52,7 +53,7 @@ HDF モデルはベースのカメラと同じファームウェアで動作し�
 各パッケージには、そのカメラのインストールガイドが、選んだ言語の PDF で入っています。復旧ガイドはその末尾にあります。ソースファイルは次のとおりです。
 
 - [GR III、GR IIIx とそれぞれの HDF モデル](resources/INSTALLATION.ja.md)
-- [GR IV と GR IV HDF](resources/INSTALLATION-GR4.ja.md)
+- [GR IV、GR IV HDF、GR IV Monochrome](resources/INSTALLATION-GR4.ja.md)
 
 GRKit を削除するには、カメラの電源を切ってから、カードの `SCRIPT` フォルダーを削除します。
 SD スクリプトの設定をオフにするには、[grkit.app](https://grkit.app) のインストール手順の下にあるファイルを使います。手順はインストールガイドにあります。
@@ -75,6 +76,7 @@ grkit verify dist/GRKit.zip
 - GR IIIx：`--camera gr3x` と `--guide build/guides/gr3x/en.pdf` を指定してパッケージを作成します。ランタイムは GR III と同じです。
 - HDF モデル：ベースのカメラ用のパッケージを作成します。たとえば GR III HDF では `--camera gr3` を指定します。
 - GR IV：`fwdc248b.bin` から `--target gr4-1.11` でビルドし、`--camera gr4` と `--guide build/guides/gr4/en.pdf` を指定してパッケージを作成します。
+- GR IV Monochrome：GR IV と同じ方法で、`--plugins framing,guides,date-stamp,grain` を指定し、`--effects` を指定せずにパッケージを作成します。
 - プラグインを減らす：インストールするプラグインを `--plugins` で指定します。例：`--plugins framing,guides`。インストーラーは、ほかのプラグインのためにファームウェアを変更しません。`--effects` を指定しない場合、パッケージにイメージコントロールは含まれません。
 - ガイドの言語：`--language zh-Hans`、`--language zh-Hant`、`--language ja` のいずれかを追加し、その言語のガイドを指定します。例：`build/guides/gr3/zh-Hans.pdf`。
 

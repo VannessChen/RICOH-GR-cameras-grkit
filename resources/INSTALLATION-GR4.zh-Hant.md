@@ -1,6 +1,7 @@
 # GRKit
 
 僅適用於 RICOH GR IV 與 GR IV HDF 韌體 1.11。
+GR IV Monochrome 執行同一個韌體，相機顯示的版本為 1.00。它的套件不含影像控制。對 GR IV Monochrome 的支援為實驗性，未經實機測試。
 
 ## 安裝
 

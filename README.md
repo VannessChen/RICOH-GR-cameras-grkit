@@ -35,6 +35,7 @@ You select the modules when you make a package. The menu shows only those module
 | RICOH GR IIIx HDF | 1.60 | Supported. It runs the same firmware and runtime as GR IIIx. |
 | RICOH GR IV | 1.11 | Tested on a camera. Framing offers only XPan. |
 | RICOH GR IV HDF | 1.11 | Supported. It runs the same firmware and runtime as GR IV. Framing offers only XPan. |
+| RICOH GR IV Monochrome | 1.00 | Experimental. It runs the firmware of GR IV 1.11 and shows it as version 1.00. It uses the GR IV package without Image Control. Not tested on a camera. Framing offers only XPan. |
 
 Each HDF model runs the firmware of its base camera and uses the same package. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
 
@@ -52,7 +53,7 @@ To make a package, go to [grkit.app](https://grkit.app). Select the camera, the 
 Each package contains the installation guide for its camera as a PDF, in the language that you select. The recovery guide is at its end. The sources are:
 
 - [GR III, GR IIIx, and their HDF models](resources/INSTALLATION.md)
-- [GR IV and GR IV HDF](resources/INSTALLATION-GR4.md)
+- [GR IV, GR IV HDF, and GR IV Monochrome](resources/INSTALLATION-GR4.md)
 
 To remove GRKit, turn the camera off and delete the `SCRIPT` folder from the card.
 To turn the SD script setting off, use the files that [grkit.app](https://grkit.app) gives below the installation steps. The installation guide gives the steps.
@@ -75,6 +76,7 @@ grkit verify dist/GRKit.zip
 - GR IIIx: package with `--camera gr3x` and `--guide build/guides/gr3x/en.pdf`. The runtime is the same as for GR III.
 - HDF models: package for the base camera, for example `--camera gr3` for GR III HDF.
 - GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4` and `--guide build/guides/gr4/en.pdf`.
+- GR IV Monochrome: package as for GR IV, with `--plugins framing,guides,date-stamp,grain` and without `--effects`.
 - Fewer plugins: add `--plugins` with the plugins to install, for example `--plugins framing,guides`. The installer makes no firmware change for the other plugins. Without `--effects`, the package has no Image Control.
 - Guide language: add `--language zh-Hans`, `--language zh-Hant`, or `--language ja`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
 

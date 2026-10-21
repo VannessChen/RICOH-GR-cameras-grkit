@@ -2,6 +2,8 @@ import { CAMERA_PLUGINS } from './generated/plugins';
 import type { ModuleKey } from './modules';
 
 export interface Camera {
+  /** The entry on the site. Two entries can share one package camera. */
+  key: string;
   /** The camera of the package (`camera.rs`): it selects the ModeSet file and the guide. */
   id: keyof typeof CAMERA_PLUGINS;
   name: string;
@@ -15,8 +17,11 @@ export interface Camera {
     modeset: string;
     /** True until the runtime has been tested on a camera. */
     experimental: boolean;
-    /** The modules that the runtime has, in menu order (`camera.rs`, through `CAMERA_PLUGINS`). */
+    /** The modules that the site offers, in menu order: the plugins of the runtime
+     * (`camera.rs`, through `CAMERA_PLUGINS`) without `excluded`. */
     modules: readonly ModuleKey[];
+    /** Plugins of the runtime that the package always omits, so the installer never installs them. */
+    excluded?: readonly ModuleKey[];
     /** Framing offers only XPan, as a crop of native 16:9. */
     xpanOnly?: boolean;
   };
@@ -25,6 +30,7 @@ export interface Camera {
 // Each HDF model runs the firmware of its base camera, so it uses the same package.
 export const CAMERAS: readonly Camera[] = [
   {
+    key: 'gr3',
     id: 'gr3',
     name: 'GR III / GR III HDF',
     support: {
@@ -37,6 +43,7 @@ export const CAMERAS: readonly Camera[] = [
   },
   // GR IIIx 1.60 runs the GR III 2.10 code, so it uses the same runtime.
   {
+    key: 'gr3x',
     id: 'gr3x',
     name: 'GR IIIx / GR IIIx HDF',
     support: {
@@ -48,6 +55,7 @@ export const CAMERAS: readonly Camera[] = [
     },
   },
   {
+    key: 'gr4',
     id: 'gr4',
     name: 'GR IV / GR IV HDF',
     support: {
@@ -56,6 +64,23 @@ export const CAMERAS: readonly Camera[] = [
       modeset: '00078560.636',
       experimental: false,
       modules: CAMERA_PLUGINS.gr4,
+      xpanOnly: true,
+    },
+  },
+  // GR IV Monochrome runs the GR IV 1.11 firmware, which it shows as version 1.00, and uses the
+  // GR IV package and ModeSet file. The effects are made for color sensors, so its packages have
+  // no Image Control.
+  {
+    key: 'gr4m',
+    id: 'gr4',
+    name: 'GR IV Monochrome',
+    support: {
+      firmware: '1.00',
+      target: 'gr4-1.11',
+      modeset: '00078560.636',
+      experimental: true,
+      modules: CAMERA_PLUGINS.gr4.filter((key) => key !== 'imageControl'),
+      excluded: ['imageControl'],
       xpanOnly: true,
     },
   },

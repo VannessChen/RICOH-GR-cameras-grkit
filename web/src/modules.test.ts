@@ -33,6 +33,21 @@ describe('planModules', () => {
     ]);
   });
 
+  it('always omits the excluded plugins, without their effects', () => {
+    const offered: ModuleKey[] = ['framing', 'guides', 'dateStamp', 'grain'];
+    expect(planModules(ALL_MODULES, 2, offered, ['imageControl'])).toEqual({
+      includeEffects: false,
+      omitted: ['image-control'],
+      visible: ['framing', 'guides', 'dateStamp', 'grain'],
+    });
+    expect(planModules(new Set<ModuleKey>(['guides']), 2, offered, ['imageControl']).omitted).toEqual([
+      'image-control',
+      'framing',
+      'date-stamp',
+      'grain',
+    ]);
+  });
+
   it('plans only the plugins that the camera has', () => {
     const partial: ModuleKey[] = ['guides', 'dateStamp'];
     expect(planModules(ALL_MODULES, 2, partial)).toEqual({

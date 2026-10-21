@@ -12,6 +12,11 @@ import { buildPackage, buildScriptsOff, prefetchPackage, save } from './package'
 const DEFAULT_SELECTION = ['portra-400-endura-v1', 'vision3-250d-2383-v1'];
 const REPOSITORY = 'https://github.com/ahonn/grkit';
 
+/** A guide in `resources/` in the page language, or in English. */
+function guideUrl(name: 'RECOVERY' | 'DUMP', language: Language): string {
+  return `${REPOSITORY}/blob/main/resources/${name}${language === 'en' ? '' : `.${language}`}.md`;
+}
+
 type Build =
   | { state: 'idle' }
   | { state: 'building'; received: number }
@@ -23,7 +28,7 @@ const megabytes = (bytes: number) => (bytes / 1_000_000).toFixed(1);
 
 export function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
-  const [cameraId, setCameraId] = useState(CAMERAS[0]!.id);
+  const [cameraKey, setCameraKey] = useState(CAMERAS[0]!.key);
   const [selection, setSelection] = useState<ReadonlySet<string>>(() => new Set(DEFAULT_SELECTION));
   const [enabled, setEnabled] = useState<ReadonlySet<ModuleKey>>(ALL_MODULES);
   const [build, setBuild] = useState<Build>({ state: 'idle' });
@@ -31,10 +36,10 @@ export function App() {
   const buildRun = useRef(0);
 
   const t = STRINGS[language];
-  const camera = CAMERAS.find((item) => item.id === cameraId) ?? CAMERAS[0]!;
+  const camera = CAMERAS.find((item) => item.key === cameraKey) ?? CAMERAS[0]!;
   const support = camera.support;
   const available = support?.modules ?? [];
-  const plan = planModules(enabled, selection.size, available);
+  const plan = planModules(enabled, selection.size, available, support?.excluded);
   const effectCount = plan.includeEffects ? selection.size : 0;
 
   function prefetch() {
@@ -72,8 +77,8 @@ export function App() {
     setBuild({ state: 'idle' });
   }
 
-  function chooseCamera(id: Camera['id']) {
-    setCameraId(id);
+  function chooseCamera(key: Camera['key']) {
+    setCameraKey(key);
     resetBuild();
   }
 
@@ -140,6 +145,14 @@ export function App() {
   return (
     <div className="page">
       <div className="languages">
+        <a className="github" href={REPOSITORY} aria-label="GitHub" title="GitHub">
+          <svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true" focusable="false">
+            <path
+              fill="currentColor"
+              d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"
+            />
+          </svg>
+        </a>
         <div role="group" aria-label={t.language}>
           {LANGUAGES.map((item) => (
             <button
@@ -169,13 +182,13 @@ export function App() {
           <div className="section-body">
             <div role="radiogroup" aria-labelledby="camera-label" className="cameras">
               {CAMERAS.map((item) => (
-                <label key={item.id} className="camera">
+                <label key={item.key} className="camera">
                   <input
                     type="radio"
                     name="camera"
-                    checked={item.id === camera.id}
+                    checked={item.key === camera.key}
                     disabled={!item.support}
-                    onChange={() => chooseCamera(item.id)}
+                    onChange={() => chooseCamera(item.key)}
                   />
                   <span className="camera-text">
                     <span className="camera-name">{item.name}</span>
@@ -354,17 +367,26 @@ export function App() {
       </main>
 
       <footer className="footer">
-        <p>{t.trademarks}</p>
-        <div>
-          <a href={`${REPOSITORY}/blob/main/effects/NOTICE.md`}>{t.licenses}</a>
-          <a href={siteUrl('THIRD_PARTY_LICENSES.txt')}>{t.thirdParty}</a>
-          <a href={`${REPOSITORY}/blob/main/resources/RECOVERY${language === 'en' ? '' : `.${language}`}.md`}>
-            {t.recovery}
-          </a>
-          <a href={REPOSITORY}>{t.source}</a>
-          <a href={`${REPOSITORY}/releases/download/v${__GRKIT_VERSION__}/GRKit-${__GRKIT_VERSION__}-dump.zip`}>
-            {t.firmwareDump}
-          </a>
+        <div className="footer-links">
+          <ul>
+            <li>
+              <a href={guideUrl('RECOVERY', language)}>{t.recovery}</a>
+            </li>
+            <li>
+              <a href={guideUrl('DUMP', language)}>{t.firmwareDump}</a>
+            </li>
+          </ul>
+          <ul>
+            <li>
+              <a href={`${REPOSITORY}/blob/main/effects/NOTICE.md`}>{t.licenses}</a>
+            </li>
+            <li>
+              <a href={siteUrl('THIRD_PARTY_LICENSES.txt')}>{t.thirdParty}</a>
+            </li>
+          </ul>
+        </div>
+        <div className="footer-meta">
+          <p>{t.trademarks}</p>
           <a href={`${REPOSITORY}/releases/tag/v${__GRKIT_VERSION__}`}>GRKit {__GRKIT_VERSION__}</a>
         </div>
       </footer>

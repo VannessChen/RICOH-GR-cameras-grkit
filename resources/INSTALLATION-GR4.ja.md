@@ -1,6 +1,7 @@
 # GRKit
 
 RICOH GR IV および GR IV HDF ファームウェア 1.11 専用です。
+GR IV Monochrome は同じファームウェアで動作し、カメラではバージョン 1.00 と表示されます。GR IV Monochrome 用のパッケージにはイメージコントロールがありません。GR IV Monochrome への対応は試験的なもので、実機ではテストしていません。
 
 ## インストール
 
