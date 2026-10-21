@@ -23,7 +23,7 @@ The compiler writes self-contained GRFX0001 files with a 40 x 40 icon. CRC32 det
 
 A monochrome effect cannot have `post_matrix` or `selective_color`.
 
-`selective_color` keeps the chroma of one hue in recorded pictures and removes it elsewhere. A pair keeps all of its chroma inside the inner half width, and none outside the outer one. `lower` is the side toward smaller hue angles (from red, toward magenta), and `higher` the side toward larger angles (toward orange and skin). Pairs with chroma below `c0` lose it, and pairs above `c1` keep it. The hue is the angle of (Cb - 128, Cr - 128): sRGB red is at 108.6 degrees. The viewfinder shows the effect in monochrome, because selective color applies only to recorded pictures.
+`selective_color` keeps the chroma of one hue range in recorded pictures and removes it elsewhere. The viewfinder shows the effect in monochrome. `crates/grkit-core/src/selective.rs` defines the hue angle and the half widths.
 
 ## Icons
 
@@ -37,7 +37,7 @@ The compiler draws each icon in gray. An icon has one of three forms:
 
 A film box and a film label span the full 40-pixel width of the tile. Their brand uses Inter Black if it fits at full width. Otherwise, it uses a 5-pixel font, which has only capitals, digits, spaces, `-`, and `+`.
 
-The name always uses the 5-pixel font, and it must fit in 40 pixels. Most glyphs are 3 pixels wide, with 1 pixel between glyphs. The exceptions are `I` and the space (1), `1` and `-` (2), `N` (4), and `M` and `W` (5). If a name does not fit, `M` and `W` change to 3-pixel forms. The number uses Inter Black and can compress to 75% of its width. If a text does not fit, the compiler stops with an error.
+The name always uses the 5-pixel font. The number uses Inter Black. If a text does not fit, the compiler stops with an error.
 
 The icon shows the effect name and the brand, and nothing else:
 
@@ -88,11 +88,7 @@ The two monochrome fits have identical matrix rows and curves. Set `flags` to 1 
 
 ## Processing domain
 
-Effects run on the camera's look matrix before Standard base gamma. RGB curves index base-gamma output divided by 64.
-They are not display-sRGB JPEG transforms. Imported fits assume 18% gray at base-gamma index 7.8.
-
-The optional post-curve matrix (`post_matrix`) acts on gamma-encoded RGB after the tone curves. The runtime multiplies the YCbCr matrix by it.
-Effects add no grain or glow. Only `selective_color` changes color by hue, and only in recorded pictures.
+Effects run in the camera's processing: the matrix acts before the Standard base gamma, and the curves and `post_matrix` act after it. They are not display-sRGB JPEG transforms. Effects add no grain or glow.
 
 ## Import a .cube preset
 
@@ -114,20 +110,8 @@ grkit effects import --cube look.cube --firmware fwdc239b.bin --input srgb \
 5. Run the command. The command writes `OUT/ID/effect.json` and prints a JSON summary.
 6. Add the license of the LUT to `attribution`. Then run `grkit effects build`.
 
-If `OUT/ID` exists, the command stops and writes nothing.
-The command checks the ID, name, label, and shape before the fit. Labels have one to four capitals or digits.
-The command checks the firmware SHA-256 and the shape of the base gamma table. If a check fails, the command stops.
+If `OUT/ID` exists or a check fails, the command stops and writes nothing.
 
-The fit follows `cube_fit.py`, `joint_fit.py`, and `lab_fit.py` of [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)):
+The fit follows [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)). `crates/grkit-core/src/fit.rs` describes the model and its assumptions.
 
-- The model is `Curve_c(BaseGamma(K (M L)_c)) / 16384`, then the post matrix `P` on the gamma-encoded result.
-- `BaseGamma` is the still-path Standard base gamma from the firmware. `K` puts 18% gray at base-gamma index 7.8. This index is an assumption.
-- The samples are a gray ramp, the ColorChecker 24 from -2 to +2 EV, and 6000 seeded random colors.
-- The importer alternates curve and matrix fits. Then it fits `P` on CIELAB residuals with a penalty that keeps neutrals neutral.
-- The matrix and `P` are signed Q13 with rows that sum to 8192. The importer omits `post_matrix` when `P` is the identity.
-- The YCbCr registers hold -256 to 255 in 1/256 units. A penalty keeps each coefficient of BT.601 x `P` at or below 240, so the hue rotation has room. If the quantized `P` exceeds 240, the importer moves `P` toward the identity until it fits.
-
-The LUT output must be sRGB-encoded display RGB. The parser accepts `TITLE`, `LUT_3D_SIZE` (2 to 256), `LUT_1D_SIZE`, `DOMAIN_MIN`, `DOMAIN_MAX`, and `LUT_1D_INPUT_RANGE` or `LUT_3D_INPUT_RANGE`. It rejects a file with both a 1D and a 3D table.
-
-`attribution.fit` records CIEDE2000 between the fit and the LUT on the ColorChecker at 0 EV. `mean_de` and `max_de` use the quantized fit. `standard_mean_de` uses the Standard look matrix with no curves. `csp_max` is the largest BT.601 x `P` coefficient at hue 0, in 1/256 units.
-A matrix, three curves, and `P` cannot copy hue-selective changes. Examine the errors before you use an imported effect.
+`attribution.fit` records the color error of the fit on a ColorChecker. A matrix, three curves, and a post matrix cannot copy hue-selective changes. Examine the errors before you use an imported effect.
