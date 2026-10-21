@@ -146,7 +146,7 @@ static void fill_planes(uint8_t luma, uint8_t cb, uint8_t cr)
 /* Changed pixels: their bounding box, whether all are lighter (and keep their
    chroma for a monochrome effect), whether a lit pair is orange, and the
    largest luma change. */
-struct box { uint32_t left, top, right, bottom, lit; int lighter, orange; uint32_t lift; };
+struct box { uint32_t left, top, right, bottom, lit; int lighter, orange; uint32_t lift; int yellow; };
 static struct box changes(uint32_t index, int mono)
 {
     const struct test_plane *p = &planes[index];
@@ -159,6 +159,8 @@ static struct box changes(uint32_t index, int mono)
         if (mono && chroma != stock) b.lighter = 0;
         if (luma - base_y > (int)b.lift) b.lift = luma - base_y;
         if (!(x & 1) && luma >= 110 && chroma <= 105 && BYTE(p->c, y * p->pitch + x + 1) >= 165) b.orange = 1;
+        /* GR1s yellow: bright, low Cb, Cr a little above neutral. */
+        if (!(x & 1) && luma >= 150 && chroma <= 90 && BYTE(p->c, y * p->pitch + x + 1) >= 130 && BYTE(p->c, y * p->pitch + x + 1) < 165) b.yellow = 1;
         if (x < b.left) b.left = x;
         if (y < b.top) b.top = y;
         if (x + 1 > b.right) b.right = x + 1;
@@ -243,18 +245,26 @@ int main(void)
     for (int i = 0; i < 9; ++i) assert(coefficient(i) == bt601[i]);
     live(0);
 
-    /* Date text for each style: no leading zeros except the year and minutes. */
+    /* Date text for each style: no leading zeros except the year and minutes.
+       The GR1s look pads a one-digit month, day, or hour with a blank digit
+       cell ('_'), as its prints show. */
     {
         static const char *const expected[] = {"'26 10 17", "'26 10 17  9:05", "10 17 '26", "17 10 '26", "17 10 '26  9:05"};
         static const char *const early[] = {"'07 1 5", "'07 1 5  13:07", "1 5 '07", "5 1 '07", "5 1 '07  13:07"};
+        static const char *const padded[] = {"'26 10 17", "'26 10 17  _9:05", "10 17 '26", "17 10 '26", "17 10 '26  _9:05"};
+        static const char *const early_padded[] = {"'07 _1 _5", "'07 _1 _5  13:07", "_1 _5 '07", "_5 _1 '07", "_5 _1 '07  13:07"};
         static const uint8_t date[6] = {2026 & 255, 2026 >> 8, 10, 17, 9, 5};
         static const uint8_t january[6] = {2007 & 255, 2007 >> 8, 1, 5, 13, 7};
         char text[20];
         for (u32 style = 1; style <= DATE_STAMP_STYLE_MAX; ++style) {
-            u32 n = date_text(text, date, style);
+            u32 n = date_text(text, date, style, 0);
             assert(n == strlen(expected[style - 1]) && !memcmp(text, expected[style - 1], n));
-            n = date_text(text, january, style);
+            n = date_text(text, january, style, 0);
             assert(n == strlen(early[style - 1]) && !memcmp(text, early[style - 1], n));
+            n = date_text(text, date, style, 1);
+            assert(n == strlen(padded[style - 1]) && !memcmp(text, padded[style - 1], n));
+            n = date_text(text, january, style, 1);
+            assert(n == strlen(early_padded[style - 1]) && !memcmp(text, early_padded[style - 1], n));
         }
     }
     /* Off touches nothing. */
@@ -402,8 +412,8 @@ int main(void)
         picture_encode(0, MESSAGE);
         assert(changes(0, 0).orange);
     }
-    /* The GR1s look lights orange dots on a color picture and white dots on a
-       monochrome one. */
+    /* The GR1s look prints yellow dots on a color picture, as GR1s color
+       negatives show them, and white dots on a monochrome one. */
     {
         encode_setup();
         fill_planes(40, 128, 128);
@@ -411,7 +421,7 @@ int main(void)
         header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 1;
         picture_encode(0, MESSAGE);
         struct box b = changes(0, 0);
-        assert(b.lit && b.lighter && b.orange && b.left > planes[0].width / 3);
+        assert(b.lit && b.lighter && b.yellow && !b.orange && b.left > planes[0].width / 3);
         encode_setup();
         fill_planes(40, 128, 128);
         header[GRKIT_HOST_STAMP / 4] = 1;
@@ -419,6 +429,16 @@ int main(void)
         BYTE(SHOT, SETTINGS_IC_TYPE) = 13;
         picture_encode(0, MESSAGE);
         for (u32 j = 0; j < 3; ++j) { struct box m = changes(j, 1); assert(m.lit && m.lighter && !m.orange); }
+        /* The dots end about 19% of the short side before the right edge and
+           8.3% above the bottom, as on the prints of the GR1s: 91 and 39
+           pixels on the 720 x 480 main picture. The halo reaches a little
+           further. */
+        struct box d = changes(1, 1);
+        /* "'26 10 17" spans 80 x 17 pixels with its halo: digits advance 7
+           columns, as on the prints. */
+        assert(d.right - d.left >= 76 && d.right - d.left <= 84 && d.bottom - d.top >= 15 && d.bottom - d.top <= 19);
+        assert(d.right <= 720 - 91 + 4 && d.right > 720 - 91 - 4);
+        assert(d.bottom <= 480 - 39 + 4 && d.bottom > 480 - 39 - 4);
     }
     /* The GR II look paints flat GR II orange (Y 146, Cb 46, Cr 225) in its
        16 x 24 cells: on a 720 x 480 picture one glyph pixel is one pixel. The
@@ -455,6 +475,22 @@ int main(void)
         BYTE(SHOT, SETTINGS_IC_TYPE) = 13;
         picture_encode(0, MESSAGE);
         for (u32 j = 0; j < 3; ++j) { struct box m = changes(j, 1); assert(m.lit && m.lighter && !m.orange); }
+        /* On a larger main picture the glyph pixels scale with the short
+           side, as the GR II imprint on its 3264 rows: a 6000 x 4000 main
+           picture gets 3.68 pixels for each glyph pixel. The 720 x 480 plane
+           samples that geometry: the ink rows lie at main rows 3746 to 3812,
+           and the text ends at main column 6000 - 48 * 3.68. */
+        {
+            static const Plane main = {0, 0, 6000, 4000, 6000, 1, 0, 0, 6000, 4000};
+            Plane small = {planes[1].y, planes[1].c, 720, 480, planes[1].pitch, 0, 0, 0, 720, 480};
+            encode_setup();
+            fill_planes(40, 128, 128);
+            gr2_paint(&small, &main, "2026/10/17", 10, 0);
+            struct box g = changes(1, 0);
+            assert(g.lit && g.top >= 449 && g.top <= 450 && g.bottom >= 457 && g.bottom <= 459);
+            assert(g.right <= 699 && g.right >= 696);
+            assert(g.left >= 720 - 16 * 13 * 3676 / 8333 - 2 && g.left <= 720 - 16 * 13 * 3676 / 8333 + 8);
+        }
         /* An unknown look prints the classic digits. */
         encode_setup();
         fill_planes(40, 128, 128);
