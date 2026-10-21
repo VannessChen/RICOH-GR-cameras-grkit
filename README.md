@@ -38,6 +38,8 @@ You select the modules when you make a package. The menu shows only those module
 
 Each HDF model runs the firmware of its base camera and uses the same package. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
 
+A camera can run another build of a supported firmware version. If GRKit does not load on a supported camera, the [firmware dump guide](resources/DUMP.md) tells you how to send its firmware image.
+
 > [!WARNING]
 > GRKit is experimental. Use it at your own risk.
 > GRKit changes the camera memory only until the camera turns off. The installation turns on the camera's SD script setting, and this setting stays on until you turn it off.
@@ -87,7 +89,7 @@ grkit verify dist/GRKit.zip
 | `runtime/` | The code that runs on the camera |
 | `effects/` | The sources of the Image Control effects |
 | `web/` | The site that makes packages in the browser |
-| `resources/` | The installation and recovery guides |
+| `resources/` | The installation, recovery, and firmware dump guides |
 | `docs/` | The architecture and the release process |
 
 ## Contributing
