@@ -12,7 +12,7 @@ The site serves these files:
 
 `THIRD_PARTY_LICENSES.txt` gives the licenses of the bundled JavaScript packages and fonts, and of the Rust crates in the WebAssembly module. `pnpm build` writes it with `scripts/third-party-licenses.mjs`. The script reads the JavaScript licenses from the Vite build and the crate licenses from `cargo metadata`, so Cargo must be on `PATH`.
 
-The site serves its fonts from `assets/` and sends no request to another host. The Noto Sans SC and TC styles load only on a Chinese page, and the Noto Sans JP styles only on a Japanese page.
+The site serves its fonts and scripts itself and sends no request to another host.
 
 ## Develop
 
@@ -46,47 +46,21 @@ pnpm test
 pnpm build
 ```
 
-## RAW preview
+## Preview
 
-The page opens with a GR IIIx sample photo. Uploads accept a DNG from any camera, including converted DNG files, with up to 120 megapixels. Other formats are not supported.
-The effects are fitted to the GR III, so the preview of another camera's photo is an approximation.
+The page opens with a GR IIIx sample photo. A user can also select a DNG from any camera. A Worker decodes it with LibRaw into linear sRGB in the browser, and a second Worker applies the preview tables of `grkit effects publish`. Photos are not uploaded to a server.
 
-A dedicated Worker decodes each upload with `@colorhythm/libraw-wasm` 1.1.1 (LibRaw 0.22.1).
-It reads sensor data, uses the recorded white balance, and produces half-size 16-bit linear sRGB.
-Automatic brightness and content-dependent white-level adjustment are disabled.
-The decoder applies orientation. The preview then applies the DNG default crop and resizes in linear light to a maximum edge of 1200 pixels.
+The effects are fitted to the GR III, and LibRaw's color processing differs from the camera's. The previews are therefore approximations.
 
-The worker terminates after completion, failure, cancellation, or a 60-second timeout.
-Selecting another photo or the default sample cancels the pending upload. Photos are not uploaded to a server.
-
-The `grkit-site-effects-v1` catalog describes linear-input LUTs with an sRGB coordinate shaper.
-The shaper allocates more grid points to shadows. It does not convert the input into a Standard JPEG.
-`preview/standard.lut` renders the baseline, and each effect table renders the same decoded pixels with the GRKit fit model.
-Both sides use the GR III model, including when the selected package targets GR IV.
-A second Worker applies the tables and encodes the JPEG previews, so a preview does not block scrolling or input.
-
-These previews are approximations. The model's exposure calibration is assumed, and LibRaw's color processing differs from the camera's processing.
-The 16-bit input clips values outside 0..1. It does not retain scene highlights above that range.
+LibRaw is distributed under CDDL-1.0. `THIRD_PARTY_LICENSES.txt` includes its notices and a link to its source.
 
 ## Default sample
 
-The default image is Snow in Akihabara by nagi usano, a GR IIIx JPEG released under CC BY 2.0. The README screenshot shows the same photo.
-`public/samples/akihabara.json` records its source URL, license, source SHA-256, processing settings, dimensions, and output SHA-256.
-The site also includes this attribution in `THIRD_PARTY_LICENSES.txt`, and the preview links to the source.
+The default image is Snow in Akihabara by nagi usano, a GR IIIx JPEG under CC BY 2.0. `public/samples/akihabara.json` records its source, license, and hashes. The site includes the attribution in `THIRD_PARTY_LICENSES.txt`, and the preview links to the source.
 
-The preview applies tables to linear pixels, but a JPEG holds developed pixels. `scripts/build-sample.mjs` therefore estimates the linear pixels: it inverts the Standard development of `preview/standard.lut` for each pixel. The baseline of the sample then matches the JPEG, and each effect starts from the same pixels as on a RAW photo. The JPEG keeps the look that its author gave it, so the sample shows the effects on that look.
-
-The checked-in `public/samples/akihabara.grlinear` contains gzip-compressed linear pixels, so visitors do not download or convert the full JPEG.
-After decompression, the format is eight ASCII bytes `GRLIN001`, little-endian u32 width and height, then little-endian u16 RGB samples.
-The custom extension prevents static servers from treating the inner gzip container as an HTTP content encoding.
-The sample builder uses the same resizing function as the browser decoder.
-
-To reproduce the sample:
+`public/samples/akihabara.grlinear` holds linear pixels that `scripts/build-sample.mjs` estimates from the JPEG. To make it again:
 
 1. Download the JPEG from the source URL in `public/samples/akihabara.json` to a directory outside the repository.
-2. Get `preview/standard.lut` of `gr3-2.10` from the site data, for example `effects/gr3-2.10/preview/standard.lut` in `site.tar.gz` of a release.
-3. Run `node scripts/build-sample.mjs /path/to/Snow_in_Akihabara_2022-01-06.jpg /path/to/standard.lut` from `web/`. The script checks the source SHA-256 before it decodes the JPEG.
-4. Run `pnpm test`. The sample test checks its hash, attribution, dimensions, and pixel format.
-
-The RAW decoder is loaded only for uploads. Its WASM and JavaScript files are served from the site.
-LibRaw is distributed under CDDL-1.0. The site license file includes its notices and a link to the source and build instructions.
+2. Get `effects/gr3-2.10/preview/standard.lut` from the site data, for example from the site archive of a release.
+3. From `web/`, run `node scripts/build-sample.mjs /path/to/Snow_in_Akihabara_2022-01-06.jpg /path/to/standard.lut`. The script checks the SHA-256 of the JPEG first.
+4. Run `pnpm test`. The sample test checks the hash, the attribution, the dimensions, and the pixel format.
