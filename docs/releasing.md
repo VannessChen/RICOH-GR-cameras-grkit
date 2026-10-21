@@ -2,21 +2,16 @@
 
 Four workflows release GRKit:
 
-- `Release PR` keeps one pull request from the `release` branch open while change files are pending. knope sets the version in `Cargo.toml` and `Cargo.lock` and writes `CHANGELOG.md` from the change files.
-- `Release` starts when the release pull request is merged. It tags the merge commit, runs the tests, and builds the site. Then it creates a draft GitHub release that holds the site, a package for each camera, and the firmware dump tool.
-  To build the site, it downloads the official GR III 2.10 and GR IV 1.11 firmware and checks their SHA-256. Then it builds a runtime for each with LLVM 21, publishes the effects in `effects/` with their preview tables, and deletes the firmware. It also builds the web page in `web/`.
-- `Deploy` commits the site of one release to the `site` branch. Cloudflare Pages deploys each commit on that branch. When the site serves the new version, `Deploy` publishes the release. `Release` calls `Deploy` when it has built a tag. Start `Deploy` by hand to deploy a release again.
-- `Site` starts when a push to `main` changes `web/`. It builds the web page from the source of the latest published release with `web/` from `main`, and it keeps the runtimes, effects, and guides of that release. The WebAssembly packager therefore matches the released runtimes, and the footer shows the released version. If `web/` on `main` needs a packager change that is not released yet, the build fails and the site stays as it is.
+- `Release PR` keeps one pull request from the `release` branch open while change files are pending. knope sets the version and writes `CHANGELOG.md` from the change files.
+- `Release` starts when the release pull request is merged. It tags the merge commit, runs the tests, builds the site and the packages from the official firmware, and creates a draft GitHub release.
+- `Deploy` commits the site of one release to the `site` branch, which Cloudflare Pages deploys. When the site serves the new version, `Deploy` publishes the release. Start `Deploy` by hand to deploy a release again.
+- `Site` starts when a push to `main` changes `web/`. It rebuilds the web page with the runtimes and effects of the latest published release. If `web/` needs a packager change that is not released yet, the build fails and the site stays as it is.
 
-The `site` branch holds only deployed sites, one commit for each deployment. `.github/scripts/commit-site.sh` makes these commits for `Deploy` and `Site`. It shares no history with `main`. Do not push to it by hand. The repository holds no Cloudflare credentials, because Cloudflare reads the branch through its GitHub app.
+The `site` branch holds only deployed sites and shares no history with `main`. Do not push to it by hand. The repository holds no Cloudflare credentials, because Cloudflare reads the branch through its GitHub app.
 
-The version is the `[workspace.package]` version in `Cargo.toml`. Each runtime `build.json` gives it, and the site shows it in the footer. A release tag is `v` and the version, for example `v0.1.0`.
+The version is the `[workspace.package]` version in `Cargo.toml`. A release tag is `v` and the version, for example `v1.2.0`.
 
-`grkit site` writes only `build.json` and `sd/` to `site/runtime/<target>/`, for `gr3-2.10` and `gr4-1.11`. It leaves out `objects/`, because the generated header there holds firmware bytes.
-`grkit effects publish` writes the v1 catalog, `.GRF` files, and preview tables to `site/effects/<target>/` for both targets.
-The tables include `preview/standard.lut` and `preview/<id>.lut`.
-
-`.github/scripts/build-guides.sh` writes the installation guides to `site/guides/<camera>/<language>.pdf` with Typst. `.github/scripts/install-guide-tools.sh` pins the Typst version and the fonts. The web build adds `index.html`, `assets/`, `samples/`, and `_headers`.
+The site holds no firmware bytes: `grkit site` leaves out the generated header of each runtime, and the release deletes the firmware after the build.
 
 ## Set up
 
@@ -56,11 +51,11 @@ Show the GRKit version in the site footer.
 
 Write the text in English, for people who use GRKit. The change type sets the version and the `CHANGELOG.md` section:
 
-| Type | Section | Below 1.0 | From 1.0 |
-| --- | --- | --- | --- |
-| `patch` | Fixes | 0.1.0 to 0.1.1 | 1.0.0 to 1.0.1 |
-| `minor` | Features | 0.1.0 to 0.1.1 | 1.0.0 to 1.1.0 |
-| `major` | Breaking Changes | 0.1.0 to 0.2.0 | 1.0.0 to 2.0.0 |
+| Type | Section | Version |
+| --- | --- | --- |
+| `patch` | Fixes | 1.0.0 to 1.0.1 |
+| `minor` | Features | 1.0.0 to 1.1.0 |
+| `major` | Breaking Changes | 1.0.0 to 2.0.0 |
 
 Use `major` for a change that an earlier package cannot follow, for example a new format of `STATE.TXT`, `PLUGINS.TXT`, or the GRF files.
 
@@ -80,9 +75,3 @@ To build a tag again, for example with `firmware_source` set to `backup`, start 
 A release keeps its files without an expiry date. To go back to an earlier version, start `Deploy` with its tag.
 
 The release toolchain is LLVM 21 on Ubuntu, not the reference Apple Clang. `Release` deploys its runtimes before a camera test, so test the camera packages right after each release. To test a runtime before the release, build it with LLVM 21 as `release.yml` does.
-
-## Firmware dump tool
-
-Cameras can run a build of a firmware version that Ricoh does not publish. `grkit dump` writes the tool that copies the running RTOS image of such a camera to its SD card. `runtime/dump/README.txt` gives the user steps.
-
-The tool reads memory only. Its `INFO.TXT` gives the startup literals and the build identity, the word at RTOS + `0x2038`. To check the relocation of a runtime against a copy, compile `tests/runtime/relocation_image.c` with the generated header of that runtime, and run it on `RTOS.BIN`.
