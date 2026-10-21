@@ -135,25 +135,34 @@ static u32 expected_badge(u32 ratio,u32 x,u32 y,u32 background)
     }
     return 0x80000000;
 }
-/* Independent guide fixtures: exact positions, rounded half up. */
+/* Independent guide fixtures. Each value is a division, and its 2-pixel line
+   covers the pixel before it and the pixel at it, as the native grid does.
+   Thirds are at multiples of floor(span / 3). The golden section is rounded. */
 static const u32 boxes[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480}};
-static const u32 thirds[][4]={{240,480,160,320},{240,480,196,284},{240,480,172,307},{253,467,160,320}};
+static const u32 thirds[][4]={{240,480,160,320},{240,480,195,283},{240,480,172,307},{253,466,160,320}};
 static const u32 golden[][4]={{275,445,183,297},{275,445,209,271},{275,445,192,287},{284,436,183,297}};
+static u32 on_line(u32 value,u32 line) { return value==line-1 || value==line; }
 static u32 expected_guide(u32 ratio,u32 style,u32 x,u32 y)
 {
     const u32 *box=boxes[ratio];
     if(x<box[0] || x>=box[2] || y<box[1] || y>=box[3]) return 0;
     if(style==1 || style==3 || style==5) {
         const u32 *lines=style==3 ? golden[ratio] : thirds[ratio];
-        if(x==lines[0] || x==lines[1] || y==lines[2] || y==lines[3]) return 1;
+        if(on_line(x,lines[0]) || on_line(x,lines[1]) || on_line(y,lines[2]) || on_line(y,lines[3])) return 1;
     }
-    /* Every center is (360,240), with 20-pixel arms. */
-    if(style==2 || style==5) return (y==240 && x>=340 && x<=380) || (x==360 && y>=220 && y<=260);
+    /* Every center is (360,240). Each arm reaches 20 pixels past the 2 center
+       pixels 359..360 and 239..240. */
+    if(style==2 || style==5)
+        return (on_line(y,240) && x>=339 && x<=380) || (on_line(x,360) && y>=219 && y<=260);
     if(style==4) {
+        /* The upper pixel of each pair goes from the top row to the row above
+           the bottom one, rounded half up. */
         u32 width=box[2]-box[0], height=box[3]-box[1], column=x-box[0];
         u32 rows[2]={column, width-1-column};
-        for(u32 i=0; i<2; ++i)
-            if(y==box[1]+(2*rows[i]*(height-1)+width-1)/(2*(width-1))) return 1;
+        for(u32 i=0; i<2; ++i) {
+            u32 upper=box[1]+(2*rows[i]*(height-2)+width-1)/(2*(width-1));
+            if(y==upper || y==upper+1) return 1;
+        }
     }
     return 0;
 }

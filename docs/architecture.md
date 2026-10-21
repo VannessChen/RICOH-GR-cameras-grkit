@@ -317,11 +317,12 @@ While ADJ is open, Framing draws the committed ratio's mask on the ADJ canvas be
 
 ### Guides
 
-Guides draws 1-pixel lines inside the photo area of the committed Framing ratio, in the same drawing path as the mask. Off uses the full 3:2 canvas.
+Guides draws 2-pixel lines inside the photo area of the committed Framing ratio, in the same drawing path as the mask. Off uses the full 3:2 canvas.
 The styles are thirds, a center cross with 20-pixel arms, the golden section (0.381966), corner-to-corner diagonals, and thirds with the center cross.
-Grid positions are fractions of the photo size in 1/65536, rounded. The diagonals are Bresenham lines, rounded half up. Neither needs division.
 
-The line color is opaque gray (`0xffc0c0c0`), which has the same value with straight or premultiplied alpha. The format of the OSD bitmap is not confirmed.
+The lines follow the native grid guide (`GridView`, GR III draw `0x5339c3b0`, GR IV `0x53578848`). It writes palette entry 16, black at 50% alpha (`0x80000000`), without blending, in 2-pixel lines. The line of a division covers the pixel before it and the pixel at it.
+The native thirds are at multiples of floor(span / 3). Guides gets the same floor from a multiplication by 21846/65536, because the link has no division. The golden section and the center are fractions in 1/65536, rounded. The diagonals are Bresenham lines with 2 pixels in each column, rounded half up.
+The color has the same value with straight or premultiplied alpha. The format of the OSD bitmap is not confirmed.
 The mask draws first and the badge last, so the badge covers the lines that cross it. Native child views, which may include the native grid guide, draw after both.
 
 The Guides page previews its highlighted style on the ADJ canvas, inside the committed ratio. The Framing page previews its ratio with the committed style.
