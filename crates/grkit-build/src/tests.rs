@@ -875,8 +875,11 @@ fn production_scripts_and_activation_match_fixed_contracts() {
 
 #[test]
 fn each_camera_offers_what_its_runtime_has() {
-    for camera in grkit_core::camera::CAMERAS {
-        let target = target::find(camera.target).unwrap();
+    for (camera, name) in grkit_core::camera::CAMERAS
+        .into_iter()
+        .flat_map(|camera| camera.targets().into_iter().map(move |name| (camera, name)))
+    {
+        let target = target::find(name).unwrap();
         let layout = target.layout.unwrap();
         assert_eq!(layout.processing.is_some(), camera.effects, "{}", camera.id);
         // Each point of each plugin that the camera offers has hooks.

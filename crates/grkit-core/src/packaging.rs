@@ -111,6 +111,23 @@ pub fn read_manifest(blob: &[u8]) -> Result<Value> {
 }
 
 /// Checks the runtime files of a build for `target`.
+/// The runtime build of a camera that a package's runtime files are. The
+/// targets of one camera have different icon strides.
+fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
+    let targets = camera.targets();
+    let matching: Vec<_> = targets
+        .iter()
+        .copied()
+        .filter(|target| validate_runtime(runtime, target).is_ok())
+        .collect();
+    match matching[..] {
+        [target] => Ok(target),
+        // Report why the runtime is not the first build of the camera.
+        [] => Err(validate_runtime(runtime, targets[0]).unwrap_err()),
+        _ => bail!("The runtime matches more than one build of {}", camera.name),
+    }
+}
+
 pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
     ensure!(
         files.len() == RUNTIME_PATHS.len() && RUNTIME_PATHS.iter().all(|p| files.contains_key(*p)),
@@ -263,17 +280,20 @@ impl Language {
     }
 
     /// The camera phrase of the GR III guide, for example "GR III and GR III HDF
-    /// firmware 2.10".
-    pub fn camera_phrase(self, camera: &Camera) -> String {
-        let (and, word) = match self {
-            Language::English => ("and", "firmware"),
-            Language::SimplifiedChinese => ("和", "固件"),
-            Language::TraditionalChinese => ("與", "韌體"),
-            Language::Japanese => ("および", "ファームウェア"),
+    /// firmware 2.10" for one version, or "... firmware 2.10 or 2.20" for the
+    /// versions that run one runtime build.
+    pub fn camera_phrase(self, camera: &Camera, versions: &[&str]) -> String {
+        let (and, word, or) = match self {
+            Language::English => ("and", "firmware", " or "),
+            Language::SimplifiedChinese => ("和", "固件", " 或 "),
+            Language::TraditionalChinese => ("與", "韌體", " 或 "),
+            Language::Japanese => ("および", "ファームウェア", " または "),
         };
         format!(
             "{} {and} {} {word} {}",
-            camera.name, camera.hdf, camera.firmware
+            camera.name,
+            camera.hdf,
+            versions.join(or)
         )
     }
 }
@@ -301,7 +321,7 @@ const GR4_GUIDE_IMAGES: [(&str, &[u8]); 1] = [MODESET_IMAGE];
 
 /// The screenshots that the guides of `camera` show.
 pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])] {
-    if camera.target == camera::GR4.target {
+    if camera.is_gr4() {
         &GR4_GUIDE_IMAGES
     } else {
         &GUIDE_IMAGES
@@ -313,6 +333,8 @@ pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])]
 pub struct Contents {
     /// The camera whose ModeSet file the package has.
     pub camera: &'static Camera,
+    /// The runtime build of the camera that the package has.
+    pub target: &'static str,
     pub effect_ids: Vec<String>,
     /// The plugins that the installer installs.
     pub plugins: Selection,
@@ -368,7 +390,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         .iter()
         .map(|name| ((*name).into(), contents[&format!("SD_ROOT/{name}")].clone()))
         .collect();
-    validate_runtime(&runtime, camera.target)?;
+    let target = runtime_target(&runtime, camera)?;
     let mut ids = BTreeSet::new();
     let mut plugins = Selection::ALL;
     let mut language = None;
@@ -421,6 +443,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
     );
     Ok(Contents {
         camera,
+        target,
         effect_ids: ids.into_iter().collect(),
         plugins,
         language: language.context("Package has no installation guide")?,
@@ -450,15 +473,20 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
 /// its names, firmware version, and ModeSet file. GR IV, which has fewer modules,
 /// has its own resource.
 pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
-    let gr4 = camera.target == camera::GR4.target;
+    let gr4 = camera.is_gr4();
     let template = language.guide_template(gr4);
     if gr4 {
         return template.as_bytes().to_vec();
     }
+    // The resource names the first GR III release. Each GR III chain camera has
+    // one runtime build, whose versions the guide names.
+    let [target] = camera.targets()[..] else {
+        unreachable!("a GR III chain camera has one runtime build");
+    };
     template
         .replace(
-            &language.camera_phrase(&camera::GR3),
-            &language.camera_phrase(camera),
+            &language.camera_phrase(&camera::GR3, &[camera::GR3.releases[0].firmware]),
+            &language.camera_phrase(camera, &camera.firmware_for(target)),
         )
         .replace(camera::GR3.hdf, camera.hdf)
         .replace(camera::GR3.modeset, camera.modeset)
@@ -501,13 +529,17 @@ pub fn assemble(
             && build.get("startup_activation") == Some(&json!("Off")),
         "Only production builds that start in Off can be packaged"
     );
+    let target = build
+        .get("target")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     ensure!(
-        build.get("target") == Some(&json!(camera.target)),
+        camera.runs(target),
         "{} runs the {} runtime, not this build",
         camera.name,
-        camera.target
+        camera.targets().join(" or ")
     );
-    validate_runtime(runtime, camera.target)?;
+    validate_runtime(runtime, target)?;
     let mut contents: Files = runtime
         .iter()
         .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob.clone()))
@@ -637,6 +669,7 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
     }
     let Contents {
         camera,
+        target,
         effect_ids,
         plugins,
         language,
@@ -646,7 +679,7 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
         "SHA256SUMS differs from package"
     );
     Ok(
-        json!({"camera": camera.id, "target": camera.target, "effect_ids": effect_ids,
+        json!({"camera": camera.id, "target": target, "effect_ids": effect_ids,
             "plugins": plugins.names(), "language": language.code(),
             "entries": contents.len()}),
     )

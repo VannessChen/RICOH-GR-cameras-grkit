@@ -589,11 +589,15 @@ fn each_camera_gets_its_modeset_file_and_guide() {
     assert!(!gr3x.contains_key("SD_ROOT/00078350.588"));
     // The guide source names GR IIIx, GR IIIx HDF, and their ModeSet file.
     let guide = String::from_utf8(installation_guide(&camera::GR3X, Language::English)).unwrap();
-    assert!(guide.contains("For RICOH GR IIIx and GR IIIx HDF firmware 1.60 only."));
+    assert!(guide.contains("For RICOH GR IIIx and GR IIIx HDF firmware 1.60 or 1.70 only."));
     assert!(guide.contains("`00078490.609`") && !guide.contains("00078350.588"));
+    // The GR III guide is the resource with each release of its runtime build.
     assert_eq!(
-        installation_guide(&camera::GR3, Language::English),
-        include_bytes!("../../../resources/INSTALLATION.md")
+        String::from_utf8(installation_guide(&camera::GR3, Language::English)).unwrap(),
+        include_str!("../../../resources/INSTALLATION.md").replace(
+            "GR III HDF firmware 2.10 only.",
+            "GR III HDF firmware 2.10 or 2.20 only."
+        )
     );
     // Every runtime and effect file is the same for both cameras.
     for (name, blob) in &gr3 {
@@ -624,8 +628,13 @@ fn the_guide_names_the_camera_once_and_the_modeset_file_twice() {
             include_str!("../../../resources/INSTALLATION.ja.md"),
         ),
     ] {
-        let phrase = language.camera_phrase(&camera::GR3);
+        // The resource names the first GR III release; the package guide
+        // names each release of the runtime build.
+        let phrase = language.camera_phrase(&camera::GR3, &["2.10"]);
         assert_eq!(guide.matches(&phrase).count(), 1, "{phrase}");
+        let source = String::from_utf8(installation_guide(&camera::GR3, language)).unwrap();
+        let releases = language.camera_phrase(&camera::GR3, &["2.10", "2.20"]);
+        assert_eq!(source.matches(&releases).count(), 1, "{releases}");
         assert_eq!(guide.matches(camera::GR3.hdf).count(), 1, "{language:?}");
         // After the installation, and in the steps that turn SD scripts off.
         assert_eq!(
@@ -656,7 +665,7 @@ fn a_package_has_the_guide_of_its_language_only() {
         assert_eq!(guides, 1, "{language:?}");
         // The guide source names GR IIIx and GR IIIx HDF in each language.
         let source = String::from_utf8(installation_guide(&camera::GR3X, language)).unwrap();
-        assert!(source.contains(&language.camera_phrase(&camera::GR3X)));
+        assert!(source.contains(&language.camera_phrase(&camera::GR3X, &["1.60", "1.70"])));
         assert_eq!(source.matches(camera::GR3X.hdf).count(), 1, "{language:?}");
         assert!(!source.contains(camera::GR3.hdf));
         assert!(source.contains(camera::GR3X.modeset) && !source.contains(camera::GR3.modeset));

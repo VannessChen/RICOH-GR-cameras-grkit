@@ -8,8 +8,9 @@ export interface Camera {
   id: keyof typeof CAMERA_PLUGINS;
   name: string;
   /**
-   * The supported firmware version, the site target that holds its runtime, and the ModeSet file
-   * that enables SD scripts. A camera without it is planned and cannot be selected.
+   * The supported firmware versions (`camera.rs` releases of the target), the site target that holds
+   * its runtime, and the ModeSet file that enables SD scripts. A camera without it is planned and
+   * cannot be selected.
    */
   support?: {
     firmware: string;
@@ -34,20 +35,21 @@ export const CAMERAS: readonly Camera[] = [
     id: 'gr3',
     name: 'GR III / GR III HDF',
     support: {
-      firmware: '2.10',
+      // 2.20 changes only the end screen; the installer relocates the 2.10 runtime to it.
+      firmware: '2.10 / 2.20',
       target: 'gr3-2.10',
       modeset: '00078350.588',
       experimental: false,
       modules: CAMERA_PLUGINS.gr3,
     },
   },
-  // GR IIIx 1.60 runs the GR III 2.10 code, so it uses the same runtime.
+  // GR IIIx 1.60 and 1.70 run the GR III 2.10 and 2.20 code, so they use the same runtime.
   {
     key: 'gr3x',
     id: 'gr3x',
     name: 'GR IIIx / GR IIIx HDF',
     support: {
-      firmware: '1.60',
+      firmware: '1.60 / 1.70',
       target: 'gr3-2.10',
       modeset: '00078490.609',
       experimental: false,

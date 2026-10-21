@@ -77,6 +77,9 @@ enum Command {
     },
     /// Check package layout, profiles and checksums.
     Verify { archive: PathBuf },
+    /// List the cameras, the firmware releases that each runs, and the runtime
+    /// build for each release.
+    Cameras,
     /// Write the ZIP that turns SD scripts off on a camera: its ModeSet file
     /// with the disable command and DEVELOP.MOD.
     ScriptsOff {
@@ -300,6 +303,15 @@ fn run(command: Command) -> Result<Value> {
                 json!({"output": out, "guides": grkit_core::camera::CAMERAS.len() * packaging::Language::ALL.len()}),
             )
         }
+        Command::Cameras => Ok(
+            json!({"cameras": grkit_core::camera::CAMERAS.map(|camera| json!({
+                "id": camera.id, "name": camera.name, "hdf": camera.hdf, "modeset": camera.modeset,
+                "releases": camera.releases.iter().map(|release| json!({
+                    "firmware": release.firmware, "target": release.target,
+                    "experimental": release.experimental,
+                })).collect::<Vec<_>>(),
+            }))}),
+        ),
         Command::Verify { archive } => {
             // Include room for ZIP metadata while bounding the archive read itself.
             let bytes = storage::read_bounded(&archive, 64 * 1024 * 1024)?;
