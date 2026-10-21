@@ -44,7 +44,7 @@ static void image_preview(volatile u32 *h) {
     h[GRKIT_HOST_PREVIEW/4]=record ? record : 1;
 }
 /* Fn adjusts the native Standard parameters of an effect row. Off has none. */
-static u32 image_parameters(volatile u32 *h) { return h[GRKIT_HOST_MENU_CURSOR/4]!=0; }
+static u32 image_parameters(volatile u32 *h,u32 row) { (void)h; return row!=0; }
 
 #define IMAGE_CONTROL_PAGE {image_title,image_summary,image_rows,image_label,image_icon, \
     image_checked,image_apply,image_active_row,image_preview,image_parameters,IMAGE_CONTROL_TILES}

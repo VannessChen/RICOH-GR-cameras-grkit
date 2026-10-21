@@ -182,6 +182,21 @@ picture_capture_tone:
     ldrh r2, [r12, #(GRKIT_RECORD_CODE & 0xff)]
     ldr pc, =FW_IFD_SET_SHORT
 
+/* Capture: the maker-note adjustments (tag 0x247) of a GRKit shot. Replaces
+   the BL to the native fill: r0 = the setter + 8, r1 is the IFD entry, and r2
+   the shot settings. The native fill runs first, and its result returns. */
+.global picture_capture_parameters
+picture_capture_parameters:
+    push {r1, r2, r4, lr}
+    ldr r12, =HOOK_PICTURE_CAPTURE_PARAMETERS_TARGET
+    blx r12
+    mov r4, r0
+    ldr r0, [sp]
+    ldr r1, [sp, #4]
+    bl picture_record_parameters
+    mov r0, r4
+    pop {r1, r2, r4, pc}
+
 // JpegEncodeMacroProcess::Execute entry: r0 = process, r1 = message. The stub
 // keeps every argument and replays the displaced `mov ip, sp`.
 .global picture_encode_entry

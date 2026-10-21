@@ -429,6 +429,7 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
         (0x536e4774, "picture_post", "e9ffffeb", true),
         (0x535047d4, "picture_encode_entry", "0dc0a0e1", false),
         (0x53608080, "picture_capture_tone", "e1fdfeeb", true),
+        (0x536078f4, "picture_capture_parameters", "3302ffeb", true),
         (0x535031b0, "grain_particle", "9537d5e5", true),
         (0x5351361c, "grain_gate", "e7feffeb", true),
     ];
@@ -885,8 +886,8 @@ fn each_point_has_its_hooks() {
     // The hooks of each point. The in-place patches add 1 to tuning, and on
     // GR III 5 to capture.aspect (build.json "points" counts both).
     for (layout, expected) in [
-        (&components::GR3_LAYOUT, [16, 47, 5, 9, 1, 2]),
-        (&components::GR4_LAYOUT, [15, 48, 5, 11, 1, 4]),
+        (&components::GR3_LAYOUT, [16, 48, 5, 9, 1, 2]),
+        (&components::GR4_LAYOUT, [15, 49, 5, 11, 1, 4]),
     ] {
         let mut counts = [0; 6];
         for (_, symbol) in components::hook_sites(layout) {

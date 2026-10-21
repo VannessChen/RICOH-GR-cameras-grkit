@@ -234,7 +234,7 @@ Each page owns its title, summary, rows, labels, icons, selection checks, activa
 
 A page returns its icons as tiles of its own artwork (`GRKIT_ICON_TILE`). The menu maps them to global IDs. The tiles of all plugins follow each other in registry order and end below the Version tile `0x7ffd`.
 
-Two page callbacks are optional. `highlight` receives each change of the highlighted row, and Image Control previews the row in the live view. `parameters` makes Fn apply the row and open the native parameter page.
+Two page callbacks are optional. `highlight` receives each change of the highlighted row, and Image Control previews the row in the live view. `parameters(h, row)` tells whether a row has native parameters. Fn on such a row of the page applies it and opens the native parameter page. Fn on the root row of the page opens the parameter page of its committed row.
 
 The root lists only the installed plugins (header `+56`), in registry order, then About. A plugin that needs effects, such as Image Control, shows only with effects.
 If no plugin is installed, the installer installs no menu hook, so the GRKit entry does not appear. GRKit opens at the root, on the row of the module that was highlighted or open when the last ADJ session ended (header `+188`).
@@ -279,10 +279,10 @@ Native Image Control pages apply each highlighted value, which previews native p
 OK or an ADJ press on the native slot, and OK on the native MENU page, disable the private effect.
 MENU on the ADJ slot keeps it, because MENU emits its switch event before the same confirm event as OK.
 
-Fn on an effect row commits that row and opens the native parameter page (ImageControlDetailController) for the adjustments of the effect. Off has no Fn hint and ignores Fn.
+Fn on an effect row commits that row and opens the native parameter page (ImageControlDetailController) for the adjustments of the effect. Fn on the Image Control row of the root opens the page for the committed effect. Off has no Fn hint and ignores Fn.
 Fn uses the native slot's call: event `0x1b` with argument 2, then `ChangeController(adj, 0x2000014, 0x2000000)`.
 It first refreshes the model snapshot with `0x531a0150`, because a cancel restores the snapshot type persistently.
-On return, header `+252` reopens GRKit Image Control at the committed row.
+On return, header `+252` reopens GRKit: Image Control at the committed row after Fn on the page, or the root at the Image Control row after Fn on the root (`RETURN_ROOT`).
 
 The page reads and writes the native settings through the Image Control model, so GRKit redirects the model while the page edits an effect (`components::PARAMETER_HOOKS`):
 
@@ -297,6 +297,9 @@ GR IV has one more row kind before shading, so shading and clarity are row kinds
 Photos record the effect in the maker-note ImageTone tag (`0x4f`, hook `0x53608080`). Each record has a stable code at `+0x6f8`: `0x8000` plus 15 bits of an FNV-1a hash of the effect ID.
 The tag hook reads the record of its own shot from the shot ring (see Recorded pictures). A shot without an entry keeps the native tag.
 Native readers accept only 256 to 267, so in-camera RAW development falls back to Standard.
+
+The maker note also records the nine adjustments in tag `0x247`, an array of int16 shown values (-4 to 4). The native fill (GR III `0x535c81c8`, GR IV `0x537dee30`) reads them from the shot settings, which hold the values of the native Image Control type, and the parameter hook does not change those settings.
+The adjustments hook (GR III `0x536078f4`, GR IV `0x53810080`) therefore runs the native fill, then writes the Fn adjustments of the shot's record into the Standard elements 0 to 6, 9, and 10. A shot without a record keeps the native values. Playback shows these elements in the detail rows.
 
 Playback extraction keeps a non-native tag in metadata key `0x25` (instruction `0x535c251c`). The DISP icon hook (`0x53179b7c`) shows the effect icon.
 The detail hook (`0x532b7cfc`) shows GRKit photos as Standard. The still-viewfinder icon adapter substitutes the active effect icon outside movie mode.

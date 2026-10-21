@@ -86,12 +86,18 @@ static void highlight(volatile u32 *h) {
     module=&modules[h[GRKIT_HOST_MODULE/4]];
     if(module->highlight) module->highlight(h);
 }
-/* Fn applies to the highlighted row of a page that has native parameters. */
+/* Fn applies to the highlighted row of a page that has native parameters,
+   and to the root row of such a page for its committed row. */
 static u32 parameters_row(volatile u32 *h) {
     const Module *module;
-    if(h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_MODULE || h[GRKIT_HOST_MODULE/4]>=ARRAY_COUNT(modules)) return 0;
-    module=&modules[h[GRKIT_HOST_MODULE/4]];
-    return module->parameters && module->parameters(h);
+    u32 row=h[GRKIT_HOST_MENU_CURSOR/4];
+    if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT) {
+        module=&modules[root_module(h,row)];
+        row=module->committed(h);
+    }
+    else if(h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_MODULE || h[GRKIT_HOST_MODULE/4]>=ARRAY_COUNT(modules)) return 0;
+    else module=&modules[h[GRKIT_HOST_MODULE/4]];
+    return module->parameters && module->parameters(h,row);
 }
 /* Each module opens at its committed row. Image Control previews from there. */
 static void menu_open(volatile u32 *h,u32 module) {

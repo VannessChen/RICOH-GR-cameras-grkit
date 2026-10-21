@@ -63,9 +63,10 @@ typedef struct {
     u32 (*committed)(volatile u32 *);
     /* Optional: the highlighted row changed. */
     void (*highlight)(volatile u32 *);
-    /* Optional: Fn on the highlighted row applies it and opens the native
-       parameter page. */
-    u32 (*parameters)(volatile u32 *);
+    /* Optional: whether a row has native parameters. Fn on such a row of the
+       page applies it and opens the native parameter page. Fn on the root row
+       opens the page for the committed row. */
+    u32 (*parameters)(volatile u32 *,u32);
     /* Artwork tiles: <ID>_TILES (generated/plugins.h), from the registry. */
     u32 tiles;
 } Module;

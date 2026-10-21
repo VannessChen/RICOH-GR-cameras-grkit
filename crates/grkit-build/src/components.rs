@@ -119,6 +119,9 @@ pub const PICTURE_HOOKS: &[(u32, &str, &str, bool)] = &[
     // PentaxMakernoteEntryDataSetter, tag 0x4f (ImageTone): the effect code of
     // the shot.
     (0x53608080, "picture_capture_tone", "e1fdfeeb", true),
+    // PentaxMakernoteEntryDataSetter, tag 0x247 (0x536078e8): the BL to the
+    // fill of the Image Control adjustments. The Fn adjustments of the shot.
+    (0x536078f4, "picture_capture_parameters", "3302ffeb", true),
     // DigitalFilterProcess SetEffectParameter (0x5350304c): the Particle load,
     // then the BL to the stage gate (0x535131c0, plan +0x24).
     (0x535031b0, "grain_particle", "9537d5e5", true),
@@ -206,6 +209,7 @@ pub fn point_of(symbol: &str) -> Result<Point> {
         "menu_playback_detail",
         "picture_post",
         "picture_capture_tone",
+        "picture_capture_parameters",
     ];
     const OVERLAY: &[&str] = &[
         "framing_update",
@@ -360,6 +364,8 @@ const GR4_PICTURE_HOOKS: &[Hook] = &[
     (0x537034b4, "picture_encode_entry", "0dc0a0e1", false),
     // The ImageTone call of the maker-note setter.
     (0x53810804, "picture_capture_tone", "1a37ffeb", true),
+    // The adjustments fill of tag 0x247 (handler 0x53810074).
+    (0x53810080, "picture_capture_parameters", "6a3bffeb", true),
     // DigitalFilterProcess SetEffectParameter (0x53701c40): the grain on,
     // strength, and size loads, then the BL to the stage gate (0x537150fc,
     // plan +0x25).

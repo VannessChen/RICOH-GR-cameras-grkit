@@ -159,6 +159,25 @@ static u32 shot_record(volatile u32 *h,u32 shot) {
 }
 /* For picture_capture_tone: the record of a shot, or 0. */
 u32 picture_capture_record(u32 shot) { return shot_record(framing_header(),shot); }
+#ifndef PICTURE_IFD_SET_SHORT
+#define PICTURE_IFD_SET_SHORT(entry,index,value) (((void (*)(u32,u32,u32))FW_IFD_SET_SHORT)(entry,index,value))
+#endif
+/* For picture_capture_parameters: the maker-note adjustments (tag 0x247) of a
+   GRKit shot. The native fill reads the settings of the native Image Control
+   type. The record's Fn adjustments replace the nine Standard elements:
+   saturation, hue, key, contrast, highlight, shadow, sharpness, then shading
+   and clarity. An element holds the shown value, -4 to 4, as camera photos
+   show. A stored byte (GRKIT_RECORD_PARAMETERS) is the shown value mod 9, and
+   a byte above 8 counts as 0. */
+void picture_record_parameters(u32 entry,u32 shot) {
+    static const u8 elements[9]={0,1,2,3,4,5,6,9,10};
+    u32 record=picture_capture_record(shot), i, stored;
+    if(!record) return;
+    for(i=0;i<sizeof(elements);++i) {
+        stored=BYTE(record,GRKIT_RECORD_PARAMETERS+i);
+        PICTURE_IFD_SET_SHORT(entry,elements[i],stored>8 ? 0 : stored<=4 ? stored : (stored-9)&0xffffU);
+    }
+}
 /* The encode handlers in call order (Encoder.order in the registry). */
 static const Encoder encoders[]={PLUGIN_ENCODERS};
 #define ENCODER_COUNT (sizeof(encoders)/sizeof(encoders[0]))

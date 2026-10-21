@@ -25,15 +25,19 @@ extern u32 menu_destroy_original(u32);
 /* GRKIT_HOST_RETURN: the native parameter page is opening (1) or open (2).
    ADJ exited while GRKit was open (3), so the next ADJ opens GRKit. MENU or
    OK on GRKit passes the event that closes ADJ to the native list (4); the
-   exit then sets 3. Only an exit sets 3, because leaving GRKit refreshes ADJ. */
+   exit then sets 3. Only an exit sets 3, because leaving GRKit refreshes ADJ.
+   RETURN_ROOT marks a parameter page that Fn opened from the root, so the
+   page returns to the root instead of the page of the module. */
 #define RETURN_OPENING 1U
 #define RETURN_PARAMETERS 2U
 #define RETURN_GRKIT 3U
 #define RETURN_CLOSING 4U
+#define RETURN_ROOT 0x10U
+#define RETURN_STATE(value) ((value)&~RETURN_ROOT)
 /* The return state after an ADJ exit. `in_grkit` is set for an exit while
    GRKit was open. */
 static u32 exit_return(u32 value,u32 in_grkit) {
-    if(value==RETURN_OPENING) return RETURN_PARAMETERS;
+    if(RETURN_STATE(value)==RETURN_OPENING) return RETURN_PARAMETERS|(value&RETURN_ROOT);
     return in_grkit || value==RETURN_CLOSING ? RETURN_GRKIT : 0;
 }
 /* Menu C is Thumb-2 for size. Firmware hooks and thunks enter with A32 B/BL,
@@ -279,16 +283,21 @@ A32_ENTRY void menu_refresh(u32 controller) {
     parameter_title(h)[0]=0;
 #endif
     if(private_mode(controller)) { render(controller); return; }
-    if(h[GRKIT_HOST_RETURN/4]==RETURN_PARAMETERS && ADJ_MOVIE(controller)!=1) {
+    if(RETURN_STATE(h[GRKIT_HOST_RETURN/4])==RETURN_PARAMETERS && ADJ_MOVIE(controller)!=1) {
+        u32 root=h[GRKIT_HOST_RETURN/4]&RETURN_ROOT;
         h[GRKIT_HOST_RETURN/4]=0;
 #ifdef PARAMETER_KINDS
         /* The page has ended. A record that no page started stays unused. */
         if(h[GRKIT_HOST_PARAMETERS/4]&1U) h[GRKIT_HOST_PARAMETERS/4]=0;
 #endif
+        /* GRKit reopens at the root row of the module (menu_reopen). Fn on a
+           page returns to that page. Fn starts only from Image Control, so it
+           is visible. */
         enter(controller,3);
-        /* Fn starts only from Image Control, so it is visible. */
-        menu_open(h,0);
-        render(controller);
+        if(!root) {
+            menu_open(h,0);
+            render(controller);
+        }
         return;
     }
     if(h[GRKIT_HOST_RETURN/4]==RETURN_GRKIT) {
@@ -533,6 +542,8 @@ A32_ENTRY u32 menu_parameter_title(u32 view) {
 static u32 open_parameters(u32 controller) {
     if(!parameters_available(controller)) return 0;
 #ifdef FW_SETTINGS_DOMAIN
+    /* leave() clears the level, so read it first. */
+    u32 root=menu_header()[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? RETURN_ROOT : 0;
     CALL1(FW_ADJ_SNAPSHOT)(controller);
 #ifdef PARAMETER_KINDS
     /* The page edits the adjustments of the committed effect. Bit 0 marks a
@@ -542,7 +553,7 @@ static u32 open_parameters(u32 controller) {
     leave(controller);
     /* The page returns to ADJ (0x2000000) with the native Image Control slot
        focused, where OK would confirm Standard. Come back to GRKit instead. */
-    menu_header()[GRKIT_HOST_RETURN/4]=RETURN_OPENING;
+    menu_header()[GRKIT_HOST_RETURN/4]=RETURN_OPENING|root;
     CALL3(FW_CHANGE_CONTROLLER)(controller,IC_PARAMETERS_CONTROLLER,0x2000000);
 #endif
     return 1;
@@ -563,7 +574,7 @@ A32_ENTRY void menu_exit(u32 controller) {
        GRKit, or opens as native ADJ does (exit_return). */
     h[GRKIT_HOST_RETURN/4]=exit_return(h[GRKIT_HOST_RETURN/4],in_grkit);
 #ifdef PARAMETER_KINDS
-    if(h[GRKIT_HOST_RETURN/4]!=RETURN_PARAMETERS && (h[GRKIT_HOST_PARAMETERS/4]&1U)) h[GRKIT_HOST_PARAMETERS/4]=0;
+    if(RETURN_STATE(h[GRKIT_HOST_RETURN/4])!=RETURN_PARAMETERS && (h[GRKIT_HOST_PARAMETERS/4]&1U)) h[GRKIT_HOST_PARAMETERS/4]=0;
     parameter_title(h)[0]=0;
 #endif
     menu_exit_original(controller);
@@ -624,7 +635,8 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
 #ifdef EV_FN_ACTION
     /* The Fn press that opened a GRKit parameter page also sends its native
        action. The native page must not open for it. */
-    if(kind==EV_FN_ACTION && (h[GRKIT_HOST_RETURN/4]==RETURN_OPENING || h[GRKIT_HOST_RETURN/4]==RETURN_PARAMETERS)) return 0;
+    if(kind==EV_FN_ACTION && (RETURN_STATE(h[GRKIT_HOST_RETURN/4])==RETURN_OPENING ||
+                              RETURN_STATE(h[GRKIT_HOST_RETURN/4])==RETURN_PARAMETERS)) return 0;
 #endif
     if(!private_mode(controller)) {
         /* OK or ADJ press on the native Image Control slot confirms a native value.
@@ -649,11 +661,9 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
     }
     menu_normalize(h);
     /* On an effect row, commit the highlighted row, then adjust its parameters.
-       Fn on Off does nothing. */
-    if(kind==EV_FN && *(u8 *)WORD((u32)event,4)==FN_PRESS_ARG &&
-       h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && current_module(h)->parameters) {
-        if(!parameters_row(h)) return 0;
-        current_module(h)->apply(h,h[GRKIT_HOST_MENU_CURSOR/4]);
+       On the root row, adjust the committed effect. Fn on Off does nothing. */
+    if(kind==EV_FN && *(u8 *)WORD((u32)event,4)==FN_PRESS_ARG && parameters_row(h)) {
+        if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE) current_module(h)->apply(h,h[GRKIT_HOST_MENU_CURSOR/4]);
         if(!open_parameters(controller)) render(controller);
         return 0;
     }

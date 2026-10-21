@@ -118,8 +118,18 @@ int main(void)
     test_header[GRKIT_HOST_MODULE / 4] = 0;
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     assert(!parameters_row(test_header));
+    /* On the root, Fn applies to the Image Control row while an effect is
+       committed. Off and the rows of other modules have no parameters. */
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
+    assert(!parameters_row(test_header));
+    test_header[GRKIT_HOST_ACTIVE / 4] = 0x59005000 + 2 * GRKIT_RECORD_SIZE;
+    assert(parameters_row(test_header));
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
+    assert(!parameters_row(test_header));
+    test_header[GRKIT_HOST_ACTIVE / 4] = 0;
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = 0;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
+    assert(!parameters_row(test_header));
     assert(menu_press(2, 0));
     assert(!menu_press(1, 0));
     assert(!menu_press(2, 1));
@@ -214,6 +224,10 @@ int main(void)
     assert(exit_return(0, 0) == 0);
     assert(exit_return(RETURN_GRKIT, 0) == 0);
     assert(exit_return(RETURN_PARAMETERS, 0) == 0);
+    /* A page that Fn opened from the root keeps its mark until it returns. */
+    assert(exit_return(RETURN_OPENING | RETURN_ROOT, 0) == (RETURN_PARAMETERS | RETURN_ROOT));
+    assert(exit_return(RETURN_PARAMETERS | RETURN_ROOT, 0) == 0);
+    assert(RETURN_STATE(RETURN_PARAMETERS | RETURN_ROOT) == RETURN_PARAMETERS);
     /* The root lists the five plugins, then About. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = 1;
     assert(count(test_header) == 6);

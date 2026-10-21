@@ -42,6 +42,10 @@ static unsigned flushes, native_aspect;
 #define PICTURE_SCRATCH(h) ((void)(h), SCRATCH)
 #define PICTURE_MAP(address) ((u8 *)region((address), GRKIT_PICTURE_SCRATCH))
 #define PICTURE_BARRIER() ((void)0)
+/* Maker-note element writes: the entry, then the value of each element. */
+static uint32_t ifd_entry, ifd_writes, ifd_values[32];
+#define PICTURE_IFD_SET_SHORT(entry,index,value) do { assert((index) < 32 && !((value) >> 16)); \
+    ifd_entry = (entry); ifd_values[(index)] = (value); ++ifd_writes; } while (0)
 #include "picture.c"
 
 static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
@@ -486,6 +490,31 @@ int main(void)
     picture_encode(0, MESSAGE);
     assert(flushes == 0);
     for (u32 i = 0; i < 3; ++i) assert(changes(i, 0).lit == 0);
+    /* The maker note of a GRKit shot records the Fn adjustments of its record
+       in the nine Standard elements of tag 0x247, as shown values. Stored
+       bytes are the shown value mod 9, and a byte above 8 counts as 0. */
+    {
+        static const uint8_t stored[9] = {2, 7, 0, 4, 5, 8, 1, 9, 6};
+        static const uint32_t elements[9] = {0, 1, 2, 3, 4, 5, 6, 9, 10};
+        static const uint32_t shown[9] = {2, 0xfffe, 0, 4, 0xfffc, 0xffff, 1, 0, 0xfffd};
+        reset();
+        for (u32 i = 0; i < 9; ++i) BYTE(record(2), GRKIT_RECORD_PARAMETERS + i) = stored[i];
+        memset(ifd_values, 0xaa, sizeof(ifd_values));
+        ifd_writes = 0;
+        picture_record_parameters(0x1234, SHOT);
+        assert(ifd_writes == 0);
+        still(record(2));
+        picture_record_parameters(0x1234, SHOT);
+        assert(ifd_writes == 9 && ifd_entry == 0x1234);
+        for (u32 i = 0; i < 9; ++i) assert(ifd_values[elements[i]] == shown[i]);
+        /* The other elements keep the native fill. */
+        for (u32 i = 0; i < 32; ++i)
+            if (i > 10 || i == 7 || i == 8) assert(ifd_values[i] == 0xaaaaaaaaU);
+        /* Another shot keeps the native adjustments. */
+        ifd_writes = 0;
+        picture_record_parameters(0x1234, SHOT + 4);
+        assert(ifd_writes == 0);
+    }
     /* Division helper used for reciprocals. */
     for (u32 n = 0; n < 70000; n += 37) for (u32 d = 1; d < 400; d += 13) assert(divide(n, d) == n / d);
     return 0;
