@@ -1,4 +1,4 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
   - name: Recovery guide
     url: https://github.com/ahonn/grkit/blob/main/resources/RECOVERY.md

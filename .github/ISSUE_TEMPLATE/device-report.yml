@@ -1,11 +1,11 @@
 name: Device report
 description: Report the result of GRKit on a camera, as a pass or a failure.
-labels: [device-report]
 body:
   - type: markdown
     attributes:
       value: |
         If the camera does not start, read the [recovery guide](https://github.com/ahonn/grkit/blob/main/resources/RECOVERY.md) first.
+        For the site, the CLI, the documentation, or a feature request, open a blank issue.
   - type: dropdown
     id: camera
     attributes:
@@ -17,57 +17,43 @@ body:
         - GR IIIx HDF
         - GR IV
         - GR IV HDF
+        - GR IV Monochrome
     validations:
       required: true
   - type: input
     id: firmware
     attributes:
       label: Firmware version
-      placeholder: "2.10"
-    validations:
-      required: true
-  - type: dropdown
-    id: source
-    attributes:
-      label: Package source
-      options:
-        - Site
-        - CLI (grkit package)
+      description: The version in the camera menu.
+      placeholder: "1.11"
     validations:
       required: true
   - type: input
-    id: sha256
+    id: version
     attributes:
-      label: SHA-256 of GRKit.zip
-      description: "macOS and Linux: `shasum -a 256 GRKit.zip`. Windows: `certutil -hashfile GRKit.zip SHA256`."
+      label: GRKit version
+      description: The last row of the GRK menu shows the version. If GRK does not appear, give the version in the footer of grkit.app.
+      placeholder: "1.1.1"
     validations:
       required: true
-  - type: checkboxes
-    id: modules
-    attributes:
-      label: Modules tested
-      options:
-        - label: Image Control
-        - label: Framing
-        - label: Guides
-        - label: Date Stamp
-        - label: Grain
   - type: dropdown
     id: result
     attributes:
       label: Result
       options:
-        - Pass
-        - Fail
+        - Works
+        - Works with problems
+        - GRK does not appear
     validations:
       required: true
-  - type: input
-    id: status
-    attributes:
-      label: INSTALL.ERR status
-      description: If the card has `SCRIPT/PLUGINS/INSTALL.ERR`, give the number in it. If the number is 47, also copy the other lines of the file into Details.
   - type: textarea
     id: details
     attributes:
       label: Details
-      description: What you did, what you expected, and what occurred. Add photos of the screen if they help.
+      description: |
+        Give the modules that you tested, the size and format of the card, what you expected, and what occurred.
+        If the card has `SCRIPT/PLUGINS/INSTALL.ERR`, copy all its lines here.
+        If the first line is 47, also attach a firmware dump. The [dump guide](https://github.com/ahonn/grkit/blob/main/resources/DUMP.md) tells you how to make one.
+        Add photos of the screen if they help.
+    validations:
+      required: true
