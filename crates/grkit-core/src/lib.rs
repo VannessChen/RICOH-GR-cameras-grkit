@@ -3,6 +3,7 @@
 pub mod abi;
 pub mod artwork;
 pub mod camera;
+pub mod color;
 pub mod cube;
 pub mod effects;
 pub mod fit;

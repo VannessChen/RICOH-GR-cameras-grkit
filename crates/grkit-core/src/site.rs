@@ -8,7 +8,7 @@ use anyhow::{ensure, Context, Result};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
-use crate::cube::{self, Matrix};
+use crate::cube::{self, Encoding};
 use crate::fit::{self, Model, Params};
 use crate::selective::{self, Selective};
 use crate::{effects, hue, packaging, Files};
@@ -65,44 +65,6 @@ pub fn params(effect: &Value) -> Result<Params> {
     Ok(result)
 }
 
-/// The base-gamma index whose output is `code` (0..16384), clipped to the table domain.
-fn inverse_base_gamma(base: &[u16; 256], code: f64) -> f64 {
-    let base = base.map(f64::from);
-    if code <= base[0] {
-        return 0.0;
-    }
-    let Some(upper) = (1..256).find(|&i| base[i] >= code) else {
-        return 255.0;
-    };
-    let (low, high) = (base[upper - 1], base[upper]);
-    upper as f64 - 1.0 + (code - low) / (high - low)
-}
-
-/// Inverts the Standard rendering, so `Model::render` with Standard returns the input again.
-struct Standard {
-    base: [u16; 256],
-    inverse: Matrix,
-}
-
-impl Standard {
-    fn new(base: &[u16; 256]) -> Self {
-        let look = unit(&fit::STANDARD_LOOK);
-        let rows: Matrix = std::array::from_fn(|r| std::array::from_fn(|c| look[r * 3 + c]));
-        Self {
-            base: *base,
-            inverse: cube::inverse(&rows).expect("the Standard look matrix is invertible"),
-        }
-    }
-
-    /// Scene-linear light that Standard renders as the sRGB-encoded `display`. A Standard JPEG
-    /// has the camera's chroma suppression, which this undoes first.
-    fn linear(&self, display: [f64; 3]) -> [f64; 3] {
-        let codes = fit::undisplay(display).map(|v| v.clamp(0.0, 1.0));
-        let mixed = codes.map(|v| inverse_base_gamma(&self.base, v * 16384.0) / fit::K);
-        cube::mul(&self.inverse, mixed)
-    }
-}
-
 /// A legacy Standard-JPEG input table, red fastest, then green, then blue.
 /// Published catalogs use `linear_preview_lut` instead.
 pub fn preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
@@ -112,13 +74,13 @@ pub fn preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
         .map(|value| Selective::from_json(value).map(|s| s.table()))
         .transpose()?;
     let model = Model::new(base_gamma);
-    let standard = Standard::new(base_gamma);
     let step = |i: usize| i as f64 / (LUT_SIZE - 1) as f64;
     let mut table = Vec::with_capacity(LUT_SIZE.pow(3) * 3);
     for b in 0..LUT_SIZE {
         for g in 0..LUT_SIZE {
             for r in 0..LUT_SIZE {
-                let linear = standard.linear([step(r), step(g), step(b)]);
+                // Scene-linear light that Standard renders as this display color.
+                let linear = model.decode(Encoding::Standard, [step(r), step(g), step(b)]);
                 let mut display = model.render(&params, linear);
                 if let Some(table) = &selective {
                     display = selective::apply_rgb(table, display);
@@ -167,12 +129,7 @@ pub fn linear_preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec
 /// Standard applies its look matrix and base gamma directly, without effect curves.
 pub fn standard_linear_preview_lut(base_gamma: &[u16; 256]) -> Vec<u8> {
     let model = Model::new(base_gamma);
-    let look = unit(&fit::STANDARD_LOOK);
-    let matrix: Matrix = std::array::from_fn(|r| std::array::from_fn(|c| look[r * 3 + c]));
-    // The Standard JPEG has the same chroma suppression as an effect.
-    linear_lut(|linear| {
-        fit::display(cube::mul(&matrix, linear).map(|value| model.base_gamma(value) / 16384.0))
-    })
+    linear_lut(|linear| model.standard(linear))
 }
 
 /// Standard base64 with padding. The catalog carries each 40 x 40 RGBA icon

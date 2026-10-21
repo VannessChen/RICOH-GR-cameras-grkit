@@ -125,6 +125,22 @@ pub fn coordinate(v: Rgb) -> Option<f64> {
     (a + b > 1e-12).then(|| quarter as f64 * 2048.0 + 2048.0 * b / (a + b))
 }
 
+/// The levels with a share of a color of stage luminance `y`, among `levels` levels (one or
+/// `LEVELS`), and their shares.
+pub fn level_shares(levels: usize, y: f64) -> Vec<(usize, f64)> {
+    if levels == 1 {
+        return vec![(0, 1.0)];
+    }
+    let (a, b, f) = level_blend(level_position(y));
+    if a == b || f == 0.0 {
+        vec![(a, 1.0)]
+    } else if f == 1.0 {
+        vec![(b, 1.0)]
+    } else {
+        vec![(a, 1.0 - f), (b, f)]
+    }
+}
+
 /// The unit (Cb, Cr) direction at a joined coordinate, the inverse of `coordinate`.
 pub fn direction(coordinate: f64) -> (f64, f64) {
     let coordinate = coordinate.rem_euclid(8192.0);
@@ -242,7 +258,7 @@ impl Stage {
         let y = luminance(v);
         let w = self.curve.weight(y);
         let m = self.matrix(k, y);
-        let mixed = cube::mul(&rows(&m), v);
+        let mixed = cube::mul(&cube::rows(&m), v);
         std::array::from_fn(|c| (v[c] + w * (mixed[c] - v[c])).max(0.0))
     }
 
@@ -255,10 +271,6 @@ impl Stage {
         let (ma, mb) = (self.levels[a][k], self.levels[b][k]);
         std::array::from_fn(|n| ma[n] + f * (mb[n] - ma[n]))
     }
-}
-
-fn rows(m: &[f64; 9]) -> cube::Matrix {
-    std::array::from_fn(|r| std::array::from_fn(|c| m[r * 3 + c]))
 }
 
 /// Six off-diagonal coefficients in 1/128 for each sector.

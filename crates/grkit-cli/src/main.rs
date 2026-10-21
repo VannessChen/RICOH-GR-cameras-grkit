@@ -4,7 +4,7 @@ mod storage;
 
 use anyhow::{ensure, Context, Result};
 use clap::{Parser, Subcommand};
-use grkit_core::{cube, effects, fit, modules::Selection, packaging, site, Files};
+use grkit_core::{effects, fit, modules::Selection, packaging, site, Files};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -349,15 +349,15 @@ fn run(command: Command) -> Result<Value> {
             let base_gamma = grkit_build::firmware::standard_base_gamma(&image)?;
             let bytes = storage::read_bounded(&lut, MAX_LUT_SIZE)?;
             let input = if input == "auto" {
-                fit::guess_input(&base_gamma, &cube::Cube::read(&bytes)?)
+                None
             } else {
-                input.parse()?
+                Some(input.parse()?)
             };
+            let icon = json!({"label": label, "shape": shape});
             let request = fit::Import {
                 effect_id: &id,
                 name: &name,
-                label: &label,
-                shape: &shape,
+                icon: &icon,
                 source: lut
                     .file_name()
                     .and_then(|name| name.to_str())
@@ -370,6 +370,8 @@ fn run(command: Command) -> Result<Value> {
                 },
             };
             let imported = fit::import(&bytes, &base_gamma, &request)?;
+            let mut warnings = imported.warnings;
+            warnings.extend(fit::grade_warning(&imported.fit));
             let errors =
                 effects::parse_json(imported.text.as_bytes())?["attribution"]["fit"].take();
             storage::write_directory(
@@ -379,7 +381,7 @@ fn run(command: Command) -> Result<Value> {
             Ok(json!({"output": output, "effect_id": id, "fit": errors,
                 "post_matrix": imported.fit.post_matrix.is_some(),
                 "monochrome": imported.fit.monochrome, "toned": imported.fit.toned,
-                "warnings": imported.warnings}))
+                "warnings": warnings}))
         }
         Command::Package {
             build,

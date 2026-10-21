@@ -34,8 +34,8 @@ pub struct Imported {
     /// A to D: how closely the effect follows the LUT (`fit::Grade`). The page shows a
     /// description of it, not the letter.
     pub grade: &'static str,
-    /// Conditions that the user should check before using the effect. The grade warning of
-    /// `fit::import` is left out, because the page describes the grade.
+    /// Conditions that the user should check before using the effect. The page describes the
+    /// grade itself.
     pub warnings: Vec<String>,
 }
 
@@ -47,38 +47,41 @@ pub struct ImportRequest<'a> {
     pub icon: &'a Value,
     /// The file name, recorded in the attribution.
     pub source: &'a str,
-    /// The input encoding name: `standard`, `srgb`, `linear`, or a log encoding.
+    /// The input encoding name: `standard`, `srgb`, `linear`, a log encoding, or `auto` for
+    /// the one that the LUT data suggests.
     pub input: &'a str,
 }
 
-/// Fits a `.cube` file or a LUT image over `base_gamma`, the table of the site catalog.
-pub fn import_lut(bytes: &[u8], base_gamma: &[u16], request: &ImportRequest) -> Result<Imported> {
+/// Rejects a LUT file over `MAX_LUT_SIZE` and reads the site catalog's base gamma.
+fn lut_inputs(bytes: &[u8], base_gamma: &[u16]) -> Result<[u16; 256]> {
     ensure!(
         bytes.len() <= MAX_LUT_SIZE,
         "The LUT file is larger than {} MB",
         MAX_LUT_SIZE >> 20
     );
-    let base_gamma = site::base_gamma(base_gamma)?;
-    // Check the icon before the fit, which takes seconds.
-    effects::icon_pixels(request.icon).context("Invalid icon")?;
-    // `fit::import` writes a label tile. The page gives a cover, which replaces it.
+    site::base_gamma(base_gamma)
+}
+
+/// Fits a `.cube` file or a LUT image over `base_gamma`, the table of the site catalog.
+pub fn import_lut(bytes: &[u8], base_gamma: &[u16], request: &ImportRequest) -> Result<Imported> {
+    let base_gamma = lut_inputs(bytes, base_gamma)?;
     let imported = fit::import(
         bytes,
         &base_gamma,
         &fit::Import {
             effect_id: request.effect_id,
             name: request.name,
-            label: "LUT",
-            shape: "plain",
+            icon: request.icon,
             source: request.source,
-            input: request.input.parse()?,
+            input: match request.input {
+                "auto" => None,
+                name => Some(name.parse()?),
+            },
             exposure: 0.0,
             options: fit::Options::default(),
         },
     )?;
-    let mut definition = effects::parse_json(imported.text.as_bytes())?;
-    definition["icon"] = request.icon.clone();
-    let blob = effects::compile_definition(&definition)?;
+    let blob = effects::compile_definition(&effects::parse_json(imported.text.as_bytes())?)?;
     let (effect, icon) = effects::decode(&blob)?;
     Ok(Imported {
         preview: site::linear_preview_lut(&base_gamma, &effect)?,
@@ -86,26 +89,14 @@ pub fn import_lut(bytes: &[u8], base_gamma: &[u16], request: &ImportRequest) -> 
         blob,
         monochrome: imported.fit.monochrome,
         grade: fit::Grade::of(&imported.fit).letter(),
-        warnings: {
-            let grade = fit::grade_warning(&imported.fit);
-            imported
-                .warnings
-                .into_iter()
-                .filter(|w| Some(w) != grade.as_ref())
-                .collect()
-        },
-        definition: serde_json::to_string_pretty(&definition)? + "\n",
+        warnings: imported.warnings,
+        definition: imported.text,
     })
 }
 
 /// The input that a LUT most likely expects, from its data alone: see `fit::guess_input`.
 pub fn guess_input(bytes: &[u8], base_gamma: &[u16]) -> Result<&'static str> {
-    ensure!(
-        bytes.len() <= MAX_LUT_SIZE,
-        "The LUT file is larger than {} MB",
-        MAX_LUT_SIZE >> 20
-    );
-    let base_gamma = site::base_gamma(base_gamma)?;
+    let base_gamma = lut_inputs(bytes, base_gamma)?;
     Ok(fit::guess_input(&base_gamma, &Cube::read(bytes)?).name())
 }
 

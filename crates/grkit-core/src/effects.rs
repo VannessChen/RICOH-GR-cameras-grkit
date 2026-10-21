@@ -285,6 +285,21 @@ pub fn coefficients(effect: &Value) -> Result<Vec<u8>> {
     Ok(result)
 }
 
+/// Checks an effect ID (`valid_id`) and a name of 1 to 16 printable ASCII characters.
+pub fn check_identity(effect_id: &str, name: &str) -> Result<()> {
+    ensure!(
+        valid_id(effect_id),
+        "Expected a 1 to 31 character lowercase ASCII effect ID"
+    );
+    ensure!(
+        (1..=16).contains(&name.len())
+            && name.trim() == name
+            && name.bytes().all(|c| (32..=126).contains(&c)),
+        "Expected 1 to 16 printable ASCII name characters without edge spaces"
+    );
+    Ok(())
+}
+
 pub fn validate(effect: &Value, icon: &[u8]) -> Result<()> {
     let mut optional = vec!["flags"];
     optional.extend(EXTENSION_KEYS);
@@ -301,19 +316,12 @@ pub fn validate(effect: &Value, icon: &[u8]) -> Result<()> {
         .map_or(Some(0), Value::as_u64)
         .context("Unsupported effect flags")?;
     ensure!(flags <= MONOCHROME as u64, "Unsupported effect flags");
-    ensure!(
-        effect["effect_id"].as_str().is_some_and(valid_id),
-        "Expected a 1 to 31 character lowercase ASCII effect ID"
-    );
-    let name = effect["name"]
-        .as_str()
-        .context("Expected an ASCII effect name")?;
-    ensure!(
-        (1..=16).contains(&name.len())
-            && name.trim() == name
-            && name.bytes().all(|c| (32..=126).contains(&c)),
-        "Expected 1 to 16 printable ASCII name characters without edge spaces"
-    );
+    check_identity(
+        effect["effect_id"].as_str().unwrap_or(""),
+        effect["name"]
+            .as_str()
+            .context("Expected an ASCII effect name")?,
+    )?;
     coefficients(effect)?;
     let extension = extension(effect)?;
     ensure!(
