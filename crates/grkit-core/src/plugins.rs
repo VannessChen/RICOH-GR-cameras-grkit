@@ -216,7 +216,7 @@ pub const PLUGINS: [Plugin; 5] = [
             },
             // The badge covers the guides that cross it.
             Layer {
-                value: "framing_value",
+                value: "framing_badge_value",
                 paint: "framing_badge",
                 live_only: true,
                 order: 30,

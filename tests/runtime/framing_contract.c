@@ -306,12 +306,16 @@ int main(void)
             assert(BYTE(TEST_CANVAS,0xa0)==0);
         }
     }
-    reset();
-    header[GRKIT_HOST_FRAME_RATIO/4]=2;
-    header[GRKIT_HOST_GUIDE/4]=1;
-    display_mode=2;
-    framing_paint(TEST_CANVAS,TEST_BITMAP);
-    assert_guides(2,0,1);
+    /* The Framing badge shows only with the full display, like the top row of
+       native settings. The mask stays in each display. */
+    for (u32 mode=0; mode<4; ++mode) {
+        reset();
+        header[GRKIT_HOST_FRAME_RATIO/4]=2;
+        header[GRKIT_HOST_GUIDE/4]=1;
+        display_mode=mode;
+        framing_paint(TEST_CANVAS,TEST_BITMAP);
+        assert_guides(2,mode<2,mode==0);
+    }
     /* Unknown styles draw nothing. */
     reset();
     header[GRKIT_HOST_FRAME_RATIO/4]=0;

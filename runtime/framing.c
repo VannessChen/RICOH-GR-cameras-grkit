@@ -51,7 +51,7 @@ static u32 framing_display_mode(void) {
 
 /* Plugin services (runtime/plugin.h). */
 static u32 framing_ratios(void) { return FRAMING_RATIO_COUNT; }
-static u32 native_info_shown(void) { return FRAMING_DISPLAY_MODE()<2; }
+static u32 native_display(void) { return FRAMING_DISPLAY_MODE(); }
 
 /* The plugin handler files and PLUGIN_LAYERS. */
 #include "generated/layers.h"

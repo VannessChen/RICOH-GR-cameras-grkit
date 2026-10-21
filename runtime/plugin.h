@@ -103,9 +103,14 @@ typedef struct {
     /* Paint in the live view only, not on the ADJ canvas. */
     u32 live_only;
 } Layer;
-/* 1 while the native live view shows its information (DISP full or simple),
-   0 for no information and display off. */
-GRKIT_MAYBE_UNUSED static u32 native_info_shown(void);
+/* The native live-view display that DISP selects. Full shows the top row
+   of settings (effect and others), simple only the bottom row, no
+   information neither, and display off turns the live view black. */
+#define DISPLAY_FULL 0U
+#define DISPLAY_SIMPLE 1U
+#define DISPLAY_NO_INFO 2U
+#define DISPLAY_OFF 3U
+GRKIT_MAYBE_UNUSED static u32 native_display(void);
 #ifndef OVERLAY_PIXELS
 #define OVERLAY_PIXELS(address) ((volatile u32 *)(address))
 #endif

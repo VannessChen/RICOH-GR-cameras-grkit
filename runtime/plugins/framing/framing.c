@@ -15,6 +15,12 @@ static u32 framing_value(volatile u32 *h) {
     u32 ratio=h[GRKIT_HOST_FRAME_RATIO/4];
     return ratio<framing_ratios() ? ratio : 0;
 }
+/* The ratio of the badge layer. The badge shows only with the full display,
+   like the top row of native settings. The mask stays in each display,
+   because it shows the capture area. */
+static u32 framing_badge_value(volatile u32 *h) {
+    return native_display()==DISPLAY_FULL ? framing_value(h) : 0;
+}
 /* Black at 50% alpha outside the photo area. */
 static void framing_mask(const Surface *s,u32 value) {
     u32 x,y;
