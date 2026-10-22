@@ -33,12 +33,12 @@ The compiler draws each icon in gray. An icon has one of three forms:
 | Form | Fields | Picture |
 |---|---|---|
 | Label tile | `label` (1 to 4 capitals or digits) and `shape` (`film`, `filter`, or `plain`) | The label on a dark tile |
-| Film box | `template` `"box"`, `brand`, `name`, `number`, and `band` (`true` or `false`) | A light band with the brand, the name and a large number on a dark body, and a light bottom band if `band` is `true` |
-| Motion picture film label | `template` `"cine"`, `brand`, `name`, and `number` | As a film box, with three light stripes at the bottom |
+| Film box | `template` `"box"`, `brand`, `name`, an optional `number`, and `band` (`true` or `false`) | A light band with the brand, the name and a large number on a dark body, and a light bottom band if `band` is `true` |
+| Motion picture film label | `template` `"cine"`, `brand`, `name`, and an optional `number` | As a film box, with three light stripes at the bottom |
 
 A film box and a film label span the full 40-pixel width of the tile. Their brand uses Inter Black if it fits at full width. Otherwise, it uses a 5-pixel font, which has only capitals, digits, spaces, `-`, and `+`.
 
-The name always uses the 5-pixel font. The number uses Inter Black. If a text does not fit, the compiler stops with an error.
+The name uses the 5-pixel font, or Inter Black if that font cannot draw it. The number uses Inter Black. A cover without `number` shows the name large, in Inter Black. If a text does not fit, the compiler stops with an error.
 
 The icon shows the effect name and the brand, and nothing else:
 
@@ -119,6 +119,8 @@ grkit effects import --cube look.cube --firmware fwdc239b.bin --input srgb \
 6. Add the license of the LUT to `attribution`. Then run `grkit effects build`.
 
 If `OUT/ID` exists or a check fails, the command stops and writes nothing.
+
+The site imports a LUT in the browser with the same fit, over the base gamma of the published effect catalog, so the user needs no firmware. See [LUT import](../web/README.md#lut-import).
 
 The fit follows [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)). `crates/grkit-core/src/fit.rs` describes the model and its assumptions.
 

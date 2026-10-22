@@ -120,11 +120,31 @@ fn has_keys(value: &Value, keys: &[&str]) -> bool {
 
 /// Renders the `icon` of an effect definition: a label tile (`label`, `shape`),
 /// a film box (`template` "box"), or a motion picture film label (`template` "cine").
+/// A cover can leave out `number`, and then shows a large name.
 pub fn icon_pixels(icon: &Value) -> Result<Vec<u8>> {
     let text = |key: &str| {
         icon[key]
             .as_str()
             .with_context(|| format!("Expected icon {key}"))
+    };
+    // A present number has 1 to 12 characters. Without the key, the cover has none.
+    let number = || -> Result<&str> {
+        match icon.get("number") {
+            None => Ok(""),
+            Some(_) => {
+                let number = text("number")?;
+                ensure!(
+                    !number.is_empty(),
+                    "Expected a cover number, or no number key"
+                );
+                Ok(number)
+            }
+        }
+    };
+    let keys = |required: &[&str]| {
+        let mut with_number = required.to_vec();
+        with_number.push("number");
+        has_keys(icon, required) || has_keys(icon, &with_number)
     };
     match icon.get("template").map(|t| t.as_str().unwrap_or_default()) {
         None => {
@@ -136,18 +156,18 @@ pub fn icon_pixels(icon: &Value) -> Result<Vec<u8>> {
         }
         Some("box") => {
             ensure!(
-                has_keys(icon, &["template", "brand", "name", "number", "band"]),
-                "Expected box icon brand, name, number, and band"
+                keys(&["template", "brand", "name", "band"]),
+                "Expected box icon brand, name, band, and an optional number"
             );
             let band = icon["band"].as_bool().context("Expected icon band")?;
-            crate::artwork::render_box(text("brand")?, text("name")?, text("number")?, band)
+            crate::artwork::render_box(text("brand")?, text("name")?, number()?, band)
         }
         Some("cine") => {
             ensure!(
-                has_keys(icon, &["template", "brand", "name", "number"]),
-                "Expected cine icon brand, name, and number"
+                keys(&["template", "brand", "name"]),
+                "Expected cine icon brand, name, and an optional number"
             );
-            crate::artwork::render_cine(text("brand")?, text("name")?, text("number")?)
+            crate::artwork::render_cine(text("brand")?, text("name")?, number()?)
         }
         Some(_) => bail!("Expected icon template box or cine"),
     }

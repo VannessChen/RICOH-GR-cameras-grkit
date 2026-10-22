@@ -1,7 +1,7 @@
 import { Suspense, useCallback, useRef, useState } from 'react';
 import { trackDownload, trackScriptsOff } from './analytics';
 import { CAMERAS, MODESET_TOKEN, type Camera } from './cameras';
-import { loadCatalog, siteUrl } from './catalog';
+import { loadCatalog, MAX_EFFECTS, siteUrl, type ImportedEffect } from './catalog';
 import { EffectsSection } from './components/EffectsSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RichText } from './components/RichText';
@@ -35,6 +35,8 @@ export function App() {
   const [cameraKey, setCameraKey] = useState(CAMERAS[0]!.key);
   const [selection, setSelection] = useState<ReadonlySet<string>>(() => new Set(DEFAULT_SELECTION));
   const [enabled, setEnabled] = useState<ReadonlySet<ModuleKey>>(ALL_MODULES);
+  // Effects fitted from LUTs on this page. They are not stored, so a reload removes them.
+  const [imported, setImported] = useState<readonly ImportedEffect[]>([]);
   const [build, setBuild] = useState<Build>({ state: 'idle' });
   // A newer build or a changed selection makes the result of an older build stale.
   const buildRun = useRef(0);
@@ -91,6 +93,22 @@ export function App() {
     resetBuild();
   }
 
+  function addImported(effect: ImportedEffect) {
+    setImported((current) => [...current, effect]);
+    // An import selects its effect when it follows its LUT closely (grade A or B) and the
+    // package has room. A looser fit waits for the user to choose it.
+    const close = effect.imported.grade === 'A' || effect.imported.grade === 'B';
+    if (close && selection.size < MAX_EFFECTS) changeSelection(new Set(selection).add(effect.id));
+    else resetBuild();
+  }
+
+  function removeImported(effect: ImportedEffect) {
+    setImported((current) => current.filter((item) => item !== effect));
+    const next = new Set(selection);
+    next.delete(effect.id);
+    changeSelection(next);
+  }
+
   function toggleModule(key: ModuleKey) {
     const next = new Set(enabled);
     if (!next.delete(key)) {
@@ -122,8 +140,11 @@ export function App() {
     const run = buildRun.current;
     setBuild({ state: 'building', received: 0 });
     try {
+      // Imported effects do not depend on the target, so each package can take them.
       const effects = plan.includeEffects
-        ? (await loadCatalog(support.target)).effects.filter((effect) => selection.has(effect.id))
+        ? [...(await loadCatalog(support.target)).effects, ...imported].filter((effect) =>
+            selection.has(effect.id),
+          )
         : [];
       const blob = await buildPackage(
         support.target,
@@ -271,6 +292,9 @@ export function App() {
                   language={language}
                   selection={selection}
                   onSelectionChange={changeSelection}
+                  imported={imported}
+                  onImport={addImported}
+                  onRemove={removeImported}
                 />
               </Suspense>
             </ErrorBoundary>
