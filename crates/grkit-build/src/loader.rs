@@ -261,7 +261,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
 
 /// The symbol of a firmware address that the private code or the installer
 /// uses, by the region that holds it.
-fn firmware_symbol(planner: &mut Planner, address: u32) -> Result<usize> {
+pub(crate) fn firmware_symbol(planner: &mut Planner, address: u32) -> Result<usize> {
     let target = planner.target();
     if address == target.heap_min {
         planner.startup(4)

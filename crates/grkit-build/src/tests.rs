@@ -1076,10 +1076,12 @@ fn each_target_has_a_header_a_camera_release_and_an_icon_stride() {
             .iter()
             .filter(|other| other.family == target.family);
         if family.count() > 1 {
+            let header = runtime_source(&shared)
+                .unwrap_or_else(|| panic!("The {} family has no {shared}", target.family));
+            // `grkit port` reads the addresses of the build header only.
             assert!(
-                runtime_source(&shared).is_some(),
-                "The {} family has no {shared}",
-                target.family
+                !std::str::from_utf8(header).unwrap().contains("FIRMWARE(0x"),
+                "{shared} names a firmware address; put it in the build header"
             );
         }
         assert!(
@@ -1107,4 +1109,221 @@ fn each_target_has_a_header_a_camera_release_and_an_icon_stride() {
             assert!(target::find(release.target).is_ok(), "{}", release.target);
         }
     }
+}
+
+/// An RTOS image of `size` bytes whose startup literals give `.data` at
+/// `data_source` with `data_size` bytes, and `words` at their addresses.
+fn rtos_image(size: usize, data_source: u32, data_size: u32, words: &[(u32, u32)]) -> Vec<u8> {
+    let mut image = vec![0; size];
+    let mut put = |address: u32, word: u32| {
+        let at = (address - target::RTOS_BASE) as usize;
+        image[at..at + 4].copy_from_slice(&word.to_le_bytes());
+    };
+    let literals = [
+        data_source,
+        relocation::DATA_START,
+        data_size,
+        0x5510_0000,
+        0x5520_0000,
+    ];
+    for (index, word) in literals.into_iter().enumerate() {
+        put(relocation::STARTUP_LITERALS + index as u32 * 4, word);
+    }
+    for &(address, word) in words {
+        put(address, word);
+    }
+    image
+}
+
+#[test]
+fn resolution_finds_moved_windows_and_needs_agreeing_sources() -> Result<()> {
+    use relocation::{mask, Plan, Region, Source, Symbol, Window};
+    // A function at 0x53001000 in the plan, at 0x53041000 in the other
+    // image: it moved by four times the installer radius. Its words: a
+    // prologue, a BL to 0x53001100 (+0x40000), a literal, MOVW and MOVT of
+    // 0x5537abcd, and a return.
+    let delta = 0x40000;
+    let function = |base: u32, moved: u32| {
+        vec![
+            (base, 0xe92d_4010),
+            (base + 4, 0xeb00_003d), // BL base + 0x100
+            (base + 8, 0x5300_1234 + moved),
+            (base + 12, 0xe30a_0bcd), // MOVW r0, #0xabcd
+            (base + 16, 0xe345_0537), // MOVT r0, #0x5537
+            (base + 20, 0xe8bd_8010),
+        ]
+    };
+    let words: Vec<u32> = function(0x5300_1000, 0)
+        .iter()
+        .map(|&(_, word)| mask(word))
+        .collect();
+    let other = rtos_image(
+        0x60000,
+        0x5305_0000,
+        0x100,
+        &function(0x5300_1000 + delta, delta),
+    );
+    let window = |start, words: &[u32]| Window {
+        region: Region::Image,
+        start,
+        words: words.to_vec(),
+        search: true,
+        probe: 0,
+    };
+    // Window 1 has code that the other image lacks.
+    let missing = [words.as_slice(), &[0xe1a0_0000]].concat();
+    let symbol = |address, sources| Symbol { address, sources };
+    let plan = Plan {
+        windows: vec![window(0x5300_1000, &words), window(0x5300_2000, &missing)],
+        symbols: vec![
+            symbol(
+                0x5300_1008,
+                vec![Source::Window {
+                    window: 0,
+                    offset: 8,
+                }],
+            ),
+            symbol(
+                0x5300_1100,
+                vec![Source::Branch {
+                    window: 0,
+                    index: 1,
+                    verify: None,
+                }],
+            ),
+            symbol(
+                0x5300_1234,
+                vec![Source::Literal {
+                    window: 0,
+                    index: 2,
+                }],
+            ),
+            symbol(
+                0x5537_abcd,
+                vec![Source::Pair {
+                    window: 0,
+                    movw: 3,
+                    movt: 4,
+                }],
+            ),
+            // A second source that gives another address.
+            symbol(
+                0x5300_1004,
+                vec![
+                    Source::Window {
+                        window: 0,
+                        offset: 4,
+                    },
+                    Source::Window {
+                        window: 0,
+                        offset: 8,
+                    },
+                ],
+            ),
+            // A missing window gives no value; the other source gives it.
+            symbol(
+                0x5300_1000,
+                vec![
+                    Source::Window {
+                        window: 1,
+                        offset: 0,
+                    },
+                    Source::Window {
+                        window: 0,
+                        offset: 0,
+                    },
+                ],
+            ),
+            symbol(
+                0x5300_2000,
+                vec![Source::Window {
+                    window: 1,
+                    offset: 0,
+                }],
+            ),
+            symbol(0x5305_1000, vec![Source::Tail]),
+        ],
+    };
+    // The installer radius does not reach the moved function.
+    let near = relocation::resolve(&plan, &other, relocation::RADIUS)?;
+    assert!(near.symbols[0].as_ref().unwrap_err().contains("not found"));
+    let far = relocation::resolve(&plan, &other, port::RADIUS)?;
+    let value = |index: usize| far.symbols[index].as_ref().map(|(value, _)| *value);
+    assert_eq!(value(0), Ok(0x5304_1008));
+    assert_eq!(value(1), Ok(0x5304_1100));
+    assert_eq!(value(2), Ok(0x5304_1234));
+    assert_eq!(value(3), Ok(0x5537_abcd));
+    assert!(value(4).unwrap_err().contains("disagree"));
+    assert_eq!(far.symbols[5].as_ref().unwrap().1.len(), 1);
+    assert_eq!(value(5), Ok(0x5304_1000));
+    assert!(value(6).unwrap_err().contains("not found"));
+    assert_eq!(value(7), Ok(0x5305_1000));
+    assert_eq!(far.layout.tail, 0x5305_1000);
+    Ok(())
+}
+
+#[test]
+fn port_lists_the_addresses_of_each_target() -> Result<()> {
+    for target in target::TARGETS {
+        let addresses = port::addresses(target)?;
+        let names: BTreeSet<_> = addresses.iter().map(|a| (a.kind, a.name.clone())).collect();
+        assert_eq!(names.len(), addresses.len(), "{}", target.name);
+        // Each hook of the layout is a site, and each header address is listed.
+        assert_eq!(
+            addresses
+                .iter()
+                .filter(|a| a.kind == port::Kind::Site && a.symbol.is_some())
+                .count(),
+            hook_symbols(target.layout.unwrap())
+                .iter()
+                .map(|(_, symbols)| symbols.len())
+                .sum::<usize>(),
+            "{}",
+            target.name
+        );
+        let header = std::str::from_utf8(runtime_source(&target.header()).unwrap())?;
+        assert_eq!(
+            addresses
+                .iter()
+                .filter(|a| a.kind == port::Kind::Header)
+                .count(),
+            header.matches("FIRMWARE(0x").count(),
+            "{}",
+            target.name
+        );
+    }
+    Ok(())
+}
+
+/// GR IV 1.11 ported to 1.20 gives no address that differs from the gr4-1.20
+/// target without a review. The image of each build is enough; no toolchain.
+#[test]
+#[ignore = "Requires local GRKIT_TEST_FIRMWARE_GR4 and GRKIT_TEST_FIRMWARE_GR4_120"]
+fn port_of_gr4_111_to_120_agrees_with_the_gr4_120_target() -> Result<()> {
+    let path = |name: &str| -> Result<PathBuf> {
+        Ok(PathBuf::from(
+            std::env::var(name).with_context(|| format!("Set {name}"))?,
+        ))
+    };
+    let base = verify_firmware(&path("GRKIT_TEST_FIRMWARE_GR4")?, &target::GR4_111)?;
+    let other = verify_firmware(&path("GRKIT_TEST_FIRMWARE_GR4_120")?, &target::GR4_120)?;
+    let port = port::port(&base, &other.body, port::RADIUS)?;
+    let check = port::check(&port, &target::GR4_120)?;
+    assert_eq!(check["differ"], json!([]), "{check:#}");
+    // The type tables grew in 1.20, so their starts need a review.
+    let review: Vec<_> = check["review"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        review.contains(&"target:image_control.tables[0]"),
+        "{check:#}"
+    );
+    assert!(check["equal"].as_u64().unwrap() >= 130, "{check:#}");
+    assert_eq!(port.layout.data_source, target::GR4_120.data_source);
+    assert_eq!(port.layout.data_size, target::GR4_120.data_size);
+    assert_eq!(port.layout.heap_min, target::GR4_120.heap_min);
+    Ok(())
 }

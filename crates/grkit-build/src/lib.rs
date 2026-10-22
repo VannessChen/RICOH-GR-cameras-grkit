@@ -4,6 +4,7 @@ pub mod components;
 pub mod dump;
 pub mod firmware;
 pub mod loader;
+pub mod port;
 pub mod relocation;
 pub mod target;
 pub mod toolchain;

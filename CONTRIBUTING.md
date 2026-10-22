@@ -43,6 +43,16 @@ GRKIT_TEST_FIRMWARE="$PWD/firmware/fwdc239b.bin" GRKIT_CLANG=clang GRKIT_LLD=ld.
 
 The GR IV relocation test `gr4_relocation_resolves_other_builds` also needs an RTOS capture of another GR IV build. Only maintainers have it. The test gives the expected input.
 
+The port test needs the official GR IV 1.11 and 1.20 firmware files, but no toolchain:
+
+```sh
+GRKIT_TEST_FIRMWARE_GR4="$PWD/firmware/gr4-1.11/fwdc248b.bin" \
+  GRKIT_TEST_FIRMWARE_GR4_120="$PWD/firmware/gr4-1.20/fwdc248b.bin" \
+  cargo test -p grkit-build --locked --release port_of_gr4 -- --ignored
+```
+
+To port a target to a new firmware build, see [Porting](docs/architecture.md#porting).
+
 For the web site, see [web/README.md](web/README.md).
 
 ## Rules
