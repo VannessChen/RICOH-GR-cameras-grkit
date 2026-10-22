@@ -92,7 +92,8 @@ fn from_video(v: f64) -> f64 {
 impl Cube {
     /// Parses a `.cube` file in the Adobe 1.0 or the Resolve flavor. Keywords may be in any
     /// case, a TITLE may be unquoted, and data values may be separated by commas, as some
-    /// exporters write them. An unknown keyword fails, because it can change the transform.
+    /// exporters write them. A DESCRIPTION line is skipped as text. An unknown keyword fails,
+    /// because it can change the transform.
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         // Comments may hold text in a legacy encoding. Invalid bytes elsewhere fail as tokens.
         let text = String::from_utf8_lossy(bytes);
@@ -108,10 +109,19 @@ impl Cube {
         for (index, raw) in text.split(['\n', '\r']).enumerate() {
             let line = index + 1;
             let raw = raw.trim();
-            let is_title = raw
-                .get(..5)
-                .is_some_and(|word| word.eq_ignore_ascii_case("TITLE"))
-                && raw[5..].chars().next().is_none_or(char::is_whitespace);
+            let starts_with = |keyword: &str| {
+                raw.get(..keyword.len())
+                    .is_some_and(|word| word.eq_ignore_ascii_case(keyword))
+                    && raw[keyword.len()..]
+                        .chars()
+                        .next()
+                        .is_none_or(char::is_whitespace)
+            };
+            // Some exporters describe the LUT in a DESCRIPTION line. It is text only.
+            if starts_with("DESCRIPTION") {
+                continue;
+            }
+            let is_title = starts_with("TITLE");
             // A TITLE keeps any '#' in its text. Other lines may end with a comment.
             let content = if is_title {
                 raw

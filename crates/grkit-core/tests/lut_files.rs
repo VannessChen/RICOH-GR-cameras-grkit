@@ -163,6 +163,14 @@ fn parses_resolve_shapers_and_lenient_syntax() {
     }
     let unshaped = parse(&cube_text(2, "", |v| v)).unwrap();
     assert!(unshaped.shaper.is_none());
+    // A DESCRIPTION line is text, whatever it holds.
+    let described = parse(&cube_text(
+        2,
+        "DESCRIPTION \"Night street, 3 # 4\"\n",
+        |v| v,
+    ))
+    .unwrap();
+    assert_eq!(described.apply([0.25; 3]), [0.25; 3]);
 }
 
 #[test]
@@ -291,6 +299,24 @@ fn reads_tiled_and_strip_lut_images() {
     check(&png(256, 16, RGB, 8, &strip), cube::Layout::Strip);
     let flipped = layout_image(256, 16, 16, look, |[r, g, b]| (r + 16 * b, 15 - g));
     check(&png(256, 16, RGB, 8, &flipped), cube::Layout::FlippedStrip);
+    // A hue rotation keeps green flat along the green input; the gray axis still tells the
+    // orientation.
+    let rotate = |[r, g, b]: [f64; 3]| [g, b, r];
+    let check_rotation = |bytes: &[u8], layout: cube::Layout| {
+        let cube = Cube::read(bytes).unwrap();
+        assert_eq!(cube.image_layout, Some(layout));
+        let out = cube.apply([0.2, 0.5, 0.9]);
+        assert!(
+            out.iter()
+                .zip([0.5, 0.9, 0.2])
+                .all(|(a, e)| (a - e).abs() < 0.01),
+            "{out:?}"
+        );
+    };
+    let strip = layout_image(256, 16, 16, rotate, |[r, g, b]| (r + 16 * b, g));
+    check_rotation(&png(256, 16, RGB, 8, &strip), cube::Layout::Strip);
+    let flipped = layout_image(256, 16, 16, rotate, |[r, g, b]| (r + 16 * b, 15 - g));
+    check_rotation(&png(256, 16, RGB, 8, &flipped), cube::Layout::FlippedStrip);
     // The same look as a level 4 HALD stays a HALD.
     let hald = layout_image(64, 64, 16, look, |[r, g, b]| {
         let i = r + 16 * g + 256 * b;

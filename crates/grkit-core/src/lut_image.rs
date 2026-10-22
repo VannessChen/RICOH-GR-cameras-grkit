@@ -11,7 +11,8 @@
 //!
 //! The pixel count cannot tell a HALD from square tiles. The reader decodes each layout that
 //! fits the size and keeps the smoothest table, because a wrong layout makes jumps between
-//! neighbouring lattice points.
+//! neighbouring lattice points. The two orientations of a strip are equally smooth; the gray
+//! axis tells them apart.
 
 use anyhow::{bail, ensure, Result};
 
@@ -148,10 +149,10 @@ fn candidates(width: usize, height: usize) -> Vec<Geometry> {
 }
 
 /// The total variation along green and blue, where the layouts differ (red is the same in
-/// all), and the total change of the green output along the green input.
-fn roughness(pixels: &[[f32; 3]], geometry: &Geometry) -> (f64, f64) {
+/// all).
+fn roughness(pixels: &[[f32; 3]], geometry: &Geometry) -> f64 {
     let c = geometry.c;
-    let (mut sum, mut green) = (0.0, 0.0);
+    let mut sum = 0.0;
     for b in 0..c {
         for g in 0..c {
             for r in 0..c {
@@ -166,13 +167,10 @@ fn roughness(pixels: &[[f32; 3]], geometry: &Geometry) -> (f64, f64) {
                     let next = pixels[geometry.index(next)];
                     sum += (0..3).map(|k| (next[k] - at[k]).abs() as f64).sum::<f64>();
                 }
-                if g + 1 < c {
-                    green += (pixels[geometry.index([r, g + 1, b])][1] - at[1]) as f64;
-                }
             }
         }
     }
-    (sum, green)
+    sum
 }
 
 /// Reads the table of a LUT image: the lattice size, the entries with red changing fastest,
@@ -182,12 +180,9 @@ pub fn table(
     height: usize,
     pixels: Vec<[f32; 3]>,
 ) -> Result<(usize, Vec<[f32; 3]>, Layout)> {
-    let scored: Vec<(f64, f64, Geometry)> = candidates(width, height)
+    let scored: Vec<(f64, Geometry)> = candidates(width, height)
         .into_iter()
-        .map(|geometry| {
-            let (sum, green) = roughness(&pixels, &geometry);
-            (sum, green, geometry)
-        })
+        .map(|geometry| (roughness(&pixels, &geometry), geometry))
         .collect();
     if scored.is_empty() {
         bail!(
@@ -195,13 +190,27 @@ pub fn table(
              c x c pixels, found {width} x {height}"
         );
     }
-    // A layout read upside down makes the green output fall as the green input rises. The
-    // total variation is the same both ways, so the trend decides the orientation.
-    let rising = scored.iter().any(|s| s.1 > 0.0);
+    // A strip read upside down has the same total variation, so the gray axis decides the
+    // orientation: a look keeps black darker than white. The other orientation reverses the
+    // green input, which darkens the white end. A LUT that mixes the channels, such as a hue
+    // rotation, keeps its gray axis only in the right orientation; a negative darkens it both
+    // ways, and the fit then refuses it.
+    let gray_rise = |geometry: &Geometry| {
+        let level = |k: usize| {
+            let v = pixels[geometry.index([k; 3])];
+            f64::from(v[0] + v[1] + v[2]) / 3.0
+        };
+        level(geometry.c - 1) - level(0)
+    };
+    let is_strip = |g: &Geometry| matches!(g.layout, Layout::Strip | Layout::FlippedStrip);
+    let rise = scored
+        .iter()
+        .filter(|s| is_strip(&s.1))
+        .map(|s| gray_rise(&s.1))
+        .fold(f64::NEG_INFINITY, f64::max);
     let mut scored: Vec<(f64, Geometry)> = scored
         .into_iter()
-        .filter(|s| !rising || s.1 > 0.0)
-        .map(|(sum, _, geometry)| (sum, geometry))
+        .filter(|s| !is_strip(&s.1) || gray_rise(&s.1) >= rise)
         .collect();
     scored.sort_by(|a, b| a.0.total_cmp(&b.0));
     let (best, geometry) = scored.swap_remove(0);
