@@ -1,4 +1,4 @@
-//! Files generated from `grkit_core::abi` and `grkit_core::plugins`. Set
+//! Files generated from `grkit_core::abi`, `plugins`, and `camera`. Set
 //! GRKIT_UPDATE_GENERATED=1 to rewrite them after a change of the tables.
 
 use std::{fs, path::Path};
@@ -8,6 +8,7 @@ fn checked_in_generated_files_match_the_tables() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut files = vec![("runtime/abi.h", grkit_core::abi::header())];
     files.extend(grkit_core::plugins::generated());
+    files.extend(grkit_core::camera::generated());
     let update = std::env::var_os("GRKIT_UPDATE_GENERATED").is_some();
     let mut stale = Vec::new();
     for (name, expected) in files {

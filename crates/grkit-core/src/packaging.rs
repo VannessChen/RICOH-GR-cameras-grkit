@@ -110,6 +110,51 @@ pub fn read_manifest(blob: &[u8]) -> Result<Value> {
     Ok(result)
 }
 
+/// The prefix of the string that names the runtime build in `INSTALL.BIN`.
+pub const TARGET_MARKER: &str = "GRKIT_TARGET=";
+
+/// The runtime build that `INSTALL.BIN` names, if it names one. Runtimes from
+/// before a camera had several builds do not.
+fn marked_target(binary: &[u8]) -> Option<&str> {
+    let marker = TARGET_MARKER.as_bytes();
+    let start = binary
+        .windows(marker.len())
+        .position(|part| part == marker)?
+        + marker.len();
+    let end = start + binary[start..].iter().position(|&byte| byte == 0)?;
+    std::str::from_utf8(&binary[start..end]).ok()
+}
+
+/// The runtime build of a camera that a package's runtime files are: the
+/// build that the installer names, or else the only build of the camera whose
+/// templates the files match, preferring the first build of the camera.
+fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
+    let targets = camera.targets();
+    if let Some(name) = runtime
+        .get("SCRIPT/PLUGINS/INSTALL.BIN")
+        .and_then(|binary| marked_target(binary))
+    {
+        let target = targets
+            .iter()
+            .copied()
+            .find(|target| *target == name)
+            .with_context(|| format!("{} does not run the {name} runtime", camera.name))?;
+        validate_runtime(runtime, target)?;
+        return Ok(target);
+    }
+    let matching: Vec<_> = targets
+        .iter()
+        .copied()
+        .filter(|target| validate_runtime(runtime, target).is_ok())
+        .collect();
+    match matching[..] {
+        // Report why the runtime is not the first build of the camera.
+        [] => Err(validate_runtime(runtime, targets[0]).unwrap_err()),
+        // A runtime without the marker predates the later builds.
+        [target, ..] => Ok(target),
+    }
+}
+
 /// Checks the runtime files of a build for `target`.
 pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
     ensure!(
@@ -128,6 +173,12 @@ pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
         *files == runtime::runtime_files_for(binary, runtime::icon_stride(target)?),
         "Runtime scripts differ from the production templates"
     );
+    if let Some(name) = marked_target(binary) {
+        ensure!(
+            name == target,
+            "The installer is the {name} runtime, not {target}"
+        );
+    }
     Ok(())
 }
 
@@ -262,18 +313,21 @@ impl Language {
         }
     }
 
-    /// The camera phrase of the GR III guide, for example "GR III and GR III HDF
-    /// firmware 2.10".
-    pub fn camera_phrase(self, camera: &Camera) -> String {
-        let (and, word) = match self {
-            Language::English => ("and", "firmware"),
-            Language::SimplifiedChinese => ("和", "固件"),
-            Language::TraditionalChinese => ("與", "韌體"),
-            Language::Japanese => ("および", "ファームウェア"),
+    /// The camera phrase of a guide, for example "GR III and GR III HDF
+    /// firmware 2.10" for one version, or "... firmware 2.10 or 2.20" for the
+    /// releases of the camera.
+    pub fn camera_phrase(self, camera: &Camera, versions: &[&str]) -> String {
+        let (and, word, or) = match self {
+            Language::English => ("and", "firmware", " or "),
+            Language::SimplifiedChinese => ("和", "固件", " 或 "),
+            Language::TraditionalChinese => ("與", "韌體", " 或 "),
+            Language::Japanese => ("および", "ファームウェア", " または "),
         };
         format!(
             "{} {and} {} {word} {}",
-            camera.name, camera.hdf, camera.firmware
+            camera.name,
+            camera.hdf,
+            versions.join(or)
         )
     }
 }
@@ -301,7 +355,7 @@ const GR4_GUIDE_IMAGES: [(&str, &[u8]); 1] = [MODESET_IMAGE];
 
 /// The screenshots that the guides of `camera` show.
 pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])] {
-    if camera.target == camera::GR4.target {
+    if camera.is_gr4() {
         &GR4_GUIDE_IMAGES
     } else {
         &GUIDE_IMAGES
@@ -313,6 +367,8 @@ pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])]
 pub struct Contents {
     /// The camera whose ModeSet file the package has.
     pub camera: &'static Camera,
+    /// The runtime build of the camera that the package has.
+    pub target: &'static str,
     pub effect_ids: Vec<String>,
     /// The plugins that the installer installs.
     pub plugins: Selection,
@@ -368,7 +424,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         .iter()
         .map(|name| ((*name).into(), contents[&format!("SD_ROOT/{name}")].clone()))
         .collect();
-    validate_runtime(&runtime, camera.target)?;
+    let target = runtime_target(&runtime, camera)?;
     let mut ids = BTreeSet::new();
     let mut plugins = Selection::ALL;
     let mut language = None;
@@ -421,6 +477,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
     );
     Ok(Contents {
         camera,
+        target,
         effect_ids: ids.into_iter().collect(),
         plugins,
         language: language.context("Package has no installation guide")?,
@@ -450,18 +507,23 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
 /// its names, firmware version, and ModeSet file. GR IV, which has fewer modules,
 /// has its own resource.
 pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
-    let gr4 = camera.target == camera::GR4.target;
-    let template = language.guide_template(gr4);
-    if gr4 {
-        return template.as_bytes().to_vec();
-    }
-    template
-        .replace(
-            &language.camera_phrase(&camera::GR3),
-            &language.camera_phrase(camera),
-        )
-        .replace(camera::GR3.hdf, camera.hdf)
-        .replace(camera::GR3.modeset, camera.modeset)
+    let gr4 = camera.is_gr4();
+    // The resource names the first release of its camera. The guide of a
+    // camera names each release that GRKit supports. A guide serves each
+    // package of the camera, so it names the releases of each runtime build.
+    let base = if gr4 { &camera::GR4 } else { &camera::GR3 };
+    let releases: Vec<&str> = camera
+        .releases
+        .iter()
+        .map(|release| release.firmware)
+        .collect();
+    let guide = language.guide_template(gr4).replace(
+        &language.camera_phrase(base, &[base.releases[0].firmware]),
+        &language.camera_phrase(camera, &releases),
+    );
+    guide
+        .replace(base.hdf, camera.hdf)
+        .replace(base.modeset, camera.modeset)
         .into_bytes()
 }
 
@@ -501,13 +563,17 @@ pub fn assemble(
             && build.get("startup_activation") == Some(&json!("Off")),
         "Only production builds that start in Off can be packaged"
     );
+    let target = build
+        .get("target")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     ensure!(
-        build.get("target") == Some(&json!(camera.target)),
+        camera.runs(target),
         "{} runs the {} runtime, not this build",
         camera.name,
-        camera.target
+        camera.targets().join(" or ")
     );
-    validate_runtime(runtime, camera.target)?;
+    validate_runtime(runtime, target)?;
     let mut contents: Files = runtime
         .iter()
         .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob.clone()))
@@ -637,6 +703,7 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
     }
     let Contents {
         camera,
+        target,
         effect_ids,
         plugins,
         language,
@@ -646,7 +713,7 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
         "SHA256SUMS differs from package"
     );
     Ok(
-        json!({"camera": camera.id, "target": camera.target, "effect_ids": effect_ids,
+        json!({"camera": camera.id, "target": target, "effect_ids": effect_ids,
             "plugins": plugins.names(), "language": language.code(),
             "entries": contents.len()}),
     )

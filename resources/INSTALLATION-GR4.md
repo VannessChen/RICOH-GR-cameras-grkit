@@ -1,7 +1,8 @@
 # GRKit
 
 For RICOH GR IV and GR IV HDF firmware 1.11 only.
-GR IV Monochrome runs the same firmware and shows it as version 1.00. Its package has no Image Control. Support for GR IV Monochrome is experimental and has not been tested on a camera.
+Each firmware version needs its own package. Use a package for the version that your camera shows.
+GR IV Monochrome runs firmware 1.11 and shows it as version 1.00. Its package has no Image Control. Support for GR IV Monochrome is experimental and has not been tested on a camera.
 
 ## Install
 

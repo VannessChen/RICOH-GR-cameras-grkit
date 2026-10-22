@@ -40,6 +40,33 @@ enum Command {
         #[arg(long, default_value = "ld.lld")]
         lld: String,
     },
+    /// Port the firmware addresses of a runtime build to another build of the
+    /// firmware, such as a new version (docs/architecture.md, Porting).
+    Port {
+        /// The runtime build to port.
+        #[arg(long, value_parser = grkit_build::target::TARGETS.map(|target| target.name))]
+        target: String,
+        /// The official firmware of the runtime build.
+        #[arg(long)]
+        firmware: PathBuf,
+        /// The official firmware of the other build.
+        #[arg(long, required_unless_present = "to_rtos", conflicts_with = "to_rtos")]
+        to: Option<PathBuf>,
+        /// The RTOS image of the other build, such as a GRDUMP capture.
+        #[arg(long)]
+        to_rtos: Option<PathBuf>,
+        /// The search range on each side of an address, in bytes, such as
+        /// 0x80000.
+        #[arg(long, default_value_t = grkit_build::port::RADIUS, value_parser = parse_u32)]
+        radius: u32,
+        /// A runtime build of the other firmware to compare the port with.
+        #[arg(long, value_parser = grkit_build::target::TARGETS.map(|target| target.name))]
+        check: Option<String>,
+        /// A new directory for report.json, the draft header, and the draft
+        /// site tables.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Compile effect definitions.
     Effects {
         #[command(subcommand)]
@@ -77,6 +104,9 @@ enum Command {
     },
     /// Check package layout, profiles and checksums.
     Verify { archive: PathBuf },
+    /// List the cameras, the firmware releases that each runs, and the runtime
+    /// build for each release.
+    Cameras,
     /// Write the ZIP that turns SD scripts off on a camera: its ModeSet file
     /// with the disable command and DEVELOP.MOD.
     ScriptsOff {
@@ -154,6 +184,14 @@ enum EffectsCommand {
     },
 }
 
+/// A number in decimal or with a 0x prefix.
+fn parse_u32(text: &str) -> Result<u32, std::num::ParseIntError> {
+    match text.strip_prefix("0x") {
+        Some(hex) => u32::from_str_radix(hex, 16),
+        None => text.parse(),
+    }
+}
+
 fn run(command: Command) -> Result<Value> {
     match command {
         Command::Doctor { clang, lld } => {
@@ -172,6 +210,66 @@ fn run(command: Command) -> Result<Value> {
             Ok(
                 json!({"output": result.output, "target": result.manifest["target"], "files": result.files.len()}),
             )
+        }
+        Command::Port {
+            target,
+            firmware,
+            to,
+            to_rtos,
+            radius,
+            check,
+            out,
+        } => {
+            let target = grkit_build::target::find(&target)?;
+            if let Some(out) = &out {
+                storage::validate_output(out)?;
+            }
+            let base = grkit_build::verify_firmware(&firmware, target)?;
+            let other = match (to, to_rtos) {
+                (Some(path), _) => {
+                    let decoded = grkit_build::firmware::decode(
+                        &std::fs::read(&path)
+                            .with_context(|| format!("Read {}", path.display()))?,
+                    )?;
+                    grkit_build::firmware::rtos_section(&decoded)?.to_vec()
+                }
+                (None, Some(path)) => {
+                    std::fs::read(&path).with_context(|| format!("Read {}", path.display()))?
+                }
+                (None, None) => anyhow::bail!("Give --to or --to-rtos"),
+            };
+            let port = grkit_build::port::port(&base, &other, radius)?;
+            let check = check
+                .map(|name| grkit_build::port::check(&port, grkit_build::target::find(&name)?))
+                .transpose()?;
+            if let Some(out) = &out {
+                let files: Files = [
+                    ("report.json", serde_json::to_vec_pretty(&port.report())?),
+                    ("header.h", port.draft_header()?.into_bytes()),
+                    ("sites.rs", port.draft_layout()?.into_bytes()),
+                ]
+                .into_iter()
+                .map(|(name, bytes)| (name.to_string(), bytes))
+                .collect();
+                storage::write_directory(out, &files)?;
+            }
+            let unported: Vec<Value> = port
+                .unported()
+                .map(|ported| {
+                    json!({"name": ported.address.name, "base": format!("{:#x}", ported.address.address),
+                        "error": ported.port.as_ref().err()})
+                })
+                .collect();
+            Ok(json!({
+                "target": target.name,
+                "addresses": port.addresses.len(),
+                "ported": port.addresses.len() - unported.len(),
+                "unported": unported,
+                "largest_move": format!("{:#x}", port.largest_move()),
+                "relocatable": port.relocatable,
+                "check": check,
+                "output": out,
+            }))
         }
         Command::Effects {
             command: EffectsCommand::Build { source, out },
@@ -300,6 +398,15 @@ fn run(command: Command) -> Result<Value> {
                 json!({"output": out, "guides": grkit_core::camera::CAMERAS.len() * packaging::Language::ALL.len()}),
             )
         }
+        Command::Cameras => Ok(
+            json!({"cameras": grkit_core::camera::CAMERAS.map(|camera| json!({
+                "id": camera.id, "name": camera.name, "hdf": camera.hdf, "modeset": camera.modeset,
+                "releases": camera.releases.iter().map(|release| json!({
+                    "firmware": release.firmware, "target": release.target,
+                    "experimental": release.experimental,
+                })).collect::<Vec<_>>(),
+            }))}),
+        ),
         Command::Verify { archive } => {
             // Include room for ZIP metadata while bounding the archive read itself.
             let bytes = storage::read_bounded(&archive, 64 * 1024 * 1024)?;

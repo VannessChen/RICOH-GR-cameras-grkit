@@ -7,7 +7,9 @@ name: Site
 # shows the released version. If web/ on main needs a packager change that is
 # not released yet, the type check fails and the site stays as it is. The page
 # loads the packager with a dynamic import, so the Vite build alone does not
-# find a missing export.
+# find a missing export. If a camera entry of web/ on main needs a runtime build
+# that the release does not have, the run deploys nothing; the release that has
+# it deploys the page.
 on:
   push:
     branches: [main]
@@ -36,6 +38,27 @@ jobs:
           set -euo pipefail
           if ! tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null); then
             echo "::notice::No release is published, so there is no site to update."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Each camera entry of web/ on main needs the runtime build of its
+          # target in the release. A release without one of them waits: the
+          # site stays as it is, and the release that has it deploys web/.
+          targets=$(gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$GITHUB_REPOSITORY/contents/web/src/generated/cameras.ts?ref=$GITHUB_SHA" 2>/dev/null \
+            | grep -o "target: '[^']*'" | cut -d "'" -f 2 | sort -u || true)
+          # Releases before 1.2.0 name the site site.tar.gz.
+          archive="GRKit-${tag#v}-site.tar.gz"
+          mkdir -p "$RUNNER_TEMP/release-check"
+          if ! gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$archive" --dir "$RUNNER_TEMP/release-check"; then
+            archive=site.tar.gz
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$archive" --dir "$RUNNER_TEMP/release-check"
+          fi
+          released=$(tar -tzf "$RUNNER_TEMP/release-check/$archive" \
+            | sed -n 's#^\(\./\)\{0,1\}runtime/\([^/]*\)/build\.json$#\2#p' | sort -u)
+          missing=$(comm -23 <(echo "$targets") <(echo "$released") | tr '\n' ' ')
+          if [ -n "${missing// /}" ]; then
+            echo "::notice::$tag has no runtime for ${missing% }, which web/ of main names. The site stays as it is until a release has it."
             tag=
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"

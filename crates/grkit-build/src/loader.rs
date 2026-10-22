@@ -124,11 +124,20 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         // The installer prepares the menu artwork but no effect records.
         result.push_str("#define GRKIT_NO_IMAGE_CONTROL 1\n");
     }
-    if target.name == target::GR4_111.name {
+    // The package names its runtime build with this string (packaging).
+    writeln!(
+        result,
+        "static const char target_marker[] __attribute__((used)) = \"{}{}\";",
+        grkit_core::packaging::TARGET_MARKER,
+        target.name
+    )?;
+    if target.icon_descriptor_bytes == 12 {
         // GR IV icon descriptors: width and a valid flag, height, pixel offset.
         result.push_str("#define GRKIT_ICON_DESCRIPTOR_12 1\n");
-        // GR IV also records the native ImageTone values 0x8100..0x8105.
-        result.push_str("#define GRKIT_NATIVE_TONE_PAGE 0x81\n");
+    }
+    if let Some(page) = target.native_tone_page {
+        // GR IV also records the native ImageTone values 0x8100 and up.
+        writeln!(result, "#define GRKIT_NATIVE_TONE_PAGE {page:#x}")?;
     }
     for (name, value) in constants {
         writeln!(result, "#define {name} {value:#x}U")?;
@@ -252,7 +261,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
 
 /// The symbol of a firmware address that the private code or the installer
 /// uses, by the region that holds it.
-fn firmware_symbol(planner: &mut Planner, address: u32) -> Result<usize> {
+pub(crate) fn firmware_symbol(planner: &mut Planner, address: u32) -> Result<usize> {
     let target = planner.target();
     if address == target.heap_min {
         planner.startup(4)

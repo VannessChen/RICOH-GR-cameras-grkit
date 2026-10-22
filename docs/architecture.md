@@ -38,14 +38,23 @@ The CLI embeds `runtime/` and `resources/`, so it works outside the checkout.
 
 ## Targets
 
-A target is one firmware build. Each target has its own addresses in `runtime/targets/<target>.h` and its own regions and hooks in `components::Layout`.
+A target is one firmware build. Each target has its own regions and hooks in `components::Layout`.
+
+The targets of one camera line form a family, such as the GR IV builds. They share the runtime code and the hook symbols.
+A family with more than one build shares the header `runtime/targets/<family>.h`. It holds the object layouts, events, and constants of the family.
+The build header `runtime/targets/<target>.h` holds the firmware addresses and the values that differ in that build.
+
+Tests require each build of a family to have the same hook symbols and the same header definitions. A build declares the definitions that only it has in `BUILD_ONLY_DEFINITIONS`. A change for one build therefore fails the tests until it reaches each build of the family.
 
 | Target | Cameras |
 | --- | --- |
-| `gr3-2.10` | GR III 2.10, GR IIIx 1.60, and their HDF models |
+| `gr3-2.10` | GR III 2.10 and 2.20, GR IIIx 1.60 and 1.70, and their HDF models |
 | `gr4-1.11` | GR IV 1.11, GR IV HDF, GR IV Monochrome |
+| `gr4-1.20` | GR IV 1.20 and GR IV HDF 1.20 |
 
 GR IIIx 1.60 runs the RTOS code of GR III 2.10, so both cameras use one runtime. They differ only in the ModeSet file that enables SD scripts.
+GR III 2.20 and GR IIIx 1.70 change only the end screen. Their code moves by less than the relocation radius, so INSTALL [relocates](#relocation) the `gr3-2.10` runtime to them. `camera.rs` lists the releases of each camera and the runtime build of each release.
+GR IV 1.20 changes the code around several hooks and adds the monochrome Image Control types 31 and 32. It therefore has its own target (see [Porting](#porting)). Its hooks are those of 1.11. A package names its build in `INSTALL.BIN` (`GRKIT_TARGET=`), because the two GR IV builds have the same runtime file layout.
 An HDF camera runs the firmware of its base camera and uses the package of that camera.
 GR IV has its own layout and all plugins, but Framing offers only XPan (see [Framing](#framing)).
 
@@ -131,6 +140,39 @@ Some cameras show a supported version but run another build of it. Each runtime 
 - INSTALL (`runtime/relocation.h`) searches each window in the running image. Each window must match once.
 
 A failure stops INSTALL with status 47 before it changes the firmware. `INSTALL.ERR` then lists the addresses that failed. `runtime/relocation.h` gives the reason codes.
+
+## Porting
+
+A new firmware version needs one of two changes:
+
+- If its code moves by less than the relocation radius, the existing target runs on it. Add the release to `camera.rs` with the existing target.
+- If its code moves farther, or code at a hook changed, it needs a new target in the family of the existing one.
+
+`grkit port` finds each address of an existing target in another build. It uses the windows of [Relocation](#relocation), within a larger radius. It takes the hook and patch sites of the layout, the `FIRMWARE()` addresses of the build header, and the data addresses of `Target`.
+The port cannot find an address whose code or data changed. It also does not check values that are not addresses, such as object offsets, text IDs, and enum values.
+
+A data address that code loads gets that code as a second source, and the sources must agree. A port whose sources are all in windows of mostly addresses needs a review, because a table that grew can match at another start.
+`"relocatable": true` means that the plan of the installer resolves each address of the target in the other build. A build has more symbols than the target names, so a test of the target on the new firmware must still confirm it.
+The family header has no firmware addresses, because the port reads only the build header.
+
+To add a target for a new firmware build:
+
+1. Run `grkit port --target <target> --firmware <its firmware> --to <new firmware> --out <directory>`. Use `--to-rtos` for an RTOS image, such as a GRDUMP capture.
+2. If the output gives `"relocatable": true`, add the release to the existing target instead. Test the existing target on the new firmware.
+3. Make `runtime/targets/<new target>.h` from `header.h` of the output. Resolve each `PORT` comment: port the address by hand, or check the offset that an expression adds. Check each value that is not an address.
+4. Add the site tables from `sites.rs` to `components.rs`, and the `Target` from the fields at its end, with the family of the existing target.
+5. Give each site whose code changed a hook that fits the new code. The runtime tests a definition that only the new build has with `#ifdef`. Add that definition to `BUILD_ONLY_DEFINITIONS`.
+6. Select the header in `runtime/firmware.h`. Add the release to `camera.rs` as experimental, and the icon stride of the target to `grkit_core::runtime::icon_stride`.
+7. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`, and add an entry for the target to `web/src/cameras.ts`.
+8. Add the firmware to the release workflow and to the private firmware backup (`docs/releasing.md`).
+9. Run `grkit port` again with `--check <new target>`. No address may differ without a review.
+10. Run the tests, build the target from the official firmware, and test it on the new firmware. Set the release to not experimental only after a test on a camera.
+
+If a step is missing, a test names it, except steps 8 and 10.
+
+A firmware update that cannot be undone moves each camera to the new build, so the old build gets fewer users over time.
+A maintainer can freeze such a build when keeping it current costs more than it gives. A frozen build still builds and gets fixes, but a new feature does not have to reach it.
+To freeze a build, exempt it in the family test for the hooks and definitions that it does not get. The runtime must then leave the feature out on that build, as the settings page does without `SETTINGS_SUBMENU`.
 
 ## Code areas
 

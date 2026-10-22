@@ -473,7 +473,7 @@ const GR4_METADATA_HOOKS: &[Hook] = &[
 /// case stores 0x10000 | (tag - 0x100), as on GR III, instead of 0.
 const GR4_INSTRUCTION_PATCHES: &[InstructionPatch] = &[(0x537d8a54, "0020a0e3", "ff2c80e2")];
 
-/// GR IV 1.11 Image Control processing (`runtime/targets/gr4-1.11-processing.S`).
+/// GR IV 1.11 Image Control processing (`runtime/targets/gr4-processing.S`).
 const GR4_PROCESSING_HOOKS: &[(u32, &str, bool)] = &[
     (0x53912c70, "module_parameters", true),
     (0x53912d40, "module_processing", true),
@@ -509,7 +509,7 @@ pub const GR4_LAYOUT: Layout = Layout {
     // After the decoded RTOS image (0x543d2ac0), like GR III.
     tail: (0x543d3000, 0x543dc000),
     processing: Some((0x543d3100, 0x543d3500)),
-    processing_source: include_str!("../../../runtime/targets/gr4-1.11-processing.S"),
+    processing_source: include_str!("../../../runtime/targets/gr4-processing.S"),
     menu: (0x543d3500, 0x543d6800),
     framing: Some((0x543d6800, 0x543dc000)),
     contexts: GR4_CONTEXTS,
@@ -524,6 +524,209 @@ pub const GR4_LAYOUT: Layout = Layout {
     picture_hooks: GR4_PICTURE_HOOKS,
     framing_patches: &[],
     guards: GR4_GUARDS,
+    relocatable: true,
+};
+
+/// GR IV 1.20: the hooks of 1.11 at their 1.20 addresses, with the stock
+/// instructions of 1.20.
+const GR4_120_MENU_HOOKS: &[(u32, &str, &str)] = &[
+    (0x531c0f10, "menu_native_touch_0", "fc31d0e5"),
+    (0x531c0f24, "menu_native_touch_1", "fc31d0e5"),
+    (0x531c0f38, "menu_native_touch_2", "fc31d0e5"),
+    (0x531c0f4c, "menu_native_touch_3", "fc31d0e5"),
+    (0x531c0f60, "menu_native_touch_4", "fc31d0e5"),
+    (0x531bb6f8, "menu_destroy", "0dc0a0e1"),
+    (0x531c0900, "menu_refresh", "0dc0a0e1"),
+    (0x531c0d6c, "menu_event", "b030d1e1"),
+    (0x531c0ab8, "menu_exit", "fc11d0e5"),
+    (0x531c08c4, "menu_changed", "0dc0a0e1"),
+    (0x53595dc8, "menu_text_measure", "077193e7"),
+    (0x535967d8, "menu_text_draw", "073193e7"),
+    // ADJ Image Control item apply (item 15, +0x28), ImageControlController
+    // apply, event, and exit, as on GR III.
+    (0x531bc30c, "menu_native_adj_apply", "0dc0a0e1"),
+    (0x531c6dcc, "menu_native_dialog_apply", "0dc0a0e1"),
+    (0x531c7894, "menu_native_page_event", "0dc0a0e1"),
+    (0x531c64f0, "menu_native_page_exit", "0dc0a0e1"),
+    // Icon lookup entry, then the limit check and the table read of the icon draw.
+    // 1.20 compares the icon ID with an immediate limit (NATIVE_ICON_LIMIT).
+    (0x5323f7a0, "menu_icon_lookup", "0dc0a0e1"),
+    (0x53240064, "menu_icon_limit", "b10f57e3"),
+    (0x53240104, "menu_icon_entry", "073190e7"),
+];
+
+/// GR IV 1.20 Framing and Guides hooks: LiveViewController update, exit, and
+/// destroy, then Canvas::Draw entry and its child-draw BL. GR IV has a
+/// live-view mode for each capture aspect, so instead of the GR III patches two
+/// hooks keep the live view in 3:2 while XPan uses capture aspect id 2.
+const GR4_120_FRAMING_HOOKS: &[Hook] = &[
+    (0x5318f5a8, "framing_update", "0dc0a0e1", false),
+    (0x5318fbdc, "framing_exit", "0dc0a0e1", false),
+    (0x53188c30, "framing_destroy", "0dc0a0e1", false),
+    (0x535910ac, "framing_canvas", "0dc0a0e1", false),
+    (0x53591178, "framing_children", "6b0800eb", true),
+    // Still aspect property (0xdf) handler, as on GR III: a native 3:2 request
+    // records the Framing ratio.
+    (0x53774744, "framing_capture_request_hook", "0010d4e5", true),
+    // The capture aspect getter BL of the live-view mode function (0x538b40c8)
+    // and of the live-view mode check (0x5366440c).
+    (0x538b40e0, "framing_live_mode", "1e26fbeb", true),
+    (0x53664424, "framing_live_check", "4d6504eb", true),
+    // ImageResolutionTranslatorKb636 (the GR IV sizes) GetResolution id 2
+    // heights. The Kb588 class holds the GR III sizes and is not used.
+    (0x538f7920, "framing_height_0", "983d00e3", true),
+    (0x538f790c, "framing_height_1", "ae3ea0e3", true),
+    (0x538f78f4, "framing_height_2", "7b3ea0e3", true),
+    (0x538f78e0, "framing_height_3", "383400e3", true),
+    // Id 2 top insets of the screennail and the thumbnail.
+    (0x538f7a24, "framing_screennail_inset", "2610a0e3", true),
+    (0x538f7adc, "framing_thumbnail_inset", "1010a0e3", true),
+    // Playback size classifier and image aspect getter.
+    (0x533b208c, "framing_classify", "51fcffeb", true),
+    (0x533b2494, "framing_image_aspect", "4ffbffea", false),
+];
+
+/// GR IV 1.20 picture hooks, as `PICTURE_HOOKS` on GR III: the live-view diff,
+/// the YCbCr matrix calc call, and the JpegEncodeMacroProcess::Execute entry.
+const GR4_120_PICTURE_HOOKS: &[Hook] = &[
+    (0x5393befc, "module_gamma_dirty", "0e30d4e5", false),
+    (0x53942494, "picture_post", "e9ffffeb", true),
+    (0x53727e10, "picture_encode_entry", "0dc0a0e1", false),
+    // The ImageTone call of the maker-note setter.
+    (0x53837414, "picture_capture_tone", "c636ffeb", true),
+    // The adjustments fill of tag 0x247 (handler 0x53836c84).
+    (0x53836c90, "picture_capture_parameters", "163bffeb", true),
+    // DigitalFilterProcess SetEffectParameter (0x53726594): the grain on,
+    // strength, and size loads, then the BL to the stage gate (0x53739a5c,
+    // plan +0x25).
+    (0x53726770, "grain_enable", "b537d4e5", true),
+    (0x53726790, "grain_strength", "b737d4e5", true),
+    (0x537267b4, "grain_size", "b637d4e5", true),
+    (0x53739f40, "grain_gate", "c5feffeb", true),
+];
+
+/// GR IV 1.20 parameter page hooks, as `PARAMETER_HOOKS` on GR III. The
+/// model getters and setters and the row texts of shading and clarity are
+/// those of row kinds 14 and 15.
+const GR4_120_PARAMETER_HOOKS: &[Hook] = &[
+    (0x531ccea8, "menu_parameter_start", "0dc0a0e1", false),
+    (0x531ccf20, "menu_parameter_kinds", "c5ecffeb", true),
+    (0x531cceec, "menu_parameter_snapshot_0", "170d08eb", true),
+    (0x531ccf58, "menu_parameter_snapshot_1", "fc0c08eb", true),
+    (0x531ccd38, "menu_parameter_event", "b030d1e1", false),
+    (0x533c77a0, "menu_parameter_get_0", "0dc0a0e1", false),
+    (0x533c7e88, "menu_parameter_get_1", "0dc0a0e1", false),
+    (0x533c8570, "menu_parameter_get_2", "0dc0a0e1", false),
+    (0x533c9088, "menu_parameter_get_3", "0dc0a0e1", false),
+    (0x533c9b00, "menu_parameter_get_4", "0dc0a0e1", false),
+    (0x533ca578, "menu_parameter_get_5", "0dc0a0e1", false),
+    (0x533caff0, "menu_parameter_get_6", "0dc0a0e1", false),
+    (0x533cd7e8, "menu_parameter_get_7", "0dc0a0e1", false),
+    (0x533ce260, "menu_parameter_get_8", "0dc0a0e1", false),
+    (0x533c6d4c, "menu_parameter_set_0", "0dc0a0e1", false),
+    (0x533c6d9c, "menu_parameter_set_1", "0dc0a0e1", false),
+    (0x533c6dec, "menu_parameter_set_2", "0dc0a0e1", false),
+    (0x533c6e3c, "menu_parameter_set_3", "0dc0a0e1", false),
+    (0x533c6e8c, "menu_parameter_set_4", "0dc0a0e1", false),
+    (0x533c6edc, "menu_parameter_set_5", "0dc0a0e1", false),
+    (0x533c6f2c, "menu_parameter_set_6", "0dc0a0e1", false),
+    (0x533c71fc, "menu_parameter_set_7", "0dc0a0e1", false),
+    (0x533c724c, "menu_parameter_set_8", "0dc0a0e1", false),
+    // The BL to the settings getter in the row text of each adjustment.
+    (0x533a9d60, "menu_parameter_row_0", "a74c0feb", true),
+    (0x533a9e7c, "menu_parameter_row_1", "714c0feb", true),
+    (0x533a9f98, "menu_parameter_row_2", "3b4c0feb", true),
+    (0x533aa0b4, "menu_parameter_row_3", "054c0feb", true),
+    (0x533aa1d0, "menu_parameter_row_4", "cf4b0feb", true),
+    (0x533aa2ec, "menu_parameter_row_5", "994b0feb", true),
+    (0x533aa408, "menu_parameter_row_6", "634b0feb", true),
+    (0x533aab08, "menu_parameter_row_7", "3c4a0feb", true),
+    (0x533aac24, "menu_parameter_row_8", "064a0feb", true),
+];
+
+/// GR IV 1.20 settings page hooks, as `SETTINGS_HOOKS` on GR III.
+const GR4_120_SETTINGS_HOOKS: &[Hook] = &[
+    (0x5318408c, "menu_settings_change", "0dc0a0e1", false),
+    (0x531e3ab8, "menu_settings_kinds_r3_0", "dd3345e3", true),
+    (0x531e3b20, "menu_settings_kinds_r2", "dd2345e3", true),
+    (0x531e3e90, "menu_settings_kinds_r8", "dd8345e3", true),
+    (0x531e40b8, "menu_settings_kinds_r5", "dd5345e3", true),
+    (0x531e418c, "menu_settings_kinds_r3_1", "dd3345e3", true),
+    (0x531d0cb8, "menu_settings_count_0", "0600a0e3", false),
+    (0x531d3578, "menu_settings_draw_0", "0dc0a0e1", false),
+    (0x531d52e8, "menu_settings_apply_0", "0dc0a0e1", false),
+    (0x531d6d04, "menu_settings_current_0", "0dc0a0e1", false),
+    (0x531d0cc0, "menu_settings_count_1", "0200a0e3", false),
+    (0x531d35bc, "menu_settings_draw_1", "0dc0a0e1", false),
+    (0x531d5318, "menu_settings_apply_1", "0dc0a0e1", false),
+    (0x531d6d38, "menu_settings_current_1", "0dc0a0e1", false),
+];
+
+const GR4_120_VIEWFINDER_HOOKS: &[Hook] = &[(0x531891e0, "menu_viewfinder_icon", "477608eb", true)];
+
+/// GR IV 1.20 Image Control tag, as `METADATA_HOOKS` on GR III: the playback
+/// DISP icon and the playback parameter detail.
+const GR4_120_METADATA_HOOKS: &[Hook] = &[
+    (0x53192918, "menu_playback_icon", "f38d08eb", true),
+    (0x533b6fdc, "menu_playback_detail", "17f0ffeb", true),
+];
+
+/// GR IV ImageTone extraction compares each native tag value. Its default
+/// case stores 0x10000 | (tag - 0x100), as on GR III, instead of 0.
+const GR4_120_INSTRUCTION_PATCHES: &[InstructionPatch] = &[(0x537ff004, "0020a0e3", "ff2c80e2")];
+
+/// GR IV 1.20 Image Control processing (`runtime/targets/gr4-processing.S`).
+const GR4_120_PROCESSING_HOOKS: &[(u32, &str, bool)] = &[
+    (0x5393aa10, "module_parameters", true),
+    (0x5393af68, "module_processing", true),
+    (0x5393af74, "module_record", true),
+    (0x5393ae74, "module_packet", true),
+    (0x53946150, "module_gamma_flag", true),
+    (0x5394655c, "module_gamma_curves", true),
+];
+/// The stock instructions around the GR IV processing hooks.
+const GR4_120_CONTEXTS: &[(u32, &str)] = &[
+    // Normalizer BL, then the type-table getters and the record store. 1.20
+    // keeps the table index in fp-0x30.
+    (0x5393aa10, "c4f9ffeb"),
+    (0x5393af64, "30a01be50a10a0e10600a0e1094c00eb080084e5"),
+    // Packet: the last field store before the native tail.
+    (0x5393ae70, "943195e5903084e5f05000eb"),
+    // Gamma stage: the custom-curve flag and the curve getter BL.
+    (0x53946150, "9b10d1e5"),
+    (0x5394655c, "ad1a00eb"),
+    // LiveViewController's Image Control widget: load native type, map, assign.
+    (0x531891d8, "ec3494e5401ad3e5477608eb"),
+];
+
+/// The startup `.data` literals, as on GR III, and the icon catalog getter
+/// (`movw r0` / `movt r0`, 0x55014280), which patched firmware moves into the
+/// RTOS tail when it adds icons.
+const GR4_120_GUARDS: &[(u32, &str)] = &[
+    (0x53000450, "00313b540000005500850500"),
+    (0x534013f8, "800204e3010545e3"),
+];
+
+pub const GR4_120_LAYOUT: Layout = Layout {
+    define: "-DGRKIT_TARGET_GR4_120",
+    // After the decoded RTOS image (0x5440b600), with the regions of 1.11.
+    tail: (0x5440c000, 0x54415000),
+    processing: Some((0x5440c100, 0x5440c500)),
+    processing_source: include_str!("../../../runtime/targets/gr4-processing.S"),
+    menu: (0x5440c500, 0x5440f800),
+    framing: Some((0x5440f800, 0x54415000)),
+    contexts: GR4_120_CONTEXTS,
+    processing_hooks: GR4_120_PROCESSING_HOOKS,
+    menu_hooks: GR4_120_MENU_HOOKS,
+    viewfinder_hooks: GR4_120_VIEWFINDER_HOOKS,
+    metadata_hooks: GR4_120_METADATA_HOOKS,
+    parameter_hooks: GR4_120_PARAMETER_HOOKS,
+    settings_hooks: GR4_120_SETTINGS_HOOKS,
+    instruction_patches: GR4_120_INSTRUCTION_PATCHES,
+    framing_hooks: GR4_120_FRAMING_HOOKS,
+    picture_hooks: GR4_120_PICTURE_HOOKS,
+    framing_patches: &[],
+    guards: GR4_120_GUARDS,
     relocatable: true,
 };
 

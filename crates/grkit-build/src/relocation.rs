@@ -86,7 +86,7 @@ pub struct Window {
     /// at the address that another source gives.
     pub search: bool,
     /// The word that the search compares first: the least frequent one within
-    /// `RADIUS` of the start.
+    /// the radius of the start.
     pub probe: usize,
 }
 
@@ -130,6 +130,10 @@ pub struct Plan {
 /// Builds a relocation plan from the pinned image.
 pub struct Planner<'a> {
     image: &'a FirmwareImage,
+    /// The search range on each side of a pinned window start. A window is
+    /// unique within twice this range, so the plan holds while code and data
+    /// move by less than it.
+    radius: u32,
     /// The masked words of the image and of the initial `.data` content.
     masked: Vec<u32>,
     data: Vec<u32>,
@@ -152,7 +156,14 @@ fn prologue(word: u32) -> bool {
 }
 
 impl<'a> Planner<'a> {
+    /// A planner for the installer, which searches within `RADIUS`.
     pub fn new(image: &'a FirmwareImage) -> Result<Self> {
+        Self::with_radius(image, RADIUS)
+    }
+
+    /// A planner whose windows hold while code and data move by less than
+    /// `radius`, such as for a port to another firmware version (`crate::port`).
+    pub fn with_radius(image: &'a FirmwareImage, radius: u32) -> Result<Self> {
         let target = image.target;
         ensure!(
             target.data_start == DATA_START,
@@ -178,6 +189,7 @@ impl<'a> Planner<'a> {
         );
         Ok(Self {
             image,
+            radius,
             masked,
             data,
             plan: Plan::default(),
@@ -201,13 +213,13 @@ impl<'a> Planner<'a> {
         }
     }
 
-    /// The pinned positions of `words` within twice `RADIUS` of `start`. A
+    /// The pinned positions of `words` within twice the radius of `start`. A
     /// window that occurs once in that range cannot match another copy when
-    /// the code moves by less than `RADIUS`.
+    /// the code moves by less than the radius.
     fn occurrences(&self, region: Region, start: u32, words: &[u32]) -> Vec<u32> {
         let (all, base) = self.region(region);
         let index = ((start - base) / 4) as usize;
-        let radius = (2 * RADIUS / 4) as usize;
+        let radius = (2 * self.radius / 4) as usize;
         let low = index.saturating_sub(radius);
         let high = (index + radius).min(all.len().saturating_sub(words.len()));
         (low..=high)
@@ -225,7 +237,7 @@ impl<'a> Planner<'a> {
         }
         let probe = if search {
             let index = ((start - base) / 4) as usize;
-            let radius = (RADIUS / 4) as usize;
+            let radius = (self.radius / 4) as usize;
             let around =
                 &all[index.saturating_sub(radius)..(index + radius + words.len()).min(all.len())];
             let mut counts: BTreeMap<u32, usize> = words.iter().map(|&word| (word, 0)).collect();
@@ -252,7 +264,7 @@ impl<'a> Planner<'a> {
     }
 
     /// Grows `[start, end)` until its masked words occur once within twice
-    /// `RADIUS`.
+    /// the radius.
     fn unique(&self, region: Region, mut start: u32, mut end: u32) -> Option<(u32, u32)> {
         let (all, base) = self.region(region);
         let limit = base + all.len() as u32 * 4;
@@ -443,13 +455,14 @@ impl<'a> Planner<'a> {
         Ok(symbol)
     }
 
-    /// A data address, through the code that loads it: literal words and MOVW
-    /// and MOVT pairs that hold exactly this address.
+    /// An address through the code that loads it: literal words and MOVW and
+    /// MOVT pairs that hold exactly this address. The installer uses it for
+    /// data; a port also uses it as a second witness of image addresses.
     pub fn referenced(&mut self, address: u32) -> Result<usize> {
         let target = self.image.target;
         ensure!(
-            (DATA_START..target.heap_min).contains(&address),
-            "Referenced address {address:#x} is outside .data and the BSS"
+            (DATA_START..target.heap_min).contains(&address) || self.in_image(address),
+            "Referenced address {address:#x} is outside the image, .data, and the BSS"
         );
         let symbol = self.symbol(address);
         let raw = words(&self.image.body[..self.masked.len() * 4]);
@@ -499,10 +512,7 @@ impl<'a> Planner<'a> {
             self.add(symbol, source);
             found += 1;
         }
-        ensure!(
-            found > 0,
-            "BSS address {address:#x} has no unique reference"
-        );
+        ensure!(found > 0, "Address {address:#x} has no unique reference");
         Ok(symbol)
     }
 
@@ -533,5 +543,182 @@ impl<'a> Planner<'a> {
 pub fn startup_window(plan: &Plan) -> Option<usize> {
     plan.windows.iter().position(|window| {
         window.region == Region::Image && window.start == STARTUP_CODE && !window.search
+    })
+}
+
+/// The layout of another build of the RTOS image, from its startup literals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImageLayout {
+    /// Where the image holds the initial `.data` content, and its size.
+    pub data_source: u32,
+    pub data_size: u32,
+    /// The BSS end, where the script heap starts.
+    pub heap_min: u32,
+    /// The first 4 KiB boundary after the image, where the private tail goes.
+    pub tail: u32,
+}
+
+/// Each symbol of a plan in another build of the RTOS image (`image`, loaded
+/// at `RTOS_BASE`), with the sources that give it. The installer
+/// (`runtime/relocation.h`) fails when any source fails. Here a source that
+/// fails gives no value, the sources that give a value must agree, and a
+/// symbol fails when no source gives a value. `radius` must be the radius that
+/// the plan was made with.
+pub struct Resolution {
+    pub layout: ImageLayout,
+    pub symbols: Vec<std::result::Result<(u32, Vec<Source>), String>>,
+    /// Whether the installer would resolve each symbol: each source gave the
+    /// value, and the startup window, if the plan has one, matches.
+    pub complete: bool,
+}
+
+/// Finds the symbols of `plan` in `image`. See `Resolution`.
+pub fn resolve(plan: &Plan, image: &[u8], radius: u32) -> Result<Resolution> {
+    let raw = words(&image[..image.len() & !3]);
+    let read = |address: u32| -> Option<u32> {
+        raw.get((address.checked_sub(RTOS_BASE)? / 4) as usize)
+            .copied()
+    };
+    let literal = |index: u32| {
+        read(STARTUP_LITERALS + index * 4).context("The image has no startup literals")
+    };
+    let (data_source, data_start, data_size, heap_min) =
+        (literal(0)?, literal(1)?, literal(2)?, literal(4)?);
+    // The checks of runtime/relocation.h, and the image must hold `.data`.
+    ensure!(
+        data_start == DATA_START
+            && data_source.is_multiple_of(4)
+            && data_size.is_multiple_of(4)
+            && data_size != 0
+            && (RTOS_BASE..DATA_START).contains(&data_source)
+            && DATA_START - data_source >= data_size
+            && read(data_source + data_size - 4).is_some(),
+        "Unexpected startup literals"
+    );
+    let layout = ImageLayout {
+        data_source,
+        data_size,
+        heap_min,
+        tail: (data_source + data_size + 0xfff) & !0xfff,
+    };
+    // A region address of a window and the image address that holds it.
+    let limits = |region: Region| match region {
+        Region::Image => (RTOS_BASE, data_source),
+        Region::Data => (DATA_START, DATA_START + data_size),
+    };
+    let holder = |region: Region, address: u32| match region {
+        Region::Image => address,
+        Region::Data => address - DATA_START + data_source,
+    };
+    let matches = |window: &Window, at: u32| -> bool {
+        let (low, high) = limits(window.region);
+        at >= low
+            && at.is_multiple_of(4)
+            && (high - at.min(high)) / 4 >= window.words.len() as u32
+            && window.words.iter().enumerate().all(|(index, &word)| {
+                read(holder(window.region, at) + index as u32 * 4).map(mask) == Some(word)
+            })
+    };
+    let found: Vec<std::result::Result<u32, String>> = plan
+        .windows
+        .iter()
+        .map(|window| {
+            if !window.search {
+                return Err("not searched".into());
+            }
+            let (low, high) = limits(window.region);
+            let from = window.start.saturating_sub(radius).max(low);
+            let to = window.start.saturating_add(radius).min(high);
+            let probe = window.words[window.probe];
+            let mut hits = (from..=to)
+                .step_by(4)
+                .filter(|&at| {
+                    read(holder(window.region, at) + window.probe as u32 * 4).map(mask)
+                        == Some(probe)
+                        && matches(window, at)
+                })
+                .take(2);
+            match (hits.next(), hits.next()) {
+                (Some(at), None) => Ok(at),
+                (None, _) => Err(format!("window {:#x} not found", window.start)),
+                (Some(_), Some(_)) => Err(format!("window {:#x} is ambiguous", window.start)),
+            }
+        })
+        .collect();
+    let value = |symbol: &Symbol, source: &Source| -> std::result::Result<u32, String> {
+        let at = |window: usize| -> std::result::Result<u32, String> { found[window].clone() };
+        let word = |window: usize, index: u32| -> std::result::Result<u32, String> {
+            let region = plan.windows[window].region;
+            read(holder(region, at(window)? + index * 4)).ok_or_else(|| "outside the image".into())
+        };
+        match *source {
+            Source::Window { window, offset } => Ok(at(window)? + offset),
+            Source::Literal { window, index } => word(window, index),
+            Source::Pair { window, movw, movt } => {
+                Ok(move_immediate(word(window, movt)?) << 16 | move_immediate(word(window, movw)?))
+            }
+            Source::Branch {
+                window,
+                index,
+                verify,
+            } => {
+                let site = at(window)? + index * 4;
+                let target = branch_target(site, word(window, index)?)
+                    .ok_or_else(|| format!("no branch at {site:#x}"))?;
+                match verify {
+                    None => Ok(target),
+                    Some(verify) if matches(&plan.windows[verify], target) => {
+                        Ok(target + (symbol.address - plan.windows[verify].start))
+                    }
+                    Some(_) => Err(format!("the branch target {target:#x} differs")),
+                }
+            }
+            Source::Startup { index } => literal(index).map_err(|error| error.to_string()),
+            Source::Tail => Ok(layout.tail),
+        }
+    };
+    let startup = startup_window(plan)
+        .is_none_or(|window| matches(&plan.windows[window], plan.windows[window].start));
+    let mut complete = startup;
+    let symbols = plan
+        .symbols
+        .iter()
+        .map(|symbol| {
+            let (values, errors): (Vec<_>, Vec<_>) = symbol
+                .sources
+                .iter()
+                .map(|source| value(symbol, source).map(|value| (value, *source)))
+                .partition(std::result::Result::is_ok);
+            let given: Vec<(u32, Source)> = values
+                .into_iter()
+                .map(std::result::Result::unwrap)
+                .collect();
+            complete &= given.len() == symbol.sources.len();
+            let mut values: Vec<u32> = given.iter().map(|&(value, _)| value).collect();
+            values.sort_unstable();
+            values.dedup();
+            complete &= values.len() == 1;
+            match values[..] {
+                [value] => Ok((value, given.into_iter().map(|(_, source)| source).collect())),
+                [] => Err(errors
+                    .into_iter()
+                    .map(std::result::Result::unwrap_err)
+                    .collect::<Vec<_>>()
+                    .join("; ")),
+                _ => Err(format!(
+                    "the sources disagree: {}",
+                    values
+                        .iter()
+                        .map(|v| format!("{v:#x}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )),
+            }
+        })
+        .collect();
+    Ok(Resolution {
+        layout,
+        symbols,
+        complete,
     })
 }

@@ -788,7 +788,7 @@ fn guides_writes_one_typst_source_for_each_camera_and_language() {
     let out = tmp.path().join("guides");
     assert_eq!(success(&["guides", "--out", text(&out)])["guides"], 12);
     let source = fs::read_to_string(out.join("gr3x/zh-Hans/guide.typ")).unwrap();
-    assert!(source.contains("仅适用于 RICOH GR IIIx 和 GR IIIx HDF 固件 1.60。"));
+    assert!(source.contains("仅适用于 RICOH GR IIIx 和 GR IIIx HDF 固件 1.60 或 1.70。"));
     assert!(source.contains("#link(<recovery>)") && source.contains("= 恢复 <recovery>"));
     assert!(out.join("gr3x/zh-Hans/images/grkit-root.jpg").is_file());
     assert!(out.join("gr3x/zh-Hans/images/modeset.png").is_file());
@@ -797,4 +797,23 @@ fn guides_writes_one_typst_source_for_each_camera_and_language() {
     assert!(!out.join("gr4/en/images/grkit-root.jpg").exists());
     // The output must be new.
     assert!(!run(&["guides", "--out", text(&out)]).status.success());
+}
+
+#[test]
+fn cameras_lists_the_runtime_build_of_each_release() {
+    let cameras = success(&["cameras"])["cameras"].clone();
+    let gr3x = cameras
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|camera| camera["id"] == "gr3x")
+        .unwrap();
+    assert_eq!(gr3x["modeset"], "00078490.609");
+    assert_eq!(
+        gr3x["releases"],
+        serde_json::json!([
+            {"firmware": "1.60", "target": "gr3-2.10", "experimental": false},
+            {"firmware": "1.70", "target": "gr3-2.10", "experimental": true},
+        ])
+    );
 }
