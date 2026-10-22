@@ -16,6 +16,12 @@ pub const RTOS_BASE: u32 = 0x53000000;
 #[derive(Debug, PartialEq, Eq)]
 pub struct Target {
     pub name: &'static str,
+    /// The builds of one camera line that share the runtime code and the hook
+    /// symbols, such as each GR IV build. Builds of a family have the same
+    /// hooks and header definitions (tests), so a change for one build fails
+    /// until it reaches each build. A family with several builds shares the
+    /// header `runtime/targets/<family>.h`.
+    pub family: &'static str,
     /// The model and version, for messages.
     pub firmware: &'static str,
     pub firmware_sha256: &'static str,
@@ -106,6 +112,7 @@ pub const GR4_IMAGE_CONTROL: ImageControl = ImageControl {
 
 pub const GR3_210: Target = Target {
     name: "gr3-2.10",
+    family: "gr3",
     firmware: "GR III 2.10",
     firmware_sha256: "d6a3c9c288d784080e7b283222ecdd8752adfeed6faa36dab44f73115354bfd4",
     decoded_sha256: "53da690797f35ad6dc2c429d8ca1d0de8e333c211ed959816813982cd093b703",
@@ -131,6 +138,7 @@ pub const GR3_210: Target = Target {
 /// Framing (XPan only), Guides, and Date Stamp.
 pub const GR4_111: Target = Target {
     name: "gr4-1.11",
+    family: "gr4",
     firmware: "GR IV 1.11",
     firmware_sha256: "a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f",
     decoded_sha256: "c4e597c7c9ca1bc181b30e35139ed90a4fd876ddcca14f12be0e00b6702233ae",
@@ -173,6 +181,7 @@ pub const GR4_120_IMAGE_CONTROL: ImageControl = ImageControl {
 /// 1.11 through the code that uses them; not tested on a camera.
 pub const GR4_120: Target = Target {
     name: "gr4-1.20",
+    family: "gr4",
     firmware: "GR IV 1.20",
     firmware_sha256: "7563d7e462f0c53b6ab2fbab7cdfbbb57151a41192ee82f4f3a2108f9d77650d",
     decoded_sha256: "f5cf55a48f65d55f4ebbd40bcd1d64d1ceca3c88432a2a4ceaa93fe1cad5fc3a",
@@ -197,6 +206,14 @@ pub const GR4_120: Target = Target {
 };
 
 pub const TARGETS: [&Target; 3] = [&GR3_210, &GR4_111, &GR4_120];
+
+impl Target {
+    /// The runtime header of the build in `runtime/` (`runtime/firmware.h`
+    /// selects it).
+    pub fn header(&self) -> String {
+        format!("targets/{}.h", self.name)
+    }
+}
 
 pub fn find(name: &str) -> Result<&'static Target> {
     match TARGETS.iter().find(|target| target.name == name) {

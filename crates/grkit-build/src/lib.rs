@@ -107,6 +107,14 @@ pub fn validate_plan(plan: &PatchPlan) -> Result<()> {
 // Every file under runtime/, from build.rs.
 include!(concat!(env!("OUT_DIR"), "/runtime_sources.rs"));
 
+/// A file under `runtime/` by its path there, such as `targets/gr4.h`.
+pub fn runtime_source(path: &str) -> Option<&'static [u8]> {
+    RUNTIME_SOURCES
+        .iter()
+        .find(|(name, _)| *name == path)
+        .map(|&(_, bytes)| bytes)
+}
+
 pub fn source_hashes() -> BTreeMap<String, String> {
     let mut sources: BTreeMap<_, _> = RUNTIME_SOURCES
         .iter()

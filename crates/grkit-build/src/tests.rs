@@ -755,11 +755,8 @@ fn generated_header_marks_only_rtos_tail_patches_as_unchecked() -> Result<()> {
 
 #[test]
 fn every_code_region_lies_in_the_tail() {
-    for (target, layout) in [
-        (&target::GR3_210, &components::GR3_LAYOUT),
-        (&target::GR4_111, &components::GR4_LAYOUT),
-        (&target::GR4_120, &components::GR4_120_LAYOUT),
-    ] {
+    for target in target::TARGETS {
+        let layout = target.layout.unwrap();
         let (tail, end) = layout.tail;
         // The decoded image ends where the startup .data copy source ends.
         assert!(
@@ -910,15 +907,17 @@ fn each_camera_offers_what_its_runtime_has() {
 fn each_point_has_its_hooks() {
     // The hooks of each point. The in-place patches add 1 to tuning, and on
     // GR III 5 to capture.aspect (build.json "points" counts both).
-    for (layout, expected) in [
-        (&components::GR3_LAYOUT, [30, 48, 5, 9, 1, 2]),
-        (&components::GR4_LAYOUT, [29, 49, 5, 11, 1, 4]),
-    ] {
+    for target in target::TARGETS {
+        let expected = match target.family {
+            "gr3" => [30, 48, 5, 9, 1, 2],
+            "gr4" => [29, 49, 5, 11, 1, 4],
+            family => panic!("No hook counts for the {family} family"),
+        };
         let mut counts = [0; 6];
-        for (_, symbol) in components::hook_sites(layout) {
+        for (_, symbol) in components::hook_sites(target.layout.unwrap()) {
             counts[components::point_of(symbol).unwrap() as usize] += 1;
         }
-        assert_eq!(counts, expected);
+        assert_eq!(counts, expected, "{}", target.name);
     }
     assert!(components::point_of("unknown_hook").is_err());
 }
@@ -945,4 +944,167 @@ fn dump_tool_is_a_static_arm_linux_program() -> Result<()> {
     let script = std::str::from_utf8(&files["SD_ROOT/SCRIPT/GRDUMP/DUMP.SH"])?;
     assert!(script.starts_with("/media/storage1/SCRIPT/GRDUMP/DUMP.BIN\n"));
     Ok(())
+}
+
+/// The definitions of a target header and of the headers that it includes from
+/// `runtime/targets/`, by name. `own` keeps only those of the target header.
+fn header_definitions(path: &str, own: bool) -> BTreeMap<String, String> {
+    let source = runtime_source(path).unwrap_or_else(|| panic!("No runtime/{path}"));
+    let text = std::str::from_utf8(source).unwrap().replace("\\\n", " ");
+    let mut definitions = BTreeMap::new();
+    for line in text.lines() {
+        if let Some(include) = line.strip_prefix("#include \"") {
+            if !own {
+                let include = include.trim_end_matches('"');
+                definitions.extend(header_definitions(&format!("targets/{include}"), false));
+            }
+        } else if let Some(definition) = line.strip_prefix("#define ") {
+            let (name, value) = definition.split_once(' ').unwrap_or((definition, ""));
+            // Skip the include guards.
+            if !(name.starts_with("GRKIT_") && name.ends_with("_H")) {
+                definitions.insert(name.to_string(), value.trim().to_string());
+            }
+        }
+    }
+    definitions
+}
+
+/// The hook symbols of each table of a layout, with their flags, in order.
+fn hook_symbols(layout: &components::Layout) -> Vec<(&'static str, Vec<(&'static str, bool)>)> {
+    let hooks = |table: &[components::Hook]| table.iter().map(|&(_, s, _, f)| (s, f)).collect();
+    vec![
+        (
+            "processing",
+            layout
+                .processing_hooks
+                .iter()
+                .map(|&(_, s, f)| (s, f))
+                .collect(),
+        ),
+        (
+            "menu",
+            layout
+                .menu_hooks
+                .iter()
+                .map(|&(_, s, _)| (s, false))
+                .collect(),
+        ),
+        ("viewfinder", hooks(layout.viewfinder_hooks)),
+        ("metadata", hooks(layout.metadata_hooks)),
+        ("parameter", hooks(layout.parameter_hooks)),
+        ("settings", hooks(layout.settings_hooks)),
+        ("framing", hooks(layout.framing_hooks)),
+        ("picture", hooks(layout.picture_hooks)),
+    ]
+}
+
+/// Definitions that only some builds of a family have, because the code of
+/// those builds differs. The runtime tests each with `#ifdef`.
+const BUILD_ONLY_DEFINITIONS: &[(&str, &[&str])] = &[(
+    "gr4-1.20",
+    &["NATIVE_ICON_LIMIT", "NATIVE_MONOCHROME_TYPES_HIGH"],
+)];
+
+#[test]
+fn builds_of_a_family_have_the_same_hooks_and_definitions() {
+    for target in target::TARGETS {
+        let first = target::TARGETS
+            .iter()
+            .find(|other| other.family == target.family)
+            .unwrap();
+        let (layout, first_layout) = (target.layout.unwrap(), first.layout.unwrap());
+        for ((table, symbols), (_, expected)) in hook_symbols(layout)
+            .into_iter()
+            .zip(hook_symbols(first_layout))
+        {
+            assert_eq!(
+                symbols, expected,
+                "The {table} hooks of {} differ from those of {}",
+                target.name, first.name
+            );
+        }
+        assert_eq!(
+            (
+                layout.contexts.len(),
+                layout.instruction_patches.len(),
+                layout.framing_patches.len()
+            ),
+            (
+                first_layout.contexts.len(),
+                first_layout.instruction_patches.len(),
+                first_layout.framing_patches.len()
+            ),
+            "{}",
+            target.name
+        );
+        let names = |target: &target::Target| -> BTreeSet<String> {
+            let only: &[&str] = BUILD_ONLY_DEFINITIONS
+                .iter()
+                .find(|(name, _)| *name == target.name)
+                .map_or(&[], |(_, names)| names);
+            header_definitions(&target.header(), true)
+                .into_keys()
+                .filter(|name| !only.contains(&name.as_str()))
+                .collect()
+        };
+        assert_eq!(
+            names(target),
+            names(first),
+            "The header of {} defines other names than that of {}",
+            target.name,
+            first.name
+        );
+    }
+}
+
+#[test]
+fn each_target_has_a_header_a_camera_release_and_an_icon_stride() {
+    let selector = std::str::from_utf8(runtime_source("firmware.h").unwrap()).unwrap();
+    for target in target::TARGETS {
+        let layout = target.layout.unwrap();
+        let define = layout.define.strip_prefix("-D").unwrap();
+        assert!(
+            selector.contains(&format!(
+                "defined({define})\n#include \"{}\"",
+                target.header()
+            )),
+            "runtime/firmware.h does not select {} with {define}",
+            target.header()
+        );
+        let shared = format!("targets/{}.h", target.family);
+        let family = target::TARGETS
+            .iter()
+            .filter(|other| other.family == target.family);
+        if family.count() > 1 {
+            assert!(
+                runtime_source(&shared).is_some(),
+                "The {} family has no {shared}",
+                target.family
+            );
+        }
+        assert!(
+            grkit_core::camera::CAMERAS
+                .iter()
+                .any(|camera| camera.runs(target.name)),
+            "No camera release runs {}",
+            target.name
+        );
+        // Without a definition, abi.h gives the GR III stride.
+        let stride = header_definitions(&target.header(), false)
+            .remove("GRKIT_ICON_STRIDE")
+            .unwrap_or_else(|| grkit_core::runtime::ICON_STRIDE.to_string());
+        assert_eq!(
+            grkit_core::runtime::icon_stride(target.name)
+                .unwrap()
+                .to_string(),
+            stride,
+            "{}",
+            target.name
+        );
+    }
+    for camera in grkit_core::camera::CAMERAS {
+        for release in camera.releases {
+            assert!(target::find(release.target).is_ok(), "{}", release.target);
+        }
+    }
 }

@@ -63,11 +63,25 @@ fn compiler() -> Option<OsString> {
     None
 }
 
-/// The definitions that select each runtime target in `runtime/firmware.h`,
-/// as `components::Layout::define` passes them to the ARM build.
+/// The definition that selects the GR III target in `runtime/firmware.h`, as
+/// `components::Layout::define` passes it to the ARM build.
 const GR3_TARGET: &str = "-DGRKIT_TARGET_GR3_210";
-const GR4_TARGET: &str = "-DGRKIT_TARGET_GR4_111";
-const TARGETS: [&str; 2] = [GR3_TARGET, GR4_TARGET];
+
+/// The definition of each runtime target that `runtime/firmware.h` selects, so
+/// a new target is compiled without a change here.
+fn targets() -> Vec<String> {
+    let selector = fs::read_to_string(root().join("runtime/firmware.h")).unwrap();
+    let targets: Vec<String> = selector
+        .lines()
+        .filter_map(|line| {
+            let name = line.split("defined(").nth(1)?.split(')').next()?;
+            name.starts_with("GRKIT_TARGET_")
+                .then(|| format!("-D{name}"))
+        })
+        .collect();
+    assert!(targets.contains(&GR3_TARGET.to_string()));
+    targets
+}
 
 /// Builds a host C harness for the GR III target.
 fn compile(compiler: &OsString, source: &Path, executable: &Path, extra_sources: &[PathBuf]) {
@@ -584,7 +598,7 @@ fn native_picture_contract_applies_post_matrix_and_stamp() {
         return;
     };
     let temporary = tempfile::tempdir().unwrap();
-    for (index, target) in TARGETS.into_iter().enumerate() {
+    for (index, target) in targets().iter().enumerate() {
         let executable = temporary.path().join(format!("picture_contract_{index}"));
         compile_for(
             target,
@@ -604,7 +618,7 @@ fn runtime_c_sources_compile_for_each_target() {
     let Some(compiler) = compiler() else {
         return;
     };
-    for target in TARGETS {
+    for target in targets() {
         for source in ["menu.c", "framing.c", "picture.c"] {
             checked(
                 Command::new(&compiler)
@@ -613,7 +627,7 @@ fn runtime_c_sources_compile_for_each_target() {
                         "-fsyntax-only",
                         "-Wno-int-to-pointer-cast",
                         "-Wno-pointer-to-int-cast",
-                        target,
+                        target.as_str(),
                     ])
                     .arg("-I")
                     .arg(root().join("runtime"))
