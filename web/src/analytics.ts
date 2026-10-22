@@ -1,4 +1,6 @@
 import type { Camera } from './cameras';
+import type { Grade } from './catalog';
+import type { Input } from './import/names';
 import type { Language } from './i18n';
 import type { ModuleKey, ModulePlan } from './modules';
 
@@ -17,17 +19,19 @@ function track(event: string, props: Props): void {
 }
 
 /**
- * The properties of a GRKit download: the camera, the effect count, the page language, and
+ * The properties of a GRKit download: the camera, its runtime build, the effect count, the page
+ * language, and
  * `on` or `off` for each module that the site offers for the camera. A module is `on` only
  * when the package installs it, so Image Control without effects is `off`.
  */
 export function downloadProps(
   camera: Camera,
+  target: string,
   plan: ModulePlan,
   effectCount: number,
   language: Language,
 ): Props {
-  const props: Props = { camera: camera.key, effects: String(effectCount), language };
+  const props: Props = { camera: camera.key, target, effects: String(effectCount), language };
   for (const key of camera.support?.modules ?? ([] as readonly ModuleKey[])) {
     props[key] = plan.visible.includes(key) ? 'on' : 'off';
   }
@@ -37,14 +41,59 @@ export function downloadProps(
 /** Records a GRKit package that the page saved. */
 export function trackDownload(
   camera: Camera,
+  target: string,
   plan: ModulePlan,
   effectCount: number,
   language: Language,
 ): void {
-  track('Download', downloadProps(camera, plan, effectCount, language));
+  track('Download', downloadProps(camera, target, plan, effectCount, language));
 }
 
 /** Records a saved package that turns SD scripts off. */
 export function trackScriptsOff(camera: Camera): void {
   track('Scripts Off', { camera: camera.key });
+}
+
+/** A LUT import of the page: its result, and the grade of an effect that it made. */
+export type ImportOutcome = { result: 'ok'; grade: Grade; warnings: number } | { result: 'failed' };
+
+/**
+ * The properties of a LUT import: the file format by its extension, the input that the fit used,
+ * whether the user chose it or kept the guess, and the outcome. They hold no file name and no
+ * LUT data.
+ */
+export function importProps(
+  file: string,
+  input: Input,
+  chosen: boolean,
+  outcome: ImportOutcome,
+): Props {
+  const extension = file.includes('.') ? file.slice(file.lastIndexOf('.') + 1).toLowerCase() : '';
+  const format =
+    extension === 'cube' || extension === 'png'
+      ? extension
+      : extension === 'tif' || extension === 'tiff'
+        ? 'tiff'
+        : 'other';
+  const props: Props = { format, input, choice: chosen ? 'manual' : 'auto', result: outcome.result };
+  if (outcome.result === 'ok') {
+    props.grade = outcome.grade;
+    props.warnings = outcome.warnings > 0 ? 'yes' : 'no';
+  }
+  return props;
+}
+
+/** Records a LUT import that ended, with an effect or with an error. */
+export function trackImport(
+  file: string,
+  input: Input,
+  chosen: boolean,
+  outcome: ImportOutcome,
+): void {
+  track('LUT Import', importProps(file, input, chosen, outcome));
+}
+
+/** Records a saved identity HALD image. */
+export function trackHaldImage(): void {
+  track('HALD Image', {});
 }

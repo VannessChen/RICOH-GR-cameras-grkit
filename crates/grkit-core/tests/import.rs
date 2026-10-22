@@ -735,3 +735,49 @@ fn flaws_measure_only_what_the_lut_does_not_do() {
     let flaws = fit::flaws(&model, &vivid, &itself);
     assert!(flaws.lag > 5.0, "{flaws:?}");
 }
+
+#[test]
+fn import_reports_progress_that_rises_to_one() {
+    // A warm look, so the fit runs the hue sectors and the joint refinement.
+    let text = cube_text(9, "", |x| {
+        [x[0] * 0.95 + 0.04, x[1] * 0.9 + 0.02, x[2] * 0.75]
+    });
+    let icon = json!({"label": "WM", "shape": "filter"});
+    let request = Import {
+        effect_id: "warm-v1",
+        name: "Warm",
+        icon: &icon,
+        source: "warm.cube",
+        input: Some(Encoding::Standard),
+        exposure: 0.0,
+        options: Options {
+            random_samples: 300,
+            rounds: 2,
+            joint_rounds: 1,
+            sector_rounds: 1,
+            sector_samples: 200,
+            joint_passes: 1,
+            ..Options::default()
+        },
+    };
+    let reports = std::cell::RefCell::new(Vec::new());
+    fit::import_with_progress(text.as_bytes(), &synthetic_base(), &request, &|fraction| {
+        reports.borrow_mut().push(fraction)
+    })
+    .unwrap();
+    let reports = reports.into_inner();
+    assert!(
+        reports.windows(2).all(|pair| pair[0] <= pair[1]),
+        "{reports:?}"
+    );
+    assert!(
+        reports.iter().all(|f| (0.0..=1.0).contains(f)),
+        "{reports:?}"
+    );
+    assert_eq!(reports.last(), Some(&1.0));
+    // The hue sectors take most of the time, so they report steps inside their span.
+    assert!(
+        reports.iter().filter(|f| (0.1..0.7).contains(*f)).count() >= 2,
+        "{reports:?}"
+    );
+}

@@ -1,6 +1,7 @@
 import { useCallback, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { MAX_EFFECTS, type ImportedEffect } from '../catalog';
 import type { Strings } from '../i18n';
+import { trackHaldImage, trackImport } from '../analytics';
 import { coverProblem, guessInput, importLut, saveHaldImage } from '../import/lut';
 import {
   coverFromFile,
@@ -29,7 +30,8 @@ interface Props {
 
 type Status =
   | { state: 'idle' }
-  | { state: 'importing' }
+  /** `fraction`: the progress of the fit, from 0 to 1. */
+  | { state: 'importing'; fraction: number }
   | { state: 'failed'; message: string }
   | { state: 'done'; effect: ImportedEffect };
 
@@ -174,16 +176,25 @@ export function ImportDialog({ strings: t, baseGamma, taken, importedCount, onIm
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!ready || !file) return;
-    setStatus({ state: 'importing' });
+    setStatus({ state: 'importing', fraction: 0 });
     try {
       const imported = await fit.run((signal) =>
-        importLut(file, name, input, cover, baseGamma, taken, signal),
+        importLut(file, name, input, cover, baseGamma, taken, signal, (fraction) => {
+          if (!signal.aborted) setStatus({ state: 'importing', fraction });
+        }),
       );
       if (!imported.current) return;
+      const { grade, warnings } = imported.value.imported;
+      trackImport(file.name, input, choice !== 'auto', {
+        result: 'ok',
+        grade,
+        warnings: warnings.length,
+      });
       onImport(imported.value);
       setStatus({ state: 'done', effect: imported.value });
     } catch (error) {
       console.error(error);
+      trackImport(file.name, input, choice !== 'auto', { result: 'failed' });
       setStatus({
         state: 'failed',
         message: error instanceof Error ? error.message : String(error),
@@ -375,14 +386,24 @@ export function ImportDialog({ strings: t, baseGamma, taken, importedCount, onIm
             <details className="hald">
               <summary>{t.haldSummary}</summary>
               <p className="note">{t.haldNote}</p>
-              <button type="button" className="button small" onClick={() => void saveHaldImage()}>
+              <button
+                type="button"
+                className="button small"
+                onClick={() => void saveHaldImage().then(trackHaldImage)}
+              >
                 {t.haldDownload}
               </button>
             </details>
 
             <div aria-live="polite">
               {full && <p className="status">{t.importFull(MAX_EFFECTS)}</p>}
-              {importing && <p className="status">{t.importing}</p>}
+              {status.state === 'importing' && (
+                <div className="import-progress">
+                  <p className="status">{t.importing}</p>
+                  <progress max={1} value={status.fraction} aria-label={t.importing} />
+                  <span className="import-percent">{Math.round(status.fraction * 100)}%</span>
+                </div>
+              )}
               {status.state === 'failed' && (
                 <p className="status error">
                   {t.importError} {status.message}
@@ -394,6 +415,15 @@ export function ImportDialog({ strings: t, baseGamma, taken, importedCount, onIm
               <button type="submit" className="button primary" disabled={!ready} aria-busy={importing}>
                 {t.importButton}
               </button>
+            </div>
+
+            <div className="import-about">
+              <p className="note">
+                <strong>{t.importHowTitle}</strong> {t.importHow}
+              </p>
+              <p className="note">
+                <strong>{t.importLimitsTitle}</strong> {t.importLimits}
+              </p>
             </div>
           </form>
         )}

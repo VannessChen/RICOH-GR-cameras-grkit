@@ -64,8 +64,18 @@ fn lut_inputs(bytes: &[u8], base_gamma: &[u16]) -> Result<[u16; 256]> {
 
 /// Fits a `.cube` file or a LUT image over `base_gamma`, the table of the site catalog.
 pub fn import_lut(bytes: &[u8], base_gamma: &[u16], request: &ImportRequest) -> Result<Imported> {
+    import_lut_with_progress(bytes, base_gamma, request, &|_| {})
+}
+
+/// `import_lut`, which reports the progress of the fit to `progress`.
+pub fn import_lut_with_progress(
+    bytes: &[u8],
+    base_gamma: &[u16],
+    request: &ImportRequest,
+    progress: fit::Progress,
+) -> Result<Imported> {
     let base_gamma = lut_inputs(bytes, base_gamma)?;
-    let imported = fit::import(
+    let imported = fit::import_with_progress(
         bytes,
         &base_gamma,
         &fit::Import {
@@ -80,6 +90,7 @@ pub fn import_lut(bytes: &[u8], base_gamma: &[u16], request: &ImportRequest) -> 
             exposure: 0.0,
             options: fit::Options::default(),
         },
+        progress,
     )?;
     let blob = effects::compile_definition(&effects::parse_json(imported.text.as_bytes())?)?;
     let (effect, icon) = effects::decode(&blob)?;
@@ -348,12 +359,25 @@ impl ImportedEffect {
     }
 }
 
+#[wasm_bindgen]
+extern "C" {
+    /// A function that takes the progress of an import, a fraction from 0 to 1.
+    #[wasm_bindgen(typescript_type = "(fraction: number) => void")]
+    pub type ImportProgress;
+
+    #[wasm_bindgen(method, js_name = call)]
+    fn report(this: &ImportProgress, context: &JsValue, fraction: f64);
+}
+
 /// Fits a `.cube` file or a LUT image (PNG or TIFF) into an effect, as `grkit effects import`
 /// does. `baseGamma` is the `base_gamma` array of the site catalog. The fit takes seconds,
-/// so call it from a Worker.
+/// so call it from a Worker. `progress` receives the progress of the fit, a fraction from 0
+/// to 1 that does not decrease.
 /// `icon` is the JSON text of the effect.json `icon`, such as
 /// `{"template":"box","brand":"Kodak","name":"PORTRA","number":"400","band":true}`.
 #[wasm_bindgen(js_name = importLut)]
+// The arguments are the fields of the worker's import request, one JavaScript value each.
+#[allow(clippy::too_many_arguments)]
 pub fn import_lut_js(
     bytes: &[u8],
     source: &str,
@@ -362,6 +386,7 @@ pub fn import_lut_js(
     effect_id: &str,
     name: &str,
     icon: &str,
+    progress: &ImportProgress,
 ) -> Result<ImportedEffect, JsError> {
     let icon: Value =
         serde_json::from_str(icon).map_err(|error| JsError::new(&error.to_string()))?;
@@ -372,9 +397,11 @@ pub fn import_lut_js(
         source,
         input,
     };
-    import_lut(bytes, base_gamma, &request)
-        .map(ImportedEffect)
-        .map_err(js_error)
+    import_lut_with_progress(bytes, base_gamma, &request, &|fraction| {
+        progress.report(&JsValue::NULL, fraction)
+    })
+    .map(ImportedEffect)
+    .map_err(js_error)
 }
 
 /// The input that a `.cube` file or LUT image most likely expects (`standard`, `vlog`,

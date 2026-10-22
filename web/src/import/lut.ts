@@ -17,10 +17,12 @@ type WorkerRequest = ImportRequest | GuessRequest;
 /** The response to a request of kind `K`. */
 type Reply<K extends WorkerRequest['kind']> = Extract<ImportResponse, { kind: K }>;
 
-/** Runs one request in a new worker, which it terminates after. */
+/** Runs one request in a new worker, which it terminates after. `onProgress` gets the progress
+ * messages of an import. */
 function run<K extends WorkerRequest['kind']>(
   request: WorkerRequest & { kind: K },
   signal: AbortSignal,
+  onProgress?: (fraction: number) => void,
 ): Promise<Reply<K>> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./lut.worker.ts', import.meta.url), { type: 'module' });
@@ -38,7 +40,10 @@ function run<K extends WorkerRequest['kind']>(
       IMPORT_TIMEOUT,
     );
     signal.addEventListener('abort', abort, { once: true });
-    worker.onmessage = ({ data }: MessageEvent<ImportResponse>) => finish(data);
+    worker.onmessage = ({ data }: MessageEvent<ImportResponse>) => {
+      if (data.kind === 'progress') onProgress?.(data.fraction);
+      else finish(data);
+    };
     worker.onerror = () => finish(undefined, new Error('The import failed'));
     worker.onmessageerror = () => finish(undefined, new Error('Invalid import response'));
     worker.postMessage(request, [request.bytes]);
@@ -86,7 +91,7 @@ export async function coverProblem(cover: CoverFields): Promise<string | null> {
 /**
  * Fits a `.cube` file or a LUT image over the catalog's base gamma, in a worker, and returns it
  * as an effect of the page with the film cover `cover` as its icon. `taken` holds the IDs of the
- * catalog and of earlier imports.
+ * catalog and of earlier imports. `onProgress` gets the progress of the fit, from 0 to 1.
  */
 export async function importLut(
   file: File,
@@ -96,6 +101,7 @@ export async function importLut(
   baseGamma: Uint16Array,
   taken: ReadonlySet<string>,
   signal: AbortSignal,
+  onProgress?: (fraction: number) => void,
 ): Promise<ImportedEffect> {
   const bytes = await readLut(file, signal);
   const id = effectId(name, taken);
@@ -111,6 +117,7 @@ export async function importLut(
       icon: JSON.stringify(coverIcon(cover)),
     },
     signal,
+    onProgress,
   );
   // The preview finds the table under this key instead of fetching a catalog path.
   const table = `imported/${id}/${++tableCount}`;

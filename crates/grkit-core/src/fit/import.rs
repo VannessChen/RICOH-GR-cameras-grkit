@@ -400,8 +400,22 @@ pub fn guess_input(base_gamma: &[u16; 256], cube: &Cube) -> Encoding {
     choose(&guess_distances(&Model::new(base_gamma), cube))
 }
 
+/// The progress of `import` when its fit starts and when it ends, in proportion to the time of a
+/// color LUT: before the fit, it reads the LUT and guesses its input; after it, it checks flaws.
+const IMPORT_FIT: (f64, f64) = (0.01, 0.99);
+
 /// Fits a `.cube` file or HALD PNG over `base_gamma` and returns the fit and its effect.json.
 pub fn import(bytes: &[u8], base_gamma: &[u16; 256], request: &Import) -> Result<Imported> {
+    import_with_progress(bytes, base_gamma, request, &|_| {})
+}
+
+/// `import`, which reports its progress to `progress`.
+pub fn import_with_progress(
+    bytes: &[u8],
+    base_gamma: &[u16; 256],
+    request: &Import,
+    progress: Progress,
+) -> Result<Imported> {
     ensure!(
         request.exposure.is_finite() && request.exposure.abs() <= MAX_EXPOSURE,
         "Expected an exposure from -{MAX_EXPOSURE} to {MAX_EXPOSURE} EV"
@@ -416,7 +430,13 @@ pub fn import(bytes: &[u8], base_gamma: &[u16; 256], request: &Import) -> Result
     let guess = choose(&distances);
     let input = request.input.unwrap_or(guess);
     let target = cube_target(&model, &cube, input, request.exposure);
-    let fit = fit(base_gamma, &target, &request.options)?;
+    progress(IMPORT_FIT.0);
+    let fit = fit_with_progress(
+        base_gamma,
+        &target,
+        &request.options,
+        &span(progress, IMPORT_FIT.0, IMPORT_FIT.1),
+    )?;
     let text = definition_text(&fit, request, input, packaging::sha256(bytes))?;
     let mut warnings = Vec::new();
     let limit = (MATRIX_LIMIT * 8192.0) as i32 - 64;
@@ -509,6 +529,7 @@ pub fn import(bytes: &[u8], base_gamma: &[u16; 256], request: &Import) -> Result
                 .to_owned(),
         );
     }
+    progress(1.0);
     Ok(Imported {
         fit,
         text,

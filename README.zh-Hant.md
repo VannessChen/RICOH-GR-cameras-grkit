@@ -41,7 +41,7 @@ GRKit 在 ADJ 模式中加入第 6 個功能 GRK，包含五個模組：
 | RICOH GR IV | 1.20 | 實驗性 |
 | RICOH GR IV HDF | 1.11 | 已支援 |
 | RICOH GR IV HDF | 1.20 | 實驗性 |
-| RICOH GR IV Monochrome | 1.00 | 實驗性，不含影像控制 |
+| RICOH GR IV Monochrome | 1.00 | 已支援，不含影像控制 |
 
 「已支援」表示該機型與經過實機測試的機型使用同一個執行環境，但本身未經實機測試。「實驗性」表示該韌體版本未經實機測試。
 

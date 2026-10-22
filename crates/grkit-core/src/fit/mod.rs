@@ -522,8 +522,32 @@ pub fn constrain(post: &[f64; 9]) -> Result<[i16; 9]> {
     toward(low)
 }
 
+/// Receives the progress of a fit or an import: a fraction from 0 to 1 that does not decrease.
+pub type Progress<'a> = &'a dyn Fn(f64);
+
+/// The part `from..to` of `progress`, for a stage that reports its own fraction.
+fn span<'a>(progress: Progress<'a>, from: f64, to: f64) -> impl Fn(f64) + 'a {
+    move |fraction| progress(from + (to - from) * fraction.clamp(0.0, 1.0))
+}
+
+/// The progress at the end of each stage of `fit`, in proportion to the time of a color LUT:
+/// the samples, the matrix and curve rounds, the post matrix rounds, the validation colors, the
+/// hue sectors, the joint refinement, and the errors.
+const STAGE_ENDS: [f64; 6] = [0.01, 0.02, 0.05, 0.06, 0.75, 0.99];
+
 /// Fits `target`, a map from scene-linear RGB to sRGB-encoded display RGB.
 pub fn fit(base_gamma: &[u16; 256], target: &dyn Fn(Rgb) -> Rgb, options: &Options) -> Result<Fit> {
+    fit_with_progress(base_gamma, target, options, &|_| {})
+}
+
+/// `fit`, which reports its progress to `progress`.
+pub fn fit_with_progress(
+    base_gamma: &[u16; 256],
+    target: &dyn Fn(Rgb) -> Rgb,
+    options: &Options,
+    progress: Progress,
+) -> Result<Fit> {
+    let [setup, rounds, posts, validated, sectored, joined] = STAGE_ENDS;
     let (linear, weights) = samples(options.random_samples);
     let targets: Vec<Rgb> = linear
         .iter()
@@ -568,6 +592,7 @@ pub fn fit(base_gamma: &[u16; 256], target: &dyn Fn(Rgb) -> Rgb, options: &Optio
         shape,
         ramps: sectors::Ramps::new(target, &LabConverter::default()),
     };
+    progress(setup);
     let shared_rows = shape != Shape::Color;
     let mut offsets = if shared_rows {
         vec![LUMA[1], LUMA[2]]
@@ -575,9 +600,11 @@ pub fn fit(base_gamma: &[u16; 256], target: &dyn Fn(Rgb) -> Rgb, options: &Optio
         vec![0.0; 6]
     };
     let mut post = IDENTITY;
-    for _ in 0..options.rounds {
+    let round_progress = span(progress, setup, rounds);
+    for round in 0..options.rounds {
         let curves = problem.curves(&matrix_from(&offsets), &post, None);
         offsets = problem.matrix(&offsets, &curves, &post);
+        round_progress((round + 1) as f64 / options.rounds as f64);
     }
     let mut curves = problem.curves(&matrix_from(&offsets), &post, None);
     if options.post && !shared_rows {
@@ -596,12 +623,14 @@ pub fn fit(base_gamma: &[u16; 256], target: &dyn Fn(Rgb) -> Rgb, options: &Optio
         };
         post = problem.post(&matrix_from(&offsets), &curves, &post, None);
         keep(&offsets, &curves, &post);
-        for _ in 0..options.joint_rounds {
+        let post_progress = span(progress, rounds, posts);
+        for round in 0..options.joint_rounds {
             curves = problem.curves(&matrix_from(&offsets), &post, None);
             offsets = problem.matrix(&offsets, &curves, &post);
             curves = problem.curves(&matrix_from(&offsets), &post, None);
             post = problem.post(&matrix_from(&offsets), &curves, &post, None);
             keep(&offsets, &curves, &post);
+            post_progress((round + 1) as f64 / options.joint_rounds as f64);
         }
         Candidate {
             offsets,
@@ -637,10 +666,12 @@ pub fn fit(base_gamma: &[u16; 256], target: &dyn Fn(Rgb) -> Rgb, options: &Optio
             .sum::<f64>()
             / validation.len() as f64
     };
+    progress(validated);
     // The hue sectors of the camera's MultiAxial stage, kept only if they improve the
     // validation colors by SECTOR_GAIN.
     if options.sectors && shape == Shape::Color {
-        if let Some(found) = problem.hue_sectors(&current, options) {
+        let sector_progress = span(progress, validated, sectored);
+        if let Some(found) = problem.hue_sectors(&current, options, &sector_progress) {
             let before = validation_error(&current.quantized());
             let after = validation_error(&found.quantized());
             if after < before - SECTOR_GAIN.max(SECTOR_GAIN * before) {
@@ -652,11 +683,12 @@ pub fn fit(base_gamma: &[u16; 256], target: &dyn Fn(Rgb) -> Rgb, options: &Optio
     // `score` finds a better result for most looks; keep it only if it improves the
     // validation colors.
     if options.joint_passes > 0 && options.post && shape == Shape::Color {
-        let joint = problem.joint(&current, options);
+        let joint = problem.joint(&current, options, &span(progress, sectored, joined));
         if validation_error(&joint.quantized()) < validation_error(&current.quantized()) {
             current = joint;
         }
     }
+    progress(joined);
     let Candidate {
         offsets,
         curves,
@@ -708,5 +740,6 @@ pub fn fit(base_gamma: &[u16; 256], target: &dyn Fn(Rgb) -> Rgb, options: &Optio
     errors.sort_by(f64::total_cmp);
     fit.holdout_mean_de = errors.iter().sum::<f64>() / errors.len() as f64;
     fit.holdout_p95_de = errors[errors.len() * 95 / 100];
+    progress(1.0);
     Ok(fit)
 }

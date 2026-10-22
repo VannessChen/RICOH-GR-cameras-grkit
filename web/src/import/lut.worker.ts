@@ -33,6 +33,8 @@ export interface GuessRequest {
 
 export type ImportResponse =
   | { kind: 'import'; result: ImportResult }
+  /** The progress of an import, a fraction from 0 to 1, before its result. */
+  | { kind: 'progress'; fraction: number }
   | { kind: 'guess'; input: Input }
   | { kind: 'error'; message: string };
 
@@ -56,6 +58,8 @@ self.onmessage = async ({ data }: MessageEvent<ImportRequest | GuessRequest>) =>
       self.postMessage({ kind: 'guess', input } satisfies ImportResponse);
       return;
     }
+    // One message for each percent: the fit reports about 180 steps.
+    let percent = 0;
     const effect = importLut(
       new Uint8Array(data.bytes),
       data.source,
@@ -64,6 +68,12 @@ self.onmessage = async ({ data }: MessageEvent<ImportRequest | GuessRequest>) =>
       data.id,
       data.name,
       data.icon,
+      (fraction) => {
+        const next = Math.floor(fraction * 100);
+        if (next <= percent) return;
+        percent = next;
+        self.postMessage({ kind: 'progress', fraction } satisfies ImportResponse);
+      },
     );
     let result: ImportResult;
     try {

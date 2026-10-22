@@ -41,7 +41,7 @@ GRKit 在 ADJ 模式中增加第 6 个功能 GRK，包含五个模块：
 | RICOH GR IV | 1.20 | 实验性 |
 | RICOH GR IV HDF | 1.11 | 已支持 |
 | RICOH GR IV HDF | 1.20 | 实验性 |
-| RICOH GR IV Monochrome | 1.00 | 实验性，不含影像控制 |
+| RICOH GR IV Monochrome | 1.00 | 已支持，不含影像控制 |
 
 “已支持”表示该机型与经过真机测试的机型使用同一个运行时，但本身未经真机测试。“实验性”表示该固件版本未经真机测试。
 

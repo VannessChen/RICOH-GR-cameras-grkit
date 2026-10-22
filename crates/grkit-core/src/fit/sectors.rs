@@ -30,6 +30,8 @@ const EXACT_WEIGHT: f64 = 1000.0;
 /// Samples and iterations of each joint refinement pass.
 const JOINT_SAMPLES: usize = 3000;
 const JOINT_ITERATIONS: usize = 15;
+/// Iterations of the sector solve in each round of `hue_sectors`.
+const SECTOR_ITERATIONS: usize = 25;
 
 /// The chroma of the seam colors, as Cb/Cr distance over Y in the stage's YCbCr. Ratios of 2
 /// to 3 reach the edge of the gamut, where saturated blues and purples showed steps of up to
@@ -355,7 +357,12 @@ impl Problem {
     /// curves with the post matrix, all on Lab residuals of the colored samples with equal
     /// weights, and keeps the best result by `score`. None if no round beats `start`, a fit
     /// without sectors.
-    pub(super) fn hue_sectors(&self, start: &Candidate, options: &Options) -> Option<Candidate> {
+    pub(super) fn hue_sectors(
+        &self,
+        start: &Candidate,
+        options: &Options,
+        progress: Progress,
+    ) -> Option<Candidate> {
         // The sectors keep gray, so the gray ramp does not inform them.
         let colored: Vec<usize> = (0..self.linear.len())
             .filter(|&i| {
@@ -395,7 +402,10 @@ impl Problem {
             vec![SECTOR_WEIGHT_START; 4],
         );
         let mut best: Option<(f64, Candidate)> = None;
-        for _ in 0..options.sector_rounds {
+        let rounds = options.sector_rounds as f64;
+        for round in 0..options.sector_rounds {
+            // The sector solve takes most of a round: each of its iterations reports a step.
+            let iterations = std::cell::Cell::new(0usize);
             // The stage applies one sector's matrix to a color, blended from at most two
             // levels, so a coefficient of sector k and level l moves only the samples in k
             // with a share of l, the seams beside k at those levels, and its own limit. The
@@ -408,7 +418,7 @@ impl Problem {
             let ramp_rows = limit_rows + sectors.len();
             sectors = minimize_with(
                 &sectors,
-                25,
+                SECTOR_ITERATIONS,
                 &|x, out| {
                     out.clear();
                     residuals(&params(&offsets, &curves, &post, stage_of(x, &weight)), out);
@@ -419,6 +429,9 @@ impl Problem {
                     with_ramps(&params(&offsets, &curves, &post, stage_of(x, &weight)), out);
                 },
                 &|x, r, columns| {
+                    iterations.set(iterations.get() + 1);
+                    let solved = iterations.get() as f64 / SECTOR_ITERATIONS as f64;
+                    progress((round as f64 + 0.8 * solved) / rounds);
                     let lightness = ramps.lightness(
                         self,
                         &params(&offsets, &curves, &post, stage_of(x, &weight)),
@@ -502,6 +515,7 @@ impl Problem {
                     },
                 ));
             }
+            progress((round + 1) as f64 / rounds);
         }
         let (score, found) = best?;
         if score >= start_score {
@@ -513,7 +527,12 @@ impl Problem {
     /// Refines the matrix offsets, the post matrix, and the sector coefficients and weights
     /// together on one CIEDE2000 residual per sample, the measure of `score`, and solves the
     /// curves again after each pass. Keeps the best pass by `score`.
-    pub(super) fn joint(&self, start: &Candidate, options: &Options) -> Candidate {
+    pub(super) fn joint(
+        &self,
+        start: &Candidate,
+        options: &Options,
+        progress: Progress,
+    ) -> Candidate {
         let no = start.offsets.len();
         let ns = start.sectors.as_ref().map_or(0, |s| s.coefficients.len());
         let stride = self.linear.len().div_ceil(JOINT_SAMPLES).max(1);
@@ -550,8 +569,10 @@ impl Problem {
         let nr = ramps.rows();
         let mut curves = start.curves;
         let mut best = (score(&x, &curves), x.clone(), curves);
-        for _ in 0..options.joint_passes {
+        let passes = options.joint_passes as f64;
+        for index in 0..options.joint_passes {
             let fixed = curves;
+            let iterations = std::cell::Cell::new(0usize);
             // The bounds of `matrix`, `post`, and `hue_sectors`, for one residual per sample.
             let penalties = |x: &[f64], out: &mut Vec<f64>| {
                 out.extend(
@@ -592,6 +613,9 @@ impl Problem {
                 penalties(x, out);
             };
             x = minimize_with(&x, JOINT_ITERATIONS, &residuals, &|x, r, columns| {
+                iterations.set(iterations.get() + 1);
+                let solved = iterations.get() as f64 / JOINT_ITERATIONS as f64;
+                progress((index as f64 + solved) / passes);
                 let n = subset.len();
                 // A sector coefficient moves only the samples in its sector, as in
                 // `hue_sectors`; the matrix decides the sector of each sample.
@@ -648,6 +672,7 @@ impl Problem {
             if pass.0 < best.0 {
                 best = (pass.0, x.clone(), curves);
             }
+            progress((index + 1) as f64 / passes);
         }
         let (_, x, curves) = best;
         Candidate {

@@ -41,7 +41,7 @@ You select the modules when you make a package. The menu shows only those module
 | RICOH GR IV | 1.20 | Experimental |
 | RICOH GR IV HDF | 1.11 | Supported |
 | RICOH GR IV HDF | 1.20 | Experimental |
-| RICOH GR IV Monochrome | 1.00 | Experimental, without Image Control |
+| RICOH GR IV Monochrome | 1.00 | Supported, without Image Control |
 
 A supported camera runs the same runtime as a tested camera, but is not tested itself. An experimental firmware version has not been tested on a camera.
 
