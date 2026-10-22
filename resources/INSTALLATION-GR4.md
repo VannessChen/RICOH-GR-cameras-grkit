@@ -2,8 +2,8 @@
 
 For RICOH GR IV and GR IV HDF firmware 1.11 only.
 Each firmware version needs its own package. Use a package for the version that your camera shows.
-The update to firmware 1.20 cannot be undone. After the update, use a package for 1.20.
-GR IV Monochrome runs firmware 1.11 and shows it as version 1.00. Its package has no Image Control. GR IV Monochrome uses the tested GR IV runtime, but has not been tested on a camera itself.
+The update to firmware 1.20 (1.10 on GR IV Monochrome) cannot be undone. After the update, use a package for 1.20.
+GR IV Monochrome runs the GR IV firmware and shows its own version: 1.00 for firmware 1.11, and 1.10 for firmware 1.20. Its package has no Image Control. GR IV Monochrome uses the GR IV runtimes, but has not been tested on a camera itself.
 
 ## Install
 

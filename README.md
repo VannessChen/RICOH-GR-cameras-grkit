@@ -42,10 +42,11 @@ You select the modules when you make a package. The menu shows only those module
 | RICOH GR IV HDF | 1.11 | Supported |
 | RICOH GR IV HDF | 1.20 | Experimental |
 | RICOH GR IV Monochrome | 1.00 | Supported, without Image Control |
+| RICOH GR IV Monochrome | 1.10 | Experimental, without Image Control |
 
 A supported camera runs the same runtime as a tested camera, but is not tested itself. An experimental firmware version has not been tested on a camera.
 
-GR III 2.20 and GR IIIx 1.70 use the same package as 2.10 and 1.60. GR IV 1.20 needs its own package. Each HDF model runs the firmware of its base camera and uses the same package. GR IV Monochrome runs the firmware of GR IV 1.11 and shows it as version 1.00. On the GR IV models, Framing offers only XPan. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
+GR III 2.20 and GR IIIx 1.70 use the same package as 2.10 and 1.60. GR IV 1.20 needs its own package. Each HDF model runs the firmware of its base camera and uses the same package. GR IV Monochrome runs the firmware of GR IV and shows its own version: 1.00 is GR IV 1.11, and 1.10 is GR IV 1.20. On the GR IV models, Framing offers only XPan. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
 
 A camera can run another build of a supported firmware version. If GRKit does not load on a supported camera, the [firmware dump guide](resources/DUMP.md) tells you how to send its firmware image.
 

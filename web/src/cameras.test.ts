@@ -43,6 +43,7 @@ describe('cameras', () => {
     expect(selectedBuild(camera('gr3'), undefined)?.target).toBe('gr3-2.10');
     expect(selectedBuild(camera('gr4'), undefined)).toBeUndefined();
     expect(selectedBuild(camera('gr4'), 'gr4-1.20')?.target).toBe('gr4-1.20');
-    expect(selectedBuild(camera('gr4m'), undefined)?.target).toBe('gr4-1.11');
+    expect(selectedBuild(camera('gr4m'), undefined)).toBeUndefined();
+    expect(selectedBuild(camera('gr4m'), 'gr4-1.20')?.target).toBe('gr4-1.20');
   });
 });

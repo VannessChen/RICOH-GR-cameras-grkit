@@ -92,17 +92,20 @@ export const CAMERAS: readonly Camera[] = [
     name: 'GR IV / GR IV HDF',
     support: { ...releases('gr4'), modules: CAMERA_PLUGINS.gr4, xpanOnly: true },
   },
-  // GR IV Monochrome runs the GR IV 1.11 firmware, which it shows as version 1.00, and uses the
-  // GR IV package and ModeSet file. The effects are made for color sensors, so its packages have
-  // no Image Control.
+  // GR IV Monochrome runs the GR IV firmware with its own version: it shows 1.11 as 1.00 and 1.20
+  // as 1.10. It uses the GR IV packages and ModeSet file. The effects are made for color sensors,
+  // so its packages have no Image Control.
   {
     key: 'gr4m',
     id: 'gr4',
     name: 'GR IV Monochrome',
     support: {
       ...releases('gr4'),
-      firmware: '1.00',
-      builds: [{ firmware: '1.00', target: 'gr4-1.11' }],
+      firmware: '1.00 / 1.10',
+      builds: [
+        { firmware: '1.00', target: 'gr4-1.11' },
+        { firmware: '1.10', target: 'gr4-1.20' },
+      ],
       modules: CAMERA_PLUGINS.gr4.filter((key) => key !== 'imageControl'),
       excluded: ['imageControl'],
       xpanOnly: true,
