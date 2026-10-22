@@ -1327,3 +1327,65 @@ fn port_of_gr4_111_to_120_agrees_with_the_gr4_120_target() -> Result<()> {
     assert_eq!(port.layout.heap_min, target::GR4_120.heap_min);
     Ok(())
 }
+
+/// The value that an ARM MOV (immediate) or MOVW loads, and its register.
+fn move_value(word: u32) -> Option<(u32, u32)> {
+    let register = (word >> 12) & 0xf;
+    if word & 0x0ff0_0000 == 0x0300_0000 {
+        return Some((register, relocation::move_immediate(word)));
+    }
+    (word & 0x0fe0_0000 == 0x03a0_0000).then(|| {
+        let rotate = ((word >> 8) & 0xf) * 2;
+        (register, (word & 0xff).rotate_right(rotate))
+    })
+}
+
+/// The Fn hint IDs of a build header are those that the native ADJ refresh of
+/// its firmware gives to FW_GUIDE_SET_CONTENT: the label in r1, the icon in r3.
+#[test]
+#[ignore = "Requires local GRKIT_TEST_FIRMWARE, GRKIT_TEST_FIRMWARE_GR4, and GRKIT_TEST_FIRMWARE_GR4_120"]
+fn fn_hint_ids_are_those_of_the_native_adj_refresh() -> Result<()> {
+    for (variable, target) in [
+        ("GRKIT_TEST_FIRMWARE", &target::GR3_210),
+        ("GRKIT_TEST_FIRMWARE_GR4", &target::GR4_111),
+        ("GRKIT_TEST_FIRMWARE_GR4_120", &target::GR4_120),
+    ] {
+        let path = std::env::var(variable).with_context(|| format!("Set {variable}"))?;
+        let image = verify_firmware(Path::new(&path), target)?;
+        let definitions = header_definitions(&target.header(), false);
+        let number = |name: &str| -> Result<u32> {
+            let value = definitions[name]
+                .trim_start_matches("FIRMWARE(")
+                .trim_end_matches(')');
+            Ok(u32::from_str_radix(value.trim_start_matches("0x"), 16)?)
+        };
+        let (setter, text, icon) = (
+            number("FW_GUIDE_SET_CONTENT")?,
+            number("FN_GUIDE_TEXT")?,
+            number("FN_GUIDE_ICON")?,
+        );
+        let code = &image.body[..(target.data_source - target::RTOS_BASE) as usize];
+        let words: Vec<u32> = code
+            .chunks_exact(4)
+            .map(|word| u32::from_le_bytes(word.try_into().unwrap()))
+            .collect();
+        let calls = (0..words.len()).filter(|&index| {
+            let address = target::RTOS_BASE + index as u32 * 4;
+            relocation::branch_target(address, words[index]) == Some(setter)
+                && (words[index] >> 24) & 0xf == 0xb
+        });
+        let matching = calls
+            .filter(|&index| {
+                let before = &words[index.saturating_sub(9)..index];
+                let loads: Vec<_> = before.iter().filter_map(|&word| move_value(word)).collect();
+                loads.contains(&(1, text)) && loads.contains(&(3, icon))
+            })
+            .count();
+        assert!(
+            matching > 0,
+            "{}: no native Fn hint with {text:#x} and {icon:#x}",
+            target.name
+        );
+    }
+    Ok(())
+}

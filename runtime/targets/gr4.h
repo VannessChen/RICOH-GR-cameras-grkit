@@ -94,10 +94,10 @@
 #define ADJ_ICONS 0x184
 #define ADJ_FN_GUIDE 0x1ac
 /* The Image Control slot method of the ADJ refresh fills the Fn hint with the
-   Fn label, layout 10, and the settings icon, and moves it to x 300
-   (FW_GUIDE_SET_CONTENT). A new ADJ starts with an empty hint. */
-#define FN_GUIDE_TEXT 0x1de
-#define FN_GUIDE_ICON 0x240
+   Fn label (FN_GUIDE_TEXT), layout 10, and the settings icon (FN_GUIDE_ICON),
+   and moves it to x 300 (FW_GUIDE_SET_CONTENT). A new ADJ starts with an
+   empty hint. Text and icon IDs differ between builds, so the build header
+   gives them. */
 #define FN_GUIDE_X 300
 #define ADJ_LIST 0x1f8
 #define ADJ_SLOT 0x1fc

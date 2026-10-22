@@ -88,6 +88,10 @@
    1 simple, 2 no information, 3 display off. */
 #define DISPLAY_MODE_BYTE (FIRMWARE(0x550832a8) + 0x1461)
 #define FW_GUIDE_SET_CONTENT FIRMWARE(0x5359af38)
+/* The Fn label and the settings icon of the Fn hint, as the native ADJ
+   refresh gives them to FW_GUIDE_SET_CONTENT. 1.20 moves both IDs. */
+#define FN_GUIDE_TEXT 0x1fd
+#define FN_GUIDE_ICON 0x26a
 /* 1 in movie mode. GR IV computes the mode from the camera settings. */
 #define ADJ_MOVIE(controller) (((u32 (*)(u32))FIRMWARE(0x531be238))(controller))
 /* The native ADJ handler acts on EV_FN_ACTION at 0x531be8c0. */
