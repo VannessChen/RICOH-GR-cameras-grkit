@@ -186,6 +186,41 @@ button {
   font-family: 'Noto Sans JP', sans-serif;
 }
 
+/* A phone has no room for four buttons in a row, so it shows one menu instead. */
+.language-select {
+  display: none;
+  position: relative;
+}
+
+.languages .language-select .button {
+  appearance: none;
+  padding-right: 36px;
+  border: 1px solid var(--ink);
+}
+
+.language-select::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-75%) rotate(45deg);
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .languages > div {
+    display: none;
+  }
+
+  .language-select {
+    display: block;
+  }
+}
+
 .masthead {
   display: flex;
   flex-direction: column;

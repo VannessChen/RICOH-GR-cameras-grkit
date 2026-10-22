@@ -202,6 +202,20 @@ export function App() {
             </button>
           ))}
         </div>
+        <span className="language-select">
+          <select
+            className="button"
+            aria-label={t.language}
+            value={language}
+            onChange={(event) => chooseLanguage(event.target.value as Language)}
+          >
+            {LANGUAGES.map((item) => (
+              <option key={item.code} value={item.code} lang={item.code}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </span>
       </div>
 
       <header className="masthead">
