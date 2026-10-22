@@ -127,7 +127,7 @@ Photos record the effect and its adjustments in the maker note, so playback show
 
 Framing draws a mask and a ratio badge into the viewfinder overlay. Guides draws its lines in the same path, inside the photo area of the selected ratio.
 
-On GR III, Framing captures through hidden capture aspects, while the native aspect setting stays 3:2. DNG files keep the full sensor data and describe the crop.
+Framing captures through hidden capture aspects, while the native aspect setting stays 3:2. DNG files keep the full sensor data and describe the crop.
 GR IV has a live-view mode for each native aspect, so Framing offers only Off and XPan there.
 
 ## Recorded pictures

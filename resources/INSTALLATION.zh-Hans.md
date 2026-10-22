@@ -25,7 +25,7 @@
 照片：nagi usano 拍摄的 [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)，[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)。
 
 - **影像控制（Image Control）：** 高亮一个效果，即可在实时显示中预览。按 OK 按钮保留这个效果。按 Fn 按钮调整这个效果的 [标准] 参数。在 GRK 菜单的影像控制一行按 Fn 按钮，可以调整当前选择的效果。每个效果单独保存自己的调整，不会改变相机的影像控制设置。
-- **画幅（Framing）：** 选择 XPan、16:9 或 4:3。显示屏上照片以外的区域会变暗。只有当相机的 [长宽比] 为 3:2 时，画幅才会生效。
+- **画幅（Framing）：** 选择 XPan、16:9 或 4:3。显示屏上照片以外的区域会变暗。只有当相机的 [长宽比] 为 3:2 时，画幅才会生效。DNG 文件保留完整的传感器图像，并记录裁切范围。应用这个裁切范围的 RAW 软件只显示照片区域。
 - **辅助线（Guides）：** 选择一种辅助线样式。辅助线只显示在显示屏上，不会出现在照片中。
 - **加印日期摄影（Date Imprint）：** 按 OK 按钮打开设置。在 **日期样式（Date Style）** 中选择一种日期样式。在 **日期字体（Date Look）** 中选择数字的字体：经典、GR1s 或 GR II。照片右下角会加印日期。
 - **颗粒感（Grain）：** 选择弱、中或强。颗粒感只加在照片上，不影响影片。
@@ -33,6 +33,26 @@
 高亮最后一行 GRK，即可看到 GRKit 的版本号。
 
 按 MENU 按钮返回上一级。关机后 GRKit 会保留你的设定。
+
+## 故障排除
+
+### 按住 MENU 按钮开机时，相机开始更新固件
+
+存储卡根目录中有固件更新文件。关闭相机。从存储卡根目录删除所有 `.bin` 文件。然后重新执行第 3 步。
+
+### 相机没有显示 Mode Set Command
+
+- 先按住 MENU 按钮，再开机。如果开机后才按 MENU 按钮，SD 脚本功能不会打开。
+- 把 `SD_ROOT` 中的内容复制到存储卡根目录，不要复制到 `DCIM` 或其他文件夹中。
+
+### ADJ 模式中没有 GRK
+
+1. 开机后等待几秒。GRKit 在相机启动后才加载。
+2. 在 ADJ 模式中找 GRK。GRK 不在 MENU 菜单中。
+3. 如果第 3 步中相机没有显示 Mode Set Command，重新执行第 3 步。
+4. 确认存储卡根目录中有 `SCRIPT` 文件夹。复制 `SD_ROOT` 中的全部内容，包括 `SCRIPT`。
+5. 如果存储卡中有 `SCRIPT/PLUGINS/INSTALL.ERR`，表示 GRKit 没有安装成功。确认包与相机的固件版本对应。在相机菜单中可以查看固件版本。如果版本正确，请提交[设备报告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，并附上 `INSTALL.ERR` 中的全部内容。
+6. GRKit 只能在 Ricoh 官方固件上运行，不能在修改过的固件上运行。
 
 ## 移除或恢复
 

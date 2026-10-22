@@ -2,6 +2,7 @@
 
 For RICOH GR IV and GR IV HDF firmware 1.11 only.
 Each firmware version needs its own package. Use a package for the version that your camera shows.
+The update to firmware 1.20 cannot be undone. After the update, use a package for 1.20.
 GR IV Monochrome runs firmware 1.11 and shows it as version 1.00. Its package has no Image Control. Support for GR IV Monochrome is experimental and has not been tested on a camera.
 
 ## Install
@@ -23,7 +24,7 @@ After the installation, you can remove `00078560.636` and `DEVELOP.MOD` from the
 Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late.
 
 - **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. On the GRK menu, press Fn on the Image Control row to adjust the selected effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings. The effects were made for GR III, so their colors can differ on GR IV.
-- **Framing:** select XPan. The viewfinder stays 3:2 and dims the area outside the photo. XPan also works when the native aspect ratio is 16:9.
+- **Framing:** select XPan. The viewfinder stays 3:2 and dims the area outside the photo. XPan also works when the native aspect ratio is 16:9. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
 - **Guides:** select a guide style. The lines show only in the viewfinder.
 - **Date Imprint:** press OK to open its settings. In **Date Style**, select a date style. In **Date Look**, select the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.
@@ -31,6 +32,26 @@ Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-
 Highlight the last row, GRK, to see the GRKit version.
 
 Press MENU to go back one level. GRKit keeps your settings after power-off.
+
+## Troubleshooting
+
+### The camera starts a firmware update when you hold MENU
+
+The card root has a firmware update file. Turn the camera off. Remove each `.bin` file from the card root. Then do step 3 again.
+
+### The camera does not show Mode Set Command
+
+- Hold MENU, then turn the camera on. If you press MENU after the camera is on, the SD scripts stay off.
+- Copy the contents of `SD_ROOT` to the card root, not into `DCIM` or another folder.
+
+### GRK does not show in ADJ
+
+1. Wait a few seconds after power-on. GRKit loads after the camera starts.
+2. Look for GRK in ADJ. It is not in MENU.
+3. If the camera did not show Mode Set Command in step 3, do step 3 again.
+4. Make sure that the card root has the `SCRIPT` folder. Copy all the contents of `SD_ROOT`, including `SCRIPT`.
+5. If the card has `SCRIPT/PLUGINS/INSTALL.ERR`, GRKit did not install. Make sure that the package is for the firmware version of your camera. To see the firmware version, open the camera menu. If the version is correct, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR`.
+6. GRKit runs only on the official Ricoh firmware. It does not run on modified firmware.
 
 ## Remove or recover
 
