@@ -112,6 +112,13 @@ fn modeset_files(camera: &Camera, command: &[u8]) -> Files {
 /// `lcmd` requests are synchronous: each returns after the Linux command ends,
 /// or with NG when Linux is not ready. The loader checks the result file after
 /// each request and repeats it after a short pause.
+///
+/// The only fixed wait comes before `lcmd_resp on`. The RTOS builds its host
+/// command tables on a worker task after the script starts, and the
+/// `lcmd_resp` handler writes through a null pointer until they exist, which
+/// stops the camera at power-on. The script cannot ask for the tables. A wait
+/// of 1 s or more before `lcmd_resp on` avoids the fault, so the loader waits
+/// 2 s.
 pub fn loader() -> Vec<u8> {
     loader_for(ICON_STRIDE)
 }
@@ -120,7 +127,8 @@ pub fn loader() -> Vec<u8> {
 pub fn loader_for(icon_stride: usize) -> Vec<u8> {
     let path = |name: &str| format!("C:\\SCRIPT\\PLUGINS\\{name}");
     let (plan, done, failed) = (path("MODULE.BIN"), path("INSTALL.OK"), path("INSTALL.ERR"));
-    let mut lines: Vec<String> = vec!["sendln 'lcmd_resp on'".into()];
+    // Wait for the host command tables of the RTOS before lcmd_resp.
+    let mut lines: Vec<String> = vec!["mpause 2000".into(), "sendln 'lcmd_resp on'".into()];
     for name in [
         "MODULE.BIN",
         "MODULE.TMP",
