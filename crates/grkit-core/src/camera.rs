@@ -157,6 +157,42 @@ impl Camera {
     }
 }
 
+/// `web/src/generated/cameras.ts`: the ModeSet file and the firmware releases
+/// of each camera, so the site needs no copy of them.
+pub fn site_module() -> String {
+    use std::fmt::Write;
+    let mut out = String::from(
+        "// Generated from crates/grkit-core/src/camera.rs. Do not edit: change the\n\
+         // cameras there, then run\n\
+         // GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated.\n\n\
+         /** The ModeSet file of each camera, and the firmware releases that a\n \
+         * runtime build supports, oldest first. `experimental`: not yet tested on\n \
+         * a camera with the release. */\n\
+         export const CAMERA_RELEASES = {\n",
+    );
+    for camera in CAMERAS {
+        writeln!(out, "  {}: {{", camera.id).unwrap();
+        writeln!(out, "    modeset: '{}',", camera.modeset).unwrap();
+        out.push_str("    releases: [\n");
+        for release in camera.releases {
+            writeln!(
+                out,
+                "      {{ firmware: '{}', target: '{}', experimental: {} }},",
+                release.firmware, release.target, release.experimental
+            )
+            .unwrap();
+        }
+        out.push_str("    ],\n  },\n");
+    }
+    out.push_str("} as const;\n");
+    out
+}
+
+/// The generated files, as paths from the repository root and contents.
+pub fn generated() -> Vec<(&'static str, String)> {
+    vec![("web/src/generated/cameras.ts", site_module())]
+}
+
 pub fn find(id: &str) -> Result<&'static Camera> {
     match CAMERAS.iter().find(|camera| camera.id == id) {
         Some(camera) => Ok(camera),
