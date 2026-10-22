@@ -5,7 +5,7 @@ Four workflows release GRKit:
 - `Release PR` keeps one pull request from the `release` branch open while change files are pending. knope sets the version and writes `CHANGELOG.md` from the change files.
 - `Release` starts when the release pull request is merged. It tags the merge commit, runs the tests, builds the site and the packages from the official firmware, and creates a draft GitHub release.
 - `Deploy` commits the site of one release to the `site` branch, which Cloudflare Pages deploys. When the site serves the new version, `Deploy` publishes the release. Start `Deploy` by hand to deploy a release again.
-- `Site` starts when a push to `main` changes `web/`. It rebuilds the web page with the runtimes and effects of the latest published release. If `web/` needs a packager change that is not released yet, the build fails and the site stays as it is.
+- `Site` starts when a push to `main` changes `web/`. It rebuilds the web page with the runtimes and effects of the latest published release. If `web/` needs a packager change that is not released yet, the build fails and the site stays as it is. If a camera entry of `web/` needs a runtime build that the latest release does not have, `Site` deploys nothing, and the release that has the build deploys the page.
 
 The `site` branch holds only deployed sites and shares no history with `main`. Do not push to it by hand. The repository holds no Cloudflare credentials, because Cloudflare reads the branch through its GitHub app.
 
