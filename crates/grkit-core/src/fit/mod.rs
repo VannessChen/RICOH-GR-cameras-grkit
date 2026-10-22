@@ -29,6 +29,11 @@ use model::LUMA;
 use sectors::{SectorCoefficients, SECTOR_GAIN, VALIDATION_COLORS};
 use solve::{fit_curve, minimize};
 
+/// The scene-linear level, as a multiple of diffuse white, beyond which the lightness bound of
+/// the fit and `flaws` do not look: the Standard base gamma reaches 98% of its top there, and
+/// the sensor clips about there.
+pub(super) const SENSOR_HEADROOM: f64 = 3.0;
+
 const GRAY_WEIGHT: f64 = 150.0;
 const CHART_WEIGHT: f64 = 20.0;
 const SKIN_WEIGHT: f64 = 60.0;
@@ -314,6 +319,8 @@ struct Problem {
     /// The root of the total sample weight, the scale of the damping terms.
     scale: f64,
     shape: Shape,
+    /// The exposure ramps of the lightness bound in the sector stages.
+    ramps: sectors::Ramps,
 }
 
 impl Problem {
@@ -559,6 +566,7 @@ pub fn fit(base_gamma: &[u16; 256], target: &dyn Fn(Rgb) -> Rgb, options: &Optio
         linear,
         targets,
         shape,
+        ramps: sectors::Ramps::new(target, &LabConverter::default()),
     };
     let shared_rows = shape != Shape::Color;
     let mut offsets = if shared_rows {

@@ -9,6 +9,7 @@ use super::*;
 /// The weight of the step between neighbouring sectors at their boundary: their matrices must
 /// agree on the colors there, so smooth hue gradients show no edge.
 const SEAM: f64 = 32.0;
+
 /// The largest sector coefficient magnitude, within the stored i8 in 1/128.
 const SECTOR_LIMIT: f64 = 0.98;
 /// The gain on the validation colors that hue sectors must bring, in CIEDE2000 and as a part.
@@ -30,13 +31,21 @@ const EXACT_WEIGHT: f64 = 1000.0;
 const JOINT_SAMPLES: usize = 3000;
 const JOINT_ITERATIONS: usize = 15;
 
-/// Colors on each sector boundary at two chroma levels, with the sectors on either side.
-/// With levels, the luminances cover each level's range of `hue::LEVEL_CURVE`.
+/// The chroma of the seam colors, as Cb/Cr distance over Y in the stage's YCbCr. Ratios of 2
+/// to 3 reach the edge of the gamut, where saturated blues and purples showed steps of up to
+/// 24 dE between neighbouring hues when the seams held only at 0.3 and 0.6.
+const SEAM_CHROMA: [f64; 5] = [0.3, 0.6, 1.2, 2.0, 3.0];
+
+/// Colors on each sector boundary at the `SEAM_CHROMA` levels that have no negative channel,
+/// with the sectors on either side. With levels, the luminances cover each level's range of
+/// `hue::LEVEL_CURVE`.
 fn seam_colors(levels: usize) -> Vec<(usize, usize, Rgb)> {
     let stage: Matrix = hue::STAGE.map(|r| r.map(|v| v / 256.0));
     let inverse = cube::inverse(&stage).expect("the stage matrix is invertible");
+    // Above 0.75 the colors are brighter than diffuse white; saturated blues and purples at
+    // +1 to +2 EV showed steps of up to 16 dE between neighbouring hues without them.
     let luminances: &[f64] = if levels > 1 {
-        &[0.03, 0.06, 0.1, 0.15, 0.22, 0.33, 0.5, 0.75]
+        &[0.03, 0.06, 0.1, 0.15, 0.22, 0.33, 0.5, 0.75, 1.0, 1.5, 2.0]
     } else {
         &[0.05, 0.18, 0.5]
     };
@@ -44,9 +53,11 @@ fn seam_colors(levels: usize) -> Vec<(usize, usize, Rgb)> {
     for k in 0..hue::SECTORS {
         let (cb, cr) = hue::direction(8192.0 * k as f64 / hue::SECTORS as f64);
         for &y in luminances {
-            for c in [0.3, 0.6] {
+            for c in SEAM_CHROMA {
                 let color = cube::mul(&inverse, [y, c * y * cb, c * y * cr]);
-                out.push(((k + hue::SECTORS - 1) % hue::SECTORS, k, color));
+                if color.iter().all(|v| *v >= 0.0) {
+                    out.push(((k + hue::SECTORS - 1) % hue::SECTORS, k, color));
+                }
             }
         }
     }
@@ -102,6 +113,185 @@ fn seam_groups(levels: usize, seams: &[(usize, usize, Rgb)]) -> Vec<Vec<usize>> 
                 .collect()
         })
         .collect()
+}
+
+/// The largest CIE L*a*b* chroma within sRGB at lightness `l` and hue angle `hue`, by
+/// bisection.
+pub(super) fn largest_chroma(l: f64, hue: f64) -> f64 {
+    let (cos, sin) = (hue.cos(), hue.sin());
+    let (mut low, mut high) = (0.0, 150.0);
+    for _ in 0..30 {
+        let middle = (low + high) / 2.0;
+        let rgb = cube::lab_d50_to_srgb([l, middle * cos, middle * sin]);
+        if rgb.iter().all(|v| (0.0..=1.0).contains(v)) {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    low
+}
+
+/// The ramps start from colors at these lightnesses, `RAMP_HUES` hues, and these shares of the
+/// largest chroma within sRGB at each lightness and hue, and from the primary and secondary
+/// colors at `RAMP_PRIMARY_LEVELS`.
+const RAMP_LIGHTNESS: [f64; 5] = [25.0, 40.0, 55.0, 70.0, 85.0];
+const RAMP_HUES: usize = 72;
+const RAMP_SHARES: [f64; 3] = [0.35, 0.7, 1.0];
+const RAMP_PRIMARY_LEVELS: [f64; 2] = [0.2, 0.5];
+/// Steps of a ramp from `RAMP_LOW` EV, `RAMP_STEP` stops apart: -2 to +4 EV.
+const RAMP_STEPS: usize = 13;
+const RAMP_LOW: f64 = -2.0;
+const RAMP_STEP: f64 = 0.5;
+/// The weight of a fall of 1 L* along a ramp, in the units of a sample's CIEDE2000 residual.
+const RAMP_WEIGHT: f64 = 4.0;
+/// The weight of a lag of 1 L* behind the target along a ramp, beyond `LAG_TOLERANCE`, within
+/// `SENSOR_HEADROOM`. A weight of 1 left the lag of the built-in looks at 11 L*, and 2 halved
+/// it to 9 at the same error on photos.
+const LAG_WEIGHT: f64 = 2.0;
+const LAG_TOLERANCE: f64 = 1.0;
+
+/// Exposure ramps for a bound on the lightness: as the exposure of a color grows, the effect's
+/// L* must not fall. The hue sectors act on the stage's luminance through the weight curve and
+/// the levels, so a sector can darken or saturate a color as it gets brighter. The samples
+/// hardly constrain this above diffuse white or for saturated colors: on 44 LUTs, 24 fits fell
+/// by more than 3 L* along an exposure ramp of a natural color, where their LUT gets brighter.
+/// With this bound 2 of 49 did. The ramps cover the edge of the gamut, where the falls were
+/// largest; random natural colors left gaps there that the fit used, and 36 hues left gaps
+/// that a fit fell by 15 L* in.
+///
+/// Within `SENSOR_HEADROOM`, the effect must also brighten each step about as much as the
+/// target does. Without this, a saturated color stayed a flat patch where the LUT fades it
+/// toward white: the built-in looks lagged their LUTs by up to 30 L*.
+pub(super) struct Ramps {
+    points: Vec<Rgb>,
+    /// The L* of the target at each point, and whether the point is within the sensor range.
+    target: Vec<(f64, bool)>,
+}
+
+impl Ramps {
+    pub(super) fn new(target: &dyn Fn(Rgb) -> Rgb, converter: &LabConverter) -> Self {
+        let mut points = Vec::new();
+        for k in 0..RAMP_HUES {
+            let hue = std::f64::consts::TAU * k as f64 / RAMP_HUES as f64;
+            let (cos, sin) = (hue.cos(), hue.sin());
+            for l in RAMP_LIGHTNESS {
+                let largest = largest_chroma(l, hue);
+                for share in RAMP_SHARES {
+                    let chroma = share * largest;
+                    let rgb = cube::lab_d50_to_srgb([l, chroma * cos, chroma * sin]);
+                    points.extend((0..RAMP_STEPS).map(|step| {
+                        let exposure = 2f64.powf(RAMP_LOW + RAMP_STEP * step as f64);
+                        rgb.map(|v| v * exposure)
+                    }));
+                }
+            }
+        }
+        for primary in [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 1.0],
+            [1.0, 0.0, 1.0],
+        ] {
+            for level in RAMP_PRIMARY_LEVELS {
+                points.extend((0..RAMP_STEPS).map(|step| {
+                    let exposure = level * 2f64.powf(RAMP_LOW + RAMP_STEP * step as f64);
+                    primary.map(|v: f64| v * exposure)
+                }));
+            }
+        }
+        let target = points
+            .iter()
+            .map(|p| {
+                (
+                    converter.lab(target(*p).map(|v| v.clamp(0.0, 1.0)))[0],
+                    p.iter().all(|v| *v <= super::SENSOR_HEADROOM),
+                )
+            })
+            .collect();
+        Self { points, target }
+    }
+
+    /// The residual rows: one for each pair of neighbouring steps.
+    pub(super) fn rows(&self) -> usize {
+        self.points.len() / RAMP_STEPS * (RAMP_STEPS - 1)
+    }
+
+    /// The L* of each point.
+    pub(super) fn lightness(&self, problem: &Problem, params: &Params) -> Vec<f64> {
+        self.points
+            .iter()
+            .map(|l| problem.converter.lab(problem.model.render(params, *l))[0])
+            .collect()
+    }
+
+    /// The fall of L* between the two steps of `row`.
+    fn pair(&self, l: &[f64], row: usize) -> f64 {
+        let i = row / (RAMP_STEPS - 1) * RAMP_STEPS + row % (RAMP_STEPS - 1);
+        let fall = RAMP_WEIGHT * (l[i] - l[i + 1]).max(0.0);
+        let (from, to) = (self.target[i], self.target[i + 1]);
+        if !to.1 {
+            return fall;
+        }
+        let lag = (to.0 - from.0) - (l[i + 1] - l[i]);
+        fall + LAG_WEIGHT * (lag - LAG_TOLERANCE).max(0.0)
+    }
+
+    pub(super) fn residuals(&self, l: &[f64], out: &mut Vec<f64>) {
+        out.extend((0..self.rows()).map(|row| self.pair(l, row)));
+    }
+
+    /// The pair rows that point `i` enters.
+    fn rows_of(i: usize) -> impl Iterator<Item = usize> {
+        let k = i % RAMP_STEPS;
+        let base = i / RAMP_STEPS * (RAMP_STEPS - 1);
+        (k > 0)
+            .then(|| base + k - 1)
+            .into_iter()
+            .chain((k + 1 < RAMP_STEPS).then_some(base + k))
+    }
+
+    /// The points of each Jacobian group (level * SECTORS + sector) under `matrix`.
+    fn groups(&self, levels: usize, matrix: &[f64; 9]) -> Vec<Vec<usize>> {
+        let m = rows(matrix);
+        sector_groups(
+            levels,
+            self.points
+                .iter()
+                .enumerate()
+                .map(|(i, l)| (i, cube::mul(&m, *l))),
+        )
+    }
+
+    /// The Jacobian entries of a sector coefficient that moves only `points`: recomputes their
+    /// L* under `moved`, from the L* `base` and the residuals `r` of the ramp rows. `column`
+    /// holds the ramp rows.
+    fn column(
+        &self,
+        problem: &Problem,
+        moved: &Params,
+        base: &[f64],
+        points: &[usize],
+        r: &[f64],
+        column: &mut [f64],
+    ) {
+        if points.is_empty() {
+            return;
+        }
+        let mut l = base.to_vec();
+        for &i in points {
+            l[i] = problem
+                .converter
+                .lab(problem.model.render(moved, self.points[i]))[0];
+        }
+        for &i in points {
+            for row in Self::rows_of(i) {
+                column[row] = (self.pair(&l, row) - r[row]) / STEP;
+            }
+        }
+    }
 }
 
 /// The step between two sectors' matrices on a seam color, relative to its brightness.
@@ -194,6 +384,10 @@ impl Problem {
             post: *post,
             sectors: Some(stage),
         };
+        let ramps = &self.ramps;
+        let with_ramps = |params: &Params, out: &mut Vec<f64>| {
+            ramps.residuals(&ramps.lightness(self, params), out);
+        };
         let start_score = self.score(&start.offsets, &start.curves, &start.post, None);
         let (mut offsets, mut curves, mut post) = (start.offsets.clone(), start.curves, start.post);
         let (mut sectors, mut weight) = (
@@ -208,8 +402,10 @@ impl Problem {
             // other entries of its Jacobian column are zero, and the forward differences skip
             // them.
             let members = self.sector_members(levels, &subset, &offsets);
+            let ramp_groups = ramps.groups(levels, &matrix_from(&offsets));
             let seam_rows = subset.len();
             let limit_rows = seam_rows + 3 * seams.len();
+            let ramp_rows = limit_rows + sectors.len();
             sectors = minimize_with(
                 &sectors,
                 25,
@@ -220,8 +416,13 @@ impl Problem {
                         out.extend(seam(x, *a, *b, color));
                     }
                     out.extend(x.iter().map(|v| limit(*v)));
+                    with_ramps(&params(&offsets, &curves, &post, stage_of(x, &weight)), out);
                 },
                 &|x, r, columns| {
+                    let lightness = ramps.lightness(
+                        self,
+                        &params(&offsets, &curves, &post, stage_of(x, &weight)),
+                    );
                     for (j, column) in columns.iter_mut().enumerate() {
                         let group = j / 6;
                         let mut y = x.to_vec();
@@ -242,28 +443,37 @@ impl Problem {
                         }
                         let row = limit_rows + j;
                         column[row] = (limit(y[j]) - r[row]) / STEP;
+                        ramps.column(
+                            self,
+                            &moved,
+                            &lightness,
+                            &ramp_groups[group],
+                            &r[ramp_rows..],
+                            &mut column[ramp_rows..],
+                        );
                     }
                 },
             );
             weight = minimize(&weight, 20, &|x, out| {
                 out.clear();
-                residuals(
-                    &params(&offsets, &curves, &post, stage_of(&sectors, x)),
-                    out,
-                );
+                let p = params(&offsets, &curves, &post, stage_of(&sectors, x));
+                residuals(&p, out);
                 out.push(BOUND_WEIGHT * scale * excess(x[1] - x[0], WEIGHT_STEP));
+                with_ramps(&p, out);
             })
             .into_iter()
             .map(|v| v.clamp(0.0, 1.0))
             .collect();
             offsets = minimize(&offsets, 20, &|x, out| {
                 out.clear();
-                residuals(&params(x, &curves, &post, stage_of(&sectors, &weight)), out);
+                let p = params(x, &curves, &post, stage_of(&sectors, &weight));
+                residuals(&p, out);
                 out.extend(
                     matrix_from(x)
                         .iter()
                         .map(|v| BOUND_WEIGHT * scale * excess(*v, MATRIX_LIMIT)),
                 );
+                with_ramps(&p, out);
             });
             let stage = stage_of(&sectors, &weight);
             let before = self.score(&offsets, &curves, &post, Some(&stage));
@@ -336,6 +546,8 @@ impl Problem {
                 unpack(x, curves).sectors.as_ref(),
             )
         };
+        let ramps = &self.ramps;
+        let nr = ramps.rows();
         let mut curves = start.curves;
         let mut best = (score(&x, &curves), x.clone(), curves);
         for _ in 0..options.joint_passes {
@@ -376,6 +588,7 @@ impl Problem {
                 out.clear();
                 let params = unpack(x, &fixed);
                 out.extend(subset.iter().map(|&i| self.sample_error(&params, i)));
+                ramps.residuals(&ramps.lightness(self, &params), out);
                 penalties(x, out);
             };
             x = minimize_with(&x, JOINT_ITERATIONS, &residuals, &|x, r, columns| {
@@ -387,6 +600,12 @@ impl Problem {
                 } else {
                     Vec::new()
                 };
+                let ramp_groups = if ns > 0 {
+                    ramps.groups(levels, &matrix_from(&x[..no]))
+                } else {
+                    Vec::new()
+                };
+                let lightness = ramps.lightness(self, &unpack(x, &fixed));
                 let mut tail = Vec::new();
                 for (j, column) in columns.iter_mut().enumerate() {
                     let mut y = x.to_vec();
@@ -398,15 +617,22 @@ impl Problem {
                         for &row in &members[(j - no - 9) / 6] {
                             column[row] = (self.sample_error(&moved, subset[row]) - r[row]) / STEP;
                         }
+                        let group = &ramp_groups[(j - no - 9) / 6];
+                        ramps.column(self, &moved, &lightness, group, &r[n..], &mut column[n..]);
                     } else {
                         for row in 0..n {
                             column[row] = (self.sample_error(&moved, subset[row]) - r[row]) / STEP;
+                        }
+                        let moved_lightness = ramps.lightness(self, &moved);
+                        for row in 0..nr {
+                            column[n + row] =
+                                (ramps.pair(&moved_lightness, row) - r[n + row]) / STEP;
                         }
                     }
                     tail.clear();
                     penalties(&y, &mut tail);
                     for (k, v) in tail.iter().enumerate() {
-                        column[n + k] = (v - r[n + k]) / STEP;
+                        column[n + nr + k] = (v - r[n + nr + k]) / STEP;
                     }
                 }
             });
@@ -475,5 +701,33 @@ fn quantize_sectors(sectors: &[f64], weight: &[f64]) -> hue::HueSectors {
             second + 1
         };
     }
-    sectors
+    join_last_segment(sectors)
+}
+
+/// Moves the last weight so that the curve stays continuous at the last breakpoint.
+///
+/// The camera reaches the last breakpoint at a stage luminance of about 1.37 and uses the
+/// last start weight above it. The 9-bit slope of the segment before it is rounded, which
+/// moves its end by up to 0.05 from that weight: a step that colors cross as they get
+/// brighter. This picks the last weight nearest to the end of that segment, preferring small
+/// changes, and keeps the slopes within the range of highlight correction.
+fn join_last_segment(sectors: hue::HueSectors) -> hue::HueSectors {
+    let span = f64::from(hue::BORDERS[2] - hue::BORDERS[1]);
+    let jump = |s: &hue::HueSectors| {
+        let curve = s.stage().curve;
+        (curve.starts[3] - curve.starts[2] - curve.slopes[2] * span / 32.0).abs()
+    };
+    let original = i32::from(sectors.weight[3]);
+    let cost = |s: &hue::HueSectors| {
+        jump(s) + 0.01 * f64::from((i32::from(s.weight[3]) - original).unsigned_abs())
+    };
+    let mut best = sectors;
+    for weight in (original - 40).max(0)..=(original + 40).min(255) {
+        let mut candidate = sectors;
+        candidate.weight[3] = weight as u8;
+        if candidate.slopes_double() && cost(&candidate) < cost(&best) {
+            best = candidate;
+        }
+    }
+    best
 }

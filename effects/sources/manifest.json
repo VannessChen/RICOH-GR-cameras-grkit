@@ -33,7 +33,7 @@
       "upstream": "https://github.com/JanLohse/spectral_film_lut/blob/bcbcfc6861f49cc706dc5d00ea048e4853060aab/LICENSE"
     },
     "CHANGELOG.txt": {
-      "sha256": "6a9b1b449c7b8c392d43910397c1192bbea2746fa032cd7cee35fac680db9027",
+      "sha256": "0cceb3bac19e6ee5e13fcaa41be1229aea7db517e16b00e6d825c3393adc67a3",
       "license": "upstream-changes"
     },
     "bake_spektrafilm.py": {

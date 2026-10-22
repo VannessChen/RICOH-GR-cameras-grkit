@@ -31,3 +31,8 @@ grkit-build = { path = "crates/grkit-build" }
 [profile.release]
 lto = "thin"
 strip = "debuginfo"
+
+# The LUT fit renders hundreds of thousands of colors per import, and its tests run about
+# five times slower without optimization.
+[profile.dev.package.grkit-core]
+opt-level = 2
