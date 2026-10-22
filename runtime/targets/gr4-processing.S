@@ -1,6 +1,8 @@
-// Private Image Control processing hooks for GR IV 1.11 (runtime/processing.S
-// describes the GR III 2.10 version). The build places this
-// code after the RTOS image. Local calls use BL words. The firmware addresses
+// Private Image Control processing hooks for each GR IV build
+// (runtime/processing.S describes the GR III 2.10 version). The build header
+// gives the frame slot of the type table index (PROCESSING_INDEX_SLOT). The
+// comments name the sites of 1.11; components.rs has the sites of each build.
+// The build places this code after the RTOS image. Local calls use BL words. The firmware addresses
 // are FIRMWARE() symbols (hooks.h), which the installer relocates.
 // The header fields are those of abi.h.
 #include "firmware.h"
@@ -64,7 +66,7 @@ owned_done:
 shot_done:
     pop {r0-r3, r12, pc}
 
-// Replaces the BL to the parameter normalizer (0x539113d8) at 0x53912c70.
+// Replaces the BL to the parameter normalizer (1.11: 0x539113d8 at 0x53912c70).
 // sb = context (+0x8000), r4 = packet, r5 = transient object, r7 = settings.
 // Snapshot activation before the packet is built. Unsupported contexts use the
 // native normalizer and cannot inherit a private record.
@@ -99,7 +101,7 @@ parameters_committed:
     str r0, [r4, #8]
     // Capture metadata and the encode read the record of this shot.
     .word 0xeb000000 | (((.Lshot_store - . - 8) >> 2) & 0x00ffffff)
-    // Fill the transient object like the native Standard branch (0x53911614),
+    // Fill the transient object like the native Standard branch (1.11 0x53911614),
     // from the adjustments of the record (r0), not from the native settings.
     // The native branch writes one byte at +0x1f8.
     add r3, r0, #(GRKIT_RECORD_PARAMETERS & ~0xff)
@@ -141,7 +143,7 @@ parameters_stock:
     pop {r0-r3, r12, lr}
     ldr pc, =HOOK_MODULE_PARAMETERS_TARGET
 
-// Replaces `mov r1, sl` at 0x53912d40, where every type path joins before the
+// Replaces `mov r1, sl` (1.11 0x53912d40), where every type path joins before the
 // type-table getters. sl is the table index. A private record uses the
 // Standard index 11 for the other tables, as GR III does.
 module_processing:
@@ -149,11 +151,11 @@ module_processing:
     ldr r0, [r4, #8]
     .word 0xeb000000 | (((.Lowned_record - . - 8) >> 2) & 0x00ffffff)
     moveq sl, #11
-    streq sl, [fp, #-0x34]
+    streq sl, [fp, #-PROCESSING_INDEX_SLOT]
     mov r1, sl
     pop {r0, pc}
 
-// Replaces `str r0, [r4, #8]` at 0x53912d4c, the record from the first getter.
+// Replaces `str r0, [r4, #8]` (1.11 0x53912d4c), the record from the first getter.
 // A private record set by module_parameters stays.
 module_record:
     push {r0, lr}
@@ -163,7 +165,7 @@ module_record:
     strne r0, [r4, #8]
     bx lr
 
-// Replaces `str r3, [r4, #0x90]` at 0x53913188, before the native packet tail.
+// Replaces `str r3, [r4, #0x90]` (1.11 0x53913188), before the native packet tail.
 // The GR IV tail has no special type path, so it continues unchanged.
 module_packet:
     str r3, [r4, #0x90]
@@ -188,7 +190,7 @@ module_packet:
 packet_done:
     pop {r0-r3, pc}
 
-// Replaces `ldrb r1, [r1, #0x9b]` at 0x5391e360 (r1 = packet): a private
+// Replaces `ldrb r1, [r1, #0x9b]` (1.11 0x5391e360, r1 = packet): a private
 // record takes the custom-curve path.
 module_gamma_flag:
     push {r0, lr}
@@ -198,7 +200,7 @@ module_gamma_flag:
     moveq r1, #1
     pop {r0, pc}
 
-// Replaces the BL to the curve getter (0x53925000) at 0x5391e76c. r1..r3 receive
+// Replaces the BL to the curve getter (1.11: 0x53925000 at 0x5391e76c). r1..r3 receive
 // the R, G, and B curves. The packet is at [fp, #-0x54].
 module_gamma_curves:
     push {r0, r5, r12, lr}

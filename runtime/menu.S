@@ -329,8 +329,9 @@ menu_icon_lookup:
     pop {r1-r3, r12, lr}
     mov r12, sp
     ldr pc, =HOOK_MENU_ICON_LOOKUP_RESUME
-/* GR IV icon draw: replaces `cmp r7, r2` (id, native limit). A private ID
-   passes the limit check. */
+/* GR IV icon draw: replaces the limit check of the icon ID in r7, `cmp r7, r2`
+   with the native limit in r2, or `cmp r7, #NATIVE_ICON_LIMIT` when the
+   target defines it. A private ID passes the check. */
 .global menu_icon_limit
 .type menu_icon_limit, %function
 menu_icon_limit:
@@ -339,8 +340,15 @@ menu_icon_limit:
     bl menu_icon
     cmp r0, #0
     pop {r0-r3, r12, lr}
+#ifdef NATIVE_ICON_LIMIT
+    beq 1f
+    cmp r7, r7
+    ldr pc, =HOOK_MENU_ICON_LIMIT_RESUME
+1:  cmp r7, #NATIVE_ICON_LIMIT
+#else
     movwne r2, #0xffff
     cmp r7, r2
+#endif
     ldr pc, =HOOK_MENU_ICON_LIMIT_RESUME
 /* GR IV icon draw: replaces `ldr r3, [r0, r7, lsl #2]` (table entry). A private
    ID uses its GRKit descriptor, whose first byte is nonzero. */

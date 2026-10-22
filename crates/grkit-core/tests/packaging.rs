@@ -646,6 +646,35 @@ fn the_guide_names_the_camera_once_and_the_modeset_file_twice() {
 }
 
 #[test]
+fn the_gr4_guide_names_each_release_once() {
+    // installation_guide replaces the phrase, so it must occur exactly once.
+    for (language, guide) in [
+        (
+            Language::English,
+            include_str!("../../../resources/INSTALLATION-GR4.md"),
+        ),
+        (
+            Language::SimplifiedChinese,
+            include_str!("../../../resources/INSTALLATION-GR4.zh-Hans.md"),
+        ),
+        (
+            Language::TraditionalChinese,
+            include_str!("../../../resources/INSTALLATION-GR4.zh-Hant.md"),
+        ),
+        (
+            Language::Japanese,
+            include_str!("../../../resources/INSTALLATION-GR4.ja.md"),
+        ),
+    ] {
+        let phrase = language.camera_phrase(&camera::GR4, &["1.11"]);
+        assert_eq!(guide.matches(&phrase).count(), 1, "{phrase}");
+        let source = String::from_utf8(installation_guide(&camera::GR4, language)).unwrap();
+        let releases = language.camera_phrase(&camera::GR4, &["1.11", "1.20"]);
+        assert_eq!(source.matches(&releases).count(), 1, "{releases}");
+    }
+}
+
+#[test]
 fn a_package_has_the_guide_of_its_language_only() {
     let effects = Files::from([effect("test-effect")]);
     for language in Language::ALL {
@@ -679,9 +708,15 @@ fn a_package_has_the_guide_of_its_language_only() {
             "GRKit インストールガイド.pdf",
         ]
     );
+    // The GR IV guide names both releases of GR IV; each has its own build.
     assert_eq!(
-        installation_guide(&camera::GR4, Language::TraditionalChinese),
-        include_bytes!("../../../resources/INSTALLATION-GR4.zh-Hant.md")
+        String::from_utf8(installation_guide(
+            &camera::GR4,
+            Language::TraditionalChinese
+        ))
+        .unwrap(),
+        include_str!("../../../resources/INSTALLATION-GR4.zh-Hant.md")
+            .replace("GR IV HDF 韌體 1.11。", "GR IV HDF 韌體 1.11 或 1.20。")
     );
 }
 
@@ -763,8 +798,11 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     assert!(files.contains_key("SD_ROOT/00078560.636"));
     assert_eq!(files["GRKit Installation Guide.pdf"], PDF);
     assert_eq!(
-        installation_guide(&camera::GR4, Language::English),
-        include_bytes!("../../../resources/INSTALLATION-GR4.md")
+        String::from_utf8(installation_guide(&camera::GR4, Language::English)).unwrap(),
+        include_str!("../../../resources/INSTALLATION-GR4.md").replace(
+            "GR IV HDF firmware 1.11 only.",
+            "GR IV HDF firmware 1.11 or 1.20 only."
+        )
     );
     // A GR III runtime does not run on GR IV.
     assert!(assemble(
@@ -884,4 +922,37 @@ fn dump_packages_hold_the_tool_files_and_their_checksums() {
     let mut extra = contents;
     extra.insert("SD_ROOT/SCRIPT/STARTUP.BAK".into(), b"x".to_vec());
     assert!(assemble_dump(extra).is_err());
+}
+
+fn marked_gr4_runtime(target: &str) -> Files {
+    let mut binary = vec![0; 52];
+    binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
+    binary[16..20].copy_from_slice(b"\x02\x00\x28\x00");
+    binary.extend_from_slice(format!("{TARGET_MARKER}{target}\0").as_bytes());
+    runtime::runtime_files_for(&binary, runtime::icon_stride(target).unwrap())
+}
+
+#[test]
+fn the_installer_names_the_runtime_build_of_a_package() {
+    let package = |runtime: &Files, target: &str| {
+        let build = json!({"target": target, "profile": "production", "startup_activation": "Off"});
+        assemble(
+            runtime,
+            &build,
+            &Files::new(),
+            Selection::ALL,
+            &camera::GR4,
+            &english(),
+        )
+    };
+    let bytes = package(&marked_gr4_runtime("gr4-1.20"), "gr4-1.20").unwrap();
+    assert_eq!(verify_package(&bytes).unwrap()["target"], "gr4-1.20");
+    let bytes = package(&marked_gr4_runtime("gr4-1.11"), "gr4-1.11").unwrap();
+    assert_eq!(verify_package(&bytes).unwrap()["target"], "gr4-1.11");
+    // The installer and the build manifest must name the same build.
+    let error = package(&marked_gr4_runtime("gr4-1.20"), "gr4-1.11").unwrap_err();
+    assert!(error.to_string().contains("is the gr4-1.20 runtime"));
+    // An installer from before the marker is the first GR IV build.
+    let bytes = package(&gr4_runtime_fixture(), "gr4-1.11").unwrap();
+    assert_eq!(verify_package(&bytes).unwrap()["target"], "gr4-1.11");
 }

@@ -20,6 +20,8 @@
 #include "targets/gr3-2.10.h"
 #elif defined(GRKIT_TARGET_GR4_111)
 #include "targets/gr4-1.11.h"
+#elif defined(GRKIT_TARGET_GR4_120)
+#include "targets/gr4-1.20.h"
 #else
 #error "Define GRKIT_TARGET_<target> to select runtime/targets/<target>.h"
 #endif

@@ -25,11 +25,12 @@ The site holds no firmware bytes: `grkit site` leaves out the generated header o
 4. Add the repository variable `SITE_URL` with the production URL of the site and no trailing slash, for example `https://<project>.pages.dev`. `Deploy` reads `SITE_URL/runtime/gr3-2.10/build.json` to find the version that the site serves.
 5. Optional: add the repository variable `PLAUSIBLE_HOST` with the origin of a Plausible server, for example `https://plausible.example.com`. Release then adds Plausible analytics to the site for the domain `grkit.app`.
 6. Keep a private backup of the firmware, so that a release does not depend on the Ricoh download:
-   1. Download `gr3_v210.zip` and `gr4_v111.zip` from Ricoh and accept the license. Do not change the zips.
+   1. Download `gr3_v210.zip`, `gr4_v111.zip`, and `gr4_v120.zip` from Ricoh and accept the license. Do not change the zips.
    2. Create a private repository: `gh repo create <owner>/<backup-repo> --private`.
    3. Upload each zip as a release asset with the tag of its target:
       - `gh release create gr3-2.10 gr3_v210.zip --repo <owner>/<backup-repo> --notes "Private backup. Do not redistribute."`
       - `gh release create gr4-1.11 gr4_v111.zip --repo <owner>/<backup-repo> --notes "Private backup. Do not redistribute."`
+      - `gh release create gr4-1.20 gr4_v120.zip --repo <owner>/<backup-repo> --notes "Private backup. Do not redistribute."`
    4. Create a fine-grained token that can read only the Contents of that repository.
    5. In this repository, add the secret `FIRMWARE_BACKUP_TOKEN` with the token, and the variable `FIRMWARE_BACKUP_REPO` with `<owner>/<backup-repo>`.
    6. Start the `Release` workflow with an existing release tag and `firmware_source` set to `backup`. If the `build` job succeeds, the backup works.

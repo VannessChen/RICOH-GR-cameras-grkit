@@ -69,6 +69,20 @@ export const CAMERAS: readonly Camera[] = [
       xpanOnly: true,
     },
   },
+  // GR IV 1.20 has a runtime of its own (`gr4-1.20`), not tested on a camera yet.
+  {
+    key: 'gr4-120',
+    id: 'gr4',
+    name: 'GR IV / GR IV HDF',
+    support: {
+      firmware: '1.20',
+      target: 'gr4-1.20',
+      modeset: '00078560.636',
+      experimental: true,
+      modules: CAMERA_PLUGINS.gr4,
+      xpanOnly: true,
+    },
+  },
   // GR IV Monochrome runs the GR IV 1.11 firmware, which it shows as version 1.00, and uses the
   // GR IV package and ModeSet file. The effects are made for color sensors, so its packages have
   // no Image Control.

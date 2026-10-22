@@ -20,7 +20,7 @@ pub const ICON_STRIDE: usize = 6408;
 pub fn icon_stride(target: &str) -> Result<usize> {
     match target {
         "gr3-2.10" => Ok(ICON_STRIDE),
-        "gr4-1.11" => Ok(6412),
+        "gr4-1.11" | "gr4-1.20" => Ok(6412),
         _ => anyhow::bail!("Unknown runtime target {target:?}"),
     }
 }

@@ -110,24 +110,52 @@ pub fn read_manifest(blob: &[u8]) -> Result<Value> {
     Ok(result)
 }
 
-/// Checks the runtime files of a build for `target`.
-/// The runtime build of a camera that a package's runtime files are. The
-/// targets of one camera have different icon strides.
+/// The prefix of the string that names the runtime build in `INSTALL.BIN`.
+pub const TARGET_MARKER: &str = "GRKIT_TARGET=";
+
+/// The runtime build that `INSTALL.BIN` names, if it names one. Runtimes from
+/// before a camera had several builds do not.
+fn marked_target(binary: &[u8]) -> Option<&str> {
+    let marker = TARGET_MARKER.as_bytes();
+    let start = binary
+        .windows(marker.len())
+        .position(|part| part == marker)?
+        + marker.len();
+    let end = start + binary[start..].iter().position(|&byte| byte == 0)?;
+    std::str::from_utf8(&binary[start..end]).ok()
+}
+
+/// The runtime build of a camera that a package's runtime files are: the
+/// build that the installer names, or else the only build of the camera whose
+/// templates the files match, preferring the first build of the camera.
 fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
     let targets = camera.targets();
+    if let Some(name) = runtime
+        .get("SCRIPT/PLUGINS/INSTALL.BIN")
+        .and_then(|binary| marked_target(binary))
+    {
+        let target = targets
+            .iter()
+            .copied()
+            .find(|target| *target == name)
+            .with_context(|| format!("{} does not run the {name} runtime", camera.name))?;
+        validate_runtime(runtime, target)?;
+        return Ok(target);
+    }
     let matching: Vec<_> = targets
         .iter()
         .copied()
         .filter(|target| validate_runtime(runtime, target).is_ok())
         .collect();
     match matching[..] {
-        [target] => Ok(target),
         // Report why the runtime is not the first build of the camera.
         [] => Err(validate_runtime(runtime, targets[0]).unwrap_err()),
-        _ => bail!("The runtime matches more than one build of {}", camera.name),
+        // A runtime without the marker predates the later builds.
+        [target, ..] => Ok(target),
     }
 }
 
+/// Checks the runtime files of a build for `target`.
 pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
     ensure!(
         files.len() == RUNTIME_PATHS.len() && RUNTIME_PATHS.iter().all(|p| files.contains_key(*p)),
@@ -145,6 +173,12 @@ pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
         *files == runtime::runtime_files_for(binary, runtime::icon_stride(target)?),
         "Runtime scripts differ from the production templates"
     );
+    if let Some(name) = marked_target(binary) {
+        ensure!(
+            name == target,
+            "The installer is the {name} runtime, not {target}"
+        );
+    }
     Ok(())
 }
 
@@ -279,9 +313,9 @@ impl Language {
         }
     }
 
-    /// The camera phrase of the GR III guide, for example "GR III and GR III HDF
+    /// The camera phrase of a guide, for example "GR III and GR III HDF
     /// firmware 2.10" for one version, or "... firmware 2.10 or 2.20" for the
-    /// versions that run one runtime build.
+    /// releases of the camera.
     pub fn camera_phrase(self, camera: &Camera, versions: &[&str]) -> String {
         let (and, word, or) = match self {
             Language::English => ("and", "firmware", " or "),
@@ -474,22 +508,22 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
 /// has its own resource.
 pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
     let gr4 = camera.is_gr4();
-    let template = language.guide_template(gr4);
-    if gr4 {
-        return template.as_bytes().to_vec();
-    }
-    // The resource names the first GR III release. Each GR III chain camera has
-    // one runtime build, whose versions the guide names.
-    let [target] = camera.targets()[..] else {
-        unreachable!("a GR III chain camera has one runtime build");
-    };
-    template
-        .replace(
-            &language.camera_phrase(&camera::GR3, &[camera::GR3.releases[0].firmware]),
-            &language.camera_phrase(camera, &camera.firmware_for(target)),
-        )
-        .replace(camera::GR3.hdf, camera.hdf)
-        .replace(camera::GR3.modeset, camera.modeset)
+    // The resource names the first release of its camera. The guide of a
+    // camera names each release that GRKit supports. A guide serves each
+    // package of the camera, so it names the releases of each runtime build.
+    let base = if gr4 { &camera::GR4 } else { &camera::GR3 };
+    let releases: Vec<&str> = camera
+        .releases
+        .iter()
+        .map(|release| release.firmware)
+        .collect();
+    let guide = language.guide_template(gr4).replace(
+        &language.camera_phrase(base, &[base.releases[0].firmware]),
+        &language.camera_phrase(camera, &releases),
+    );
+    guide
+        .replace(base.hdf, camera.hdf)
+        .replace(base.modeset, camera.modeset)
         .into_bytes()
 }
 

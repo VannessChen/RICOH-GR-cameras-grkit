@@ -185,6 +185,9 @@ static u32 native_monochrome(u32 shot) {
     u32 type;
     if(shot<0x40000000U || shot>0xbfffff00U) return 0;
     type=BYTE(shot,SETTINGS_IC_TYPE);
+#ifdef NATIVE_MONOCHROME_TYPES_HIGH
+    if(type>=32) return type<64 && (NATIVE_MONOCHROME_TYPES_HIGH>>(type-32)&1);
+#endif
     return type<32 && (NATIVE_MONOCHROME_TYPES>>type&1);
 #else
     (void)shot;

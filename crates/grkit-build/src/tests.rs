@@ -714,9 +714,13 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     };
     validate_plan(&plan)?;
     let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
+    // The installer names its runtime build for the package check.
+    assert!(header.starts_with(
+        "static const char target_marker[] __attribute__((used)) = \"GRKIT_TARGET=gr3-2.10\";\n"
+    ));
     assert_eq!(
         sha256(header.as_bytes()),
-        "fcacd00a0fbbbbb3bd5ba7ed2e8d6455585bd847183f492875765ad515d83bc5"
+        "66d189c8a5affafc6e6237be5fdda7ae9b213be467337846130db02fbdf83eb9"
     );
     Ok(())
 }
@@ -754,6 +758,7 @@ fn every_code_region_lies_in_the_tail() {
     for (target, layout) in [
         (&target::GR3_210, &components::GR3_LAYOUT),
         (&target::GR4_111, &components::GR4_LAYOUT),
+        (&target::GR4_120, &components::GR4_120_LAYOUT),
     ] {
         let (tail, end) = layout.tail;
         // The decoded image ends where the startup .data copy source ends.

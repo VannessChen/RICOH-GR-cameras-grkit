@@ -44,9 +44,11 @@ A target is one firmware build. Each target has its own addresses in `runtime/ta
 | --- | --- |
 | `gr3-2.10` | GR III 2.10 and 2.20, GR IIIx 1.60 and 1.70, and their HDF models |
 | `gr4-1.11` | GR IV 1.11, GR IV HDF, GR IV Monochrome |
+| `gr4-1.20` | GR IV 1.20 and GR IV HDF 1.20 |
 
 GR IIIx 1.60 runs the RTOS code of GR III 2.10, so both cameras use one runtime. They differ only in the ModeSet file that enables SD scripts.
 GR III 2.20 and GR IIIx 1.70 change only the end screen. Their code moves by less than the relocation radius, so INSTALL [relocates](#relocation) the `gr3-2.10` runtime to them. `camera.rs` lists the releases of each camera and the runtime build of each release.
+GR IV 1.20 changes the code around several hooks and adds the monochrome Image Control types 31 and 32, so it has its own target. Its addresses come from 1.11 through the code that uses them, and its hooks are those of 1.11. A package names its build in `INSTALL.BIN` (`GRKIT_TARGET=`), because the two GR IV builds have the same runtime file layout.
 An HDF camera runs the firmware of its base camera and uses the package of that camera.
 GR IV has its own layout and all plugins, but Framing offers only XPan (see [Framing](#framing)).
 

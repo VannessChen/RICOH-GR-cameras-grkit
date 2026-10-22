@@ -17,9 +17,12 @@
 //! factory adjustment, not from the ModeSet numbers. A package for a camera is
 //! therefore also the package for its HDF model.
 //!
-//! GR IV 1.11 is a different build with its own runtime. It has Image Control,
-//! Framing (XPan only, cropped from native 16:9), Guides, Date Stamp, and Grain.
-//! It has been tested on a GR IV camera, but not on a GR IV HDF camera.
+//! GR IV 1.11 is a different build with its own runtime. GR IV 1.20 moves and
+//! changes code beyond the relocation radius, so it has a runtime of its own,
+//! `gr4-1.20`, which has not been tested on a camera. Each has
+//! Image Control, Framing (XPan only, cropped from native 16:9), Guides, Date
+//! Stamp, and Grain. The 1.11 runtime has been tested on a GR IV camera, but
+//! not on a GR IV HDF camera.
 
 use anyhow::{bail, Result};
 
@@ -102,11 +105,18 @@ pub const GR4: Camera = Camera {
     id: "gr4",
     name: "GR IV",
     hdf: "GR IV HDF",
-    releases: &[Release {
-        firmware: "1.11",
-        target: "gr4-1.11",
-        experimental: false,
-    }],
+    releases: &[
+        Release {
+            firmware: "1.11",
+            target: "gr4-1.11",
+            experimental: false,
+        },
+        Release {
+            firmware: "1.20",
+            target: "gr4-1.20",
+            experimental: true,
+        },
+    ],
     modeset: "00078560.636",
     experimental: false,
     effects: true,
@@ -162,20 +172,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn later_gr3_releases_run_the_gr3_210_runtime() {
+    fn each_release_names_its_runtime_build() {
         assert_eq!(GR3.targets(), ["gr3-2.10"]);
         assert_eq!(GR3.firmware_for("gr3-2.10"), ["2.10", "2.20"]);
         assert_eq!(GR3X.firmware_for("gr3-2.10"), ["1.60", "1.70"]);
         assert!(GR3X.runs("gr3-2.10") && !GR3X.runs("gr4-1.11"));
-        assert_eq!(GR4.targets(), ["gr4-1.11"]);
-        assert!(CAMERAS
+        assert_eq!(GR4.targets(), ["gr4-1.11", "gr4-1.20"]);
+        assert_eq!(GR4.firmware_for("gr4-1.20"), ["1.20"]);
+        // The releases that no camera test covers are experimental.
+        let experimental: Vec<_> = CAMERAS
             .iter()
-            .all(|camera| camera.releases.iter().all(|release| {
-                !release.experimental
-                    || camera
-                        .releases
-                        .iter()
-                        .any(|tested| !tested.experimental && tested.target == release.target)
-            })));
+            .flat_map(|camera| camera.releases.iter())
+            .filter(|release| release.experimental)
+            .map(|release| release.firmware)
+            .collect();
+        assert_eq!(experimental, ["2.20", "1.70", "1.20"]);
     }
 }

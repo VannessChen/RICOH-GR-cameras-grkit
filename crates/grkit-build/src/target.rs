@@ -7,7 +7,7 @@
 
 use anyhow::{bail, Result};
 
-use crate::components::{Layout, GR3_LAYOUT, GR4_LAYOUT};
+use crate::components::{Layout, GR3_LAYOUT, GR4_120_LAYOUT, GR4_LAYOUT};
 
 pub use grkit_core::runtime::HEADER_REFERENCE;
 
@@ -37,6 +37,12 @@ pub struct Target {
     /// word holds it.
     pub pixel_base_slot: u32,
     pub pixel_base_indirect: bool,
+    /// The bytes of a native icon descriptor before the pixels: 8 on GR III,
+    /// 12 on GR IV (width and a valid flag, height, pixel offset).
+    pub icon_descriptor_bytes: u32,
+    /// The high byte of the native ImageTone values that photos record
+    /// besides the GR III values, if any: 0x81 on GR IV (0x8100 and up).
+    pub native_tone_page: Option<u32>,
     /// The runtime components and their hooks. Without a layout, the runtime has
     /// the loader and the installer only.
     pub layout: Option<&'static Layout>,
@@ -113,6 +119,8 @@ pub const GR3_210: Target = Target {
     english_slot: 0x55002bb0,
     pixel_base_slot: 0x55018734,
     pixel_base_indirect: false,
+    icon_descriptor_bytes: 8,
+    native_tone_page: None,
     layout: Some(&GR3_LAYOUT),
     image_control: Some(&GR3_IMAGE_CONTROL),
     // The English entry is +4 in the language table, which the text hooks load.
@@ -138,6 +146,8 @@ pub const GR4_111: Target = Target {
     // icons from a copy of the icon pixels, not from the ICONBIN load address.
     pixel_base_slot: 0x55082038,
     pixel_base_indirect: true,
+    icon_descriptor_bytes: 12,
+    native_tone_page: Some(0x81),
     layout: Some(&GR4_LAYOUT),
     image_control: Some(&GR4_IMAGE_CONTROL),
     // The settings domain follows the vtable of the capture property
@@ -145,7 +155,48 @@ pub const GR4_111: Target = Target {
     relocation_bases: &[(0x55379610, 0x5537960c), (0x55082038, 0x55082028)],
 };
 
-pub const TARGETS: [&Target; 2] = [&GR3_210, &GR4_111];
+/// GR IV 1.20 tables hold 0x26 entries for each model variant, and 1.20 adds
+/// the monochrome types 31 and 32, so the settings hold types up to 32.
+pub const GR4_120_IMAGE_CONTROL: ImageControl = ImageControl {
+    tables: [0x55054800, 0x55054554, 0x55053ce4],
+    table_bytes: 3 * 0x26 * 4,
+    record: 0x5501bd58,
+    coefficients: 0x5408051c,
+    record_tail: [0x540805a4, 0x5408073c, 0x540807f4, 0x540801d0],
+    base_gamma: 0x540b57d0,
+    settings_domain: 0x5537b2a0,
+    settings_type: 0x79c,
+    type_count: 33,
+};
+
+/// GR IV and GR IV HDF 1.20, with the plugins of 1.11. Its addresses come from
+/// 1.11 through the code that uses them; not tested on a camera.
+pub const GR4_120: Target = Target {
+    name: "gr4-1.20",
+    firmware: "GR IV 1.20",
+    firmware_sha256: "7563d7e462f0c53b6ab2fbab7cdfbbb57151a41192ee82f4f3a2108f9d77650d",
+    decoded_sha256: "f5cf55a48f65d55f4ebbd40bcd1d64d1ceca3c88432a2a4ceaa93fe1cad5fc3a",
+    data_start: 0x55000000,
+    data_source: 0x543b3100,
+    data_size: 0x58500,
+    array_table: 0x553b5bcc,
+    array_count: 0x553b47b8,
+    heap_min: 0x55839014,
+    heap_end: 0x60000000,
+    english_slot: 0x5500211c,
+    // The drawer of the icon manager singleton (0x55083028 + 0x10).
+    pixel_base_slot: 0x55083038,
+    pixel_base_indirect: true,
+    icon_descriptor_bytes: 12,
+    native_tone_page: Some(0x81),
+    layout: Some(&GR4_120_LAYOUT),
+    image_control: Some(&GR4_120_IMAGE_CONTROL),
+    // As on 1.11: the settings domain follows the vtable of the capture
+    // property singleton, and the icon drawer is +0x10 in the icon manager.
+    relocation_bases: &[(0x5537b2a0, 0x5537b29c), (0x55083038, 0x55083028)],
+};
+
+pub const TARGETS: [&Target; 3] = [&GR3_210, &GR4_111, &GR4_120];
 
 pub fn find(name: &str) -> Result<&'static Target> {
     match TARGETS.iter().find(|target| target.name == name) {
