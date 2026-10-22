@@ -1,3 +1,20 @@
+## 1.2.0 (2026-10-22)
+
+### Features
+
+- OK on Date Imprint in the GRK menu opens its settings, where Date Look selects the digits of the date imprint: the classic seven-segment digits, the dot matrix of the GR1s, or the digits of the GR II.
+- Color film looks and imported LUTs follow their source more closely with the camera's hue-sector color stage, in photos and in the viewfinder.
+- Fn on the Image Control row of the GRK menu opens the adjustments of the selected effect.
+- GR III and GR III HDF firmware 2.20 and GR IIIx and GR IIIx HDF firmware 1.70 are supported as experimental, with the same package as 2.10 and 1.60.
+- GR IV and GR IV HDF firmware 1.20 are supported as experimental, with a package of their own.
+
+### Fixes
+
+- Guides draw 2-pixel lines in the color of the native grid guide, at the positions of the native thirds.
+- GRKit starts 2 seconds later after power-on, which avoids a stop of the camera when the script talks to the camera before it is ready.
+- Playback shows the Fn adjustments of the effect that took the photo, not the parameters of the camera's Image Control setting.
+- The date stamp is white on monochrome pictures, including the camera's monochrome Image Control types and GR IV Monochrome.
+
 ## 1.1.1 (2026-10-21)
 
 ### Fixes
