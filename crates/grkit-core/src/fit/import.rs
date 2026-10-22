@@ -121,10 +121,10 @@ fn definition_text(fit: &Fit, request: &Import, input: Encoding, sha256: String)
 
 /// How closely an effect follows its LUT, from the held-out colors.
 ///
-/// The bounds are provisional. They were chosen so that the grades agree with the pixel errors
-/// of 328 third-party LUTs on two natural sample pictures, where A is a mean dE2000 up to 1.5
-/// and a 95th percentile up to 3, B up to 3 and 6, and C a mean up to 5. 277 grades agree,
-/// and 11 are one grade too good. Calibrate them again with more pictures.
+/// The bounds make the grades agree with the pixel errors of 807 LUTs on 56 natural pictures,
+/// where A is a mean dE2000 up to 1.5 and a 95th percentile up to 3, B up to 3 and 6, and C a
+/// mean up to 5. 715 grades agree, 84 are too strict, and 8 are too good. The earlier bounds,
+/// from two pictures, made 197 grades too strict.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Grade {
     A,
@@ -135,7 +135,7 @@ pub enum Grade {
 
 impl Grade {
     /// (mean, 95th percentile) bounds of the held-out errors for A, B, and C.
-    const BOUNDS: [(f64, f64); 3] = [(0.9, 3.75), (1.8, 6.5), (5.5, f64::INFINITY)];
+    const BOUNDS: [(f64, f64); 3] = [(1.2, 3.75), (2.0, 8.0), (4.5, f64::INFINITY)];
 
     pub fn of(fit: &Fit) -> Self {
         let within =
@@ -236,6 +236,17 @@ pub fn input_distance(model: &Model, cube: &Cube, input: Encoding) -> f64 {
     tone + color / (3.0 * chart.len() as f64) / 100.0
 }
 
+/// Whether the LUT data cannot tell `a` from `b`: two display inputs, or F-Log2 and F-Log2 C,
+/// which share their curve.
+fn similar(a: Encoding, b: Encoding) -> bool {
+    a == b
+        || (a.is_display() && b.is_display())
+        || matches!(
+            (a, b),
+            (Encoding::Flog2, Encoding::Flog2C) | (Encoding::Flog2C, Encoding::Flog2)
+        )
+}
+
 /// The distance of each input that `guess_input` chooses from.
 fn guess_distances(model: &Model, cube: &Cube) -> Vec<(Encoding, f64)> {
     GUESSES
@@ -314,22 +325,42 @@ pub fn import(bytes: &[u8], base_gamma: &[u16; 256], request: &Import) -> Result
             layout.name()
         ));
     }
-    // A guess that keeps the LUT much closer to Standard than the chosen input does. The data
-    // does not tell Standard from sRGB, so the two do not warn about each other.
     let distance = |input: Encoding| {
         distances
             .iter()
             .find(|(guessed, _)| *guessed == input)
             .map_or_else(|| input_distance(&model, &cube, input), |(_, d)| *d)
     };
-    if guess != input
-        && !(guess.is_display() && input.is_display())
-        && distance(input) >= LOG_MARGIN * distance(guess)
-    {
+    // A guess that keeps the LUT closer to Standard than the chosen input does. On 820 LUTs of
+    // known input, this warns for 92% of wrong inputs and 8% of right ones; requiring the guess
+    // to be `LOG_MARGIN` times closer missed a quarter of the wrong inputs. The data does not
+    // tell Standard from sRGB, or F-Log2 from F-Log2 C, so these do not warn about each other.
+    if !similar(guess, input) && distance(input) > distance(guess) {
         warnings.push(format!(
             "The LUT data suggests {} input, but the import used {}",
             guess.name(),
             input.name()
+        ));
+    }
+    // A guessed log input. The data cannot tell a supported log from another camera's log,
+    // which the import then reads as the nearest supported one.
+    if request.input.is_none() && !guess.is_display() {
+        let near: Vec<&str> = distances
+            .iter()
+            .filter(|(other, d)| {
+                !other.is_display() && !similar(*other, guess) && *d < LOG_MARGIN * distance(guess)
+            })
+            .map(|(other, _)| other.name())
+            .collect();
+        let also = if near.is_empty() {
+            String::new()
+        } else {
+            format!(", and it fits {} about as well", near.join(" or "))
+        };
+        warnings.push(format!(
+            "The LUT data suggests {} input{also}. Choose the input if you know it. A LUT for \
+             another camera log, such as S-Log3, LogC, C-Log, or N-Log, imports with wrong colors.",
+            guess.name()
         ));
     }
     if cube.video_input || cube.video_output {

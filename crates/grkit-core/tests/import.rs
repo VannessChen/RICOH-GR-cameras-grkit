@@ -284,6 +284,25 @@ fn import_writes_a_compilable_definition() {
         .unwrap()
         .warnings;
     assert!(!quiet.iter().any(|w| w.contains("suggests")), "{quiet:?}");
+    // A guessed log input asks the user to check it, as another camera's log reads alike.
+    let guessed = fit::import(
+        vlog.as_bytes(),
+        &synthetic_base(),
+        &Import {
+            input: None,
+            ..request.clone()
+        },
+    )
+    .unwrap();
+    assert_eq!(guessed.input, Encoding::Vlog);
+    assert!(
+        guessed
+            .warnings
+            .iter()
+            .any(|w| w.contains("suggests vlog input") && w.contains("S-Log3")),
+        "{:?}",
+        guessed.warnings
+    );
     assert!(!result.monochrome);
     let definition = effects::parse_json(json.as_bytes()).unwrap();
     effects::compile_definition(&definition).unwrap();
