@@ -304,12 +304,58 @@ fn cover_icons_span_the_tile_width_inside_the_row_margin() {
 }
 
 #[test]
+fn covers_without_a_number_show_a_large_name() {
+    // Below the brand band, only the name is light on a box without a band.
+    let rows = |pixels: &[u8]| -> Vec<usize> {
+        (12..40)
+            .filter(|y| (0..40).any(|x| pixels[(y * 40 + x) * 4] > 128))
+            .collect()
+    };
+    let large = artwork::render_box("Kodak", "PORTRA", "", false).unwrap();
+    let small = artwork::render_box("Kodak", "PORTRA", "400", false).unwrap();
+    assert_ne!(large, small);
+    let large_rows = rows(&large);
+    // Taller than the 5-pixel font, inside the body, and centered within one row.
+    assert!(large_rows.len() >= 8, "{large_rows:?}");
+    assert!(
+        large_rows.iter().all(|y| (12..37).contains(y)),
+        "{large_rows:?}"
+    );
+    let middle = (large_rows[0] + large_rows[large_rows.len() - 1]) as f32 / 2.0;
+    assert!((middle - 24.5).abs() <= 1.5, "{middle}");
+    // A long name gets a smaller size and still fills no more than the body.
+    for name in [
+        "KODACHROME",
+        "TEAL ORANGE",
+        "MMMMMMMMMMMM",
+        "classic chrome"[..12].trim(),
+    ] {
+        let pixels = artwork::render_box("Kodak", name, "", false).unwrap();
+        let used = rows(&pixels);
+        assert!(
+            !used.is_empty() && used.iter().all(|y| (12..37).contains(y)),
+            "{name}: {used:?}"
+        );
+    }
+    // With a number, a name too wide for the pixel font, or with lowercase, gets a smaller
+    // Inter Black on the name row. A name that fits keeps the pixel font.
+    for name in ["TEAL ORANGE", "VISION 2383", "Portra"] {
+        assert!(
+            artwork::render_box("Kodak", name, "400", true).is_ok(),
+            "{name}"
+        );
+    }
+    let error = artwork::render_box("Kodak", "WWWWWWWWWWW", "400", true).unwrap_err();
+    assert!(format!("{error:#}").contains("does not fit"), "{error:#}");
+    // Lowercase works only in Inter Black.
+    assert!(artwork::render_box("Kodak", "Portra", "", true).is_ok());
+}
+
+#[test]
 fn compiler_rejects_cover_icons_that_do_not_fit() {
     let definition = read_json(root().join("portra-400-endura-v1/effect.json"));
     let box_icon = definition["icon"].clone();
     for (key, value) in [
-        ("name", json!("WWWWWWWWWWW")),
-        ("name", json!("Portra")),
         ("name", json!("")),
         ("number", json!("1234567")),
         ("number", json!("é")),
@@ -325,7 +371,14 @@ fn compiler_rejects_cover_icons_that_do_not_fit() {
         );
     }
     let mut changed = definition.clone();
+    // A cover without a number shows a large name.
     changed["icon"] = json!({"template": "cine", "brand": "Kodak", "name": "VISION3"});
+    assert_eq!(
+        effects::icon_pixels(&changed["icon"]).unwrap(),
+        artwork::render_cine("Kodak", "VISION3", "").unwrap()
+    );
+    changed["icon"] =
+        json!({"template": "box", "brand": "Kodak", "name": "PORTRA", "number": "", "band": true});
     assert!(effects::compile_definition(&changed).is_err());
     changed["icon"] = json!({"template": "cine", "brand": "Kodak", "name": "VISION3", "number": "250D", "band": true});
     assert!(effects::compile_definition(&changed).is_err());

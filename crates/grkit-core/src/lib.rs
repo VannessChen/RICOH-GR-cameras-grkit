@@ -3,17 +3,22 @@
 pub mod abi;
 pub mod artwork;
 pub mod camera;
+pub mod color;
 pub mod cube;
 pub mod effects;
 pub mod fit;
 pub mod guide;
+pub mod hue;
+pub mod lut_image;
 pub mod menu_text;
 pub mod modules;
 pub mod packaging;
 pub mod plugins;
+mod png;
 pub mod runtime;
 pub mod selective;
 pub mod site;
+mod tiff;
 
 pub type Files = std::collections::BTreeMap<String, Vec<u8>>;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

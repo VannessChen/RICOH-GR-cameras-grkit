@@ -20,8 +20,9 @@ The compiler writes self-contained GRFX0001 files with a 40 x 40 icon. CRC32 det
 | `attribution` | Yes | An object with the origin, source, and license |
 | `post_matrix` | No | Nine signed Q13 coefficients, row-major, after the tone curves |
 | `selective_color` | No | `hue` in degrees (0 to 360), `lower` and `higher` `[inner, outer]` half widths in degrees (0 to 75), and `chroma` `[c0, c1]` (c0 < c1 <= 181) |
+| `hue_sectors` | No | The camera's hue-sector stage: `matrices`, `weight`, and optional `levels`. `crates/grkit-core/src/hue.rs` defines the fields and their ranges |
 
-A monochrome effect cannot have `post_matrix` or `selective_color`.
+A monochrome effect cannot have `post_matrix`, `selective_color`, or `hue_sectors`.
 
 `selective_color` keeps the chroma of one hue range in recorded pictures and removes it elsewhere. The viewfinder shows the effect in monochrome. `crates/grkit-core/src/selective.rs` defines the hue angle and the half widths.
 
@@ -32,12 +33,12 @@ The compiler draws each icon in gray. An icon has one of three forms:
 | Form | Fields | Picture |
 |---|---|---|
 | Label tile | `label` (1 to 4 capitals or digits) and `shape` (`film`, `filter`, or `plain`) | The label on a dark tile |
-| Film box | `template` `"box"`, `brand`, `name`, `number`, and `band` (`true` or `false`) | A light band with the brand, the name and a large number on a dark body, and a light bottom band if `band` is `true` |
-| Motion picture film label | `template` `"cine"`, `brand`, `name`, and `number` | As a film box, with three light stripes at the bottom |
+| Film box | `template` `"box"`, `brand`, `name`, an optional `number`, and `band` (`true` or `false`) | A light band with the brand, the name and a large number on a dark body, and a light bottom band if `band` is `true` |
+| Motion picture film label | `template` `"cine"`, `brand`, `name`, and an optional `number` | As a film box, with three light stripes at the bottom |
 
 A film box and a film label span the full 40-pixel width of the tile. Their brand uses Inter Black if it fits at full width. Otherwise, it uses a 5-pixel font, which has only capitals, digits, spaces, `-`, and `+`.
 
-The name always uses the 5-pixel font. The number uses Inter Black. If a text does not fit, the compiler stops with an error.
+The name uses the 5-pixel font, or Inter Black if that font cannot draw it. The number uses Inter Black. A cover without `number` shows the name large, in Inter Black. If a text does not fit, the compiler stops with an error.
 
 The icon shows the effect name and the brand, and nothing else:
 
@@ -96,15 +97,20 @@ Effects run in the camera's processing: the matrix acts before the Standard base
 The fit needs the Standard base gamma. The command reads this table from your copy of the official GR III 2.10 firmware. The repository contains no firmware data.
 
 ```sh
-grkit effects import --cube look.cube --firmware fwdc239b.bin --input srgb \
+grkit effects import --cube look.cube --firmware fwdc239b.bin --input standard \
   --id my-look-v1 --name "My Look" --label FV --shape film --out effects
 ```
 
 1. Set `--firmware` to the official GR III 2.10 firmware file.
-2. Select `--input` for the encoding of the LUT input:
+2. Optional: select `--input` for the encoding of the LUT input.
+   - `auto` (default): a guess from the LUT data, not the file name. It selects `standard` or a log input.
+   - `standard`: a picture of the camera's Standard rendering, as a GR JPEG.
    - `srgb`: sRGB-encoded display RGB. The importer clips scene-linear light to 0..1 before the sRGB curve.
    - `linear`: scene-linear RGB with sRGB primaries.
    - `vlog`: Panasonic V-Log over V-Gamut primaries, as spektrafilm writes its LUTs.
+   - `flog`, `flog2`, `flog2c`: Fujifilm F-Log or F-Log2 over F-Gamut, or F-Log2 over F-Gamut C.
+
+   The data cannot tell Standard from sRGB, or a supported log from another camera's log, such as S-Log3. Select the input if you know it.
 3. Optional: add `--exposure EV` to change the scene-linear light before the LUT. The default is 0.
 4. Optional: add `--no-post` to fit no post-curve matrix.
 5. Run the command. The command writes `OUT/ID/effect.json` and prints a JSON summary.
@@ -112,6 +118,8 @@ grkit effects import --cube look.cube --firmware fwdc239b.bin --input srgb \
 
 If `OUT/ID` exists or a check fails, the command stops and writes nothing.
 
-The fit follows [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)). `crates/grkit-core/src/fit.rs` describes the model and its assumptions.
+The site imports a LUT in the browser with the same fit. It uses the base gamma of the published effect catalog, so the user needs no firmware. See [LUT import](../web/README.md#lut-import).
 
-`attribution.fit` records the color error of the fit on a ColorChecker. A matrix, three curves, and a post matrix cannot copy hue-selective changes. Examine the errors before you use an imported effect.
+The fit follows [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)). `crates/grkit-core/src/fit/` describes the model and its assumptions.
+
+`attribution.fit` records the errors and the grade of the fit. The effect model copies hue-selective changes only in part. Examine the grade and the warnings of the import before you use an imported effect.

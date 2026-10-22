@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 
 /// Room for a 256-point 3D table written with generous precision.
-const MAX_CUBE_SIZE: usize = 1024 * 1024 * 1024;
+const MAX_LUT_SIZE: usize = 1024 * 1024 * 1024;
 
 #[derive(Parser)]
 #[command(name = "grkit", version, about = "Build GRKit plugins and SD effects")]
@@ -156,14 +156,37 @@ enum EffectsCommand {
         #[arg(long)]
         out: PathBuf,
     },
-    /// Fit a .cube LUT into a new effect definition at OUT/ID/effect.json.
-    Import {
+    /// Write an identity HALD image, to turn an editor preset into a LUT for `import`.
+    ///
+    /// 1. Write the image, for example with `--level 12`.
+    /// 2. Open it in Lightroom or another editor as an ordinary image, not a raw file.
+    /// 3. Apply the preset or profile. Turn off grain, sharpening, clarity, texture, dehaze,
+    ///    vignette, lens corrections, and noise reduction: they act on neighbouring pixels,
+    ///    not on colors, and corrupt the table.
+    /// 4. Export at full size in sRGB, as 16-bit TIFF or PNG, without resizing or
+    ///    output sharpening.
+    /// 5. Import the export with `grkit effects import --lut <file> --input standard`.
+    #[command(verbatim_doc_comment)]
+    Hald {
+        /// The HALD level, 2 to 16. Level L gives an L^3 x L^3 image of L^2 points per axis.
+        #[arg(long, default_value_t = 12)]
+        level: usize,
         #[arg(long)]
-        cube: PathBuf,
+        out: PathBuf,
+    },
+    /// Fit a .cube LUT or a LUT image (PNG or TIFF) into a new effect definition at
+    /// OUT/ID/effect.json.
+    Import {
+        #[arg(long, visible_alias = "cube")]
+        lut: PathBuf,
         /// Official GR III 2.10 firmware, the source of the Standard base gamma.
         #[arg(long)]
         firmware: PathBuf,
-        #[arg(long, value_parser = ["srgb", "linear", "vlog"])]
+        /// What the LUT expects: standard for a GR JPEG in Standard, srgb for sRGB-encoded
+        /// scene light without a tone curve, or a log encoding. auto guesses it from the LUT
+        /// data (`fit::guess_input`): Standard or a log encoding, never srgb or linear.
+        #[arg(long, default_value = "auto",
+            value_parser = ["auto", "standard", "srgb", "linear", "vlog", "flog", "flog2", "flog2c"])]
         input: String,
         /// Exposure offset in EV, applied to scene-linear light before the LUT.
         #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
@@ -272,6 +295,13 @@ fn run(command: Command) -> Result<Value> {
             }))
         }
         Command::Effects {
+            command: EffectsCommand::Hald { level, out },
+        } => {
+            let png = grkit_core::lut_image::identity_png(level)?;
+            storage::write_new(&out, &png)?;
+            Ok(json!({"output": out, "level": level, "side": level.pow(3)}))
+        }
+        Command::Effects {
             command: EffectsCommand::Build { source, out },
         } => {
             let compiled = storage::compile_directory(&source)?;
@@ -300,7 +330,7 @@ fn run(command: Command) -> Result<Value> {
         Command::Effects {
             command:
                 EffectsCommand::Import {
-                    cube,
+                    lut,
                     firmware,
                     input,
                     exposure,
@@ -317,31 +347,41 @@ fn run(command: Command) -> Result<Value> {
             storage::validate_output(&output)?;
             let image = grkit_build::verify_firmware(&firmware, &grkit_build::target::GR3_210)?;
             let base_gamma = grkit_build::firmware::standard_base_gamma(&image)?;
-            let bytes = storage::read_bounded(&cube, MAX_CUBE_SIZE)?;
+            let bytes = storage::read_bounded(&lut, MAX_LUT_SIZE)?;
+            let input = if input == "auto" {
+                None
+            } else {
+                Some(input.parse()?)
+            };
+            let icon = json!({"label": label, "shape": shape});
             let request = fit::Import {
                 effect_id: &id,
                 name: &name,
-                label: &label,
-                shape: &shape,
-                source: cube
+                icon: &icon,
+                source: lut
                     .file_name()
                     .and_then(|name| name.to_str())
-                    .context("Expected a UTF-8 .cube filename")?,
-                input: input.parse()?,
+                    .context("Expected a UTF-8 LUT filename")?,
+                input,
                 exposure,
                 options: fit::Options {
                     post: !no_post,
                     ..fit::Options::default()
                 },
             };
-            let (result, text) = fit::import(&bytes, &base_gamma, &request)?;
-            let errors = effects::parse_json(text.as_bytes())?["attribution"]["fit"].take();
+            let imported = fit::import(&bytes, &base_gamma, &request)?;
+            let mut warnings = imported.warnings;
+            warnings.extend(fit::grade_warning(&imported.fit));
+            let errors =
+                effects::parse_json(imported.text.as_bytes())?["attribution"]["fit"].take();
             storage::write_directory(
                 &output,
-                &Files::from([("effect.json".to_owned(), text.into_bytes())]),
+                &Files::from([("effect.json".to_owned(), imported.text.into_bytes())]),
             )?;
             Ok(json!({"output": output, "effect_id": id, "fit": errors,
-                "post_matrix": result.post_matrix.is_some()}))
+                "post_matrix": imported.fit.post_matrix.is_some(),
+                "monochrome": imported.fit.monochrome, "toned": imported.fit.toned,
+                "warnings": warnings}))
         }
         Command::Package {
             build,

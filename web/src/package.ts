@@ -71,8 +71,11 @@ function transfer(url: string): Transfer {
 type Wasm = typeof import('./wasm/grkit_wasm.js');
 let wasm: Promise<Wasm> | undefined;
 
-/** The packager, loaded once. Its module downloads like the other files, with a stall limit. */
-function loadWasm(): Promise<Wasm> {
+/**
+ * The packager, loaded once. Its module downloads like the other files, with a stall limit.
+ * The page also uses it for the HALD image of the LUT import.
+ */
+export function loadWasm(): Promise<Wasm> {
   wasm ??= (async () => {
     const [module, bytes] = await Promise.all([
       import('./wasm/grkit_wasm.js'),
@@ -163,7 +166,11 @@ export async function buildPackage(
         for (const path of listedPaths(build)) use(runtimeUrl(target, path)).catch(ignore);
       })
       .catch(ignore);
-    const effectBytes = Promise.all(effects.map((effect) => use(effectUrl(target, effect.file))));
+    const effectBytes = Promise.all(
+      effects.map((effect) =>
+        effect.imported ? Promise.resolve(effect.imported.blob) : use(effectUrl(target, effect.file)),
+      ),
+    );
     // The build awaits the effects later. Until then, a failure is not an unhandled rejection.
     effectBytes.catch(ignore);
     const [{ Package }, build, guide] = await Promise.all([
@@ -184,7 +191,8 @@ export async function buildPackage(
       }
       for (const [index, blob] of (await effectBytes).entries()) {
         const effect = effects[index]!;
-        if ((await sha256(blob)) !== effect.sha256) {
+        // An imported effect comes from this page, so it has no site file to check.
+        if (!effect.imported && (await sha256(blob)) !== effect.sha256) {
           throw new Error(`Effect checksum mismatch: ${effect.id}`);
         }
         builder.addEffect(blob);

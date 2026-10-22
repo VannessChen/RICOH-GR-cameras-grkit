@@ -99,9 +99,6 @@ int main(void)
                text_arena + (GRKIT_TEXT_SUMMARY + (language * GRKIT_TEXT_RECORDS + 3) * GRKIT_SUMMARY_UNITS * 2) / 2);
     }
     test_language = 0;
-    /* x * 2260 >> 16 equals x / 29 for each record offset / 64. */
-    for (u32 index = 0; index < GRKIT_TEXT_RECORDS; ++index)
-        assert(((index * GRKIT_RECORD_SIZE) >> 6) * 2260U >> 16 == index);
     assert(menu_viewfinder_icon_select(0x166, 0) == 0x8003);
     assert(menu_viewfinder_icon_select(0x166, 1) == 0x166);
     test_header[GRKIT_HOST_ACTIVE / 4] += 4;

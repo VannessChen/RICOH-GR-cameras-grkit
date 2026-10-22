@@ -271,6 +271,7 @@ dependencies = [
  "ab_glyph",
  "anyhow",
  "crc32fast",
+ "flate2",
  "hex",
  "serde",
  "serde_json",

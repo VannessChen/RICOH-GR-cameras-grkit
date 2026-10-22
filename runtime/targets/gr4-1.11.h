@@ -92,8 +92,10 @@
 /* Picture processing: the YCbCr matrix calculation. */
 #define FW_YCBCR_CALC FIRMWARE(0x5391a650)
 /* The processing hooks (gr4-processing.S) keep the type table index in the
-   frame slot fp-0x34. */
+   frame slot fp-0x34. The function stores the highlight correction flag of
+   the capture in fp-0x30 before the hooks. */
 #define PROCESSING_INDEX_SLOT 0x34
+#define PROCESSING_HIGHLIGHT_SLOT 0x30
 
 /* Date stamp: cache maintenance and the local time. */
 #define FW_CACHE_FLUSH FIRMWARE(0x53a95804)

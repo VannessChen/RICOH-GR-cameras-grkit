@@ -10,6 +10,7 @@ struct patch { u32 address, size, kind; const u8 *before; u8 *after; };
 struct guard { u32 address, size; const u8 *bytes; };
 #include "relocation.h"
 #include "module_payload.h"
+#include "grf.h"
 #ifndef TABLE_ADDRESS
 /* The native type tables. A relocatable target resolves them. */
 #define TABLE_ADDRESS(i) table_addresses[i]
@@ -29,8 +30,9 @@ static long syscall6(u32 number, u32 a, u32 b, u32 c, u32 d, u32 e, u32 f)
     return (long)r0;
 }
 static volatile u8 *mapping;
-static u8 profiles[MAX_COUNT][8192], temporary[8192], directory_entries[4096];
-static u8 plan[20 + MAX_COUNT * 8192];
+static u8 profiles[MAX_COUNT][GRKIT_GRF_MAX_SIZE], temporary[GRKIT_GRF_MAX_SIZE];
+static u8 directory_entries[4096];
+static u8 plan[20 + MAX_COUNT * GRKIT_GRF_MAX_SIZE];
 static u32 count, size, icon_chunks;
 static const char root[] = EFFECTS_PATH;
 static const char plan_path[] = PLAN_PATH;
@@ -106,6 +108,26 @@ static long directory_read(long fd, u8 *buffer, u32 size)
 { return syscall6(217,fd,(u32)buffer,size,0,0,0); }
 static long directory_seek(long fd, long offset, u32 whence)
 { return syscall6(19,fd,(u32)offset,whence,0,0,0); }
+/* Reads an effect file of GRKIT_GRF_SIZE or GRKIT_GRF_MAX_SIZE bytes into a buffer
+   of GRKIT_GRF_MAX_SIZE bytes, zeros after a shorter file. Returns the file size,
+   or 0 for any other size or a read error. */
+static u32 read_effect(const char *path, u8 *buffer)
+{
+    zero(buffer, GRKIT_GRF_MAX_SIZE);
+    long fd=syscall6(5,(u32)path,0x8800,0,0,0,0);
+    if(fd<0) return 0;
+    u32 have=0; long got=0;
+    while(have<GRKIT_GRF_MAX_SIZE) {
+        got=syscall6(3,fd,(u32)(buffer+have),GRKIT_GRF_MAX_SIZE-have,0,0,0);
+        if(got<=0) break;
+        have+=(u32)got;
+    }
+    u8 extra; long more=0;
+    if(have==GRKIT_GRF_MAX_SIZE) more=syscall6(3,fd,(u32)&extra,1,0,0,0);
+    syscall6(6,fd,0,0,0,0,0);
+    if(got<0 || more!=0) return 0;
+    return (have==GRKIT_GRF_SIZE || have==GRKIT_GRF_MAX_SIZE) ? have : 0;
+}
 /* A symbolic link or an unusable file does not stop the other effects. */
 static void offer_effect(const char *name, u32 n, void *context)
 {
@@ -114,7 +136,8 @@ static void offer_effect(const char *name, u32 n, void *context)
     char path[sizeof(root) + 13]; u32 prefix=length(root);
     copy((u8 *)path,(const u8 *)root,prefix); path[prefix++]='/';
     copy((u8 *)path+prefix,(const u8 *)name,n+1);
-    if(read_file(path,temporary,8192) && valid_profile(temporary))
+    u32 size=read_effect(path,temporary);
+    if(size && valid_profile(temporary,size))
         count=catalog_offer(profiles,names,count,MAX_COUNT,temporary,name);
 }
 static int discover(void)
@@ -140,6 +163,86 @@ static int discover(void)
 #else
 #define NATIVE_CODE(code) 0
 #endif
+#if !defined(GRKIT_NO_MODULES) && !defined(GRKIT_NO_IMAGE_CONTROL)
+/* The MultiAxial parameter set of an effect with hue sectors (GRF feature 8,
+   grkit_core::hue), at RECORD_MULTIAXIAL. The firmware reads a set as six
+   pointers: bounds (16 u16, four descending ones per Cb/Cr quadrant), bank
+   selectors (20 u8, five segments per quadrant), a matrix header whose word
+   +0x10 points to 60 3x3 i32 Q10 matrices (12 banks x 5 levels), region values,
+   21 u16 control fields, and the RGB to YCbCr matrix. The bounds and selectors
+   give 11 equal sectors of the hue coordinate, sector k in bank k + 1; bank 0
+   stays the identity. Without hue levels, every level of a bank gets the same
+   matrix and control fields 1..8 = 0xfff keep every pixel on level 0. With them
+   (feature 16), levels 1 to 3 come from the GRF, level 4 repeats level 3, and
+   fields 1..8 are hue::LEVEL_CONTROL. Fields 10..20, the weight curve, come from
+   the GRF. The region values and the YCbCr matrix are those of Standard's set
+   (type 11). */
+static const u16 multiaxial_bounds[16] = GRKIT_HUE_BOUNDS;
+static const u8 multiaxial_banks[20] = GRKIT_HUE_SELECTORS;
+static const u16 multiaxial_levels[8] = GRKIT_HUE_LEVEL_CONTROL;
+static const u16 multiaxial_levels_halved[8] = GRKIT_HUE_LEVEL_CONTROL_HALVED;
+static void multiaxial(u32 record, const u8 *profile)
+{
+    const u8 *sectors = profile + GRKIT_HUE_OFFSET;
+    int levels = (get32(profile + 84) & GRKIT_FEATURE_HUE_LEVELS) != 0;
+    u32 slot = record + GRKIT_RECORD_MULTIAXIAL, table = slot + 0x98;
+    u32 stock = word(TABLE_ADDRESS(1) + 11 * 4);
+    store(slot, slot + 8);
+    store(slot + 8, slot + 0x20);
+    store(slot + 12, slot + 0x40);
+    store(slot + 16, slot + 0x58);
+    store(slot + 20, word(stock + 12));
+    store(slot + 24, slot + 0x6c);
+    store(slot + 28, word(stock + 20));
+    copy(at(slot + 0x20), (const u8 *)multiaxial_bounds, sizeof multiaxial_bounds);
+    copy(at(slot + 0x40), multiaxial_banks, sizeof multiaxial_banks);
+    for (u32 k = 0; k < 5; ++k) store(slot + 0x58 + k * 4, table);
+    volatile u16 *control = (volatile u16 *)at(slot + 0x6c);
+    control[0] = 0;
+    for (u32 k = 1; k <= 8; ++k) control[k] = levels ? multiaxial_levels[k - 1] : 0xfff;
+    control[9] = 0;
+    const u8 *fields = sectors + GRKIT_HUE_MATRICES;
+    for (u32 k = 0; k < 11; ++k) control[10 + k] = (u16)(fields[k * 2] | fields[k * 2 + 1] << 8);
+    for (u32 bank = 0; bank < 12; ++bank)
+        for (u32 level = 0; level < 5; ++level) {
+            /* Levels 1 to 3 follow GRKIT_HUE_LEVEL_OFFSET; level 4 repeats level 3. */
+            u32 from = levels ? (level < 4 ? level : 3) : 0;
+            const u8 *c = from ? profile + GRKIT_HUE_LEVEL_OFFSET + (from - 1) * GRKIT_HUE_MATRICES : sectors;
+            int m[9] = {1024, 0, 0, 0, 1024, 0, 0, 0, 1024};
+            for (u32 r = 0; bank && r < 3; ++r) {
+                /* GRF validation keeps each diagonal within the 12-bit register. */
+                int a = (signed char)c[(bank - 1) * 6 + r * 2] * 8;
+                int b = (signed char)c[(bank - 1) * 6 + r * 2 + 1] * 8;
+                m[r * 3 + (r + 1) % 3] = a;
+                m[r * 3 + (r + 2) % 3] = b;
+                m[r * 4] = 1024 - a - b;
+            }
+            for (u32 k = 0; k < 9; ++k) store(table + (bank * 5 + level) * 36 + k * 4, (u32)m[k]);
+        }
+    /* The set for a capture with highlight correction, which the hooks pick by the
+       native flag. The camera then halves the stage's input, so these control fields
+       select the levels and the weight of twice the luminance: the weight breakpoints
+       halve and its slopes double (9-bit, clamped). The address at +4, the set at
+       +0x908, its control fields at +0x920; the other pointers are those of the set. */
+    u32 halved = slot + 0x908;
+    store(slot + 4, halved);
+    for (u32 k = 0; k < 6; ++k) store(halved + k * 4, word(slot + 8 + k * 4));
+    store(halved + 16, slot + 0x920);
+    volatile u16 *half = (volatile u16 *)at(slot + 0x920);
+    half[0] = 0;
+    for (u32 k = 1; k <= 8; ++k) half[k] = levels ? multiaxial_levels_halved[k - 1] : 0xfff;
+    half[9] = 0;
+    for (u32 k = 0; k < 4; ++k) {
+        int slope = (int)(control[14 + k] & 0x1ff) - ((control[14 + k] & 0x100) ? 0x200 : 0);
+        slope *= 2;
+        if (slope > 255) slope = 255;
+        if (slope < -256) slope = -256;
+        half[10 + k] = control[10 + k];
+        half[14 + k] = (u16)(slope & 0x1ff);
+    }
+    for (u32 k = 18; k <= 20; ++k) half[k] = (u16)(control[k] / 2);
+}
+#endif
 static u32 effect_code(const u8 *id)
 {
     u32 hash = 0x811c9dc5;
@@ -163,13 +266,14 @@ static int scan(void)
     layout();
     put32(plan, 0x314d5247); put32(plan + 4, count);
     put32(plan + 8, size / 4); put32(plan + 12, icon_chunks);
-    put32(plan + 16, 20 + count * 8192);
-    for (u32 i = 0; i < count; ++i) copy(plan + 20 + i * 8192, profiles[i], 8192);
+    put32(plan + 16, 20 + count * GRKIT_GRF_MAX_SIZE);
+    for (u32 i = 0; i < count; ++i)
+        copy(plan + 20 + i * GRKIT_GRF_MAX_SIZE, profiles[i], GRKIT_GRF_MAX_SIZE);
     /* O_EXCL: the loader resends SCAN until a plan appears, so attempts can overlap. */
     long fd = syscall6(5, (u32)plan_tmp, 0xc1, 0600, 0, 0, 0);
     if (fd == -17) return 3;
     if (fd < 0) return 36;
-    u32 done = 0, total = 20 + count * 8192;
+    u32 done = 0, total = 20 + count * GRKIT_GRF_MAX_SIZE;
     while (done < total) {
         long n = syscall6(4, fd, (u32)(plan + done), total - done, 0, 0, 0);
         if (n <= 0) break;
@@ -275,11 +379,11 @@ static int install(void)
     for (u32 i = 0; i < PLUGIN_COUNT; ++i)
         if (selected >> i & 1) needed_points |= plugin_points[i];
     layout();
-    if (!read_file(plan_path, plan, 20 + count * 8192) || get32(plan) != 0x314d5247 ||
+    if (!read_file(plan_path, plan, 20 + count * GRKIT_GRF_MAX_SIZE) || get32(plan) != 0x314d5247 ||
         get32(plan + 4) != count || get32(plan + 8) != size / 4 ||
-        get32(plan + 12) != icon_chunks || get32(plan + 16) != 20 + count * 8192) return 37;
+        get32(plan + 12) != icon_chunks || get32(plan + 16) != 20 + count * GRKIT_GRF_MAX_SIZE) return 37;
     for (u32 i = 0; i < count; ++i)
-        if (!equal(plan + 20 + i * 8192, profiles[i], 8192)) return 37;
+        if (!equal(plan + 20 + i * GRKIT_GRF_MAX_SIZE, profiles[i], GRKIT_GRF_MAX_SIZE)) return 37;
 #ifdef GRKIT_RELOCATE
     if ((status = relocate())) return status;
 #endif
@@ -397,6 +501,7 @@ static int install(void)
            reserved zero bytes. */
         copy(at(record + GRKIT_RECORD_FEATURES), profile + 84, 4);
         copy(at(record + GRKIT_RECORD_POST), profile + 88, 40);
+        if (get32(profile + 84) & 8U) multiaxial(record, profile);
         /* Neutral Fn adjustments until the loader restores the saved ones. */
         zero(at(record + GRKIT_RECORD_PARAMETERS), 9);
         u32 n = length((const char *)profile + 48);

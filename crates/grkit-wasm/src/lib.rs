@@ -1,17 +1,104 @@
-//! Browser entry points that assemble a GRKit SD package.
+//! Browser entry points that assemble a GRKit SD package and import LUTs as effects.
 //!
 //! The site serves a runtime build as CI publishes it: `build.json` and the files under `sd/`.
 //! The page fetches those files and the selected effects, then builds the ZIP locally.
 //! `Builder` holds the logic so that native tests cover it. `Package` only adapts it for JS.
+//! `import_lut` fits a LUT as `grkit effects import` does, over the base gamma of the catalog.
 
 use anyhow::{ensure, Context, Result};
 use grkit_core::{
     camera::{self, Camera},
-    effects,
+    cube::Cube,
+    effects, fit, lut_image,
     modules::Selection,
-    packaging, runtime, Files,
+    packaging, runtime, site, Files,
 };
+use serde_json::Value;
 use wasm_bindgen::prelude::*;
+
+/// The largest LUT file that the site imports. A 16-bit TIFF HALD image of level 16 has
+/// about 100 MB. The CLI accepts more, because it does not share the memory of a page.
+pub const MAX_LUT_SIZE: usize = 128 * 1024 * 1024;
+
+/// An effect that `import_lut` made from a LUT.
+pub struct Imported {
+    /// The effect.json text, as `grkit effects import` writes it.
+    pub definition: String,
+    /// The compiled `.GRF` effect for the package.
+    pub blob: Vec<u8>,
+    /// The RAW preview table, as `grkit effects publish` writes it for a catalog effect.
+    pub preview: Vec<u8>,
+    /// The ADJ icon: 40 x 40 RGBA pixels.
+    pub icon: Vec<u8>,
+    pub monochrome: bool,
+    /// A to D: how closely the effect follows the LUT (`fit::Grade`). The page shows a
+    /// description of it, not the letter.
+    pub grade: &'static str,
+    /// Conditions that the user should check before using the effect. The page describes the
+    /// grade itself.
+    pub warnings: Vec<String>,
+}
+
+/// What the user gives for an import. The fields are the `grkit effects import` options.
+pub struct ImportRequest<'a> {
+    pub effect_id: &'a str,
+    pub name: &'a str,
+    /// The `icon` of effect.json: a film cover (`template` box or cine) or a label tile.
+    pub icon: &'a Value,
+    /// The file name, recorded in the attribution.
+    pub source: &'a str,
+    /// The input encoding name: `standard`, `srgb`, `linear`, a log encoding, or `auto` for
+    /// the one that the LUT data suggests.
+    pub input: &'a str,
+}
+
+/// Rejects a LUT file over `MAX_LUT_SIZE` and reads the site catalog's base gamma.
+fn lut_inputs(bytes: &[u8], base_gamma: &[u16]) -> Result<[u16; 256]> {
+    ensure!(
+        bytes.len() <= MAX_LUT_SIZE,
+        "The LUT file is larger than {} MB",
+        MAX_LUT_SIZE >> 20
+    );
+    site::base_gamma(base_gamma)
+}
+
+/// Fits a `.cube` file or a LUT image over `base_gamma`, the table of the site catalog.
+pub fn import_lut(bytes: &[u8], base_gamma: &[u16], request: &ImportRequest) -> Result<Imported> {
+    let base_gamma = lut_inputs(bytes, base_gamma)?;
+    let imported = fit::import(
+        bytes,
+        &base_gamma,
+        &fit::Import {
+            effect_id: request.effect_id,
+            name: request.name,
+            icon: request.icon,
+            source: request.source,
+            input: match request.input {
+                "auto" => None,
+                name => Some(name.parse()?),
+            },
+            exposure: 0.0,
+            options: fit::Options::default(),
+        },
+    )?;
+    let blob = effects::compile_definition(&effects::parse_json(imported.text.as_bytes())?)?;
+    let (effect, icon) = effects::decode(&blob)?;
+    Ok(Imported {
+        preview: site::linear_preview_lut(&base_gamma, &effect)?,
+        icon,
+        blob,
+        monochrome: imported.fit.monochrome,
+        grade: fit::Grade::of(&imported.fit).letter(),
+        warnings: imported.warnings,
+        definition: imported.text,
+    })
+}
+
+/// The input that a LUT most likely expects, from its data alone: see `fit::guess_input`.
+pub fn guess_input(bytes: &[u8], base_gamma: &[u16]) -> Result<&'static str> {
+    let base_gamma = lut_inputs(bytes, base_gamma)?;
+    Ok(fit::guess_input(&base_gamma, &Cube::read(bytes)?).name())
+}
 
 /// Collects one runtime build and a set of compiled effects, then assembles the package.
 pub struct Builder {
@@ -211,6 +298,108 @@ pub fn scripts_off_package(camera: &str) -> Result<Vec<u8>, JsError> {
     grkit_core::camera::find(camera)
         .and_then(grkit_core::packaging::assemble_scripts_off)
         .map_err(js_error)
+}
+
+/// An effect fitted from a LUT. See `importLut`.
+#[wasm_bindgen(js_name = ImportedEffect)]
+pub struct ImportedEffect(Imported);
+
+#[wasm_bindgen(js_class = ImportedEffect)]
+impl ImportedEffect {
+    /// The effect.json text.
+    #[wasm_bindgen(getter)]
+    pub fn definition(&self) -> String {
+        self.0.definition.clone()
+    }
+
+    /// The compiled `.GRF` effect, for `Package.addEffect`.
+    #[wasm_bindgen(getter)]
+    pub fn blob(&self) -> Vec<u8> {
+        self.0.blob.clone()
+    }
+
+    /// The RAW preview table: 33 x 33 x 33 RGB bytes over sRGB-shaped linear input.
+    #[wasm_bindgen(getter)]
+    pub fn preview(&self) -> Vec<u8> {
+        self.0.preview.clone()
+    }
+
+    /// The ADJ icon: 40 x 40 RGBA pixels.
+    #[wasm_bindgen(getter)]
+    pub fn icon(&self) -> Vec<u8> {
+        self.0.icon.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn monochrome(&self) -> bool {
+        self.0.monochrome
+    }
+
+    /// A to D: how closely the effect follows the LUT.
+    #[wasm_bindgen(getter)]
+    pub fn grade(&self) -> String {
+        self.0.grade.to_owned()
+    }
+
+    /// Conditions that the user should check before using the effect, in English.
+    #[wasm_bindgen(getter)]
+    pub fn warnings(&self) -> Vec<String> {
+        self.0.warnings.clone()
+    }
+}
+
+/// Fits a `.cube` file or a LUT image (PNG or TIFF) into an effect, as `grkit effects import`
+/// does. `baseGamma` is the `base_gamma` array of the site catalog. The fit takes seconds,
+/// so call it from a Worker.
+/// `icon` is the JSON text of the effect.json `icon`, such as
+/// `{"template":"box","brand":"Kodak","name":"PORTRA","number":"400","band":true}`.
+#[wasm_bindgen(js_name = importLut)]
+pub fn import_lut_js(
+    bytes: &[u8],
+    source: &str,
+    input: &str,
+    base_gamma: &[u16],
+    effect_id: &str,
+    name: &str,
+    icon: &str,
+) -> Result<ImportedEffect, JsError> {
+    let icon: Value =
+        serde_json::from_str(icon).map_err(|error| JsError::new(&error.to_string()))?;
+    let request = ImportRequest {
+        effect_id,
+        name,
+        icon: &icon,
+        source,
+        input,
+    };
+    import_lut(bytes, base_gamma, &request)
+        .map(ImportedEffect)
+        .map_err(js_error)
+}
+
+/// The input that a `.cube` file or LUT image most likely expects (`standard`, `vlog`,
+/// `flog`, `flog2`, or `flog2c`), from its data alone. `baseGamma` is the `base_gamma` array
+/// of the site catalog. It reads the whole file, so call it from a Worker.
+#[wasm_bindgen(js_name = guessInput)]
+pub fn guess_input_js(bytes: &[u8], base_gamma: &[u16]) -> Result<String, JsError> {
+    guess_input(bytes, base_gamma)
+        .map(str::to_owned)
+        .map_err(js_error)
+}
+
+/// The camera pixels of an effect.json `icon` (JSON text): 40 x 40 RGBA. It fails with the
+/// reason when a text does not fit, so the page can check an icon before an import.
+#[wasm_bindgen(js_name = iconPixels)]
+pub fn icon_pixels_js(icon: &str) -> Result<Vec<u8>, JsError> {
+    let icon: Value =
+        serde_json::from_str(icon).map_err(|error| JsError::new(&error.to_string()))?;
+    effects::icon_pixels(&icon).map_err(js_error)
+}
+
+/// An identity HALD PNG of `level` (2 to 16), to turn an editor preset into a LUT image.
+#[wasm_bindgen(js_name = haldImage)]
+pub fn hald_image(level: usize) -> Result<Vec<u8>, JsError> {
+    lut_image::identity_png(level).map_err(js_error)
 }
 
 fn js_error(error: anyhow::Error) -> JsError {

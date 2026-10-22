@@ -8,10 +8,10 @@ use anyhow::{ensure, Context, Result};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
-use crate::cube::{self, Matrix};
+use crate::cube::{self, Encoding};
 use crate::fit::{self, Model, Params};
 use crate::selective::{self, Selective};
-use crate::{effects, packaging, Files};
+use crate::{effects, hue, packaging, Files};
 
 /// Points on each axis of a preview table.
 pub const LUT_SIZE: usize = 33;
@@ -51,6 +51,10 @@ pub fn params(effect: &Value) -> Result<Params> {
         matrix: q13(&effect["matrix"])?,
         curves: [[0.0; 256]; 3],
         post: fit::IDENTITY,
+        sectors: effect
+            .get("hue_sectors")
+            .map(|value| hue::HueSectors::from_json(value).map(|s| s.stage()))
+            .transpose()?,
     };
     for (slot, curve) in result.curves.iter_mut().zip(curves) {
         *slot = coefficients::<256>(curve, "curve")?.map(|v| v as f64);
@@ -59,42 +63,6 @@ pub fn params(effect: &Value) -> Result<Params> {
         result.post = q13(post)?;
     }
     Ok(result)
-}
-
-/// The base-gamma index whose output is `code` (0..16384), clipped to the table domain.
-fn inverse_base_gamma(base: &[u16; 256], code: f64) -> f64 {
-    let base = base.map(f64::from);
-    if code <= base[0] {
-        return 0.0;
-    }
-    let Some(upper) = (1..256).find(|&i| base[i] >= code) else {
-        return 255.0;
-    };
-    let (low, high) = (base[upper - 1], base[upper]);
-    upper as f64 - 1.0 + (code - low) / (high - low)
-}
-
-/// Inverts the Standard rendering, so `Model::render` with Standard returns the input again.
-struct Standard {
-    base: [u16; 256],
-    inverse: Matrix,
-}
-
-impl Standard {
-    fn new(base: &[u16; 256]) -> Self {
-        let look = unit(&fit::STANDARD_LOOK);
-        let rows: Matrix = std::array::from_fn(|r| std::array::from_fn(|c| look[r * 3 + c]));
-        Self {
-            base: *base,
-            inverse: cube::inverse(&rows).expect("the Standard look matrix is invertible"),
-        }
-    }
-
-    /// Scene-linear light that Standard renders as the sRGB-encoded `display`.
-    fn linear(&self, display: [f64; 3]) -> [f64; 3] {
-        let mixed = display.map(|v| inverse_base_gamma(&self.base, v * 16384.0) / fit::K);
-        cube::mul(&self.inverse, mixed)
-    }
 }
 
 /// A legacy Standard-JPEG input table, red fastest, then green, then blue.
@@ -106,13 +74,13 @@ pub fn preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
         .map(|value| Selective::from_json(value).map(|s| s.table()))
         .transpose()?;
     let model = Model::new(base_gamma);
-    let standard = Standard::new(base_gamma);
     let step = |i: usize| i as f64 / (LUT_SIZE - 1) as f64;
     let mut table = Vec::with_capacity(LUT_SIZE.pow(3) * 3);
     for b in 0..LUT_SIZE {
         for g in 0..LUT_SIZE {
             for r in 0..LUT_SIZE {
-                let linear = standard.linear([step(r), step(g), step(b)]);
+                // Scene-linear light that Standard renders as this display color.
+                let linear = model.decode(Encoding::Standard, [step(r), step(g), step(b)]);
                 let mut display = model.render(&params, linear);
                 if let Some(table) = &selective {
                     display = selective::apply_rgb(table, display);
@@ -161,9 +129,7 @@ pub fn linear_preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec
 /// Standard applies its look matrix and base gamma directly, without effect curves.
 pub fn standard_linear_preview_lut(base_gamma: &[u16; 256]) -> Vec<u8> {
     let model = Model::new(base_gamma);
-    let look = unit(&fit::STANDARD_LOOK);
-    let matrix: Matrix = std::array::from_fn(|r| std::array::from_fn(|c| look[r * 3 + c]));
-    linear_lut(|linear| cube::mul(&matrix, linear).map(|value| model.base_gamma(value) / 16384.0))
+    linear_lut(|linear| model.standard(linear))
 }
 
 /// Standard base64 with padding. The catalog carries each 40 x 40 RGBA icon
@@ -192,9 +158,25 @@ fn text<'a>(value: &'a Value, what: &str) -> Result<&'a str> {
         .with_context(|| format!("Expected effect {what}"))
 }
 
+/// Checks a Standard base gamma table from a site catalog: 256 values from 0 that do
+/// not decrease and end near 16384, as `grkit_build::firmware::standard_base_gamma` reads them.
+pub fn base_gamma(values: &[u16]) -> Result<[u16; 256]> {
+    let table: [u16; 256] = values
+        .try_into()
+        .context("Expected 256 base gamma values")?;
+    ensure!(
+        table[0] == 0
+            && table.windows(2).all(|pair| pair[0] <= pair[1])
+            && (16000..=16384).contains(&table[255]),
+        "Unexpected Standard base gamma"
+    );
+    Ok(table)
+}
+
 /// Compiles effect definitions for the site catalog of `target`, whose firmware holds
 /// `base_gamma`. The result holds `catalog.json`, one `.GRF` per effect under its
 /// package filename, `preview/<id>.lut`, and the Standard baseline preview table.
+/// The catalog also gives `base_gamma`, so the site can import LUTs without the firmware.
 pub fn publish_effects(
     definitions: &[Value],
     base_gamma: &[u16; 256],
@@ -250,6 +232,9 @@ pub fn publish_effects(
     let catalog = json!({
         "schema": CATALOG_SCHEMA,
         "target": target,
+        // The site fits imported LUTs over this table, as `grkit effects import` does with
+        // the table that it reads from the firmware. See `base_gamma`.
+        "base_gamma": base_gamma.as_slice(),
         "preview": {
             "size": LUT_SIZE,
             "order": "rgb",

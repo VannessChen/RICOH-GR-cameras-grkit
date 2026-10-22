@@ -1,0 +1,130 @@
+use grkit_core::{cube, effects, fit, site};
+use grkit_wasm::{guess_input, import_lut, ImportRequest, MAX_LUT_SIZE};
+use serde_json::{json, Value};
+use std::sync::LazyLock;
+
+/// The analytic stand-in for the firmware table from the core import tests.
+fn synthetic_base() -> [u16; 256] {
+    let scale = 1.2 * 0.18 / fit::MID_INDEX;
+    let white = 255.0 * scale;
+    std::array::from_fn(|i| {
+        let x = i as f64 * scale;
+        let shoulder = x * (1.0 + x / (white * white)) / (1.0 + x);
+        (16384.0 * cube::srgb_encode(shoulder)).round() as u16
+    })
+}
+
+/// A small warm `.cube` LUT: red up, blue down, a little less saturation.
+fn warm_cube() -> Vec<u8> {
+    let n = 9;
+    let mut text = format!("TITLE \"Warm\"\nLUT_3D_SIZE {n}\n");
+    for b in 0..n {
+        for g in 0..n {
+            for r in 0..n {
+                let [r, g, b] = [r, g, b].map(|v| v as f64 / (n - 1) as f64);
+                let (r, b) = ((r * 1.04).min(1.0), b * 0.94);
+                let luma = 0.3 * r + 0.6 * g + 0.1 * b;
+                let [r, g, b] = [r, g, b].map(|v| luma + (v - luma) * 0.9);
+                text.push_str(&format!("{r:.6} {g:.6} {b:.6}\n"));
+            }
+        }
+    }
+    text.into_bytes()
+}
+
+static COVER: LazyLock<Value> = LazyLock::new(
+    || json!({"template": "box", "brand": "Kodak", "name": "WARM", "number": "400", "band": true}),
+);
+
+fn request<'a>(id: &'a str, name: &'a str) -> ImportRequest<'a> {
+    ImportRequest {
+        effect_id: id,
+        name,
+        icon: &COVER,
+        source: "warm.cube",
+        input: "standard",
+    }
+}
+
+#[test]
+fn imports_a_cube_as_a_package_effect_with_a_preview() {
+    let imported =
+        import_lut(&warm_cube(), &synthetic_base(), &request("warm-v1", "Warm")).unwrap();
+    let (effect, icon) = effects::decode(&imported.blob).unwrap();
+    assert_eq!(effect["effect_id"], "warm-v1");
+    assert_eq!(effect["name"], "Warm");
+    assert_eq!(icon.len(), 40 * 40 * 4);
+    assert_eq!(imported.icon, icon);
+    let definition = effects::parse_json(imported.definition.as_bytes()).unwrap();
+    assert_eq!(definition["attribution"]["source"], "warm.cube");
+    // The cover replaces the label tile of `fit::import`, as the catalog effects use covers.
+    assert_eq!(definition["icon"], *COVER);
+    assert_eq!(icon, effects::icon_pixels(&COVER).unwrap());
+    assert_eq!(definition["attribution"]["fit"]["grade"], imported.grade);
+    assert_eq!(
+        effects::compile_definition(&definition).unwrap(),
+        imported.blob
+    );
+    assert_eq!(
+        imported.preview,
+        site::linear_preview_lut(&synthetic_base(), &effect).unwrap()
+    );
+    assert!(!imported.monochrome);
+    assert!(["A", "B"].contains(&imported.grade), "{}", imported.grade);
+}
+
+#[test]
+fn invalid_requests_fail_with_their_cause() {
+    let base = synthetic_base();
+    let cube = warm_cube();
+    let error = |result: anyhow::Result<grkit_wasm::Imported>| {
+        format!("{:#}", result.err().expect("expected an error"))
+    };
+    assert!(
+        error(import_lut(&cube, &base[..255], &request("warm-v1", "Warm")))
+            .contains("256 base gamma values")
+    );
+    assert!(
+        error(import_lut(&cube, &[0; 256], &request("warm-v1", "Warm")))
+            .contains("Unexpected Standard base gamma")
+    );
+    assert!(error(import_lut(&cube, &base, &request("Warm", "Warm"))).contains("effect ID"));
+    assert!(error(import_lut(
+        &cube,
+        &base,
+        &request("warm-v1", "A name over 16 chars")
+    ))
+    .contains("name"));
+    let wide = json!({"template": "box", "brand": "Kodak", "name": "WARM",
+        "number": "123456789012", "band": true});
+    let mut cover = request("warm-v1", "Warm");
+    cover.icon = &wide;
+    assert!(error(import_lut(&cube, &base, &cover)).contains("does not fit"));
+    let mut log = request("warm-v1", "Warm");
+    log.input = "slog3";
+    assert!(import_lut(&cube, &base, &log).is_err());
+    let large = vec![0; MAX_LUT_SIZE + 1];
+    assert!(error(import_lut(&large, &base, &request("warm-v1", "Warm"))).contains("larger"));
+    assert!(import_lut(b"not a LUT", &base, &request("warm-v1", "Warm")).is_err());
+}
+
+#[test]
+fn guesses_the_input_from_the_lut_data() {
+    let base = synthetic_base();
+    assert_eq!(guess_input(&warm_cube(), &base).unwrap(), "standard");
+    // A LUT that shows V-Log input as the Standard rendering asks for V-Log, whatever its name.
+    let model = fit::Model::new(&base);
+    let n = 17;
+    let mut text = format!("TITLE \"Look\"\nLUT_3D_SIZE {n}\n");
+    for b in 0..n {
+        for g in 0..n {
+            for r in 0..n {
+                let code = [r, g, b].map(|v| v as f64 / (n - 1) as f64);
+                let [r, g, b] = model.standard(model.decode(cube::Encoding::Vlog, code));
+                text.push_str(&format!("{r:.6} {g:.6} {b:.6}\n"));
+            }
+        }
+    }
+    assert_eq!(guess_input(text.as_bytes(), &base).unwrap(), "vlog");
+    assert!(guess_input(b"not a LUT", &base).is_err());
+}

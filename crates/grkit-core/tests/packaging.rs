@@ -438,7 +438,7 @@ fn runtime_layout_matches_target_capacity() {
     );
     assert_eq!(
         runtime::layout(20).unwrap(),
-        json!({"words": 48866, "icon_words": [64080, 4806]})
+        json!({"words": 61346, "icon_words": [64080, 4806]})
     );
     assert!(runtime::layout(21).is_err());
 }
@@ -457,7 +457,7 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
         // Picture scratch (the date stamp masks, then the shot ring), then the menu text.
         assert_eq!(
             words * 4,
-            512 + count * 0x740 + 141376 + 72 + 16384,
+            512 + count * 0x1100 + 141376 + 72 + 16384,
             "count {count}"
         );
         assert_eq!(

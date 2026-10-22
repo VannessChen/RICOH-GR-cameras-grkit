@@ -262,7 +262,8 @@ button {
   color: var(--ink-2);
 }
 
-.status.error {
+.status.error,
+.note.error {
   color: var(--warning);
 }
 
@@ -571,6 +572,11 @@ td input[type='checkbox'] {
   letter-spacing: -0.3px;
 }
 
+.cover-name-large {
+  font-size: 12px;
+  letter-spacing: -0.2px;
+}
+
 /* Modules, package, install */
 
 .modules {
@@ -623,6 +629,242 @@ td input[type='checkbox'] {
   font-size: 14px;
   line-height: 1.6;
   color: var(--warning);
+}
+
+/* LUT import */
+
+.effect-source {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload.secondary {
+  min-height: 44px;
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.upload.secondary:hover {
+  border-color: var(--ink);
+}
+
+.button.primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.button:disabled {
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.dialog-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+.dialog-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog .upload[aria-disabled='true'] {
+  color: var(--muted);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+.import-file-name {
+  min-width: 0;
+  padding: 0 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.import-text {
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.import-text[aria-invalid='true'] {
+  border-color: var(--warning);
+}
+
+.import-icon {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 24px;
+  margin: 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.import-icon legend {
+  padding: 0 0 8px;
+}
+
+.import-icon-preview .effect-icon {
+  width: 120px;
+}
+
+.import-icon-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  align-content: start;
+  gap: 12px;
+}
+
+.import-icon-fields > .check,
+.import-icon-fields > .note {
+  grid-column: 1 / -1;
+}
+
+.import-icon-edit summary {
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.import-icon-edit[open] summary {
+  margin-bottom: 12px;
+}
+
+.import-icon-error {
+  grid-column: 1 / -1;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.hald summary {
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.hald[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.import-done {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.import-done .effect-icon {
+  width: 96px;
+  flex: none;
+}
+
+.import-done-name {
+  margin: 0 0 4px;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.import-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.import-warnings {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+@media (max-width: 560px) {
+  .import-icon {
+    gap: 8px 16px;
+  }
+
+  .import-icon-preview .effect-icon {
+    width: 80px;
+  }
 }
 
 .package {

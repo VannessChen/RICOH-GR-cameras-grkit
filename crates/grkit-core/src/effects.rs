@@ -3,7 +3,10 @@
 //! Bytes 84..128 hold the optional extension: u32 features, an i16[9] signed Q13
 //! post-curve matrix at 88, and the selective color parameters at 106 (see
 //! `selective`). Bytes 120..128 are reserved. An effect without features has zeros in
-//! the whole extension.
+//! the whole extension. With feature 8, bytes 8084..8172 of the reserved tail hold the hue
+//! sectors (see `hue`); the rest of the tail stays zero. Feature 16 adds hue levels to
+//! feature 8: the file grows to `SIZE_WITH_LEVELS` bytes, and the bytes from `SIZE` hold
+//! the sectors of levels 1 to 3, then zeros.
 
 use anyhow::{bail, ensure, Context, Result};
 use serde::{
@@ -14,20 +17,29 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::fmt;
 
+use crate::hue;
 use crate::selective::{self, Selective};
 
 pub const MAGIC: &[u8; 8] = b"GRFX0001";
 pub const SIZE: usize = 8192;
+/// The size of an effect with hue levels (feature 16).
+pub const SIZE_WITH_LEVELS: usize = 8704;
 pub const ICON_SIZE: usize = 6400;
 pub const ICON_OFFSET: usize = 1684;
 pub const MONOCHROME: u32 = 1;
 pub const SCHEMA: &str = "grkit-effect-v1";
 pub const FEATURE_POST: u32 = 1;
 pub const FEATURE_SELECTIVE: u32 = 2;
-const FEATURES: u32 = FEATURE_POST | FEATURE_SELECTIVE;
+/// Hue sectors for the MultiAxial stage (`hue`), at HUE_OFFSET.
+pub const FEATURE_HUE_SECTORS: u32 = 8;
+/// Hue levels (`hue::LEVELS`), with feature 8, at `SIZE`.
+pub const FEATURE_HUE_LEVELS: u32 = 16;
+const FEATURES: u32 = FEATURE_POST | FEATURE_SELECTIVE | FEATURE_HUE_SECTORS | FEATURE_HUE_LEVELS;
+/// The hue sectors use the start of the reserved tail of the file.
+pub const HUE_OFFSET: usize = 8084;
 /// Optional keys of both a definition and a decoded effect. A definition writes
 /// `selective_color` in degrees; a decoded effect holds its GRF integers.
-const EXTENSION_KEYS: [&str; 2] = ["post_matrix", "selective_color"];
+const EXTENSION_KEYS: [&str; 3] = ["post_matrix", "selective_color", "hue_sectors"];
 const SELECTIVE_OFFSET: usize = 106;
 const RESERVED: std::ops::Range<usize> = SELECTIVE_OFFSET + selective::SIZE..128;
 
@@ -108,11 +120,31 @@ fn has_keys(value: &Value, keys: &[&str]) -> bool {
 
 /// Renders the `icon` of an effect definition: a label tile (`label`, `shape`),
 /// a film box (`template` "box"), or a motion picture film label (`template` "cine").
+/// A cover can leave out `number`, and then shows a large name.
 pub fn icon_pixels(icon: &Value) -> Result<Vec<u8>> {
     let text = |key: &str| {
         icon[key]
             .as_str()
             .with_context(|| format!("Expected icon {key}"))
+    };
+    // A present number has 1 to 12 characters. Without the key, the cover has none.
+    let number = || -> Result<&str> {
+        match icon.get("number") {
+            None => Ok(""),
+            Some(_) => {
+                let number = text("number")?;
+                ensure!(
+                    !number.is_empty(),
+                    "Expected a cover number, or no number key"
+                );
+                Ok(number)
+            }
+        }
+    };
+    let keys = |required: &[&str]| {
+        let mut with_number = required.to_vec();
+        with_number.push("number");
+        has_keys(icon, required) || has_keys(icon, &with_number)
     };
     match icon.get("template").map(|t| t.as_str().unwrap_or_default()) {
         None => {
@@ -124,18 +156,18 @@ pub fn icon_pixels(icon: &Value) -> Result<Vec<u8>> {
         }
         Some("box") => {
             ensure!(
-                has_keys(icon, &["template", "brand", "name", "number", "band"]),
-                "Expected box icon brand, name, number, and band"
+                keys(&["template", "brand", "name", "band"]),
+                "Expected box icon brand, name, band, and an optional number"
             );
             let band = icon["band"].as_bool().context("Expected icon band")?;
-            crate::artwork::render_box(text("brand")?, text("name")?, text("number")?, band)
+            crate::artwork::render_box(text("brand")?, text("name")?, number()?, band)
         }
         Some("cine") => {
             ensure!(
-                has_keys(icon, &["template", "brand", "name", "number"]),
-                "Expected cine icon brand, name, and number"
+                keys(&["template", "brand", "name"]),
+                "Expected cine icon brand, name, and an optional number"
             );
-            crate::artwork::render_cine(text("brand")?, text("name")?, text("number")?)
+            crate::artwork::render_cine(text("brand")?, text("name")?, number()?)
         }
         Some(_) => bail!("Expected icon template box or cine"),
     }
@@ -156,6 +188,7 @@ struct Extension {
     features: u32,
     post: [i16; 9],
     selective: Option<Selective>,
+    hue: Option<hue::HueSectors>,
 }
 
 fn extension(effect: &Value) -> Result<Extension> {
@@ -163,6 +196,7 @@ fn extension(effect: &Value) -> Result<Extension> {
         features: 0,
         post: [0; 9],
         selective: None,
+        hue: None,
     };
     if let Some(matrix) = effect.get("post_matrix") {
         let values = matrix
@@ -180,6 +214,14 @@ fn extension(effect: &Value) -> Result<Extension> {
     if let Some(value) = effect.get("selective_color") {
         result.selective = Some(Selective::from_json(value)?);
         result.features |= FEATURE_SELECTIVE;
+    }
+    if let Some(value) = effect.get("hue_sectors") {
+        let sectors = hue::HueSectors::from_json(value)?;
+        result.features |= FEATURE_HUE_SECTORS;
+        if sectors.levels.is_some() {
+            result.features |= FEATURE_HUE_LEVELS;
+        }
+        result.hue = Some(sectors);
     }
     Ok(result)
 }
@@ -243,6 +285,21 @@ pub fn coefficients(effect: &Value) -> Result<Vec<u8>> {
     Ok(result)
 }
 
+/// Checks an effect ID (`valid_id`) and a name of 1 to 16 printable ASCII characters.
+pub fn check_identity(effect_id: &str, name: &str) -> Result<()> {
+    ensure!(
+        valid_id(effect_id),
+        "Expected a 1 to 31 character lowercase ASCII effect ID"
+    );
+    ensure!(
+        (1..=16).contains(&name.len())
+            && name.trim() == name
+            && name.bytes().all(|c| (32..=126).contains(&c)),
+        "Expected 1 to 16 printable ASCII name characters without edge spaces"
+    );
+    Ok(())
+}
+
 pub fn validate(effect: &Value, icon: &[u8]) -> Result<()> {
     let mut optional = vec!["flags"];
     optional.extend(EXTENSION_KEYS);
@@ -252,26 +309,19 @@ pub fn validate(effect: &Value, icon: &[u8]) -> Result<()> {
             &["effect_id", "name", "matrix", "curves"],
             &optional
         ),
-        "Expected effect_id, name, matrix, curves, and optional flags, post_matrix, and selective_color"
+        "Expected effect_id, name, matrix, curves, and optional flags, post_matrix, selective_color, and hue_sectors"
     );
     let flags = effect
         .get("flags")
         .map_or(Some(0), Value::as_u64)
         .context("Unsupported effect flags")?;
     ensure!(flags <= MONOCHROME as u64, "Unsupported effect flags");
-    ensure!(
-        effect["effect_id"].as_str().is_some_and(valid_id),
-        "Expected a 1 to 31 character lowercase ASCII effect ID"
-    );
-    let name = effect["name"]
-        .as_str()
-        .context("Expected an ASCII effect name")?;
-    ensure!(
-        (1..=16).contains(&name.len())
-            && name.trim() == name
-            && name.bytes().all(|c| (32..=126).contains(&c)),
-        "Expected 1 to 16 printable ASCII name characters without edge spaces"
-    );
+    check_identity(
+        effect["effect_id"].as_str().unwrap_or(""),
+        effect["name"]
+            .as_str()
+            .context("Expected an ASCII effect name")?,
+    )?;
     coefficients(effect)?;
     let extension = extension(effect)?;
     ensure!(
@@ -281,6 +331,10 @@ pub fn validate(effect: &Value, icon: &[u8]) -> Result<()> {
     ensure!(
         flags != MONOCHROME as u64 || extension.features & FEATURE_SELECTIVE == 0,
         "Monochrome effects cannot have selective color"
+    );
+    ensure!(
+        flags != MONOCHROME as u64 || extension.features & FEATURE_HUE_SECTORS == 0,
+        "Monochrome effects cannot have hue sectors"
     );
     if flags == MONOCHROME as u64 {
         let matrix = effect["matrix"].as_array().unwrap();
@@ -319,7 +373,12 @@ pub fn checksum(blob: &[u8]) -> u32 {
 pub fn encode(effect: &Value, icon: &[u8]) -> Result<Vec<u8>> {
     validate(effect, icon)?;
     let extension = extension(effect)?;
-    let mut blob = vec![0; SIZE];
+    let size = if extension.features & FEATURE_HUE_LEVELS != 0 {
+        SIZE_WITH_LEVELS
+    } else {
+        SIZE
+    };
+    let mut blob = vec![0; size];
     blob[..8].copy_from_slice(MAGIC);
     blob[84..88].copy_from_slice(&extension.features.to_le_bytes());
     for (index, value) in extension.post.iter().enumerate() {
@@ -328,7 +387,13 @@ pub fn encode(effect: &Value, icon: &[u8]) -> Result<Vec<u8>> {
     if let Some(selective) = extension.selective {
         blob[SELECTIVE_OFFSET..RESERVED.start].copy_from_slice(&selective.to_bytes());
     }
-    blob[8..12].copy_from_slice(&(SIZE as u32).to_le_bytes());
+    if let Some(sectors) = extension.hue {
+        blob[HUE_OFFSET..HUE_OFFSET + hue::SIZE].copy_from_slice(&sectors.to_bytes());
+        if let Some(levels) = sectors.level_bytes() {
+            blob[SIZE..SIZE + hue::LEVEL_SIZE].copy_from_slice(&levels);
+        }
+    }
+    blob[8..12].copy_from_slice(&(size as u32).to_le_bytes());
     blob[80..84].copy_from_slice(
         &(effect.get("flags").and_then(Value::as_u64).unwrap_or(0) as u32).to_le_bytes(),
     );
@@ -345,18 +410,34 @@ pub fn encode(effect: &Value, icon: &[u8]) -> Result<Vec<u8>> {
 
 pub fn decode(blob: &[u8]) -> Result<(Value, Vec<u8>)> {
     ensure!(
-        blob.len() == SIZE && &blob[..8] == MAGIC,
+        (blob.len() == SIZE || blob.len() == SIZE_WITH_LEVELS) && &blob[..8] == MAGIC,
         "Expected one complete GRFX0001 effect"
     );
     let read_u32 = |offset| u32::from_le_bytes(blob[offset..offset + 4].try_into().unwrap());
     ensure!(
-        read_u32(8) == SIZE as u32 && read_u32(12) == checksum(blob),
+        read_u32(8) == blob.len() as u32 && read_u32(12) == checksum(blob),
         "Invalid effect size or CRC32"
     );
+    let levels = read_u32(84) & FEATURE_HUE_LEVELS != 0;
     ensure!(
-        [(RESERVED.start, RESERVED.end), (146, 148), (8084, SIZE)]
-            .iter()
-            .all(|(start, end)| blob[*start..*end].iter().all(|v| *v == 0)),
+        levels == (blob.len() == SIZE_WITH_LEVELS)
+            && (!levels || read_u32(84) & FEATURE_HUE_SECTORS != 0),
+        "Hue levels need hue sectors and the larger effect size"
+    );
+    let hue_end = if read_u32(84) & FEATURE_HUE_SECTORS != 0 {
+        HUE_OFFSET + hue::SIZE
+    } else {
+        HUE_OFFSET
+    };
+    ensure!(
+        [
+            (RESERVED.start, RESERVED.end),
+            (146, 148),
+            (hue_end, SIZE),
+            (blob.len().min(SIZE + hue::LEVEL_SIZE), blob.len()),
+        ]
+        .iter()
+        .all(|(start, end)| blob[*start..*end].iter().all(|v| *v == 0)),
         "Unsupported effect flags or reserved bytes"
     );
     let string = |offset| -> Result<&str> {
@@ -410,6 +491,16 @@ pub fn decode(blob: &[u8]) -> Result<(Value, Vec<u8>)> {
             object.insert(
                 "selective_color".into(),
                 Selective::from_bytes(selective)?.to_json(),
+            );
+        }
+        if features & FEATURE_HUE_SECTORS != 0 {
+            object.insert(
+                "hue_sectors".into(),
+                hue::HueSectors::from_bytes(
+                    &blob[HUE_OFFSET..hue_end],
+                    levels.then(|| &blob[SIZE..SIZE + hue::LEVEL_SIZE]),
+                )?
+                .to_json(),
             );
         }
     }
@@ -501,6 +592,9 @@ pub fn compile_definition(definition: &Value) -> Result<Vec<u8>> {
             "selective_color".into(),
             Selective::from_definition(value)?.to_json(),
         );
+    }
+    if let Some(value) = definition.get("hue_sectors") {
+        object.insert("hue_sectors".into(), value.clone());
     }
     encode(&effect, &pixels)
 }

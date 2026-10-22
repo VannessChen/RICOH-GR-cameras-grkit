@@ -51,6 +51,8 @@ module_gamma_dirty:
     movne r2, #1
     cmp r2, #0
     strbne r2, [r4, #5]
+    // The MultiAxial stage (+6) holds the hue sectors of a record.
+    strbne r2, [r4, #6]
     strbne r2, [r4, #7]
     // Private records and record changes always rebuild the curves.
     orrs r2, r2, r0

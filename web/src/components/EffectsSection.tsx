@@ -10,7 +10,14 @@ import {
 import { Handle, HandleRoot, Item, Provider, Root } from 'react-compare-slider/components';
 import { useReactCompareSlider } from 'react-compare-slider/hooks';
 import { PREVIEW_TARGET } from '../cameras';
-import { effectUrl, loadCatalog, MAX_EFFECTS, type Effect } from '../catalog';
+import {
+  effectUrl,
+  loadCatalog,
+  MAX_EFFECTS,
+  previewTable,
+  type Effect,
+  type ImportedEffect,
+} from '../catalog';
 import type { Language, Strings } from '../i18n';
 import { forget, preview, type PreviewEffect, type Source } from '../preview/render';
 import { DEFAULT_SAMPLE } from '../preview/samples';
@@ -18,6 +25,7 @@ import { PhotoLoader } from '../preview/raw';
 import { STOCKS } from '../stocks';
 import { EffectIcon } from './EffectIcon';
 import { ErrorBoundary } from './ErrorBoundary';
+import { ImportDialog } from './ImportDialog';
 
 const DEFAULT_PREVIEW = 'portra-400-endura-v1';
 
@@ -31,11 +39,23 @@ interface Props {
   language: Language;
   selection: ReadonlySet<string>;
   onSelectionChange: (selection: ReadonlySet<string>) => void;
+  /** The effects that this page fitted from LUTs, after the catalog effects. */
+  imported: readonly ImportedEffect[];
+  onImport: (effect: ImportedEffect) => void;
+  onRemove: (effect: ImportedEffect) => void;
 }
 
-export function EffectsSection({ strings: t, selection, onSelectionChange }: Props) {
+export function EffectsSection({
+  strings: t,
+  selection,
+  onSelectionChange,
+  imported,
+  onImport,
+  onRemove,
+}: Props) {
   const catalog = use(loadCatalog(PREVIEW_TARGET));
-  const effects = catalog.effects;
+  const effects: readonly Effect[] = [...catalog.effects, ...imported];
+  const taken = new Set(effects.map((effect) => effect.id));
   const [previewId, setPreviewId] = useState(DEFAULT_PREVIEW);
   const [source, setSource] = useState<Source>(DEFAULT_SAMPLE);
   const photo = useRef<Source | null>(null);
@@ -69,6 +89,11 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
 
   function showEffect(effect: Effect) {
     startTransition(() => setPreviewId(effect.id));
+  }
+
+  function importEffect(effect: ImportedEffect) {
+    onImport(effect);
+    showEffect(effect);
   }
 
   function showSample() {
@@ -132,7 +157,7 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
                   source={source}
                   effect={{
                     id: shown.id,
-                    table: effectUrl(catalog.target, shown.preview),
+                    table: previewTable(catalog.target, shown),
                     size: catalog.lutSize,
                     baseline: effectUrl(catalog.target, catalog.baseline),
                   }}
@@ -205,6 +230,15 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
               </a>
             </p>
           )}
+          {catalog.baseGamma && (
+            <ImportDialog
+              strings={t}
+              baseGamma={catalog.baseGamma}
+              taken={taken}
+              importedCount={imported.length}
+              onImport={importEffect}
+            />
+          )}
         </div>
       </div>
 
@@ -219,7 +253,9 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
             type="button"
             className="button"
             onClick={() =>
-              onSelectionChange(new Set(effects.slice(0, MAX_EFFECTS).map((effect) => effect.id)))
+              onSelectionChange(
+                new Set(catalog.effects.slice(0, MAX_EFFECTS).map((effect) => effect.id)),
+              )
             }
           >
             {t.selectAll}
@@ -271,18 +307,42 @@ export function EffectsSection({ strings: t, selection, onSelectionChange }: Pro
                     <span className="effect-stock">{stockText(STOCKS[effect.id]!, t)}</span>
                   )}
                 </td>
-                <td>{t.looks[effect.id] ?? effect.look}</td>
-                <td>{effect.monochrome ? t.mono : t.color}</td>
                 <td>
-                  <button
-                    type="button"
-                    className="button small"
-                    aria-pressed={effect.id === shown?.id}
-                    aria-label={t.previewOf(effect.name)}
-                    onClick={() => showEffect(effect)}
-                  >
-                    {t.preview}
-                  </button>
+                  {effect.imported ? (
+                    <>
+                      <span className="effect-source">{effect.imported.source}</span>
+                      <span className="effect-stock">{t.fitText[effect.imported.grade]}</span>
+                    </>
+                  ) : (
+                    (t.looks[effect.id] ?? effect.look)
+                  )}
+                </td>
+                <td>
+                  {effect.monochrome ? t.mono : t.color}
+                  {effect.imported && <span className="effect-stock">{t.imported}</span>}
+                </td>
+                <td>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="button small"
+                      aria-pressed={effect.id === shown?.id}
+                      aria-label={t.previewOf(effect.name)}
+                      onClick={() => showEffect(effect)}
+                    >
+                      {t.preview}
+                    </button>
+                    {effect.imported && (
+                      <button
+                        type="button"
+                        className="button small"
+                        aria-label={t.removeOf(effect.name)}
+                        onClick={() => onRemove(effect)}
+                      >
+                        {t.removeEffect}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

@@ -1,8 +1,9 @@
 # Effect attribution
 
-Each film effect is a fit of one film simulation LUT to the GR III effect model: a 3 x 3 look
-matrix, three tone curves, and an optional post-curve matrix. GRKit contributors made the fits.
-The repository and the SD packages contain the fitted parameters, not the LUTs.
+Each film effect is a fit of one film simulation LUT to the effect model of the GR cameras: a
+3 x 3 look matrix, optional hue sectors, three tone curves, and an optional post-curve matrix.
+GRKit contributors made the fits. The repository and the SD packages contain the fitted
+parameters, not the LUTs.
 
 ## spektrafilm
 

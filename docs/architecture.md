@@ -115,6 +115,11 @@ Image Control selects an effect for still pictures and the live view by changing
 
 An effect (GRFX0001) replaces the Standard color matrix and tone curves. An optional extension adds a post matrix and selective color.
 
+An effect can also drive the camera's hue-sector stage, which changes colors by hue and by luminance in still pictures and the live view. The installer writes a parameter set for each effect with sectors, and hooks point the stage at it. Effects without sectors keep the native set.
+Highlight correction halves the input of the stage. The installer therefore writes a second set for that case, and the hooks pick it by the camera's flag for the capture. `grkit_core::hue` describes the stage.
+
+After the color stages, the camera reduces the chroma of very dark and very light areas. The fit model and the site previews include this reduction, so the previews show no more tint than the photos.
+
 Each effect record has its own Fn adjustments. Fn opens the native parameter page, and hooks redirect its model to the record, so native settings and effect settings stay separate.
 Photos record the effect and its adjustments in the maker note, so playback shows them.
 

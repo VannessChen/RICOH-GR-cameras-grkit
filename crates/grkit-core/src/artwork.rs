@@ -383,14 +383,47 @@ enum Bottom {
     Stripes,
 }
 
+/// The capital heights, in pixels, that a cover tries for a large name, largest first.
+const LARGE_NAME: [f32; 5] = [9.0, 8.0, 7.0, 6.0, 5.0];
+/// The capital heights of a name that is too wide for the pixel font, largest first.
+const SMALL_NAME: [f32; 2] = [5.0, 4.0];
+/// A name may compress to this horizontal scale before a smaller size is tried.
+const NAME_COMPRESSION: f32 = 0.6;
+/// The width of a name in Inter Black: the tile width less one pixel on each side.
+const NAME_WIDTH: f32 = 38.0;
+
+/// Draws `name` in Inter Black at the largest capital height in `capitals` that fits,
+/// centered vertically on `center`. Returns false, and draws nothing, if no size fits.
+fn fitted_name(rgba: &mut [u8], name: &str, capitals: &[f32], center: f32) -> bool {
+    capitals.iter().any(|&capital| {
+        let baseline = (center + capital / 2.0).round() as i32;
+        cover_text(
+            rgba,
+            name,
+            capital,
+            baseline,
+            -0.02,
+            NAME_WIDTH,
+            NAME_COMPRESSION,
+            255,
+        )
+        .is_some()
+    })
+}
+
 /// A gray cover: a light band with the brand, then a dark body with the film
 /// name and a large number. The brand uses Inter Black when it fits without
-/// compression, and the pixel font otherwise. The name always uses the pixel
-/// font.
+/// compression, and the pixel font otherwise. The name uses the pixel font. A
+/// name that the pixel font cannot draw in 40 pixels uses a smaller Inter Black.
+/// An empty `number` means no number: the name then uses Inter Black, as large
+/// as fits, centered on the body. A name that fits no large size uses the pixel
+/// font, and then the smaller Inter Black.
 fn cover(brand: &str, name: &str, number: &str, bottom: Bottom) -> Result<Vec<u8>> {
     check_cover_label(brand, "brand")?;
     check_cover_label(name, "name")?;
-    check_cover_label(number, "number")?;
+    if !number.is_empty() {
+        check_cover_label(number, "number")?;
+    }
     let mut rgba = vec![0; 40 * 40 * 4];
     fill(&mut rgba, COVER, COVER_END, BODY);
     fill(&mut rgba, COVER, 12, LIGHT);
@@ -398,21 +431,37 @@ fn cover(brand: &str, name: &str, number: &str, bottom: Bottom) -> Result<Vec<u8
         pixel_text(&mut rgba, brand, 5, DARK)?;
     }
     // The number sits one row lower without a bottom band, and one row
-    // higher above the stripes.
-    let (name_top, baseline) = match bottom {
-        Bottom::None => (15, 33),
+    // higher above the stripes. `body_end` is the first row below the body.
+    let (name_top, baseline, body_end) = match bottom {
+        Bottom::None => (15, 33, COVER_END),
         Bottom::Band => {
             fill(&mut rgba, 34, COVER_END, LIGHT);
-            (14, 32)
+            (14, 32, 34)
         }
         Bottom::Stripes => {
             for row in [32, 34, 36] {
                 fill(&mut rgba, row, row + 1, LIGHT);
             }
-            (14, 31)
+            (14, 31, 32)
         }
     };
-    pixel_text(&mut rgba, name, name_top, 255)?;
+    if number.is_empty() {
+        // The body starts below the brand band, on row 12.
+        let center = (12 + body_end) as f32 / 2.0;
+        if !fitted_name(&mut rgba, name, &LARGE_NAME, center) {
+            // The 5-pixel font, centered on the body.
+            let pixel = pixel_text(&mut rgba, name, 12 + (body_end - 12 - 5) / 2, 255);
+            if pixel.is_err() && !fitted_name(&mut rgba, name, &SMALL_NAME, center) {
+                pixel.with_context(|| format!("Cover name {name:?} does not fit"))?;
+            }
+        }
+        return Ok(rgba);
+    }
+    // `pixel_text` draws nothing when it fails, so a smaller Inter Black can take its place.
+    let pixel = pixel_text(&mut rgba, name, name_top, 255);
+    if pixel.is_err() && !fitted_name(&mut rgba, name, &SMALL_NAME, name_top as f32 + 2.5) {
+        pixel.with_context(|| format!("Cover name {name:?} does not fit"))?;
+    }
     cover_text(
         &mut rgba,
         number,
@@ -428,6 +477,7 @@ fn cover(brand: &str, name: &str, number: &str, bottom: Bottom) -> Result<Vec<u8
 }
 
 /// A still film box. Professional films have a light band at the bottom.
+/// An empty `number` gives a large name and no number.
 pub fn render_box(brand: &str, name: &str, number: &str, band: bool) -> Result<Vec<u8>> {
     cover(
         brand,
@@ -438,6 +488,7 @@ pub fn render_box(brand: &str, name: &str, number: &str, band: bool) -> Result<V
 }
 
 /// A motion picture film label, with three light stripes at the bottom.
+/// An empty `number` gives a large name and no number.
 pub fn render_cine(brand: &str, name: &str, number: &str) -> Result<Vec<u8>> {
     cover(brand, name, number, Bottom::Stripes)
 }
