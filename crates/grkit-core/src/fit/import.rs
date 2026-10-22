@@ -167,6 +167,125 @@ impl Grade {
     }
 }
 
+/// Local flaws of an effect that the held-out mean hides, each beyond what its LUT does.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Flaws {
+    /// The largest fall of L* along an exposure ramp of a saturated color, from -2 EV up to
+    /// `SENSOR_HEADROOM`.
+    pub fall: f64,
+    /// The largest lag of L* behind the LUT along such a ramp, from 0 EV on: how much less the
+    /// effect brightens a color than the LUT does. A lagging color stays a flat, saturated
+    /// patch where the LUT fades it toward white.
+    pub lag: f64,
+    /// The largest color step between neighbouring hues of a saturated hue sweep, in CIEDE2000.
+    pub step: f64,
+}
+
+/// The flaws that `import` reports. Of 53 test LUTs, mostly hard ones, 1 fit falls, 6 lag, and
+/// 11 step by more than these.
+pub const FALL_WARNING: f64 = 5.0;
+pub const LAG_WARNING: f64 = 20.0;
+pub const STEP_WARNING: f64 = 8.0;
+
+/// The primary and secondary colors at full saturation.
+const PRIMARIES: [Rgb; 6] = [
+    [1.0, 0.0, 0.0],
+    [1.0, 1.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 1.0, 1.0],
+    [0.0, 0.0, 1.0],
+    [1.0, 0.0, 1.0],
+];
+
+/// The fully saturated color of hue `turn` (0..1) on the edge of the RGB cube: the path through
+/// `PRIMARIES`.
+fn edge_color(turn: f64) -> Rgb {
+    let at = turn.rem_euclid(1.0) * 6.0;
+    let k = (at as usize).min(5);
+    let (a, b) = (PRIMARIES[k], PRIMARIES[(k + 1) % 6]);
+    let f = at - k as f64;
+    std::array::from_fn(|c| a[c] + f * (b[c] - a[c]))
+}
+
+/// Measures `Flaws` of `params` against `target` on colors at the edge of the sRGB gamut, where
+/// the hue sectors meet and where the samples of the fit are few: exposure ramps and hue sweeps
+/// at the edge of the Lab gamut and through the primary colors.
+pub fn flaws(model: &Model, params: &Params, target: &dyn Fn(Rgb) -> Rgb) -> Flaws {
+    let converter = LabConverter::default();
+    let lab = |rgb: Rgb| converter.lab(rgb);
+    let color = |l: f64, hue: f64, share: f64| {
+        let chroma = share * sectors::largest_chroma(l, hue);
+        cube::lab_d50_to_srgb([l, chroma * hue.cos(), chroma * hue.sin()]).map(|v| v.max(0.0))
+    };
+    let mut flaws = Flaws::default();
+    let mut ramps = Vec::new();
+    for k in 0..72 {
+        let hue = std::f64::consts::TAU * f64::from(k) / 72.0;
+        for l in [25.0, 40.0, 55.0, 70.0, 85.0] {
+            for share in [0.5, 0.9, 1.0] {
+                ramps.push(color(l, hue, share));
+            }
+        }
+    }
+    for primary in PRIMARIES {
+        for level in [0.2, 0.5] {
+            ramps.push(primary.map(|v| v * level));
+        }
+    }
+    // Steps of a quarter stop from -2 EV; step 8 is 0 EV.
+    for base in ramps {
+        let (mut peak, mut fall) = ([f64::MIN; 2], [0.0f64; 2]);
+        let mut gap_at_zero = None;
+        for step in 0..=24 {
+            let linear = base.map(|v| v * 2f64.powf(-2.0 + 0.25 * f64::from(step)));
+            if linear.iter().any(|v| *v > SENSOR_HEADROOM) {
+                break;
+            }
+            let pair = [lab(model.render(params, linear))[0], lab(target(linear))[0]];
+            for i in 0..2 {
+                peak[i] = peak[i].max(pair[i]);
+                fall[i] = fall[i].max(peak[i] - pair[i]);
+            }
+            let gap = pair[1] - pair[0];
+            if step >= 8 {
+                let zero = *gap_at_zero.get_or_insert(gap);
+                flaws.lag = flaws.lag.max(gap - zero);
+            }
+        }
+        flaws.fall = flaws.fall.max(fall[0] - fall[1]);
+    }
+    let mut sweeps: Vec<Box<dyn Fn(f64) -> Rgb>> = Vec::new();
+    for l in [30.0, 45.0, 60.0, 75.0, 90.0] {
+        for share in [0.5, 0.95] {
+            sweeps.push(Box::new(move |turn| {
+                color(l, std::f64::consts::TAU * turn, share)
+            }));
+        }
+    }
+    for level in [0.3, 0.6, 1.0] {
+        sweeps.push(Box::new(move |turn| edge_color(turn).map(|v| v * level)));
+    }
+    for sweep in &sweeps {
+        for ev in [-1, 0, 1, 2] {
+            let mut previous: Option<[[f64; 3]; 2]> = None;
+            for k in 0..=720 {
+                let linear = sweep(f64::from(k) / 720.0).map(|v| v * 2f64.powi(ev));
+                if linear.iter().any(|v| *v > SENSOR_HEADROOM) {
+                    previous = None;
+                    continue;
+                }
+                let pair = [lab(model.render(params, linear)), lab(target(linear))];
+                if let Some(before) = previous {
+                    let step = delta_e2000(pair[0], before[0]) - delta_e2000(pair[1], before[1]);
+                    flaws.step = flaws.step.max(step);
+                }
+                previous = Some(pair);
+            }
+        }
+    }
+    flaws
+}
+
 /// A warning for a grade of C or D, for a caller that does not describe the grade otherwise.
 pub fn grade_warning(fit: &Fit) -> Option<String> {
     let grade = Grade::of(fit);
@@ -296,11 +415,8 @@ pub fn import(bytes: &[u8], base_gamma: &[u16; 256], request: &Import) -> Result
     let distances = guess_distances(&model, &cube);
     let guess = choose(&distances);
     let input = request.input.unwrap_or(guess);
-    let fit = fit(
-        base_gamma,
-        &cube_target(&model, &cube, input, request.exposure),
-        &request.options,
-    )?;
+    let target = cube_target(&model, &cube, input, request.exposure);
+    let fit = fit(base_gamma, &target, &request.options)?;
     let text = definition_text(&fit, request, input, packaging::sha256(bytes))?;
     let mut warnings = Vec::new();
     let limit = (MATRIX_LIMIT * 8192.0) as i32 - 64;
@@ -311,7 +427,8 @@ pub fn import(bytes: &[u8], base_gamma: &[u16; 256], request: &Import) -> Result
         ));
     }
     if cube.image_layout.is_some()
-        && crate::lut_image::noise(&cube.table, cube.size) > crate::lut_image::NOISE_LIMIT
+        && crate::lut_image::noise(&cube.table, cube.size)
+            > crate::lut_image::noise_limit(cube.size)
     {
         warnings.push(
             "The LUT image is noisy, as from grain or sharpening. Export it again with grain, \
@@ -361,6 +478,28 @@ pub fn import(bytes: &[u8], base_gamma: &[u16; 256], request: &Import) -> Result
             "The LUT data suggests {} input{also}. Choose the input if you know it. A LUT for \
              another camera log, such as S-Log3, LogC, C-Log, or N-Log, imports with wrong colors.",
             guess.name()
+        ));
+    }
+    let flaws = flaws(&model, &fit.params(), &target);
+    if flaws.fall > FALL_WARNING {
+        warnings.push(format!(
+            "Some saturated colors get darker as their exposure grows, by up to {:.0} L*, where \
+             the LUT keeps them brightening",
+            flaws.fall
+        ));
+    }
+    if flaws.lag > LAG_WARNING {
+        warnings.push(format!(
+            "Some saturated colors stay darker and more saturated than in the LUT as their \
+             exposure grows, by up to {:.0} L*",
+            flaws.lag
+        ));
+    }
+    if flaws.step > STEP_WARNING {
+        warnings.push(format!(
+            "Some saturated colors change abruptly between neighbouring hues, by up to {:.0} \
+             dE2000 more than in the LUT",
+            flaws.step
         ));
     }
     if cube.video_input || cube.video_output {

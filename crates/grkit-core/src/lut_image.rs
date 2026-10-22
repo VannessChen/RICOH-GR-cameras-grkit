@@ -57,6 +57,15 @@ pub fn identity_png(level: usize) -> Result<Vec<u8>> {
 /// and sharpening of radius 1 exceeds the bound in 260 of 294 images.
 pub const NOISE_LIMIT: f64 = 0.028;
 
+/// The noise limit for a table of `c` points per axis. The second difference of a smooth look
+/// grows with the square of the lattice step, so a coarse table needs a larger limit: clean
+/// strips of 16 and 32 points and a HALD of 36 points measured 0.14, 0.06, and 0.04. From 64
+/// points on, the limit is `NOISE_LIMIT`.
+pub fn noise_limit(c: usize) -> f64 {
+    let step = 63.0 / (c.max(2) - 1) as f64;
+    NOISE_LIMIT * step.powi(2).max(1.0)
+}
+
 /// The 99.5th percentile of the absolute second difference of a 3D table along red, the axis
 /// whose lattice neighbours are neighbouring pixels in each layout. A smooth look stays near
 /// the quantization step there, and grain or sharpening of the image does not.

@@ -317,6 +317,16 @@ fn reads_tiled_and_strip_lut_images() {
     check_rotation(&png(256, 16, RGB, 8, &strip), cube::Layout::Strip);
     let flipped = layout_image(256, 16, 16, rotate, |[r, g, b]| (r + 16 * b, 15 - g));
     check_rotation(&png(256, 16, RGB, 8, &flipped), cube::Layout::FlippedStrip);
+    // A clean 16-point table of a strong curve bends more between its coarse steps than a
+    // noise-free fine table may; the limit for its size allows it.
+    let curve = |rgb: [f64; 3]| rgb.map(|v| v.powf(1.0 / 2.2));
+    let strip = layout_image(256, 16, 16, curve, |[r, g, b]| (r + 16 * b, g));
+    let cube = Cube::read(&png(256, 16, RGB, 8, &strip)).unwrap();
+    let noise = lut_image::noise(&cube.table, cube.size);
+    assert!(
+        noise > lut_image::NOISE_LIMIT && noise < lut_image::noise_limit(16),
+        "{noise}"
+    );
     // The same look as a level 4 HALD stays a HALD.
     let hald = layout_image(64, 64, 16, look, |[r, g, b]| {
         let i = r + 16 * g + 256 * b;

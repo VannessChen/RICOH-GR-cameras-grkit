@@ -468,18 +468,19 @@ fn toned_luts_share_one_matrix_row_and_no_post_matrix() {
 
 #[test]
 fn noisy_lut_images_warn() {
-    // A level 4 identity with grain of about 2 / 255.
+    // A level 8 identity, as editors export one, with grain of about 2 / 255. A coarser table
+    // is allowed more curvature (`lut_image::noise_limit`).
     let mut state = 7u32;
     let mut grain = || {
         state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         (state >> 24) as i32 % 5 - 2
     };
-    let data: Vec<u8> = (0..64 * 64)
-        .flat_map(|i: i32| [i % 16, i / 16 % 16, i / 256].map(|v| v * 17))
+    let data: Vec<u8> = (0..512 * 512)
+        .flat_map(|i: i32| [i % 64, i / 64 % 64, i / 4096].map(|v| (v * 255 + 31) / 63))
         .map(|v| (v + grain()).clamp(0, 255) as u8)
         .collect();
     let warnings = fit::import(
-        &png(64, 64, RGB, 8, &data),
+        &png(512, 512, RGB, 8, &data),
         &synthetic_base(),
         &import_request(Encoding::Standard),
     )
@@ -709,4 +710,28 @@ fn hue_sectors_keep_colors_brightening_with_exposure() {
     let span = f64::from(hue::BORDERS[2] - hue::BORDERS[1]);
     let end = curve.starts[2] + curve.slopes[2] * span / 32.0;
     assert!((curve.starts[3] - end).abs() <= 8.0, "{curve:?}");
+}
+
+#[test]
+fn flaws_measure_only_what_the_lut_does_not_do() {
+    let model = model();
+    let params = known([1.1, -0.05, -0.05, -0.05, 1.1, -0.05, -0.05, -0.05, 1.1]);
+    let itself = |x: [f64; 3]| model.render(&params, x);
+    let flaws = fit::flaws(&model, &params, &itself);
+    assert!(
+        flaws.fall.abs() < 1e-9 && flaws.lag.abs() < 1e-9 && flaws.step.abs() < 1e-9,
+        "{flaws:?}"
+    );
+    // A target that keeps saturated reds brightening, against an effect that darkens them as
+    // the exposure grows.
+    let mut darker = params.clone();
+    darker.post = [1.0, 0.0, 0.0, -1.5, 1.0, 0.0, -1.5, 0.0, 1.0];
+    let flaws = fit::flaws(&model, &darker, &itself);
+    assert!(flaws.fall > fit::FALL_WARNING, "{flaws:?}");
+    // An effect that saturates every color more than the target: bright saturated colors stay
+    // darker than the target as they brighten, so the effect lags behind it.
+    let mut vivid = params.clone();
+    vivid.post = [1.8, -0.4, -0.4, -0.4, 1.8, -0.4, -0.4, -0.4, 1.8];
+    let flaws = fit::flaws(&model, &vivid, &itself);
+    assert!(flaws.lag > 5.0, "{flaws:?}");
 }
