@@ -20,7 +20,7 @@ The compiler writes self-contained GRFX0001 files with a 40 x 40 icon. CRC32 det
 | `attribution` | Yes | An object with the origin, source, and license |
 | `post_matrix` | No | Nine signed Q13 coefficients, row-major, after the tone curves |
 | `selective_color` | No | `hue` in degrees (0 to 360), `lower` and `higher` `[inner, outer]` half widths in degrees (0 to 75), and `chroma` `[c0, c1]` (c0 < c1 <= 181) |
-| `hue_sectors` | No | `matrices`: 11 sectors of six off-diagonal coefficients in 1/128 (-127 to 127; the two of a row sum to -127 or more). `weight`: four values 0 to 255 at luminance 0, 0.055, 0.218, and 1.365 (`hue::KNOTS`); the first two differ by at most about 160, because highlight correction doubles the slopes. Optional `levels`: the sectors of levels 1 to 3, three sets like `matrices` |
+| `hue_sectors` | No | The camera's hue-sector stage: `matrices`, `weight`, and optional `levels`. `crates/grkit-core/src/hue.rs` defines the fields and their ranges |
 
 A monochrome effect cannot have `post_matrix`, `selective_color`, or `hue_sectors`.
 
@@ -91,28 +91,26 @@ The two monochrome fits have identical matrix rows and curves. Set `flags` to 1 
 
 Effects run in the camera's processing: the matrix acts before the Standard base gamma, and the curves and `post_matrix` act after it. They are not display-sRGB JPEG transforms. Effects add no grain or glow.
 
-`hue_sectors` drives the camera's hue-sector stage after the matrix, in recorded pictures and the live view. With `levels`, the sector matrices also change with luminance. `crates/grkit-core/src/hue.rs` describes the stage.
-
 ## Import a .cube preset
 
 `grkit effects import` fits a 3D or 1D `.cube` LUT to the effect model and writes a new definition.
 The fit needs the Standard base gamma. The command reads this table from your copy of the official GR III 2.10 firmware. The repository contains no firmware data.
 
 ```sh
-grkit effects import --cube look.cube --firmware fwdc239b.bin --input srgb \
+grkit effects import --cube look.cube --firmware fwdc239b.bin --input standard \
   --id my-look-v1 --name "My Look" --label FV --shape film --out effects
 ```
 
 1. Set `--firmware` to the official GR III 2.10 firmware file.
-2. Optional: select `--input` for the encoding of the LUT input. The default is `auto`.
-   - `auto`: the importer reads the LUT with each input (`fit::guess_input`). It keeps a log input only if the result is much closer to the camera's Standard rendering. Otherwise it uses `standard`. It does not read the file name, and it never selects `srgb` or `linear`.
+2. Optional: select `--input` for the encoding of the LUT input.
+   - `auto` (default): a guess from the LUT data, not the file name. It selects `standard` or a log input.
    - `standard`: a picture of the camera's Standard rendering, as a GR JPEG.
    - `srgb`: sRGB-encoded display RGB. The importer clips scene-linear light to 0..1 before the sRGB curve.
    - `linear`: scene-linear RGB with sRGB primaries.
    - `vlog`: Panasonic V-Log over V-Gamut primaries, as spektrafilm writes its LUTs.
    - `flog`, `flog2`, `flog2c`: Fujifilm F-Log or F-Log2 over F-Gamut, or F-Log2 over F-Gamut C.
 
-   If you select an input and the LUT data suggests a different one, the import adds a warning.
+   The data cannot tell Standard from sRGB, or a supported log from another camera's log, such as S-Log3. Select the input if you know it.
 3. Optional: add `--exposure EV` to change the scene-linear light before the LUT. The default is 0.
 4. Optional: add `--no-post` to fit no post-curve matrix.
 5. Run the command. The command writes `OUT/ID/effect.json` and prints a JSON summary.
@@ -120,8 +118,8 @@ grkit effects import --cube look.cube --firmware fwdc239b.bin --input srgb \
 
 If `OUT/ID` exists or a check fails, the command stops and writes nothing.
 
-The site imports a LUT in the browser with the same fit, over the base gamma of the published effect catalog, so the user needs no firmware. See [LUT import](../web/README.md#lut-import).
+The site imports a LUT in the browser with the same fit. It uses the base gamma of the published effect catalog, so the user needs no firmware. See [LUT import](../web/README.md#lut-import).
 
-The fit follows [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)). `crates/grkit-core/src/fit.rs` describes the model and its assumptions.
+The fit follows [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) ([MIT](../crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)). `crates/grkit-core/src/fit/` describes the model and its assumptions.
 
-`attribution.fit` records the color error of the fit on a ColorChecker. A matrix, three curves, a post matrix, and 11 hue sectors copy hue-selective changes only in part. Examine the errors before you use an imported effect.
+`attribution.fit` records the errors and the grade of the fit. The effect model copies hue-selective changes only in part. Examine the grade and the warnings of the import before you use an imported effect.
