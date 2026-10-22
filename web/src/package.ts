@@ -208,7 +208,6 @@ export async function buildPackage(
   }
 }
 
-/** Starts the download of a blob as a file. */
 /** The ZIP that turns SD scripts off on `camera`: its ModeSet file with the disable command. */
 export async function buildScriptsOff(camera: string): Promise<Blob> {
   const module = await loadWasm();
@@ -217,6 +216,7 @@ export async function buildScriptsOff(camera: string): Promise<Blob> {
   });
 }
 
+/** Starts the download of a blob as a file. */
 export function save(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

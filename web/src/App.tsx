@@ -1,4 +1,5 @@
 import { Suspense, useCallback, useRef, useState } from 'react';
+import { trackDownload, trackScriptsOff } from './analytics';
 import { CAMERAS, MODESET_TOKEN, type Camera } from './cameras';
 import { loadCatalog, siteUrl } from './catalog';
 import { EffectsSection } from './components/EffectsSection';
@@ -11,6 +12,9 @@ import { buildPackage, buildScriptsOff, prefetchPackage, save } from './package'
 
 const DEFAULT_SELECTION = ['portra-400-endura-v1', 'vision3-250d-2383-v1'];
 const REPOSITORY = 'https://github.com/ahonn/grkit';
+/** The Tally form for feature requests. A plain link, so the page loads nothing from Tally. */
+const FEATURE_REQUEST_FORM = 'https://tally.so/r/Z9jRgB';
+const DONATE = 'https://buymeacoffee.com/yuexunjiang';
 
 /** A guide in `resources/` in the page language, or in English. */
 function guideUrl(name: 'RECOVERY' | 'DUMP', language: Language): string {
@@ -102,6 +106,7 @@ export function App() {
     setScriptsOff('building');
     try {
       save(await buildScriptsOff(camera.id), 'GRKit-scripts-off.zip');
+      trackScriptsOff(camera);
       setScriptsOff('idle');
     } catch (error) {
       console.error(error);
@@ -132,6 +137,7 @@ export function App() {
       );
       if (run === buildRun.current) {
         save(blob, 'GRKit.zip');
+        trackDownload(camera, plan, effectCount, language);
         setBuild({ state: 'ready' });
       }
     } catch (error) {
@@ -374,6 +380,12 @@ export function App() {
             </li>
             <li>
               <a href={guideUrl('DUMP', language)}>{t.firmwareDump}</a>
+            </li>
+            <li>
+              <a href={FEATURE_REQUEST_FORM}>{t.featureRequest}</a>
+            </li>
+            <li>
+              <a href={DONATE}>{t.donate}</a>
             </li>
           </ul>
           <ul>
