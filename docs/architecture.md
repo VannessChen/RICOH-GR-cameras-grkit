@@ -165,11 +165,11 @@ To add a target for a new firmware build:
 1. Run `grkit port --target <target> --firmware <its firmware> --to <new firmware> --out <directory>`. Use `--to-rtos` for an RTOS image, such as a GRDUMP capture.
 2. If the output gives `"relocatable": true`, add the release to the existing target instead. Test the existing target on the new firmware.
 3. Make `runtime/targets/<new target>.h` from `header.h` of the output. Resolve each `PORT` comment: port the address by hand, or check the offset that an expression adds. Check each value that is not an address.
-4. Save `target.rs` of the output as `crates/grkit-build/src/target/<module>.rs`. The module name is the target name with `_` for `-` and without `.`. Resolve each `PORT` comment: give the name, the firmware, its SHA-256 values, and the header definition of the new target, port each address without a port, and check each value that is not an address. Add the module to `crates/grkit-build/src/target.rs`, to `TARGETS`, and to `SOURCES`.
+4. Save `target.rs` of the output as `crates/grkit-build/src/target/<module>.rs`. The module name is the target name with `_` for `-` and without `.`. Resolve each `PORT` comment. Give the name, the firmware, its SHA-256 values, its download, and the header definition of the new target. Port each address that has no port, and check each value that is not an address. Add the module to `crates/grkit-build/src/target.rs`, to `TARGETS`, and to `SOURCES`.
 5. If the code at a site changed, change the hook of the family so that it fits the code of each build. The runtime tests a definition that only the new build has with `#ifdef`. Add that definition to `BUILD_ONLY_DEFINITIONS`.
 6. Select the header in `runtime/firmware.h`. Add the release to `camera.rs` as experimental.
 7. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`, and add an entry for the target to `web/src/cameras.ts`.
-8. Add the firmware to the release workflow and to the private firmware backup (`docs/releasing.md`).
+8. Add the firmware zip to the private firmware backup (`docs/releasing.md`). The release workflow builds each target of `grkit release-plan`, so it needs no change.
 9. Run `grkit port` again with `--check <new target>`. No address may differ without a review.
 10. Run the tests, build the target from the official firmware, and test it on the new firmware. Set the release to not experimental only after a test on a camera.
 
@@ -177,7 +177,9 @@ If a step is missing, a test names it, except steps 8 and 10.
 
 A firmware update that cannot be undone moves each camera to the new build, so the old build gets fewer users over time.
 A maintainer can freeze such a build when keeping it current costs more than it gives. A frozen build still builds and gets fixes, but a new feature does not have to reach it.
-To freeze a build, let `components::hooks` leave out the hooks that the build does not get, and exempt the build in the family test for the definitions that it does not get. The runtime must then leave the feature out on that build, as the settings page does without `SETTINGS_SUBMENU`. The C code gates a feature on a header definition, and the assembly and INSTALL follow the hooks of the build. The assembly stops the build if a build has one without the other.
+
+To freeze a build, let `components::hooks` leave out the hooks that the build does not get. Exempt the build in the family test for the definitions that it does not get. The runtime must then leave the feature out on that build, as the settings page does without `SETTINGS_SUBMENU`.
+The C code gates a feature on a header definition, and the assembly and INSTALL follow the hooks of the build. If a build has one of them without the other, the assembly stops the build.
 
 ## Code areas
 

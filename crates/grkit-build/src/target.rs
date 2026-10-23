@@ -38,6 +38,15 @@ pub(crate) const SOURCES: &[(&str, &[u8])] = &[
     ("gr4_120.rs", include_bytes!("target/gr4_120.rs")),
 ];
 
+/// A firmware zip on the Ricoh download page.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Download {
+    pub zip: &'static str,
+    pub zip_sha256: &'static str,
+    /// The firmware file in the zip, which `grkit build` takes.
+    pub file: &'static str,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Target {
     pub name: &'static str,
@@ -47,6 +56,9 @@ pub struct Target {
     pub firmware: &'static str,
     pub firmware_sha256: &'static str,
     pub decoded_sha256: &'static str,
+    /// The official download that holds the firmware file. The release builds
+    /// the runtime from it.
+    pub download: Download,
     pub data_start: u32,
     pub data_source: u32,
     pub data_size: u32,

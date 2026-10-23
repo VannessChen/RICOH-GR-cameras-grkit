@@ -2,8 +2,8 @@
 
 Four workflows release GRKit:
 
-- `Release PR` keeps one pull request from the `release` branch open while change files are pending. knope sets the version and writes `CHANGELOG.md` from the change files.
-- `Release` starts when the release pull request is merged. It tags the merge commit, runs the tests, builds the site and the packages from the official firmware, and creates a draft GitHub release.
+- `Release PR` keeps one pull request from the `release` branch open while change files are pending. knope sets the version and writes `CHANGELOG.md` from the change files. `Release PR` then starts `Tests` on the `release` branch, so the pull request shows the test results.
+- `Release` starts when the release pull request is merged. It tags the merge commit, runs the tests, builds the site and the packages from the official firmware, and creates a draft GitHub release. Then it runs `Deploy`.
 - `Deploy` commits the site of one release to the `site` branch, which Cloudflare Pages deploys. When the site serves the new version, `Deploy` publishes the release. Start `Deploy` by hand to deploy a release again.
 - `Site` starts when a push to `main` changes `web/`. It rebuilds the web page with the runtimes and effects of the latest published release. If `web/` needs a packager change that is not released yet, the build fails and the site stays as it is. If a camera entry of `web/` needs a runtime build that the latest release does not have, `Site` deploys nothing, and the release that has the build deploys the page.
 
@@ -22,7 +22,7 @@ The site holds no firmware bytes: `grkit site` leaves out the generated header o
    2. Install the Cloudflare GitHub app for this repository only.
    3. Set the production branch to `site` and the framework preset to None. Leave the build command empty. Set the build output directory to `/`.
    4. After Cloudflare creates the project, go to Settings, Builds, Branch control. Set the preview branch to None. Otherwise Cloudflare deploys the source of each other branch as a preview.
-4. Add the repository variable `SITE_URL` with the production URL of the site and no trailing slash, for example `https://<project>.pages.dev`. `Deploy` reads `SITE_URL/runtime/gr3-2.10/build.json` to find the version that the site serves.
+4. Add the repository variable `SITE_URL` with the production URL of the site and no trailing slash, for example `https://<project>.pages.dev`. `Deploy` reads the `build.json` of a runtime under `SITE_URL/runtime/` to find the version that the site serves.
 5. Optional: add the repository variable `PLAUSIBLE_HOST` with the origin of a Plausible server, for example `https://plausible.example.com`. Release then adds Plausible analytics to the site for the domain `grkit.app`.
 6. Keep a private backup of the firmware, so that a release does not depend on the Ricoh download:
    1. Download `gr3_v210.zip`, `gr4_v111.zip`, and `gr4_v120.zip` from Ricoh and accept the license. Do not change the zips.
@@ -66,7 +66,7 @@ Use `major` for a change that an earlier package cannot follow, for example a ne
 2. If the site does not serve the version within 15 minutes, `Deploy` fails and the release stays a draft. Examine the deployment in the Cloudflare dashboard. If it failed, retry it there, because a second `Deploy` run makes no new commit. Then start `Deploy` with the tag `vX.Y.Z`.
 3. The release holds these files. Install the package of each camera that you have, and test it.
    - `GRKit-X.Y.Z-site.tar.gz`: the site. Releases before 1.2.0 name it `site.tar.gz`, and `Deploy` and `Site` accept both names.
-   - `GRKit-X.Y.Z-gr3.zip`, `GRKit-X.Y.Z-gr3x.zip`, and `GRKit-X.Y.Z-gr4.zip`: the package of each camera, with the published runtime, each effect in `effects/`, each plugin, and the English guide. The site makes the same package by default.
+   - `GRKit-X.Y.Z-gr3.zip`, `GRKit-X.Y.Z-gr3x.zip`, `GRKit-X.Y.Z-gr4.zip`, and `GRKit-X.Y.Z-gr4-1.20.zip`: the package of each camera, with the published runtime, each effect in `effects/`, each plugin, and the English guide. `gr4` is for GR IV firmware 1.11, and `gr4-1.20` is for firmware 1.20. The site makes the same package by default.
    - `GRKit-X.Y.Z-dump.zip`: the firmware dump tool of `runtime/dump/` for each camera. The site footer links to it.
 4. If a test fails, start `Deploy` with the tag of the previous release. The site then serves that release again.
 

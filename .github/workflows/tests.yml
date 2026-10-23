@@ -1,7 +1,12 @@
 name: Tests
 on:
+  # A pull request runs the tests of a feature branch, so a push runs them only on main.
   push:
+    branches: [main]
   pull_request:
+  # Release PR starts the tests of the release branch, because its push with the
+  # workflow token starts pull request runs that wait for approval.
+  workflow_dispatch:
   # The Release workflow checks the commit that it releases.
   workflow_call:
     inputs:
@@ -41,6 +46,7 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/llvm-21.list
           sudo apt-get update
           sudo apt-get install --yes clang-21 lld-21
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked

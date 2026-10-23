@@ -721,7 +721,10 @@ impl Port {
         push(
             out,
             0,
-            &format!("use super::{{{}, ImageControl, Target}};", base.family.name),
+            &format!(
+                "use super::{{{}, Download, ImageControl, Target}};",
+                base.family.name
+            ),
             "",
         );
         push(
@@ -763,6 +766,26 @@ impl Port {
             &format!("decoded_sha256: {:?},", base.decoded_sha256),
             &base_note("the SHA-256 of the decoded firmware"),
         );
+        push(out, 4, "download: Download {", "");
+        push(
+            out,
+            8,
+            &format!("zip: {:?},", base.download.zip),
+            &base_note("the zip on the Ricoh download page"),
+        );
+        push(
+            out,
+            8,
+            &format!("zip_sha256: {:?},", base.download.zip_sha256),
+            &base_note("the SHA-256 of the zip"),
+        );
+        push(
+            out,
+            8,
+            &format!("file: {:?},", base.download.file),
+            &base_note("the firmware file in the zip"),
+        );
+        push(out, 4, "},", "");
         push(out, 4, &format!("data_start: {:#x},", base.data_start), "");
         push(
             out,

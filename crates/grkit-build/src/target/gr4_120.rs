@@ -1,7 +1,7 @@
 //! GR IV and GR IV HDF 1.20, with the plugins of 1.11. Its addresses come
 //! from 1.11 through the code that uses them; not tested on a camera.
 
-use super::{gr4, ImageControl, Target};
+use super::{gr4, Download, ImageControl, Target};
 use crate::components::{InstructionPatch, Layout, Site};
 
 pub const TARGET: Target = Target {
@@ -10,6 +10,11 @@ pub const TARGET: Target = Target {
     firmware: "GR IV 1.20",
     firmware_sha256: "7563d7e462f0c53b6ab2fbab7cdfbbb57151a41192ee82f4f3a2108f9d77650d",
     decoded_sha256: "f5cf55a48f65d55f4ebbd40bcd1d64d1ceca3c88432a2a4ceaa93fe1cad5fc3a",
+    download: Download {
+        zip: "gr4_v120.zip",
+        zip_sha256: "dcc1b6fb004f0d855bb46b30a529da894c7b717501276fec2d198b3d7eb76a59",
+        file: "fwdc248b.bin",
+    },
     data_start: 0x55000000,
     data_source: 0x543b3100,
     data_size: 0x58500,

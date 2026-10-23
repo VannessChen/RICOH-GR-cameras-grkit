@@ -2,7 +2,7 @@
 //! has the private menu, Image Control, Framing (XPan only), Guides, Date
 //! Stamp, and Grain.
 
-use super::{gr4, ImageControl, Target};
+use super::{gr4, Download, ImageControl, Target};
 use crate::components::{InstructionPatch, Layout, Site};
 
 pub const TARGET: Target = Target {
@@ -11,6 +11,11 @@ pub const TARGET: Target = Target {
     firmware: "GR IV 1.11",
     firmware_sha256: "a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f",
     decoded_sha256: "c4e597c7c9ca1bc181b30e35139ed90a4fd876ddcca14f12be0e00b6702233ae",
+    download: Download {
+        zip: "gr4_v111.zip",
+        zip_sha256: "ded47aa6385886e4b1f8f41f8551866ab0f1ecd0aef89934a43ef0e456539e8f",
+        file: "fwdc248b.bin",
+    },
     data_start: 0x55000000,
     data_source: 0x5437b640,
     data_size: 0x57480,

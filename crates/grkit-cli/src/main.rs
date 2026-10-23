@@ -107,6 +107,9 @@ enum Command {
     /// List the cameras, the firmware releases that each runs, and the runtime
     /// build for each release.
     Cameras,
+    /// List the runtime builds and the camera packages of a release, with the
+    /// firmware download of each build. The release workflow builds from it.
+    ReleasePlan,
     /// Write the ZIP that turns SD scripts off on a camera: its ModeSet file
     /// with the disable command and DEVELOP.MOD.
     ScriptsOff {
@@ -454,6 +457,30 @@ fn run(command: Command) -> Result<Value> {
                 })).collect::<Vec<_>>(),
             }))}),
         ),
+        Command::ReleasePlan => {
+            let runtimes: Vec<Value> = grkit_build::target::TARGETS
+                .iter()
+                .map(|target| {
+                    json!({"target": target.name, "zip": target.download.zip,
+                        "zip_sha256": target.download.zip_sha256, "file": target.download.file})
+                })
+                .collect();
+            let mut packages = Vec::new();
+            for camera in grkit_core::camera::CAMERAS {
+                for (index, target) in camera.targets().into_iter().enumerate() {
+                    grkit_build::target::find(target)?;
+                    // The first build of a camera has the camera's package. A later
+                    // build adds the first firmware version that runs it.
+                    let name = if index == 0 {
+                        camera.id.to_string()
+                    } else {
+                        format!("{}-{}", camera.id, camera.firmware_for(target)[0])
+                    };
+                    packages.push(json!({"camera": camera.id, "target": target, "name": name}));
+                }
+            }
+            Ok(json!({"runtimes": runtimes, "packages": packages}))
+        }
         Command::Verify { archive } => {
             // Include room for ZIP metadata while bounding the archive read itself.
             let bytes = storage::read_bounded(&archive, 64 * 1024 * 1024)?;

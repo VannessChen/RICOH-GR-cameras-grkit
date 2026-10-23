@@ -104,9 +104,6 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       FIRMWARE_BASE_URL: https://www.ricoh-imaging.co.jp/resources/japan/support/download/digital/FIRMWARE
-      GR3_ZIP_SHA256: e895b439e4b3b96ac04f50072f02a63061ec7de5dcc1b070890baa09bc659470
-      GR4_ZIP_SHA256: ded47aa6385886e4b1f8f41f8551866ab0f1ecd0aef89934a43ef0e456539e8f
-      GR4_120_ZIP_SHA256: dcc1b6fb004f0d855bb46b30a529da894c7b717501276fec2d198b3d7eb76a59
       # A private repository holds the same zips as release assets, one tag for each
       # target. See docs/releasing.md.
       FIRMWARE_BACKUP_REPO: ${{ vars.FIRMWARE_BACKUP_REPO }}
@@ -183,28 +180,23 @@ jobs:
               check
             fi
           }
-          fetch gr3_v210.zip "$GR3_ZIP_SHA256" gr3-2.10
-          fetch gr4_v111.zip "$GR4_ZIP_SHA256" gr4-1.11
-          fetch gr4_v120.zip "$GR4_120_ZIP_SHA256" gr4-1.20
-          unzip -q "$firmware/gr3_v210.zip" fwdc239b.bin -d "$firmware"
-          unzip -q "$firmware/gr4_v111.zip" fwdc248b.bin -d "$firmware"
-          # GR IV 1.20 has a package file of the same name.
-          unzip -q "$firmware/gr4_v120.zip" fwdc248b.bin -d "$firmware/gr4-1.20"
-          target/release/grkit build --target gr3-2.10 --firmware "$firmware/fwdc239b.bin" \
-            --out "$RUNNER_TEMP/runtime-gr3" --clang clang-21 --lld ld.lld-21
-          target/release/grkit build --target gr4-1.11 --firmware "$firmware/fwdc248b.bin" \
-            --out "$RUNNER_TEMP/runtime-gr4" --clang clang-21 --lld ld.lld-21
-          target/release/grkit build --target gr4-1.20 --firmware "$firmware/gr4-1.20/fwdc248b.bin" \
-            --out "$RUNNER_TEMP/runtime-gr4-120" --clang clang-21 --lld ld.lld-21
-          target/release/grkit site --build "$RUNNER_TEMP/runtime-gr3" --out site
-          target/release/grkit site --build "$RUNNER_TEMP/runtime-gr4" --out site
-          target/release/grkit site --build "$RUNNER_TEMP/runtime-gr4-120" --out site
-          target/release/grkit effects publish --source effects --firmware "$firmware/fwdc239b.bin" \
-            --out site/effects/gr3-2.10
-          target/release/grkit effects publish --source effects --target gr4-1.11 \
-            --firmware "$firmware/fwdc248b.bin" --out site/effects/gr4-1.11
-          target/release/grkit effects publish --source effects --target gr4-1.20 \
-            --firmware "$firmware/gr4-1.20/fwdc248b.bin" --out site/effects/gr4-1.20
+          # `grkit release-plan` lists each runtime build with its firmware download
+          # (`grkit_build::target`) and each camera package (`camera.rs`).
+          target/release/grkit release-plan > "$RUNNER_TEMP/release-plan.json"
+          jq -r '.runtimes[] | [.target, .zip, .zip_sha256, .file] | @tsv' \
+            "$RUNNER_TEMP/release-plan.json" > "$RUNNER_TEMP/runtimes.tsv"
+          # The loop reads the plan from descriptor 3, so no command in it reads the plan.
+          while IFS=$'\t' read -r target archive archive_sum file <&3; do
+            fetch "$archive" "$archive_sum" "$target"
+            # Two GR IV zips hold a firmware file of the same name.
+            mkdir "$firmware/$target"
+            unzip -q "$firmware/$archive" "$file" -d "$firmware/$target"
+            target/release/grkit build --target "$target" --firmware "$firmware/$target/$file" \
+              --out "$RUNNER_TEMP/runtime-$target" --clang clang-21 --lld ld.lld-21
+            target/release/grkit site --build "$RUNNER_TEMP/runtime-$target" --out site
+            target/release/grkit effects publish --source effects --target "$target" \
+              --firmware "$firmware/$target/$file" --out "site/effects/$target"
+          done 3< "$RUNNER_TEMP/runtimes.tsv"
       - name: Build the installation guides
         run: |
           sh .github/scripts/install-guide-tools.sh "$RUNNER_TEMP/guide-tools"
@@ -225,17 +217,15 @@ jobs:
         run: |
           version="${TAG#v}"
           target/release/grkit effects build --source effects --out "$RUNNER_TEMP/effects"
-          # camera:target:use. GR IV 1.20 has its own package.
-          for entry in gr3:gr3-2.10:gr3 gr3x:gr3-2.10:gr3x gr4:gr4-1.11:gr4 gr4:gr4-1.20:gr4-1.20; do
-            camera="${entry%%:*}"
-            rest="${entry#*:}"
-            target="${rest%%:*}"
-            use="${rest#*:}"
+          # Each runtime build of a camera has its own package.
+          jq -r '.packages[] | [.camera, .target, .name] | @tsv' \
+            "$RUNNER_TEMP/release-plan.json" > "$RUNNER_TEMP/packages.tsv"
+          while IFS=$'\t' read -r camera target use <&3; do
             target/release/grkit package --build "site/runtime/$target" --camera "$camera" \
               --effects "$RUNNER_TEMP/effects" --guide "site/guides/$camera/en.pdf" \
               --out "GRKit-$version-$use.zip"
             target/release/grkit verify "GRKit-$version-$use.zip"
-          done
+          done 3< "$RUNNER_TEMP/packages.tsv"
       - name: Build the firmware dump tool
         run: target/release/grkit dump --out "GRKit-${TAG#v}-dump.zip" --clang clang-21 --lld ld.lld-21
       - name: Check the version of each runtime

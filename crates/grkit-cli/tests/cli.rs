@@ -841,3 +841,27 @@ fn writes_an_identity_hald_without_overwriting() {
     .status
     .success());
 }
+
+#[test]
+fn release_plan_builds_each_target_and_packages_each_camera_build() {
+    let plan = success(&["release-plan"]);
+    let targets: Vec<_> = plan["runtimes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|runtime| runtime["target"].as_str().unwrap())
+        .collect();
+    assert_eq!(targets, ["gr3-2.10", "gr4-1.11", "gr4-1.20"]);
+    assert_eq!(plan["runtimes"][2]["zip"], "gr4_v120.zip");
+    assert_eq!(plan["runtimes"][2]["file"], "fwdc248b.bin");
+    // The package names are those of the release assets.
+    assert_eq!(
+        plan["packages"],
+        serde_json::json!([
+            {"camera": "gr3", "target": "gr3-2.10", "name": "gr3"},
+            {"camera": "gr3x", "target": "gr3-2.10", "name": "gr3x"},
+            {"camera": "gr4", "target": "gr4-1.11", "name": "gr4"},
+            {"camera": "gr4", "target": "gr4-1.20", "name": "gr4-1.20"},
+        ])
+    );
+}

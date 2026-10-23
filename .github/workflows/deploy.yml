@@ -90,10 +90,13 @@ jobs:
         run: |
           set -euo pipefail
           version="${TAG#v}"
+          # Each runtime of the release gives its version. The first one is enough.
+          runtime=$(find "$RUNNER_TEMP/site/runtime" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | head -n 1)
+          test -n "$runtime"
           # Cloudflare Pages builds the commit, then switches production to it.
           for attempt in $(seq 90); do
             served=$(curl --fail --silent --show-error \
-              "$SITE_URL/runtime/gr3-2.10/build.json?run=$GITHUB_RUN_ID-$attempt" | jq -r .version) || served=
+              "$SITE_URL/runtime/$runtime/build.json?run=$GITHUB_RUN_ID-$attempt" | jq -r .version) || served=
             if [ "$served" = "$version" ]; then
               echo "$SITE_URL serves $TAG."
               exit 0

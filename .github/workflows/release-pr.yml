@@ -8,6 +8,8 @@ on:
     branches: [main]
 
 permissions:
+  # actions: write starts the Tests workflow on the release branch.
+  actions: write
   contents: write
   pull-requests: write
 
@@ -78,8 +80,8 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "Merging this pull request tags v$VERSION, builds the release, and creates a draft GitHub release."
-            echo "After a device test, start the Deploy workflow with the tag v$VERSION."
+            echo "Merging this pull request tags v$VERSION, tests and builds the release, deploys the site, and publishes the GitHub release."
+            echo "Test the camera packages right after the release. If a test fails, start the Deploy workflow with the tag of the previous release."
             echo
             sh .github/scripts/changelog-section.sh "$VERSION"
           } > "$RUNNER_TEMP/body.md"
@@ -89,3 +91,8 @@ jobs:
           else
             gh pr create --head release --base main --title "Release v$VERSION" --body-file "$RUNNER_TEMP/body.md"
           fi
+      # A push with the workflow token starts pull request runs that wait for
+      # approval. This run puts the test results on the release commit.
+      - name: Test the release branch
+        if: steps.changes.outputs.pending == 'true'
+        run: gh workflow run tests.yml --ref release
