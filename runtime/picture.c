@@ -76,8 +76,8 @@ void picture_post(u32 object,u32 context,u32 settings) {
 #define PICTURE_NATIVE_ASPECT() (((u32 (*)(u32))FW_STILL_ASPECT_GET)(((u32 (*)(void))FW_SETTINGS)()))
 #endif
 #ifndef PICTURE_NATIVE_ID
-/* Visible-area id of a native aspect. GR III offers only 3:2 (0) and 1:1 (3). */
-#define PICTURE_NATIVE_ID(native) ((native)==3 ? 3 : 0)
+/* The family header maps a native aspect to its visible-area id. */
+#error "The family header defines PICTURE_NATIVE_ID"
 #endif
 /* Visible-area id of the capture: 0 3:2, 1 4:3, 2 16:9, 3 1:1, 4 XPan. */
 #ifdef FRAMING_XPAN_NATIVE
@@ -149,11 +149,11 @@ static u32 plane_of(u32 image,u32 code,Plane *p) {
 static u32 shot_record(volatile u32 *h,u32 shot) {
     u32 ring=PICTURE_SCRATCH(h)+GRKIT_SHOT_RING, n=WORD(ring,0), i, entry, record;
     for(i=1;shot && i<=GRKIT_SHOT_ENTRIES;++i) {
-        entry=ring+8+((n-i)&(GRKIT_SHOT_ENTRIES-1))*8;
-        if(WORD(entry,0)!=shot) continue;
-        record=WORD(entry,4);
+        entry=ring+GRKIT_SHOT_ENTRY+((n-i)&(GRKIT_SHOT_ENTRIES-1))*GRKIT_SHOT_STRIDE;
+        if(WORD(entry,GRKIT_SHOT_KEY)!=shot) continue;
+        record=WORD(entry,GRKIT_SHOT_RECORD);
         PICTURE_BARRIER();
-        if(WORD(entry,0)==shot) return record;
+        if(WORD(entry,GRKIT_SHOT_KEY)==shot) return record;
     }
     return 0;
 }

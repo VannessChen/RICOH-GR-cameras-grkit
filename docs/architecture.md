@@ -41,7 +41,7 @@ The CLI embeds `runtime/` and `resources/`, so it works outside the checkout.
 A target is one firmware build. Each target has its own regions and hooks in `components::Layout`.
 
 The targets of one camera line form a family, such as the GR IV builds. They share the runtime code and the hook symbols.
-A family with more than one build shares the header `runtime/targets/<family>.h`. It holds the object layouts, events, and constants of the family.
+Each family has the header `runtime/targets/<family>.h`, which each build header of the family includes. It holds the object layouts, events, and constants of the family. It also holds the values that the shared code takes from each family, such as the icon slot and the Framing ratios. The shared code has no default for them, so a new family that does not define one does not build.
 The build header `runtime/targets/<target>.h` holds the firmware addresses and the values that differ in that build.
 
 Tests require each build of a family to have the same hook symbols and the same header definitions. A build declares the definitions that only it has in `BUILD_ONLY_DEFINITIONS`. A change for one build therefore fails the tests until it reaches each build of the family.
@@ -177,7 +177,7 @@ If a step is missing, a test names it, except steps 8 and 10.
 
 A firmware update that cannot be undone moves each camera to the new build, so the old build gets fewer users over time.
 A maintainer can freeze such a build when keeping it current costs more than it gives. A frozen build still builds and gets fixes, but a new feature does not have to reach it.
-To freeze a build, exempt it in the family test for the hooks and definitions that it does not get. The runtime must then leave the feature out on that build, as the settings page does without `SETTINGS_SUBMENU`.
+To freeze a build, exempt it in the family test for the hooks and definitions that it does not get. The runtime must then leave the feature out on that build, as the settings page does without `SETTINGS_SUBMENU`. The C code gates a feature on a header definition, and the assembly and INSTALL follow the hooks of the build. The assembly stops the build if a build has one without the other.
 
 ## Code areas
 

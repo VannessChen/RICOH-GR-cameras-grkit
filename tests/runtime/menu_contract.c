@@ -2,6 +2,9 @@
 #include <string.h>
 /* The build's label table, which the Rust test writes for this harness. */
 #include "menu_text.h"
+/* The family header sends the aspect request; the harness counts requests. */
+#include "firmware.h"
+#undef MENU_FRAMING_REQUEST
 static unsigned framing_requests;
 #define MENU_FRAMING_REQUEST() (++framing_requests)
 /* Camera addresses of the menu text map to text_arena, relative to the text

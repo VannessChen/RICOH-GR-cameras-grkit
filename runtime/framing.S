@@ -1,6 +1,15 @@
 #include "firmware.h"
 #include "abi.h"
 #include "hooks.h"
+/* framing.c syncs the capture aspect with FRAMING_CAPTURE_ASPECT and keeps the
+   live view in 3:2 with FW_CAPTURE_ASPECT_GET (target headers). The hooks
+   that complete each come from the site tables of the target (hooks.h). */
+#if defined(FRAMING_CAPTURE_ASPECT) != defined(HOOK_FRAMING_CAPTURE_REQUEST_HOOK)
+#error "FRAMING_CAPTURE_ASPECT and the framing_capture_request_hook hook go together"
+#endif
+#if defined(FW_CAPTURE_ASPECT_GET) != defined(HOOK_FRAMING_LIVE_MODE)
+#error "FW_CAPTURE_ASPECT_GET and the framing_live_* hooks go together"
+#endif
 .syntax unified
 .arm
 .text
@@ -55,23 +64,16 @@ framing_children:
 #ifdef HOOK_FRAMING_CLASSIFY
 /* 65:24 shares capture aspect id 2 with 16:9. These hooks switch the id 2
    geometry: shooting follows the Framing ratio, playback follows the size of
-   the photo that the classifier saw last. A target header can replace the
-   GR III 2.10 sizes and classifier registers below. */
-#ifndef XPAN_HEIGHT_0
-/* GetResolution id 2: the stock 16:9 height and the 65:24 height of each size. */
-#define XPAN_HEIGHT_0 3376, 2216
-#define XPAN_HEIGHT_1 2704, 1776
-#define XPAN_HEIGHT_2 1888, 1240
-#define XPAN_HEIGHT_3 1080, 712
-/* The 65:24 sizes (width, height), largest first. */
-#define XPAN_SIZES 6000, 2216, 4800, 1776, 3360, 1240, 1920, 712
+   the photo that the classifier saw last. The family header gives the sizes
+   (XPAN_HEIGHT_<n>: the stock 16:9 and the 65:24 height of GetResolution id 2;
+   XPAN_SIZES: the 65:24 sizes, largest first) and the classifier registers at
+   the aspect BL (the width, the class pointer, and the return of its frame). */
+#if !defined(XPAN_HEIGHT_0) || !defined(XPAN_HEIGHT_1) || !defined(XPAN_HEIGHT_2) || \
+    !defined(XPAN_HEIGHT_3) || !defined(XPAN_SIZES)
+#error "The family header defines the XPan sizes"
 #endif
-#ifndef CLASSIFY_WIDTH
-/* Size classifier registers at the aspect BL: the width, the class pointer,
-   and the return of the classifier's frame. */
-#define CLASSIFY_WIDTH r7
-#define CLASSIFY_CLASS r6
-#define CLASSIFY_RETURN ldm sp, {r4,r5,r6,r7,fp,sp,pc}
+#if !defined(CLASSIFY_WIDTH) || !defined(CLASSIFY_CLASS) || !defined(CLASSIFY_RETURN)
+#error "The family header defines the classifier registers"
 #endif
 /* r12 = 1 when id 2 means 65:24. Clobbers only r12 and the flags. */
 xpan_active:

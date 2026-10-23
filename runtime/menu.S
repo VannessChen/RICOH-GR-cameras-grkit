@@ -1,6 +1,15 @@
 #include "firmware.h"
 #include "abi.h"
 #include "hooks.h"
+/* menu.c has the Fn parameter page with PARAMETER_KINDS and the settings page
+   with SETTINGS_SUBMENU (build header). The hooks of each page come from the
+   site tables of the target (hooks.h). A build has both or neither. */
+#if defined(PARAMETER_KINDS) != defined(HOOK_MENU_PARAMETER_START)
+#error "PARAMETER_KINDS and the menu_parameter_* hooks go together"
+#endif
+#if defined(SETTINGS_SUBMENU) != defined(HOOK_MENU_SETTINGS_CHANGE)
+#error "SETTINGS_SUBMENU and the menu_settings_* hooks go together"
+#endif
 .syntax unified
 .arm
 .text

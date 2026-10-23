@@ -209,11 +209,6 @@
 /* The longest menu string, with its NUL: an Image Control summary is a prefix
    and a 16-character effect name. */
 #define GRKIT_SUMMARY_UNITS 32
-/* Icon slot of GR III 2.10. A target header can define a larger slot (see
-   runtime/targets). */
-#ifndef GRKIT_ICON_STRIDE
-#define GRKIT_ICON_STRIDE 6408
-#endif
 
 /* Picture scratch after the records: the date stamp core and halo masks, then
    the shot ring. */
@@ -222,10 +217,15 @@
    its shot settings pointer, which the maker-note setter (+0x18) and the JPEG
    encode configuration (+0x34) also hold. A later shot can start processing
    before an earlier one is written, so a single "last build" word is not
-   enough. Word 0 counts the writes, and entry n is {key, record} at 8 + 8 n.
-   The assembly computes the offset as 0x22800 + 0x40. */
+   enough. Word 0 counts the writes. Entry n is at GRKIT_SHOT_ENTRY +
+   GRKIT_SHOT_STRIDE n and holds the key at GRKIT_SHOT_KEY and the record at
+   GRKIT_SHOT_RECORD. */
 #define GRKIT_SHOT_RING 141376
 #define GRKIT_SHOT_ENTRIES 8
+#define GRKIT_SHOT_ENTRY 8
+#define GRKIT_SHOT_STRIDE 8
+#define GRKIT_SHOT_KEY 0
+#define GRKIT_SHOT_RECORD 4
 #define GRKIT_PICTURE_SCRATCH 141448
 
 /* Menu text after the picture scratch, in each menu language: 0 English, 1

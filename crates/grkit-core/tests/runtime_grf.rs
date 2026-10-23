@@ -491,7 +491,7 @@ _Static_assert(GRKIT_RECORD_NAME + 34 <= GRKIT_RECORD_MONOCHROME, "Name overlap"
 _Static_assert(GRKIT_RECORD_CODE + 2 <= GRKIT_RECORD_FEATURES, "Extension overlap");
 _Static_assert(GRKIT_RECORD_POST + 20 <= GRKIT_RECORD_SIZE, "Extension overflow");
 int main(void) {
-    printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE, GRKIT_ICON_STRIDE,
+    printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE,
            GRKIT_PICTURE_SCRATCH, GRKIT_HOST_COUNT, GRKIT_HOST_RECORDS, GRKIT_HOST_ACTIVE, GRKIT_HOST_STAMP,
            GRKIT_HOST_GUIDE, GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE, GRKIT_HOST_PLUGINS, GRKIT_TEXT_SIZE,
            GRKIT_TEXT_SUMMARY, GRKIT_TEXT_STRINGS, GRKIT_TEXT_LANGUAGES, GRKIT_TEXT_RECORDS, GRKIT_SUMMARY_UNITS, GRKIT_TAIL_SIZE);
@@ -513,7 +513,6 @@ int main(void) {
         [
             runtime::HEADER_SIZE,
             runtime::RECORD_SIZE,
-            runtime::ICON_STRIDE,
             runtime::PICTURE_SCRATCH,
             runtime::HOST_COUNT,
             runtime::HOST_RECORDS,

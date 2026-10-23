@@ -204,9 +204,15 @@ fields!(RECORD_FIELDS {
 pub const PICTURE_MASKS: usize = 141376;
 /// Entries of the shot ring.
 pub const SHOT_ENTRIES: usize = 8;
-/// The picture scratch after the records: the masks, then the shot ring (a
-/// write count, a pad word, and `SHOT_ENTRIES` {key, record} pairs).
-pub const PICTURE_SCRATCH: usize = PICTURE_MASKS + 8 + 8 * SHOT_ENTRIES;
+/// The shot ring: a write count, a pad word, then entry n at
+/// `SHOT_ENTRY + SHOT_STRIDE * n`, which holds the key at `SHOT_KEY` and the
+/// record at `SHOT_RECORD`.
+pub const SHOT_ENTRY: usize = 8;
+pub const SHOT_STRIDE: usize = 8;
+pub const SHOT_KEY: usize = 0;
+pub const SHOT_RECORD: usize = 4;
+/// The picture scratch after the records: the masks, then the shot ring.
+pub const PICTURE_SCRATCH: usize = PICTURE_MASKS + SHOT_ENTRY + SHOT_STRIDE * SHOT_ENTRIES;
 /// Everything after the records: the picture scratch, then the menu text.
 pub const TAIL_SIZE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE;
 // The summaries of every record in every menu language end before the
@@ -377,19 +383,9 @@ pub fn header() -> String {
         "SUMMARY_UNITS",
         menu_text::SUMMARY_UNITS,
     );
-    // The icon slot is the one value that a target header can override, so the
-    // target header must come before this file.
-    comment(
-        &mut out,
-        "Icon slot of GR III 2.10. A target header can define a larger slot (see \
-         runtime/targets).",
-    );
-    writeln!(
-        out,
-        "#ifndef GRKIT_ICON_STRIDE\n#define GRKIT_ICON_STRIDE {}\n#endif\n",
-        runtime::ICON_STRIDE
-    )
-    .unwrap();
+    // The icon slot differs between camera families, so the family header in
+    // runtime/targets defines GRKIT_ICON_STRIDE.
+    out.push('\n');
 
     define(
         &mut out,
@@ -404,12 +400,21 @@ pub fn header() -> String {
          by its shot settings pointer, which the maker-note setter (+0x18) and the \
          JPEG encode configuration (+0x34) also hold. A later shot can start \
          processing before an earlier one is written, so a single \"last build\" \
-         word is not enough. Word 0 counts the writes, and entry n is {key, record} \
-         at 8 + 8 n. The assembly computes the offset as 0x22800 + 0x40.",
+         word is not enough. Word 0 counts the writes. Entry n is at GRKIT_SHOT_ENTRY \
+         + GRKIT_SHOT_STRIDE n and holds the key at GRKIT_SHOT_KEY and the record at \
+         GRKIT_SHOT_RECORD.",
         "SHOT_RING",
         PICTURE_MASKS,
     );
-    writeln!(out, "#define GRKIT_SHOT_ENTRIES {SHOT_ENTRIES}").unwrap();
+    for (name, value) in [
+        ("ENTRIES", SHOT_ENTRIES),
+        ("ENTRY", SHOT_ENTRY),
+        ("STRIDE", SHOT_STRIDE),
+        ("KEY", SHOT_KEY),
+        ("RECORD", SHOT_RECORD),
+    ] {
+        writeln!(out, "#define GRKIT_SHOT_{name} {value}").unwrap();
+    }
     writeln!(out, "#define GRKIT_PICTURE_SCRATCH {PICTURE_SCRATCH}").unwrap();
     out.push('\n');
 

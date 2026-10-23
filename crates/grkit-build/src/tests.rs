@@ -1131,19 +1131,23 @@ fn each_target_has_a_header_a_camera_release_and_an_icon_stride() {
             "runtime/firmware.h does not select {} with {define}",
             target.header()
         );
-        let shared = format!("targets/{}.h", target.family);
-        let family = target::TARGETS
-            .iter()
-            .filter(|other| other.family == target.family);
-        if family.count() > 1 {
-            let header = runtime_source(&shared)
-                .unwrap_or_else(|| panic!("The {} family has no {shared}", target.family));
-            // `grkit port` reads the addresses of the build header only.
-            assert!(
-                !std::str::from_utf8(header).unwrap().contains("FIRMWARE(0x"),
-                "{shared} names a firmware address; put it in the build header"
-            );
-        }
+        // Each build header includes the header of its family, which holds
+        // the values that the shared code takes from each family.
+        let shared = format!("{}.h", target.family);
+        let header = runtime_source(&format!("targets/{shared}"))
+            .unwrap_or_else(|| panic!("The {} family has no targets/{shared}", target.family));
+        // `grkit port` reads the addresses of the build header only.
+        assert!(
+            !std::str::from_utf8(header).unwrap().contains("FIRMWARE(0x"),
+            "{shared} names a firmware address; put it in the build header"
+        );
+        assert!(
+            std::str::from_utf8(runtime_source(&target.header()).unwrap())
+                .unwrap()
+                .contains(&format!("#include \"{shared}\"")),
+            "{} does not include {shared}",
+            target.header()
+        );
         assert!(
             grkit_core::camera::CAMERAS
                 .iter()
@@ -1151,10 +1155,9 @@ fn each_target_has_a_header_a_camera_release_and_an_icon_stride() {
             "No camera release runs {}",
             target.name
         );
-        // Without a definition, abi.h gives the GR III stride.
         let stride = header_definitions(&target.header(), false)
             .remove("GRKIT_ICON_STRIDE")
-            .unwrap_or_else(|| grkit_core::runtime::ICON_STRIDE.to_string());
+            .unwrap_or_else(|| panic!("{} defines no GRKIT_ICON_STRIDE", target.name));
         assert_eq!(
             grkit_core::runtime::icon_stride(target.name)
                 .unwrap()

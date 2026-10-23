@@ -1,4 +1,4 @@
-/* The target header comes first: it can set ABI values such as the icon slot. */
+/* The target header, then the shared layout. */
 #include "firmware.h"
 #include "abi.h"
 /* Private ADJ menu. All state belongs to the module host. */
@@ -155,9 +155,9 @@ A32_ENTRY u32 menu_viewfinder_icon_select(u32 native_icon,u32 movie) {
     return !movie && icon!=0x7fff ? icon : native_icon;
 }
 #ifndef MENU_FRAMING_REQUEST
-/* Resend the native StillAspectRatio value, as a native menu change does.
-   The Framing capture hook maps a 3:2 request to the Framing ratio. */
-#define MENU_FRAMING_REQUEST() do { u32 s=CALL0(FW_SETTINGS)(); CALL2(FW_STILL_ASPECT_SET)(s,CALL1(FW_STILL_ASPECT_GET)(s)); } while(0)
+/* The family header sends the native aspect request again after a Framing
+   change, so the capture hook maps it to the new ratio. */
+#error "The family header defines MENU_FRAMING_REQUEST"
 #endif
 #ifndef TOOLBAR_CREATED
 /* The first full ADJ draw follows the toolbar creation. */

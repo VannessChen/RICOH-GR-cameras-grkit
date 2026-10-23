@@ -1,9 +1,12 @@
 /* RICOH GR III 2.10 (also GR IIIx 1.60): firmware entry points, data, and
    object layouts that the runtime uses. The addresses are those of the
    pinned 2.10 image. Each is a FIRMWARE() symbol that the installer
-   relocates, as on GR IV. */
+   relocates, as on GR IV. gr3.h has the values that the shared runtime takes
+   from each family. */
 #ifndef GRKIT_TARGET_H
 #define GRKIT_TARGET_H
+
+#include "gr3.h"
 
 /* Camera settings and the still aspect property. */
 #define FW_SETTINGS FIRMWARE(0x5320b31c)

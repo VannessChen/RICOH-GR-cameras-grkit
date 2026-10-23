@@ -13,19 +13,10 @@
 #ifndef FRAMING_NATIVE_ASPECT
 #define FRAMING_NATIVE_ASPECT() (((u32 (*)(u32))FW_STILL_ASPECT_GET)(FRAMING_SETTINGS()))
 #endif
-#ifdef FW_CAPTURE_PROPERTIES
-#ifndef FRAMING_CAPTURE_ASPECT
-/* Requested capture StillAspectRatio (CommonProperty +0x7b6). The property
-   setter writes the next copy at [property+4]; readers see the current copy
-   at [property] only after a later commit. Comparing the next copy sends
-   each change once. */
-#define FRAMING_CAPTURE_ASPECT() BYTE(WORD(WORD(WORD(((u32 (*)(void))FW_CAPTURE_PROPERTIES)(),0),0x518),4),0x7b6)
-#endif
-#ifndef FRAMING_REQUEST_ASPECT
-/* Native StillAspectRatio setter with the unchanged 3:2 UI value. It sends
-   capture property 0xd4 again and posts no UI change event. */
-#define FRAMING_REQUEST_ASPECT() (((u32 (*)(u32,u32))FW_STILL_ASPECT_SET)(FRAMING_SETTINGS(),0))
-#endif
+/* The family header reads the requested capture aspect and sends the request
+   again (FRAMING_CAPTURE_ASPECT, FRAMING_REQUEST_ASPECT). */
+#if defined(FRAMING_CAPTURE_ASPECT) != defined(FRAMING_REQUEST_ASPECT)
+#error "The family header defines FRAMING_CAPTURE_ASPECT and FRAMING_REQUEST_ASPECT together"
 #endif
 #ifndef FRAMING_INVALIDATE
 /* View::Invalidate: request a redraw unless one is pending (+0xa0). */

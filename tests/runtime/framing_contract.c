@@ -39,6 +39,11 @@ static volatile uint32_t *mapped_pixels(uint32_t address)
 #define BYTE(p,o) (*(uint8_t *)mapped((p)+(o),1))
 #define FRAMING_PIXELS(address) mapped_pixels(address)
 #define FRAMING_NATIVE_ASPECT() native_aspect
+/* The family header reads and requests the capture aspect in the firmware;
+   the harness keeps it in capture_aspect. */
+#include "firmware.h"
+#undef FRAMING_CAPTURE_ASPECT
+#undef FRAMING_REQUEST_ASPECT
 #define FRAMING_CAPTURE_ASPECT() capture_aspect
 /* The native setter resends 0 through the property handler hook. */
 #define FRAMING_REQUEST_ASPECT() (++capture_requests, capture_aspect=framing_capture_request(0))

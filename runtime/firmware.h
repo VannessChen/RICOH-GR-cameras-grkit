@@ -1,6 +1,7 @@
 /* Selects the firmware definitions of the build target. The build and the host
    tests define GRKIT_TARGET_<target> (components::Layout::define). A new target
-   must add its header here. */
+   must add its header here. The build header includes the header of its
+   family, runtime/targets/<family>.h. */
 
 /* A firmware address of a relocatable target. The installer finds the address
    in the running build of the firmware version and moves each reference
@@ -26,7 +27,9 @@
 #error "Define GRKIT_TARGET_<target> to select runtime/targets/<target>.h"
 #endif
 
-#ifndef FRAMING_RATIO_COUNT
-/* Framing ratios: Off, XPan, 16:9, 4:3. A target can offer only the first ones. */
-#define FRAMING_RATIO_COUNT 4U
+/* Values that each family header gives the shared code. FRAMING_RATIO_COUNT:
+   the Framing ratios Off, XPan, 16:9, 4:3 that the family offers, from the
+   first one. */
+#if !defined(GRKIT_ICON_STRIDE) || !defined(FRAMING_RATIO_COUNT)
+#error "The family header defines GRKIT_ICON_STRIDE and FRAMING_RATIO_COUNT"
 #endif

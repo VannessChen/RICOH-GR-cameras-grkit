@@ -114,9 +114,9 @@ static void picture(uint32_t index, uint32_t width, uint32_t height, uint32_t pi
 static void store_shot(uint32_t shot, uint32_t r)
 {
     uint32_t ring = SCRATCH + GRKIT_SHOT_RING, n = WORD(ring, 0);
-    uint32_t entry = ring + 8 + (n & (GRKIT_SHOT_ENTRIES - 1)) * 8;
-    WORD(entry, 0) = shot;
-    WORD(entry, 4) = r;
+    uint32_t entry = ring + GRKIT_SHOT_ENTRY + (n & (GRKIT_SHOT_ENTRIES - 1)) * GRKIT_SHOT_STRIDE;
+    WORD(entry, GRKIT_SHOT_KEY) = shot;
+    WORD(entry, GRKIT_SHOT_RECORD) = r;
     WORD(ring, 0) = n + 1;
 }
 static void still(uint32_t r) { store_shot(SHOT, r); }
