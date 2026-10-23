@@ -40,6 +40,8 @@ export function App() {
   // Effects fitted from LUTs on this page. They are not stored, so a reload removes them.
   const [imported, setImported] = useState<readonly ImportedEffect[]>([]);
   const [build, setBuild] = useState<Build>({ state: 'idle' });
+  // A retry of a failed catalog request clears the error boundaries that use the catalog.
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   // A newer build or a changed selection makes the result of an older build stale.
   const buildRun = useRef(0);
 
@@ -341,7 +343,21 @@ export function App() {
           {!available.includes('imageControl') ? (
             <p className="status section-body">{t.effectsUnavailable(camera.name)}</p>
           ) : plan.includeEffects ? (
-            <ErrorBoundary fallback={<p className="status error section-body">{t.loadError}</p>}>
+            <ErrorBoundary
+              resetKey={String(catalogAttempt)}
+              fallback={
+                <div className="section-body load-error">
+                  <p className="status error">{t.loadError}</p>
+                  <button
+                    type="button"
+                    className="button small"
+                    onClick={() => setCatalogAttempt((attempt) => attempt + 1)}
+                  >
+                    {t.retryLoad}
+                  </button>
+                </div>
+              }
+            >
               <Suspense fallback={<p className="status section-body">{t.loading}</p>}>
                 <EffectsSection
                   strings={t}
@@ -370,7 +386,7 @@ export function App() {
               <dt>{t.effectCount}</dt>
               <dd>
                 {plan.includeEffects ? (
-                  <ErrorBoundary fallback="—">
+                  <ErrorBoundary resetKey={String(catalogAttempt)} fallback="—">
                     <Suspense fallback="—">
                       <CheckedCount selection={selection} />
                     </Suspense>

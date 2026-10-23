@@ -297,6 +297,11 @@ button {
   color: var(--ink-2);
 }
 
+.load-error {
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .status.error,
 .note.error {
   color: var(--warning);

@@ -137,12 +137,21 @@ async function fetchCatalog(target: string): Promise<Catalog> {
 
 const catalogs = new Map<string, Promise<Catalog>>();
 
-/** One cached request for each target, so `use()` receives the same promise on each render. */
+/**
+ * One cached request for each target, so `use()` receives the same promise on each render.
+ * A failed request leaves the cache, so the next call requests the catalog again.
+ */
 export function loadCatalog(target: string): Promise<Catalog> {
-  let catalog = catalogs.get(target);
-  if (!catalog) {
-    catalog = fetchCatalog(target);
-    catalogs.set(target, catalog);
+  const cached = catalogs.get(target);
+  if (cached) {
+    return cached;
   }
+  const catalog = fetchCatalog(target);
+  catalogs.set(target, catalog);
+  catalog.catch(() => {
+    if (catalogs.get(target) === catalog) {
+      catalogs.delete(target);
+    }
+  });
   return catalog;
 }
