@@ -14,8 +14,8 @@ licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 These effect definitions are also licensed under CC BY-SA 4.0.
 
 `sources/SPEKTRAFILM_LICENSE.txt` contains the upstream notice. `sources/CHANGELOG.txt` describes
-the changes: GRKit scans the three slide films directly instead of printing them, and fits each
-LUT to the effect model.
+the changes: GRKit scans the three slide films directly instead of printing them, sets the scan
+levels of Vision3 500T, and fits each LUT to the effect model.
 
 ## Spectral Film LUT
 

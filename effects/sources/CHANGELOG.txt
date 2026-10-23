@@ -12,6 +12,10 @@ git 3bb2c2d2801ff68b92019cf1dbcbb133d60832bc, CC BY-SA 4.0):
 - Slide films (Kodachrome 64, Velvia 100, Ektachrome E100) are scanned directly
   (`io.scan_film`) instead of printed, because the LUT builder always prints and the print
   stocks are negative-working.
+- Vision3 500T (on Supra Endura paper) is built with the scanner black and white correction on,
+  at the default levels, as a lab scan of the print sets them.
+  spektrafilm-lut turns the correction off for every LUT. Its references are fixed (the film base
+  and the film's maximum density), so the LUT holds it.
 - The "# Created:" header line is removed before the fit.
 - Fitted as above by GRKit contributors.
 

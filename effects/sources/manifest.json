@@ -45,11 +45,11 @@
       "upstream": "https://github.com/t3mujin/t3mujinpack/blob/0b421f3e25209ed78253d1724a29cc6255c5e7fe/LICENSE.txt"
     },
     "CHANGELOG.txt": {
-      "sha256": "2dc979b0a2ac9fb6896a994b4fc2c85badc9ae7a8ac5afc209d0c1f9021e33ab",
+      "sha256": "1cb1a385ab027f5ed0e9f579a355f8e5f08f8d4d3f21cad73e52846511f02262",
       "license": "upstream-changes"
     },
     "bake_spektrafilm.py": {
-      "sha256": "21dc994405107c396a71eb8d2d49dc66d9c6f6f58bb8eb1c3bde3774c5e8bd22",
+      "sha256": "3f3fd813e11895260ee4dea674e1e2958be408a46a0ef3fbc19319b586ae0ec5",
       "license": "project"
     },
     "bake_spectral_film_lut.py": {
@@ -123,9 +123,9 @@
       "generator": "spektrafilm",
       "sha256": "6deeaf3c1f84f4ccb0e3005dc722e127a507534b08b82ea3cf5d55945eaf3684"
     },
-    "vision3-500t-2393-v1.cube": {
+    "vision3-500t-supra-v1.cube": {
       "generator": "spektrafilm",
-      "sha256": "cea22beac0935008169bf716d8aa84fe1d331ca8d2a69493499d3d61bae52290"
+      "sha256": "f7a319e548e8e3cd5d932f7c16e5b4073fbf624ab2efc0b2261053ead83cc665"
     },
     "xtra-400-crystal-v1.cube": {
       "generator": "spektrafilm",
