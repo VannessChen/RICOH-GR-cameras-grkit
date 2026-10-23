@@ -141,9 +141,17 @@ fn standard_lut_fits_its_target() {
 }
 
 #[test]
-fn flog_round_trips_recover_the_model() {
+fn flog_round_trip_recovers_the_model() {
     round_trip(Encoding::Flog, 65, &known(POST));
+}
+
+#[test]
+fn flog2_round_trip_recovers_the_model() {
     round_trip(Encoding::Flog2, 65, &known(POST));
+}
+
+#[test]
+fn flog2c_round_trip_recovers_the_model() {
     round_trip(Encoding::Flog2C, 65, &known(POST));
 }
 
@@ -650,7 +658,7 @@ fn hue_sectors_follow_a_hue_selective_look() {
     let blob = effects::compile_definition(&definition).unwrap();
     assert_eq!(blob[84] & 8, 8);
     let (effect, _) = effects::decode(&blob).unwrap();
-    let params = grkit_core::site::params(&effect).unwrap();
+    let params = grkit_core::site::params(&effect);
     assert_eq!(params, imported.fit.params());
     assert_eq!(params.sectors, Some(imported.fit.sectors.unwrap().stage()));
     let _ = sectors;

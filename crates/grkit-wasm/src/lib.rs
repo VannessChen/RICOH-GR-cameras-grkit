@@ -11,7 +11,8 @@ use grkit_core::{
     cube::Cube,
     effects, fit, lut_image,
     modules::Selection,
-    packaging, runtime, site, Files,
+    packaging::{self, EffectSet},
+    site, Files,
 };
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -87,6 +88,8 @@ pub fn import_lut_with_progress(
                 "auto" => None,
                 name => Some(name.parse()?),
             },
+            // The site has no `--exposure` or `--no-post` control; it fits as the CLI
+            // does without them.
             exposure: 0.0,
             options: fit::Options::default(),
         },
@@ -116,7 +119,7 @@ pub struct Builder {
     manifest: Vec<u8>,
     paths: Vec<String>,
     runtime: Files,
-    effects: Files,
+    effects: EffectSet,
     plugins: Selection,
     camera: &'static Camera,
     language: packaging::Language,
@@ -126,23 +129,11 @@ pub struct Builder {
 impl Builder {
     /// Starts a package from the runtime's `build.json`.
     pub fn new(manifest: &[u8]) -> Result<Self> {
-        let parsed = packaging::read_manifest(manifest)?;
-        let paths = parsed["files"]
-            .as_array()
-            .context("Expected a manifest file list")?
-            .iter()
-            .map(|item| {
-                item["path"]
-                    .as_str()
-                    .map(str::to_owned)
-                    .context("Expected a runtime path")
-            })
-            .collect::<Result<_>>()?;
         Ok(Self {
             manifest: manifest.to_vec(),
-            paths,
+            paths: packaging::manifest_paths(manifest)?,
             runtime: Files::new(),
-            effects: Files::new(),
+            effects: EffectSet::default(),
             plugins: Selection::ALL,
             camera: &camera::GR3,
             language: packaging::Language::English,
@@ -171,27 +162,11 @@ impl Builder {
 
     /// Adds one compiled effect and returns its ID. The package filename comes from the ID.
     pub fn add_effect(&mut self, blob: &[u8]) -> Result<String> {
-        let (effect, _) = effects::decode(blob)?;
-        let id = effect["effect_id"]
-            .as_str()
-            .context("Expected an effect ID")?
-            .to_owned();
-        let name = effects::filename(&id)?;
-        ensure!(
-            !self.effects.contains_key(&name),
-            "Duplicate effect ID or filename hash collision: {id}"
-        );
-        ensure!(
-            self.effects.len() < runtime::MAX_COUNT,
-            "This target supports at most {} effects",
-            runtime::MAX_COUNT
-        );
-        self.effects.insert(name, blob.to_vec());
-        Ok(id)
+        self.effects.insert(blob.to_vec())
     }
 
-    /// Leaves one plugin out of the package: `image-control`, `framing`, `guides`,
-    /// `date-stamp`, or `grain`. The installer changes no firmware for it.
+    /// Leaves one plugin out of the package, by its name in `grkit_core::plugins::NAMES`.
+    /// The installer changes no firmware for it.
     /// Without effects, the installer leaves out Image Control by itself.
     pub fn omit_plugin(&mut self, name: &str) -> Result<()> {
         let plugins = self.plugins.without(name)?;
@@ -200,15 +175,15 @@ impl Builder {
         Ok(())
     }
 
-    /// Selects the camera: `gr3` (the default), `gr3x`, or `gr4`. The package gets its
-    /// ModeSet file. `build` rejects a camera that does not run this runtime.
+    /// Selects the camera by its ID in `grkit_core::camera::CAMERAS`, GR III by default.
+    /// The package gets its ModeSet file. `build` rejects a camera that does not run this runtime.
     pub fn set_camera(&mut self, id: &str) -> Result<()> {
         self.camera = camera::find(id)?;
         Ok(())
     }
 
-    /// Selects the language of the installation guide: `en` (the default),
-    /// `zh-Hans`, `zh-Hant`, or `ja`.
+    /// Selects the language of the installation guide by its code
+    /// (`packaging::Language::code`), English by default.
     pub fn set_language(&mut self, code: &str) -> Result<()> {
         self.language = packaging::Language::parse(code)?;
         Ok(())
@@ -222,10 +197,9 @@ impl Builder {
 
     /// Verifies the runtime against its manifest and returns the verified package ZIP.
     pub fn build(&self) -> Result<Vec<u8>> {
-        let (runtime, manifest) = packaging::load_runtime(&self.manifest, &self.runtime)?;
-        packaging::assemble(
+        let runtime = packaging::load_runtime(&self.manifest, &self.runtime)?;
+        let package = packaging::assemble(
             &runtime,
-            &manifest,
             &self.effects,
             self.plugins,
             self.camera,
@@ -236,7 +210,8 @@ impl Builder {
                     .as_deref()
                     .context("Set the installation guide first")?,
             },
-        )
+        )?;
+        Ok(package.bytes)
     }
 }
 
@@ -272,20 +247,22 @@ impl Package {
         self.0.add_effect(blob).map_err(js_error)
     }
 
-    /// Leaves one plugin out of the package: `image-control`, `framing`, `guides`,
-    /// `date-stamp`, or `grain`.
+    /// Leaves one plugin out of the package, by its `plugin` name in `PLUGINS`
+    /// (`generated/plugins.ts`).
     #[wasm_bindgen(js_name = omitPlugin)]
     pub fn omit_plugin(&mut self, name: &str) -> Result<(), JsError> {
         self.0.omit_plugin(name).map_err(js_error)
     }
 
-    /// Selects the camera: `gr3` (the default), `gr3x`, or `gr4`.
+    /// Selects the camera by its key in `CAMERA_RELEASES` (`generated/cameras.ts`), `gr3`
+    /// by default.
     #[wasm_bindgen(js_name = setCamera)]
     pub fn set_camera(&mut self, id: &str) -> Result<(), JsError> {
         self.0.set_camera(id).map_err(js_error)
     }
 
-    /// Selects the language of the installation guide: `en`, `zh-Hans`, `zh-Hant`, or `ja`.
+    /// Selects the language of the installation guide by its site language tag, `en` by
+    /// default.
     #[wasm_bindgen(js_name = setLanguage)]
     pub fn set_language(&mut self, code: &str) -> Result<(), JsError> {
         self.0.set_language(code).map_err(js_error)
@@ -303,7 +280,8 @@ impl Package {
     }
 }
 
-/// Returns the ZIP that turns SD scripts off on a camera: `gr3`, `gr3x`, or `gr4`.
+/// Returns the ZIP that turns SD scripts off on a camera, by
+/// its key in `CAMERA_RELEASES` (`generated/cameras.ts`).
 #[wasm_bindgen(js_name = scriptsOffPackage)]
 pub fn scripts_off_package(camera: &str) -> Result<Vec<u8>, JsError> {
     grkit_core::camera::find(camera)

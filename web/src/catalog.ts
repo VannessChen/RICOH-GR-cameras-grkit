@@ -1,4 +1,7 @@
+import { CATALOG_SCHEMA } from './generated/site';
 import type { Input } from './import/names';
+
+export { MAX_EFFECTS } from './generated/site';
 
 /** The fields of a film cover icon, as `effect.json` gives them (`effects/README.md`, Icons). */
 export interface Cover {
@@ -89,9 +92,6 @@ export function readBaseGamma(value: unknown): Uint16Array | undefined {
   return Uint16Array.from(value as number[]);
 }
 
-const SCHEMA = 'grkit-site-effects-v1';
-/** The effects that one package can hold (`runtime::MAX_COUNT`). */
-export const MAX_EFFECTS = 20;
 
 export function siteUrl(path: string): string {
   return new URL(path, document.baseURI).href;
@@ -113,7 +113,7 @@ async function fetchCatalog(target: string): Promise<Catalog> {
   }
   const data = await response.json();
   if (
-    data?.schema !== SCHEMA ||
+    data?.schema !== CATALOG_SCHEMA ||
     data.target !== target ||
     !Array.isArray(data.effects) ||
     data.preview?.input !== 'linear-srgb16' ||

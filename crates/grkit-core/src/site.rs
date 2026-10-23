@@ -9,10 +9,15 @@ use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
 use crate::cube::{self, Encoding};
+use crate::effects::{self, Effect};
 use crate::fit::{self, Model, Params};
 use crate::selective::{self, Selective};
-use crate::{effects, hue, packaging, Files};
+use crate::{hue, packaging, Files};
 
+/// The runtime build whose catalog the site shows. Its Standard base gamma is also the
+/// one that `grkit effects import` reads from the firmware, so the CLI and the site fit
+/// imported LUTs over the same table.
+pub const PREVIEW_TARGET: &str = "gr3-2.10";
 /// Points on each axis of a preview table.
 pub const LUT_SIZE: usize = 33;
 pub const CATALOG_SCHEMA: &str = "grkit-site-effects-v1";
@@ -24,55 +29,38 @@ fn unit(m: &[i16; 9]) -> [f64; 9] {
     m.map(|v| v as f64 / 8192.0)
 }
 
-fn coefficients<const N: usize>(value: &Value, what: &str) -> Result<[i64; N]> {
-    let values = value
-        .as_array()
-        .filter(|v| v.len() == N)
-        .with_context(|| format!("Expected {N} {what} values"))?;
-    let mut result = [0; N];
-    for (slot, value) in result.iter_mut().zip(values) {
-        *slot = value
-            .as_i64()
-            .with_context(|| format!("Expected integer {what} values"))?;
-    }
-    Ok(result)
+/// The constants that the site shares with the packager, as a TypeScript module.
+pub fn generated() -> Vec<(&'static str, String)> {
+    let module = format!(
+        "// Generated from crates/grkit-core/src/site.rs. Do not edit: change the\n\
+         // constants there, then run\n\
+         // GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated.\n\n\
+         /** The target whose effects and previews the site shows. */\n\
+         export const PREVIEW_TARGET = '{PREVIEW_TARGET}';\n\n\
+         /** The effects that one package can hold. */\n\
+         export const MAX_EFFECTS = {};\n\n\
+         /** The schema of the effect catalog of each target. */\n\
+         export const CATALOG_SCHEMA = '{CATALOG_SCHEMA}';\n",
+        crate::runtime::MAX_COUNT
+    );
+    vec![("web/src/generated/site.ts", module)]
 }
 
 /// The model parameters of a decoded effect.
-pub fn params(effect: &Value) -> Result<Params> {
-    let q13 = |value: &Value| -> Result<[f64; 9]> {
-        Ok(unit(&coefficients::<9>(value, "matrix")?.map(|v| v as i16)))
-    };
-    let curves = effect["curves"]
-        .as_array()
-        .filter(|c| c.len() == 3)
-        .context("Expected three curves")?;
-    let mut result = Params {
-        matrix: q13(&effect["matrix"])?,
-        curves: [[0.0; 256]; 3],
-        post: fit::IDENTITY,
-        sectors: effect
-            .get("hue_sectors")
-            .map(|value| hue::HueSectors::from_json(value).map(|s| s.stage()))
-            .transpose()?,
-    };
-    for (slot, curve) in result.curves.iter_mut().zip(curves) {
-        *slot = coefficients::<256>(curve, "curve")?.map(|v| v as f64);
+pub fn params(effect: &Effect) -> Params {
+    Params {
+        matrix: unit(&effect.matrix),
+        curves: effect.curves.map(|curve| curve.map(f64::from)),
+        post: effect.post_matrix.as_ref().map_or(fit::IDENTITY, unit),
+        sectors: effect.hue_sectors.as_ref().map(hue::HueSectors::stage),
     }
-    if let Some(post) = effect.get("post_matrix") {
-        result.post = q13(post)?;
-    }
-    Ok(result)
 }
 
 /// A legacy Standard-JPEG input table, red fastest, then green, then blue.
 /// Published catalogs use `linear_preview_lut` instead.
-pub fn preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
-    let params = params(effect)?;
-    let selective = effect
-        .get("selective_color")
-        .map(|value| Selective::from_json(value).map(|s| s.table()))
-        .transpose()?;
+pub fn preview_lut(base_gamma: &[u16; 256], effect: &Effect) -> Result<Vec<u8>> {
+    let params = params(effect);
+    let selective = effect.selective.as_ref().map(Selective::table);
     let model = Model::new(base_gamma);
     let step = |i: usize| i as f64 / (LUT_SIZE - 1) as f64;
     let mut table = Vec::with_capacity(LUT_SIZE.pow(3) * 3);
@@ -109,12 +97,9 @@ fn linear_lut(render: impl Fn([f64; 3]) -> [f64; 3]) -> Vec<u8> {
 
 /// Renders RAW linear sRGB, using sRGB-encoded lookup coordinates in red-fastest order.
 /// The output contains `LUT_SIZE` cubed 8-bit RGB samples.
-pub fn linear_preview_lut(base_gamma: &[u16; 256], effect: &Value) -> Result<Vec<u8>> {
-    let params = params(effect)?;
-    let selective = effect
-        .get("selective_color")
-        .map(|value| Selective::from_json(value).map(|s| s.table()))
-        .transpose()?;
+pub fn linear_preview_lut(base_gamma: &[u16; 256], effect: &Effect) -> Result<Vec<u8>> {
+    let params = params(effect);
+    let selective = effect.selective.as_ref().map(Selective::table);
     let model = Model::new(base_gamma);
     Ok(linear_lut(|linear| {
         let display = model.render(&params, linear);
@@ -196,7 +181,7 @@ pub fn publish_effects(
     for definition in definitions {
         let blob = effects::compile_definition(definition)?;
         let (effect, icon) = effects::decode(&blob)?;
-        let id = text(&effect["effect_id"], "ID")?;
+        let id = effect.id.as_str();
         let file = effects::filename(id)?;
         ensure!(
             ids.insert(id.to_owned()) && !files.contains_key(&file),
@@ -210,9 +195,9 @@ pub fn publish_effects(
         );
         let mut entry = json!({
             "id": id,
-            "name": effect["name"],
+            "name": effect.name,
             "icon": base64(&icon),
-            "monochrome": effect["flags"].as_u64() == Some(effects::MONOCHROME.into()),
+            "monochrome": effect.monochrome(),
             "look": text(&attribution["target"], "target look")?,
             "origin": text(&attribution["origin"], "origin")?,
             "license": text(&attribution["license"], "license")?,

@@ -326,9 +326,8 @@ fn build_image(
         fs::create_dir_all(destination.parent().unwrap())?;
         fs::write(destination, bytes)?;
     }
-    let manifest = json!({
-        "schema_version": 1, "version": env!("CARGO_PKG_VERSION"), "target": image.target.name,
-        "profile": "production", "startup_activation": "Off",
+    let Value::Object(records) = json!({
+        "schema_version": 1, "version": env!("CARGO_PKG_VERSION"),
         "toolchain": tools.manifest(), "source_revision": null, "source_dirty": null,
         "firmware_sha256": image.sha256, "decoded_firmware_sha256": image.decoded_sha256,
         "source_sha256": source_hashes(), "generated_header_sha256": sha256(generated.as_bytes()),
@@ -340,8 +339,12 @@ fn build_image(
         "points": components::Point::ALL.iter().map(|point| (point.name().to_owned(),
             json!(plan.patches.iter().filter(|patch| patch.points == point.bit()).count())))
             .collect::<serde_json::Map<_, _>>(),
-        "files": files.iter().map(|(path, bytes)| json!({"path": path, "size": bytes.len(), "sha256": sha256(bytes)})).collect::<Vec<_>>()
-    });
+    }) else {
+        unreachable!("an object literal")
+    };
+    let mut manifest = grkit_core::packaging::manifest(image.target.name, &files);
+    manifest.extend(records);
+    let manifest = Value::Object(manifest);
     fs::write(
         output.join("build.json"),
         format!("{}\n", serde_json::to_string_pretty(&manifest)?),

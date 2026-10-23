@@ -18,6 +18,8 @@ mod png;
 pub mod runtime;
 pub mod selective;
 pub mod site;
+#[doc(hidden)]
+pub mod testing;
 mod tiff;
 
 pub type Files = std::collections::BTreeMap<String, Vec<u8>>;

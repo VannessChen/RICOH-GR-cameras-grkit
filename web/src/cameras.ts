@@ -2,6 +2,8 @@ import { CAMERA_RELEASES } from './generated/cameras';
 import { CAMERA_PLUGINS } from './generated/plugins';
 import type { ModuleKey } from './modules';
 
+export { PREVIEW_TARGET } from './generated/site';
+
 /** One runtime build of a camera: the package for the firmware versions that it runs. */
 export interface Build {
   /** The firmware versions that run this build (`camera.rs` releases of the target). */
@@ -115,6 +117,3 @@ export const CAMERAS: readonly Camera[] = [
 
 /** The token in the install steps that stands for the camera's ModeSet file. */
 export const MODESET_TOKEN = '`{modeset}';
-
-/** The target whose effects and previews the site shows. */
-export const PREVIEW_TARGET = 'gr3-2.10';

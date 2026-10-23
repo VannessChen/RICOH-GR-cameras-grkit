@@ -1,4 +1,5 @@
-use grkit_core::{cube, effects, fit, packaging, site};
+use grkit_core::effects::{self, Effect};
+use grkit_core::{cube, fit, packaging, site};
 use serde_json::{json, Value};
 use std::{fs, path::PathBuf};
 
@@ -53,7 +54,7 @@ fn keep_red() -> Value {
     effects::parse_json(&fs::read(path).unwrap()).unwrap()
 }
 
-fn decoded(definition: &Value) -> Value {
+fn decoded(definition: &Value) -> Effect {
     effects::decode(&effects::compile_definition(definition).unwrap())
         .unwrap()
         .0
@@ -67,8 +68,9 @@ fn entry(table: &[u8], r: usize, g: usize, b: usize) -> [u8; 3] {
 #[test]
 fn standard_preview_returns_each_input() {
     let curve: Vec<u16> = (0..256).map(|v| v * 64).collect();
-    let standard = json!({"effect_id": "standard-v1", "name": "Standard", "flags": 0,
-        "matrix": fit::STANDARD_LOOK, "curves": [&curve, &curve, &curve]});
+    let standard = Effect::from_json(&json!({"effect_id": "standard-v1", "name": "Standard",
+        "flags": 0, "matrix": fit::STANDARD_LOOK, "curves": [&curve, &curve, &curve]}))
+    .unwrap();
     let table = site::preview_lut(&synthetic_base(), &standard).unwrap();
     assert_eq!(table.len(), site::LUT_SIZE.pow(3) * 3);
     let level = |i: usize| (i as f64 * 255.0 / (site::LUT_SIZE - 1) as f64).round() as i32;
@@ -125,7 +127,7 @@ fn raw_previews_render_linear_input_without_inverting_standard() {
     let base = synthetic_base();
     let effect = decoded(&definition("ektar-100-edge-v1"));
     let model = fit::Model::new(&base);
-    let params = site::params(&effect).unwrap();
+    let params = site::params(&effect);
     let table = site::linear_preview_lut(&base, &effect).unwrap();
     let baseline = site::standard_linear_preview_lut(&base);
     let standard = std::array::from_fn(|r| {
@@ -239,7 +241,7 @@ fn selective_color_previews_keep_red_and_gray_other_hues() {
     let base = synthetic_base();
     let accent = site::preview_lut(&base, &decoded(&keep_red())).unwrap();
     let mut standard = decoded(&keep_red());
-    standard.as_object_mut().unwrap().remove("selective_color");
+    standard.selective = None;
     let plain = site::preview_lut(&base, &standard).unwrap();
     let last = site::LUT_SIZE - 1;
     // Saturated red keeps its color; green and blue turn neutral.
@@ -266,10 +268,8 @@ fn selective_color_previews_keep_red_and_gray_other_hues() {
 fn raw_previews_apply_selective_color_after_rendering() {
     let base = synthetic_base();
     let effect = decoded(&keep_red());
-    let params = site::params(&effect).unwrap();
-    let selective = grkit_core::selective::Selective::from_json(&effect["selective_color"])
-        .unwrap()
-        .table();
+    let params = site::params(&effect);
+    let selective = effect.selective.unwrap().table();
     let model = fit::Model::new(&base);
     let table = site::linear_preview_lut(&base, &effect).unwrap();
     for [r, g, b] in [[32, 0, 0], [0, 32, 0], [0, 0, 32], [16, 16, 16]] {
@@ -278,4 +278,11 @@ fn raw_previews_apply_selective_color_after_rendering() {
             .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
         assert_eq!(entry(&table, r, g, b), expected);
     }
+}
+
+#[test]
+fn the_preview_target_is_a_camera_runtime() {
+    assert!(grkit_core::camera::CAMERAS
+        .iter()
+        .any(|camera| camera.runs(site::PREVIEW_TARGET)));
 }

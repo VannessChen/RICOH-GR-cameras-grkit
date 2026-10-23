@@ -1,7 +1,8 @@
 //! Filesystem policy for explicit local inputs and newly created outputs.
 
 use anyhow::{bail, ensure, Context, Result};
-use grkit_core::{effects, packaging, runtime, Files};
+use grkit_core::packaging::{self, EffectSet, VerifiedRuntime};
+use grkit_core::{effects, Files};
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
@@ -103,34 +104,23 @@ pub fn compile_directory(source: &Path) -> Result<Files> {
     Ok(files)
 }
 
-pub fn read_effects(directory: &Path) -> Result<Files> {
-    let mut files = Files::new();
-    let mut ids = BTreeSet::new();
+/// Reads a directory of compiled effects. Each file must have the package filename of
+/// its effect (`effects::filename`), in any letter case.
+pub fn read_effects(directory: &Path) -> Result<EffectSet> {
+    let mut effects = EffectSet::default();
     for path in directory_entries(directory)? {
         let name = basename(&path)?;
         ensure!(
             name.to_ascii_uppercase().ends_with(".GRF"),
             "Unexpected compiled effect entry: {name}"
         );
-        let bytes = read_regular(&path)?;
-        let (effect, _) = effects::decode(&bytes)?;
-        let id = effect["effect_id"]
-            .as_str()
-            .context("Expected an effect ID")?;
-        let canonical = effects::filename(id)?;
+        let id = effects.insert(read_regular(&path)?)?;
         ensure!(
-            name.to_ascii_uppercase() == canonical && !files.contains_key(&canonical),
-            "Invalid or colliding effect filename: {name}"
-        );
-        ensure!(ids.insert(id.to_owned()), "Duplicate effect ID");
-        files.insert(canonical, bytes);
-        ensure!(
-            files.len() <= runtime::MAX_COUNT,
-            "This target supports at most {} effects",
-            runtime::MAX_COUNT
+            name.eq_ignore_ascii_case(&effects::filename(&id)?),
+            "Invalid effect filename: {name}"
         );
     }
-    Ok(files)
+    Ok(effects)
 }
 
 fn collect_files(root: &Path, relative: &Path, files: &mut BTreeSet<String>) -> Result<()> {
@@ -179,7 +169,7 @@ fn read_build(directory: &Path) -> Result<(Vec<u8>, Files)> {
     Ok((manifest, files))
 }
 
-pub fn load_build(directory: &Path) -> Result<(Files, Value)> {
+pub fn load_build(directory: &Path) -> Result<VerifiedRuntime> {
     let (manifest, files) = read_build(directory)?;
     packaging::load_runtime(&manifest, &files)
 }
@@ -190,26 +180,25 @@ pub fn load_build(directory: &Path) -> Result<(Files, Value)> {
 /// `objects/` stays out because its generated header holds firmware bytes.
 pub fn export_runtime(build: &Path, site: &Path) -> Result<(String, usize)> {
     let (manifest, files) = read_build(build)?;
-    let (runtime, parsed) = packaging::load_runtime(&manifest, &files)?;
-    let target = parsed["target"]
-        .as_str()
-        .context("Expected a build target")?
-        .to_owned();
+    let runtime = packaging::load_runtime(&manifest, &files)?;
+    let target = runtime.target().to_owned();
     // A site holds one runtime for each target, so a second target can join it.
     let output = site.join("runtime").join(&target);
     validate_output(&output)?;
     let mut tree = Files::from([("build.json".to_owned(), manifest)]);
     tree.extend(
         runtime
-            .into_iter()
-            .map(|(name, bytes)| (format!("sd/{name}"), bytes)),
+            .files()
+            .iter()
+            .map(|(name, bytes)| (format!("sd/{name}"), bytes.clone())),
     );
     let count = tree.len();
     write_directory(&output, &tree)?;
     Ok((target, count))
 }
 
-// Resolve existing ancestors too, so symlink aliases cannot conceal nested outputs.
+/// Refuses an output path that exists, a dangling symlink included, so a command
+/// cannot write into earlier output. The ancestors of the path are not checked.
 pub fn validate_output(output: &Path) -> Result<()> {
     ensure!(
         fs::symlink_metadata(output).is_err(),

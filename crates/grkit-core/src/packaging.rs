@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::io::{Cursor, Read, Write};
 
 use anyhow::{bail, ensure, Context, Result};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use zip::{write::SimpleFileOptions, CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
@@ -68,6 +68,22 @@ pub fn safe_path(name: &str) -> Result<&str> {
         "Invalid package path: {name:?}"
     );
     Ok(name)
+}
+
+/// The fields of a runtime manifest (`build.json`) that `load_runtime` checks: the
+/// target, the production profile that starts in Off, and the size and SHA-256 of each
+/// file of the build's `sd/` tree. `grkit_build` adds its build records.
+pub fn manifest(target: &str, files: &Files) -> Map<String, Value> {
+    let records = files
+        .iter()
+        .map(|(path, bytes)| json!({"path": path, "size": bytes.len(), "sha256": sha256(bytes)}))
+        .collect();
+    Map::from_iter([
+        ("target".to_owned(), json!(target)),
+        ("profile".to_owned(), json!("production")),
+        ("startup_activation".to_owned(), json!("Off")),
+        ("files".to_owned(), Value::Array(records)),
+    ])
 }
 
 pub fn read_manifest(blob: &[u8]) -> Result<Value> {
@@ -182,11 +198,46 @@ pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
     Ok(())
 }
 
-/// Checks a runtime build against its `build.json` and returns the runtime files and manifest.
+/// The paths of the runtime files that a `build.json` lists, under the build's `sd/` tree.
+pub fn manifest_paths(manifest: &[u8]) -> Result<Vec<String>> {
+    read_manifest(manifest)?["files"]
+        .as_array()
+        .context("Expected a manifest file list")?
+        .iter()
+        .map(|item| {
+            item["path"]
+                .as_str()
+                .map(str::to_owned)
+                .context("Expected a runtime path")
+        })
+        .collect()
+}
+
+/// The runtime files of a production build that `load_runtime` checked against its
+/// manifest and the templates of its target.
+#[derive(Clone, Debug)]
+pub struct VerifiedRuntime {
+    files: Files,
+    target: String,
+}
+
+impl VerifiedRuntime {
+    /// The files of the build's `sd/` tree.
+    pub fn files(&self) -> &Files {
+        &self.files
+    }
+
+    /// The runtime build, such as `gr3-2.10`.
+    pub fn target(&self) -> &str {
+        &self.target
+    }
+}
+
+/// Checks a runtime build against its `build.json`.
 ///
 /// `files` holds every file of the build's `sd/` tree, keyed by its path in that tree.
 /// The file set must equal the manifest list, and each file must match its size and SHA-256.
-pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<(Files, Value)> {
+pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<VerifiedRuntime> {
     let manifest = read_manifest(manifest)?;
     let target = manifest["target"]
         .as_str()
@@ -222,7 +273,37 @@ pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<(Files, Value)> {
         "Runtime directory differs from its manifest"
     );
     validate_runtime(&runtime, &target)?;
-    Ok((runtime, manifest))
+    Ok(VerifiedRuntime {
+        files: runtime,
+        target,
+    })
+}
+
+/// The compiled effects of a package, each under its package filename (`effects::filename`).
+#[derive(Clone, Debug, Default)]
+pub struct EffectSet {
+    files: Files,
+}
+
+impl EffectSet {
+    /// Adds one compiled effect and returns its ID. It refuses an effect that does not
+    /// decode, a second effect with the same filename, and more than `runtime::MAX_COUNT`
+    /// effects.
+    pub fn insert(&mut self, blob: Vec<u8>) -> Result<String> {
+        let id = effects::decode(&blob)?.0.id;
+        let name = effects::filename(&id)?;
+        ensure!(
+            !self.files.contains_key(&name),
+            "Duplicate effect ID or filename hash collision: {id}"
+        );
+        ensure!(
+            self.files.len() < runtime::MAX_COUNT,
+            "This target supports at most {} effects",
+            runtime::MAX_COUNT
+        );
+        self.files.insert(name, blob);
+        Ok(id)
+    }
 }
 
 fn is_effect_path(name: &str) -> bool {
@@ -374,6 +455,8 @@ pub struct Contents {
     pub plugins: Selection,
     /// The language of the guide.
     pub language: Language,
+    /// The number of package entries, the runtime included.
+    pub entries: usize,
 }
 
 /// Checks the package entries.
@@ -434,13 +517,12 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         .filter(|(name, _)| !mandatory.contains(*name))
     {
         if is_effect_path(name) {
-            let (effect, _) = effects::decode(blob)?;
-            let id = effect["effect_id"].as_str().context("Invalid effect ID")?;
+            let id = effects::decode(blob)?.0.id;
             ensure!(
-                name.rsplit('/').next() == Some(effects::filename(id)?.as_str()),
+                name.rsplit('/').next() == Some(effects::filename(&id)?.as_str()),
                 "Profile filename does not match its stable ID"
             );
-            ensure!(ids.insert(id.to_owned()), "Duplicate effect ID");
+            ensure!(ids.insert(id), "Duplicate effect ID");
         } else if *name == plugins_path {
             plugins = Selection::parse(blob)?;
         } else if let Some(guide) = Language::ALL
@@ -481,6 +563,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         effect_ids: ids.into_iter().collect(),
         plugins,
         language: language.context("Package has no installation guide")?,
+        entries: contents.len(),
     })
 }
 
@@ -550,33 +633,30 @@ pub struct Guide<'a> {
     pub pdf: &'a [u8],
 }
 
+/// A package ZIP and what it holds.
+#[derive(Debug)]
+pub struct Package {
+    pub bytes: Vec<u8>,
+    pub contents: Contents,
+}
+
 /// Builds the package ZIP for one camera. `plugins` names the plugins that the
 /// installer installs.
 pub fn assemble(
-    runtime: &Files,
-    build: &Value,
-    effects: &Files,
+    runtime: &VerifiedRuntime,
+    effects: &EffectSet,
     plugins: Selection,
     camera: &Camera,
     guide: &Guide,
-) -> Result<Vec<u8>> {
+) -> Result<Package> {
     ensure!(
-        build.get("profile") == Some(&json!("production"))
-            && build.get("startup_activation") == Some(&json!("Off")),
-        "Only production builds that start in Off can be packaged"
-    );
-    let target = build
-        .get("target")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    ensure!(
-        camera.runs(target),
+        camera.runs(runtime.target()),
         "{} runs the {} runtime, not this build",
         camera.name,
         camera.targets().join(" or ")
     );
-    validate_runtime(runtime, target)?;
     let mut contents: Files = runtime
+        .files()
         .iter()
         .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob.clone()))
         .collect();
@@ -585,9 +665,9 @@ pub fn assemble(
             .into_iter()
             .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob)),
     );
-    for (name, blob) in effects {
+    for (name, blob) in &effects.files {
         contents.insert(
-            format!("SD_ROOT/SCRIPT/PLUGINS/EFFECTS/{}", safe_path(name)?),
+            format!("SD_ROOT/SCRIPT/PLUGINS/EFFECTS/{name}"),
             blob.clone(),
         );
     }
@@ -600,8 +680,9 @@ pub fn assemble(
     contents.insert("SHA256SUMS".into(), checksum_list(&contents));
     validate_contents(&contents)?;
     let bytes = write_zip(contents)?;
-    verify_package(&bytes)?;
-    Ok(bytes)
+    // Read the ZIP back as `grkit verify` does, so the writer cannot drift from the checks.
+    let contents = verify_package(&bytes)?;
+    Ok(Package { bytes, contents })
 }
 
 /// The ZIP of the files that turn SD scripts off on `camera`: its ModeSet
@@ -659,7 +740,8 @@ fn write_zip(contents: Files) -> Result<Vec<u8>> {
     Ok(archive.finish()?.into_inner())
 }
 
-pub fn verify_package(bytes: &[u8]) -> Result<Value> {
+/// Checks a package ZIP: its entries, its contents (`validate_contents`), and `SHA256SUMS`.
+pub fn verify_package(bytes: &[u8]) -> Result<Contents> {
     let declared_entries = declared_entry_count(bytes)?;
     let mut archive = ZipArchive::new(Cursor::new(bytes)).context("Invalid ZIP archive")?;
     // zip indexes names in a map. Check the raw count so duplicate names cannot disappear.
@@ -703,22 +785,12 @@ pub fn verify_package(bytes: &[u8]) -> Result<Value> {
         );
         contents.insert(name, blob);
     }
-    let Contents {
-        camera,
-        target,
-        effect_ids,
-        plugins,
-        language,
-    } = validate_contents(&contents)?;
+    let result = validate_contents(&contents)?;
     ensure!(
         contents["SHA256SUMS"] == checksum_list(&contents),
         "SHA256SUMS differs from package"
     );
-    Ok(
-        json!({"camera": camera.id, "target": target, "effect_ids": effect_ids,
-            "plugins": plugins.names(), "language": language.code(),
-            "entries": contents.len()}),
-    )
+    Ok(result)
 }
 
 fn declared_entry_count(bytes: &[u8]) -> Result<usize> {

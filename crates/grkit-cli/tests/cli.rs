@@ -1,4 +1,4 @@
-use grkit_core::{effects, packaging, runtime};
+use grkit_core::{effects, testing};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -76,22 +76,13 @@ fn fixture(root: &Path) -> (PathBuf, PathBuf) {
         "--out",
         text(&effects),
     ]);
-    let mut binary = vec![0; 52];
-    binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
-    binary[16..20].copy_from_slice(b"\x02\x00\x28\x00");
-    let files = runtime::runtime_files(&binary);
+    let (manifest, files) = testing::build("gr3-2.10");
     for (name, bytes) in &files {
         let path = build.join("sd").join(name);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, bytes).unwrap();
     }
-    let manifest = json!({"profile":"production", "target":"gr3-2.10", "startup_activation":"Off",
-        "files": files.iter().map(|(name,bytes)|json!({"path":name,"size":bytes.len(),"sha256":packaging::sha256(bytes)})).collect::<Vec<_>>()});
-    fs::write(
-        build.join("build.json"),
-        packaging::json_bytes(&manifest).unwrap(),
-    )
-    .unwrap();
+    fs::write(build.join("build.json"), manifest).unwrap();
     (build, effects)
 }
 
@@ -662,7 +653,7 @@ fn imports_a_cube_into_a_buildable_effect_without_overwriting() {
     assert_eq!(built["effects"], 1);
     let name = effects::filename("warm-v1").unwrap();
     let (effect, _) = effects::decode(&fs::read(compiled.join(name)).unwrap()).unwrap();
-    assert_eq!(effect["matrix"], definition["matrix"]);
+    assert_eq!(effect.to_json()["matrix"], definition["matrix"]);
 }
 
 #[test]

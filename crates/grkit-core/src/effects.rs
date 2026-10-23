@@ -183,47 +183,234 @@ fn has_keys_with(value: &Value, required: &[&str], optional: &[&str]) -> bool {
     })
 }
 
-/// The optional extension of an effect: features, the post matrix, and selective color.
-struct Extension {
-    features: u32,
-    post: [i16; 9],
-    selective: Option<Selective>,
-    hue: Option<hue::HueSectors>,
+/// A decoded effect: every field of a GRFX0001 file except the icon.
+///
+/// JSON appears only at the edges: effect definitions (`compile_definition`) and the
+/// decoded JSON form (`from_json`, `to_json`), which holds the GRF integers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Effect {
+    pub id: String,
+    pub name: String,
+    /// 0 or `MONOCHROME`.
+    pub flags: u32,
+    /// The signed Q13 effect matrix, row-major.
+    pub matrix: [i16; 9],
+    /// The 14-bit curve of each channel.
+    pub curves: [[u16; 256]; 3],
+    /// The signed Q13 post-curve matrix (feature 1).
+    pub post_matrix: Option<[i16; 9]>,
+    /// Feature 2.
+    pub selective: Option<Selective>,
+    /// Feature 8, and feature 16 with levels.
+    pub hue_sectors: Option<hue::HueSectors>,
 }
 
-fn extension(effect: &Value) -> Result<Extension> {
-    let mut result = Extension {
-        features: 0,
-        post: [0; 9],
-        selective: None,
-        hue: None,
-    };
-    if let Some(matrix) = effect.get("post_matrix") {
-        let values = matrix
-            .as_array()
-            .filter(|m| m.len() == 9)
-            .context("Expected nine signed Q13 post-matrix coefficients")?;
-        for (slot, value) in result.post.iter_mut().zip(values) {
-            *slot = value
-                .as_i64()
-                .and_then(|n| i16::try_from(n).ok())
-                .context("Expected nine signed Q13 post-matrix coefficients")?;
+/// The matrix and the curves of `matrix` and `curves`, JSON arrays of GRF integers.
+fn coefficients(matrix: &Value, curves: &Value) -> Result<([i16; 9], [[u16; 256]; 3])> {
+    let matrix = matrix
+        .as_array()
+        .context("Expected matrix and curve arrays")?;
+    let curves = curves
+        .as_array()
+        .context("Expected matrix and curve arrays")?;
+    ensure!(
+        matrix.len() == 9
+            && matrix
+                .iter()
+                .all(|v| v.as_i64().is_some_and(|n| (-32768..=32767).contains(&n))),
+        "Expected nine signed Q13 matrix coefficients"
+    );
+    ensure!(
+        curves.len() == 3
+            && curves.iter().all(|c| c.as_array().is_some_and(
+                |c| c.len() == 256 && c.iter().all(|v| v.as_u64().is_some_and(|n| n <= 16383))
+            )),
+        "Expected three 256-sample 14-bit curves"
+    );
+    Ok((
+        std::array::from_fn(|i| matrix[i].as_i64().unwrap() as i16),
+        std::array::from_fn(|c| std::array::from_fn(|i| curves[c][i].as_u64().unwrap() as u16)),
+    ))
+}
+
+impl Effect {
+    /// Reads the fields that a definition and the decoded JSON form share. `curves` are
+    /// the GRF curves, and `selective` the selective color, because the two forms write
+    /// them differently.
+    fn read(value: &Value, curves: &Value, selective: Option<Selective>) -> Result<Self> {
+        let flags = value
+            .get("flags")
+            .map_or(Some(0), Value::as_u64)
+            .context("Unsupported effect flags")?;
+        ensure!(flags <= MONOCHROME as u64, "Unsupported effect flags");
+        let id = value["effect_id"].as_str().unwrap_or("");
+        let name = value["name"]
+            .as_str()
+            .context("Expected an ASCII effect name")?;
+        check_identity(id, name)?;
+        let (matrix, curves) = coefficients(&value["matrix"], curves)?;
+        let post_matrix = value
+            .get("post_matrix")
+            .map(|matrix| -> Result<[i16; 9]> {
+                let error = "Expected nine signed Q13 post-matrix coefficients";
+                let values = matrix.as_array().filter(|m| m.len() == 9).context(error)?;
+                let mut post = [0; 9];
+                for (slot, value) in post.iter_mut().zip(values) {
+                    *slot = value
+                        .as_i64()
+                        .and_then(|n| i16::try_from(n).ok())
+                        .context(error)?;
+                }
+                Ok(post)
+            })
+            .transpose()?;
+        let effect = Self {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            flags: flags as u32,
+            matrix,
+            curves,
+            post_matrix,
+            selective,
+            hue_sectors: value
+                .get("hue_sectors")
+                .map(hue::HueSectors::from_json)
+                .transpose()?,
+        };
+        effect.check()?;
+        Ok(effect)
+    }
+
+    /// Reads the decoded JSON form (`to_json`).
+    pub fn from_json(value: &Value) -> Result<Self> {
+        let mut optional = vec!["flags"];
+        optional.extend(EXTENSION_KEYS);
+        ensure!(
+            has_keys_with(
+                value,
+                &["effect_id", "name", "matrix", "curves"],
+                &optional
+            ),
+            "Expected effect_id, name, matrix, curves, and optional flags, post_matrix, selective_color, and hue_sectors"
+        );
+        let selective = value
+            .get("selective_color")
+            .map(Selective::from_json)
+            .transpose()?;
+        Self::read(value, &value["curves"], selective)
+    }
+
+    /// The decoded JSON form: the GRF integers of each field, and the optional keys of
+    /// the features that the effect has.
+    pub fn to_json(&self) -> Value {
+        let mut value = json!({"effect_id": self.id, "name": self.name, "flags": self.flags,
+            "matrix": self.matrix, "curves": self.curves.map(Vec::from)});
+        if let Some(post) = self.post_matrix {
+            value["post_matrix"] = json!(post);
         }
-        result.features |= FEATURE_POST;
-    }
-    if let Some(value) = effect.get("selective_color") {
-        result.selective = Some(Selective::from_json(value)?);
-        result.features |= FEATURE_SELECTIVE;
-    }
-    if let Some(value) = effect.get("hue_sectors") {
-        let sectors = hue::HueSectors::from_json(value)?;
-        result.features |= FEATURE_HUE_SECTORS;
-        if sectors.levels.is_some() {
-            result.features |= FEATURE_HUE_LEVELS;
+        if let Some(selective) = &self.selective {
+            value["selective_color"] = selective.to_json();
         }
-        result.hue = Some(sectors);
+        if let Some(sectors) = &self.hue_sectors {
+            value["hue_sectors"] = sectors.to_json();
+        }
+        value
     }
-    Ok(result)
+
+    pub fn monochrome(&self) -> bool {
+        self.flags == MONOCHROME
+    }
+
+    fn features(&self) -> u32 {
+        let mut features = 0;
+        if self.post_matrix.is_some() {
+            features |= FEATURE_POST;
+        }
+        if self.selective.is_some() {
+            features |= FEATURE_SELECTIVE;
+        }
+        if let Some(sectors) = &self.hue_sectors {
+            features |= FEATURE_HUE_SECTORS;
+            if sectors.levels.is_some() {
+                features |= FEATURE_HUE_LEVELS;
+            }
+        }
+        features
+    }
+
+    /// Checks the fields that the parts do not check themselves.
+    fn check(&self) -> Result<()> {
+        ensure!(self.flags <= MONOCHROME, "Unsupported effect flags");
+        check_identity(&self.id, &self.name)?;
+        ensure!(
+            self.curves.iter().flatten().all(|v| *v <= 16383),
+            "Expected three 256-sample 14-bit curves"
+        );
+        if self.monochrome() {
+            ensure!(
+                self.post_matrix.is_none(),
+                "Monochrome effects cannot have a post matrix"
+            );
+            ensure!(
+                self.selective.is_none(),
+                "Monochrome effects cannot have selective color"
+            );
+            ensure!(
+                self.hue_sectors.is_none(),
+                "Monochrome effects cannot have hue sectors"
+            );
+            let m = &self.matrix;
+            let c = &self.curves;
+            ensure!(
+                m[..3] == m[3..6] && m[..3] == m[6..9] && c[0] == c[1] && c[0] == c[2],
+                "Monochrome requires equal matrix rows and RGB curves"
+            );
+        }
+        Ok(())
+    }
+
+    /// The GRFX0001 file of the effect with `icon`, 40 x 40 RGBA8 pixels.
+    pub fn encode(&self, icon: &[u8]) -> Result<Vec<u8>> {
+        self.check()?;
+        check_icon(icon)?;
+        let features = self.features();
+        let size = if features & FEATURE_HUE_LEVELS != 0 {
+            SIZE_WITH_LEVELS
+        } else {
+            SIZE
+        };
+        let mut blob = vec![0; size];
+        blob[..8].copy_from_slice(MAGIC);
+        blob[84..88].copy_from_slice(&features.to_le_bytes());
+        for (index, value) in self.post_matrix.unwrap_or([0; 9]).iter().enumerate() {
+            blob[88 + index * 2..90 + index * 2].copy_from_slice(&value.to_le_bytes());
+        }
+        if let Some(selective) = &self.selective {
+            blob[SELECTIVE_OFFSET..RESERVED.start].copy_from_slice(&selective.to_bytes());
+        }
+        if let Some(sectors) = &self.hue_sectors {
+            blob[HUE_OFFSET..HUE_OFFSET + hue::SIZE].copy_from_slice(&sectors.to_bytes());
+            if let Some(levels) = sectors.level_bytes() {
+                blob[SIZE..SIZE + hue::LEVEL_SIZE].copy_from_slice(&levels);
+            }
+        }
+        blob[8..12].copy_from_slice(&(size as u32).to_le_bytes());
+        blob[80..84].copy_from_slice(&self.flags.to_le_bytes());
+        for (offset, text) in [(16, &self.id), (48, &self.name)] {
+            blob[offset..offset + text.len()].copy_from_slice(text.as_bytes());
+        }
+        // The matrix, two bytes of padding, then the curves.
+        for (index, value) in self.matrix.iter().enumerate() {
+            blob[128 + index * 2..130 + index * 2].copy_from_slice(&value.to_le_bytes());
+        }
+        for (index, value) in self.curves.iter().flatten().enumerate() {
+            blob[148 + index * 2..150 + index * 2].copy_from_slice(&value.to_le_bytes());
+        }
+        blob[ICON_OFFSET..ICON_OFFSET + ICON_SIZE].copy_from_slice(icon);
+        let crc = checksum(&blob);
+        blob[12..16].copy_from_slice(&crc.to_le_bytes());
+        Ok(blob)
+    }
 }
 
 pub fn valid_id(id: &str) -> bool {
@@ -251,40 +438,6 @@ pub fn filename(effect_id: &str) -> Result<String> {
     ))
 }
 
-pub fn coefficients(effect: &Value) -> Result<Vec<u8>> {
-    let matrix = effect["matrix"]
-        .as_array()
-        .context("Expected matrix and curve arrays")?;
-    let curves = effect["curves"]
-        .as_array()
-        .context("Expected matrix and curve arrays")?;
-    ensure!(
-        matrix.len() == 9
-            && matrix
-                .iter()
-                .all(|v| v.as_i64().is_some_and(|n| (-32768..=32767).contains(&n))),
-        "Expected nine signed Q13 matrix coefficients"
-    );
-    ensure!(
-        curves.len() == 3
-            && curves.iter().all(|c| c.as_array().is_some_and(
-                |c| c.len() == 256 && c.iter().all(|v| v.as_u64().is_some_and(|n| n <= 16383))
-            )),
-        "Expected three 256-sample 14-bit curves"
-    );
-    let mut result = Vec::with_capacity(1556);
-    for value in matrix {
-        result.extend_from_slice(&(value.as_i64().unwrap() as i16).to_le_bytes());
-    }
-    result.extend_from_slice(&[0, 0]);
-    for curve in curves {
-        for value in curve.as_array().unwrap() {
-            result.extend_from_slice(&(value.as_u64().unwrap() as u16).to_le_bytes());
-        }
-    }
-    Ok(result)
-}
-
 /// Checks an effect ID (`valid_id`) and a name of 1 to 16 printable ASCII characters.
 pub fn check_identity(effect_id: &str, name: &str) -> Result<()> {
     ensure!(
@@ -300,53 +453,7 @@ pub fn check_identity(effect_id: &str, name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn validate(effect: &Value, icon: &[u8]) -> Result<()> {
-    let mut optional = vec!["flags"];
-    optional.extend(EXTENSION_KEYS);
-    ensure!(
-        has_keys_with(
-            effect,
-            &["effect_id", "name", "matrix", "curves"],
-            &optional
-        ),
-        "Expected effect_id, name, matrix, curves, and optional flags, post_matrix, selective_color, and hue_sectors"
-    );
-    let flags = effect
-        .get("flags")
-        .map_or(Some(0), Value::as_u64)
-        .context("Unsupported effect flags")?;
-    ensure!(flags <= MONOCHROME as u64, "Unsupported effect flags");
-    check_identity(
-        effect["effect_id"].as_str().unwrap_or(""),
-        effect["name"]
-            .as_str()
-            .context("Expected an ASCII effect name")?,
-    )?;
-    coefficients(effect)?;
-    let extension = extension(effect)?;
-    ensure!(
-        flags != MONOCHROME as u64 || extension.features & FEATURE_POST == 0,
-        "Monochrome effects cannot have a post matrix"
-    );
-    ensure!(
-        flags != MONOCHROME as u64 || extension.features & FEATURE_SELECTIVE == 0,
-        "Monochrome effects cannot have selective color"
-    );
-    ensure!(
-        flags != MONOCHROME as u64 || extension.features & FEATURE_HUE_SECTORS == 0,
-        "Monochrome effects cannot have hue sectors"
-    );
-    if flags == MONOCHROME as u64 {
-        let matrix = effect["matrix"].as_array().unwrap();
-        let curves = effect["curves"].as_array().unwrap();
-        ensure!(
-            matrix[..3] == matrix[3..6]
-                && matrix[..3] == matrix[6..9]
-                && curves[0] == curves[1]
-                && curves[0] == curves[2],
-            "Monochrome requires equal matrix rows and RGB curves"
-        );
-    }
+fn check_icon(icon: &[u8]) -> Result<()> {
     ensure!(icon.len() == ICON_SIZE, "Expected a 40 x 40 RGBA8 icon");
     ensure!(
         icon.iter()
@@ -370,61 +477,31 @@ pub fn checksum(blob: &[u8]) -> u32 {
     hasher.finalize()
 }
 
+/// Encodes an effect in the decoded JSON form (`Effect::from_json`) with `icon`.
 pub fn encode(effect: &Value, icon: &[u8]) -> Result<Vec<u8>> {
-    validate(effect, icon)?;
-    let extension = extension(effect)?;
-    let size = if extension.features & FEATURE_HUE_LEVELS != 0 {
-        SIZE_WITH_LEVELS
-    } else {
-        SIZE
-    };
-    let mut blob = vec![0; size];
-    blob[..8].copy_from_slice(MAGIC);
-    blob[84..88].copy_from_slice(&extension.features.to_le_bytes());
-    for (index, value) in extension.post.iter().enumerate() {
-        blob[88 + index * 2..90 + index * 2].copy_from_slice(&value.to_le_bytes());
-    }
-    if let Some(selective) = extension.selective {
-        blob[SELECTIVE_OFFSET..RESERVED.start].copy_from_slice(&selective.to_bytes());
-    }
-    if let Some(sectors) = extension.hue {
-        blob[HUE_OFFSET..HUE_OFFSET + hue::SIZE].copy_from_slice(&sectors.to_bytes());
-        if let Some(levels) = sectors.level_bytes() {
-            blob[SIZE..SIZE + hue::LEVEL_SIZE].copy_from_slice(&levels);
-        }
-    }
-    blob[8..12].copy_from_slice(&(size as u32).to_le_bytes());
-    blob[80..84].copy_from_slice(
-        &(effect.get("flags").and_then(Value::as_u64).unwrap_or(0) as u32).to_le_bytes(),
-    );
-    for (offset, field) in [(16, "effect_id"), (48, "name")] {
-        let bytes = effect[field].as_str().unwrap().as_bytes();
-        blob[offset..offset + bytes.len()].copy_from_slice(bytes);
-    }
-    blob[128..ICON_OFFSET].copy_from_slice(&coefficients(effect)?);
-    blob[ICON_OFFSET..ICON_OFFSET + ICON_SIZE].copy_from_slice(icon);
-    let crc = checksum(&blob);
-    blob[12..16].copy_from_slice(&crc.to_le_bytes());
-    Ok(blob)
+    Effect::from_json(effect)?.encode(icon)
 }
 
-pub fn decode(blob: &[u8]) -> Result<(Value, Vec<u8>)> {
+/// Reads one GRFX0001 file: the effect and its icon.
+pub fn decode(blob: &[u8]) -> Result<(Effect, Vec<u8>)> {
     ensure!(
         (blob.len() == SIZE || blob.len() == SIZE_WITH_LEVELS) && &blob[..8] == MAGIC,
         "Expected one complete GRFX0001 effect"
     );
     let read_u32 = |offset| u32::from_le_bytes(blob[offset..offset + 4].try_into().unwrap());
+    let read_i16 = |offset: usize| i16::from_le_bytes([blob[offset], blob[offset + 1]]);
     ensure!(
         read_u32(8) == blob.len() as u32 && read_u32(12) == checksum(blob),
         "Invalid effect size or CRC32"
     );
-    let levels = read_u32(84) & FEATURE_HUE_LEVELS != 0;
+    let features = read_u32(84);
+    let levels = features & FEATURE_HUE_LEVELS != 0;
     ensure!(
         levels == (blob.len() == SIZE_WITH_LEVELS)
-            && (!levels || read_u32(84) & FEATURE_HUE_SECTORS != 0),
+            && (!levels || features & FEATURE_HUE_SECTORS != 0),
         "Hue levels need hue sectors and the larger effect size"
     );
-    let hue_end = if read_u32(84) & FEATURE_HUE_SECTORS != 0 {
+    let hue_end = if features & FEATURE_HUE_SECTORS != 0 {
         HUE_OFFSET + hue::SIZE
     } else {
         HUE_OFFSET
@@ -452,60 +529,47 @@ pub fn decode(blob: &[u8]) -> Result<(Value, Vec<u8>)> {
         );
         Ok(std::str::from_utf8(&field[..end])?)
     };
-    let matrix: Vec<i16> = blob[128..146]
-        .chunks_exact(2)
-        .map(|bytes| i16::from_le_bytes(bytes.try_into().unwrap()))
-        .collect();
-    let curves: Vec<Vec<u16>> = blob[148..ICON_OFFSET]
-        .chunks_exact(512)
-        .map(|channel| {
-            channel
-                .chunks_exact(2)
-                .map(|bytes| u16::from_le_bytes(bytes.try_into().unwrap()))
-                .collect()
-        })
-        .collect();
-    let mut effect = json!({"effect_id": string(16)?, "name": string(48)?, "flags": read_u32(80), "matrix": matrix, "curves": curves});
-    {
-        let features = read_u32(84);
-        ensure!(features & !FEATURES == 0, "Unsupported effect features");
-        let post: Vec<i16> = blob[88..106]
-            .chunks_exact(2)
-            .map(|bytes| i16::from_le_bytes(bytes.try_into().unwrap()))
-            .collect();
-        // A field without its feature bit must stay zero, so the bytes stay canonical.
-        ensure!(
-            features & FEATURE_POST != 0 || post.iter().all(|v| *v == 0),
-            "Unsupported effect features"
-        );
-        let selective = &blob[SELECTIVE_OFFSET..RESERVED.start];
-        ensure!(
-            features & FEATURE_SELECTIVE != 0 || selective.iter().all(|v| *v == 0),
-            "Unsupported effect features"
-        );
-        let object = effect.as_object_mut().unwrap();
-        if features & FEATURE_POST != 0 {
-            object.insert("post_matrix".into(), json!(post));
-        }
-        if features & FEATURE_SELECTIVE != 0 {
-            object.insert(
-                "selective_color".into(),
-                Selective::from_bytes(selective)?.to_json(),
-            );
-        }
-        if features & FEATURE_HUE_SECTORS != 0 {
-            object.insert(
-                "hue_sectors".into(),
+    let id = string(16)?;
+    let name = string(48)?;
+    ensure!(features & !FEATURES == 0, "Unsupported effect features");
+    let post: [i16; 9] = std::array::from_fn(|i| read_i16(88 + i * 2));
+    // A field without its feature bit must stay zero, so the bytes stay canonical.
+    ensure!(
+        features & FEATURE_POST != 0 || post.iter().all(|v| *v == 0),
+        "Unsupported effect features"
+    );
+    let selective = &blob[SELECTIVE_OFFSET..RESERVED.start];
+    ensure!(
+        features & FEATURE_SELECTIVE != 0 || selective.iter().all(|v| *v == 0),
+        "Unsupported effect features"
+    );
+    let effect = Effect {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        flags: read_u32(80),
+        matrix: std::array::from_fn(|i| read_i16(128 + i * 2)),
+        curves: std::array::from_fn(|c| {
+            std::array::from_fn(|i| {
+                let offset = 148 + c * 512 + i * 2;
+                u16::from_le_bytes([blob[offset], blob[offset + 1]])
+            })
+        }),
+        post_matrix: (features & FEATURE_POST != 0).then_some(post),
+        selective: (features & FEATURE_SELECTIVE != 0)
+            .then(|| Selective::from_bytes(selective))
+            .transpose()?,
+        hue_sectors: (features & FEATURE_HUE_SECTORS != 0)
+            .then(|| {
                 hue::HueSectors::from_bytes(
                     &blob[HUE_OFFSET..hue_end],
                     levels.then(|| &blob[SIZE..SIZE + hue::LEVEL_SIZE]),
-                )?
-                .to_json(),
-            );
-        }
-    }
+                )
+            })
+            .transpose()?,
+    };
     let icon = blob[ICON_OFFSET..ICON_OFFSET + ICON_SIZE].to_vec();
-    validate(&effect, &icon)?;
+    effect.check()?;
+    check_icon(&icon)?;
     Ok((effect, icon))
 }
 
@@ -582,19 +646,10 @@ pub fn compile_definition(definition: &Value) -> Result<Vec<u8>> {
     } else {
         definition["curves"].clone()
     };
-    let mut effect = json!({"effect_id": definition["effect_id"], "name": definition["name"], "flags": definition["flags"], "matrix": definition["matrix"], "curves": curves});
-    let object = effect.as_object_mut().unwrap();
-    if let Some(matrix) = definition.get("post_matrix") {
-        object.insert("post_matrix".into(), matrix.clone());
-    }
-    if let Some(value) = definition.get("selective_color") {
-        object.insert(
-            "selective_color".into(),
-            Selective::from_definition(value)?.to_json(),
-        );
-    }
-    if let Some(value) = definition.get("hue_sectors") {
-        object.insert("hue_sectors".into(), value.clone());
-    }
-    encode(&effect, &pixels)
+    // A definition writes selective color in degrees.
+    let selective = definition
+        .get("selective_color")
+        .map(Selective::from_definition)
+        .transpose()?;
+    Effect::read(definition, &curves, selective)?.encode(&pixels)
 }

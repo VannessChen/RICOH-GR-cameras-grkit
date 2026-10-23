@@ -4,7 +4,7 @@ mod storage;
 
 use anyhow::{ensure, Context, Result};
 use clap::{Parser, Subcommand};
-use grkit_core::{effects, fit, modules::Selection, packaging, site, Files};
+use grkit_core::{cube::Encoding, effects, fit, modules::Selection, packaging, site, Files};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -79,9 +79,9 @@ enum Command {
         /// Compiled effects. Without effects, the installer does not install Image Control.
         #[arg(long)]
         effects: Option<PathBuf>,
-        /// The plugins to install: image-control, framing, guides, date-stamp,
-        /// grain. Without this option, the package installs each plugin.
-        #[arg(long, value_delimiter = ',')]
+        /// The plugins to install, separated by commas. Without this option, the
+        /// package installs each plugin.
+        #[arg(long, value_delimiter = ',', value_parser = grkit_core::plugins::NAMES)]
         plugins: Option<Vec<String>>,
         /// The camera that the package enables SD scripts on.
         #[arg(long, default_value = "gr3", value_parser = grkit_core::camera::CAMERAS.map(|camera| camera.id))]
@@ -148,7 +148,7 @@ enum EffectsCommand {
         #[arg(long)]
         source: PathBuf,
         /// The runtime target whose catalog this is.
-        #[arg(long, default_value = "gr3-2.10")]
+        #[arg(long, default_value = site::PREVIEW_TARGET)]
         target: String,
         /// The official firmware of the target, the source of the Standard base gamma.
         #[arg(long)]
@@ -185,8 +185,7 @@ enum EffectsCommand {
         /// What the LUT expects: standard for a GR JPEG in Standard, srgb for sRGB-encoded
         /// scene light without a tone curve, or a log encoding. auto guesses it from the LUT
         /// data (`fit::guess_input`): Standard or a log encoding, never srgb or linear.
-        #[arg(long, default_value = "auto",
-            value_parser = ["auto", "standard", "srgb", "linear", "vlog", "flog", "flog2", "flog2c"])]
+        #[arg(long, default_value = "auto", value_parser = input_names())]
         input: String,
         /// Exposure offset in EV, applied to scene-linear light before the LUT.
         #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
@@ -205,6 +204,13 @@ enum EffectsCommand {
         #[arg(long)]
         out: PathBuf,
     },
+}
+
+/// `auto`, then the name of each input encoding of a LUT.
+fn input_names() -> clap::builder::PossibleValuesParser {
+    clap::builder::PossibleValuesParser::new(
+        std::iter::once("auto").chain(Encoding::ALL.map(Encoding::name)),
+    )
 }
 
 /// A number in decimal or with a 0x prefix.
@@ -345,7 +351,8 @@ fn run(command: Command) -> Result<Value> {
             ensure!(effects::valid_id(&id), "Invalid effect ID");
             let output = out.join(&id);
             storage::validate_output(&output)?;
-            let image = grkit_build::verify_firmware(&firmware, &grkit_build::target::GR3_210)?;
+            let target = grkit_build::target::find(site::PREVIEW_TARGET)?;
+            let image = grkit_build::verify_firmware(&firmware, target)?;
             let base_gamma = grkit_build::firmware::standard_base_gamma(&image)?;
             let bytes = storage::read_bounded(&lut, MAX_LUT_SIZE)?;
             let input = if input == "auto" {
@@ -353,6 +360,7 @@ fn run(command: Command) -> Result<Value> {
             } else {
                 Some(input.parse()?)
             };
+            // A label tile. The site import also makes film covers (`effects::icon_pixels`).
             let icon = json!({"label": label, "shape": shape});
             let request = fit::Import {
                 effect_id: &id,
@@ -392,10 +400,10 @@ fn run(command: Command) -> Result<Value> {
             guide,
             out,
         } => {
-            let (runtime, manifest) = storage::load_build(&build)?;
+            let runtime = storage::load_build(&build)?;
             let effects = match effects {
                 Some(directory) => storage::read_effects(&directory)?,
-                None => Files::new(),
+                None => packaging::EffectSet::default(),
             };
             let plugins = match plugins {
                 Some(names) => Selection::from_names(names.iter().map(String::as_str))?,
@@ -404,9 +412,8 @@ fn run(command: Command) -> Result<Value> {
             let camera = grkit_core::camera::find(&camera)?;
             let language = packaging::Language::parse(&language)?;
             let pdf = storage::read_bounded(&guide, packaging::MAX_FILE_SIZE)?;
-            let bytes = packaging::assemble(
+            let package = packaging::assemble(
                 &runtime,
-                &manifest,
                 &effects,
                 plugins,
                 camera,
@@ -415,12 +422,12 @@ fn run(command: Command) -> Result<Value> {
                     pdf: &pdf,
                 },
             )?;
-            let verified = packaging::verify_package(&bytes)?;
-            storage::write_new(&out, &bytes)?;
+            storage::write_new(&out, &package.bytes)?;
+            let contents = package.contents;
             Ok(
-                json!({"path": out, "sha256": packaging::sha256(&bytes), "camera": verified["camera"],
-                "entries": verified["entries"], "plugins": verified["plugins"],
-                "language": verified["language"]}),
+                json!({"path": out, "sha256": packaging::sha256(&package.bytes),
+                "camera": contents.camera.id, "entries": contents.entries,
+                "plugins": contents.plugins.names(), "language": contents.language.code()}),
             )
         }
         Command::Guides { out } => {
@@ -450,11 +457,11 @@ fn run(command: Command) -> Result<Value> {
         Command::Verify { archive } => {
             // Include room for ZIP metadata while bounding the archive read itself.
             let bytes = storage::read_bounded(&archive, 64 * 1024 * 1024)?;
-            let verified = packaging::verify_package(&bytes)?;
+            let contents = packaging::verify_package(&bytes)?;
             Ok(
-                json!({"valid": true, "camera": verified["camera"], "target": verified["target"],
-                "effects": verified["effect_ids"].as_array().map_or(0, Vec::len),
-                "plugins": verified["plugins"], "language": verified["language"]}),
+                json!({"valid": true, "camera": contents.camera.id, "target": contents.target,
+                "effects": contents.effect_ids.len(),
+                "plugins": contents.plugins.names(), "language": contents.language.code()}),
             )
         }
         Command::ScriptsOff { camera, out } => {

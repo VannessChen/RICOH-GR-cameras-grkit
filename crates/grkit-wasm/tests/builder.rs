@@ -1,28 +1,16 @@
-use grkit_core::{effects, packaging, runtime, Files};
+use grkit_core::{packaging, runtime, testing, Files};
 use grkit_wasm::Builder;
 use serde_json::{json, Value};
 
 fn runtime_files() -> Files {
-    let mut binary = vec![0; 52];
-    binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
-    binary[16..20].copy_from_slice(b"\x02\x00\x28\x00");
-    runtime::runtime_files(&binary)
+    testing::runtime_files(&testing::installer(), "gr3-2.10")
 }
 
 fn manifest(files: &Files) -> Vec<u8> {
-    let value = json!({"profile": "production", "target": "gr3-2.10", "startup_activation": "Off",
-        "files": files.iter().map(|(path, bytes)| json!({"path": path, "size": bytes.len(),
-            "sha256": packaging::sha256(bytes)})).collect::<Vec<_>>()});
-    packaging::json_bytes(&value).unwrap()
+    testing::manifest("gr3-2.10", files)
 }
 
-fn effect(id: &str) -> Vec<u8> {
-    let curve: Vec<_> = (0..256).map(|i| i * 64).collect();
-    let value = json!({"effect_id": id, "name": "Test", "flags": 0,
-        "matrix": [8192, 0, 0, 0, 8192, 0, 0, 0, 8192],
-        "curves": [&curve, &curve, &curve]});
-    effects::encode(&value, &vec![0; 6400]).unwrap()
-}
+use testing::effect;
 
 /// A stand-in for a guide PDF, which the site fetches.
 const PDF: &[u8] = b"%PDF-1.7\n% GRKit test guide\n";
@@ -51,16 +39,16 @@ fn builds_a_verified_package_from_a_published_runtime() {
 
     let package = builder.build().unwrap();
     assert_eq!(package, builder.build().unwrap());
-    let verified: Value = packaging::verify_package(&package).unwrap();
-    assert_eq!(verified["effect_ids"], json!(["test-a", "test-b"]));
+    let verified = packaging::verify_package(&package).unwrap();
+    assert_eq!(verified.effect_ids, ["test-a", "test-b"]);
 }
 
 #[test]
 fn a_package_without_effects_is_valid() {
     let package = builder_with_runtime(&runtime_files()).build().unwrap();
     assert_eq!(
-        packaging::verify_package(&package).unwrap()["effect_ids"],
-        json!([])
+        packaging::verify_package(&package).unwrap().effect_ids,
+        Vec::<String>::new()
     );
 }
 
@@ -73,8 +61,8 @@ fn omitted_plugins_are_written_and_checked() {
     builder.omit_plugin("guides").unwrap();
     let package = builder.build().unwrap();
     assert_eq!(
-        packaging::verify_package(&package).unwrap()["plugins"],
-        json!(["image-control", "date-stamp", "grain"])
+        packaging::verify_package(&package).unwrap().plugins.names(),
+        ["image-control", "date-stamp", "grain"]
     );
     // Without effects, omitting every other plugin leaves nothing to show.
     builder.omit_plugin("date-stamp").unwrap();
@@ -95,11 +83,11 @@ fn the_camera_selects_the_modeset_file() {
     builder.set_camera("gr3x").unwrap();
     let package = builder.build().unwrap();
     let verified = packaging::verify_package(&package).unwrap();
-    assert_eq!(verified["camera"], "gr3x");
+    assert_eq!(verified.camera.id, "gr3x");
     builder.set_camera("gr3").unwrap();
     let package = builder.build().unwrap();
     assert_eq!(
-        packaging::verify_package(&package).unwrap()["camera"],
+        packaging::verify_package(&package).unwrap().camera.id,
         "gr3"
     );
 }
@@ -125,13 +113,13 @@ fn the_language_names_the_guide() {
     builder.set_language("zh-Hant").unwrap();
     let package = builder.build().unwrap();
     assert_eq!(
-        packaging::verify_package(&package).unwrap()["language"],
+        packaging::verify_package(&package).unwrap().language.code(),
         "zh-Hant"
     );
     builder.set_language("en").unwrap();
     let package = builder.build().unwrap();
     assert_eq!(
-        packaging::verify_package(&package).unwrap()["language"],
+        packaging::verify_package(&package).unwrap().language.code(),
         "en"
     );
 }

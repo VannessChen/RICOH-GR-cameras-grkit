@@ -2,25 +2,14 @@ use std::fs;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
 
-use grkit_core::{camera, effects, modules::Selection, packaging::*, runtime, Files};
-use serde_json::{json, Value};
+use grkit_core::{camera, modules::Selection, packaging::*, testing, Files};
+use serde_json::Value;
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 fn package() -> Vec<u8> {
-    let mut binary = vec![0; 52];
-    binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
-    binary[16..20].copy_from_slice(b"\x02\x00\x28\x00");
-    let curve: Vec<_> = (0..256).map(|i| i * 64).collect();
-    let effect = json!({"effect_id": "test-effect", "name": "Test", "flags": 0,
-        "matrix": [8192, 0, 0, 0, 8192, 0, 0, 0, 8192],
-        "curves": [&curve, &curve, &curve]});
     assemble(
-        &runtime::runtime_files(&binary),
-        &json!({"target": "gr3-2.10", "profile": "production", "startup_activation": "Off"}),
-        &Files::from([(
-            effects::filename("test-effect").unwrap(),
-            effects::encode(&effect, &vec![0; 6400]).unwrap(),
-        )]),
+        &testing::runtime("gr3-2.10"),
+        &testing::effect_set(&["test-effect"]),
         Selection::ALL,
         &camera::GR3,
         &Guide {
@@ -29,6 +18,7 @@ fn package() -> Vec<u8> {
         },
     )
     .unwrap()
+    .bytes
 }
 
 fn unpack(bytes: &[u8]) -> Files {

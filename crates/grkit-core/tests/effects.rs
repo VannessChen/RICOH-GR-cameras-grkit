@@ -94,6 +94,7 @@ fn user_definition_preserves_edited_name_and_creative_curve() {
     definition["curves"][0][100] = json!(0);
     let (compiled, _) =
         effects::decode(&effects::compile_definition(&definition).unwrap()).unwrap();
+    let compiled = compiled.to_json();
     assert_eq!(compiled["name"], "My Portrait");
     assert_eq!(compiled["curves"], definition["curves"]);
     assert_eq!(compiled["matrix"], definition["matrix"]);
@@ -143,7 +144,9 @@ fn round_trip_preserves_layout_and_nonmonotone_curves() {
     assert_eq!(bytes.len(), 8192);
     assert_eq!(&bytes[..8], b"GRFX0001");
     assert_eq!(&bytes[1684..8084], &icon);
-    assert_eq!(effects::decode(&bytes).unwrap(), (effect, icon));
+    let (decoded, decoded_icon) = effects::decode(&bytes).unwrap();
+    assert_eq!((decoded.to_json(), &decoded_icon), (effect, &icon));
+    assert_eq!(decoded.encode(&decoded_icon).unwrap(), bytes);
 }
 
 #[test]
@@ -188,7 +191,8 @@ fn monochrome_requires_identical_rows_and_channels() {
     assert_eq!(
         effects::decode(&effects::encode(&effect, &icon).unwrap())
             .unwrap()
-            .0,
+            .0
+            .to_json(),
         effect
     );
     effect["curves"][1][3] = json!(193);
@@ -224,7 +228,8 @@ fn default_flags_and_filename_contract() {
     assert_eq!(
         effects::decode(&effects::encode(&effect, &vec![0; effects::ICON_SIZE]).unwrap())
             .unwrap()
-            .0["flags"],
+            .0
+            .flags,
         0
     );
     let filename = effects::filename("custom-v1").unwrap();
@@ -424,11 +429,11 @@ fn selective_color_compiles_to_kernel_integers_and_round_trips() {
     assert!(blob[120..128].iter().all(|v| *v == 0));
     let (effect, icon) = effects::decode(&blob).unwrap();
     assert_eq!(
-        effect["selective_color"],
+        effect.selective.unwrap().to_json(),
         json!({"direction_q12": [-1306, 3882], "lower_tan_q8": [93, 179],
                "higher_tan_q8": [27, 64], "chroma": [6, 16]})
     );
-    assert_eq!(effects::encode(&effect, &icon).unwrap(), blob);
+    assert_eq!(effect.encode(&icon).unwrap(), blob);
 }
 
 #[test]

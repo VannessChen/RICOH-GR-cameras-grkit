@@ -51,8 +51,8 @@ fn imports_a_cube_as_a_package_effect_with_a_preview() {
     let imported =
         import_lut(&warm_cube(), &synthetic_base(), &request("warm-v1", "Warm")).unwrap();
     let (effect, icon) = effects::decode(&imported.blob).unwrap();
-    assert_eq!(effect["effect_id"], "warm-v1");
-    assert_eq!(effect["name"], "Warm");
+    assert_eq!(effect.id, "warm-v1");
+    assert_eq!(effect.name, "Warm");
     assert_eq!(icon.len(), 40 * 40 * 4);
     assert_eq!(imported.icon, icon);
     let definition = effects::parse_json(imported.definition.as_bytes()).unwrap();

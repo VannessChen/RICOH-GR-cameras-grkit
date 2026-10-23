@@ -1,18 +1,15 @@
 use std::io::{Cursor, Read, Write};
 
-use grkit_core::{camera, effects, modules::Selection, packaging::*, runtime, Files};
+use grkit_core::{camera, modules::Selection, packaging::*, runtime, testing, Files};
 use serde_json::{json, Value};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 fn runtime_fixture() -> Files {
-    let mut binary = vec![0; 52];
-    binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
-    binary[16..20].copy_from_slice(b"\x02\x00\x28\x00");
-    runtime::runtime_files(&binary)
+    testing::runtime_files(&testing::installer(), "gr3-2.10")
 }
 
-fn build() -> Value {
-    json!({"target": "gr3-2.10", "profile": "production", "startup_activation": "Off"})
+fn runtime() -> VerifiedRuntime {
+    testing::runtime("gr3-2.10")
 }
 
 /// A stand-in for a guide PDF, which the release builds with Typst.
@@ -25,27 +22,16 @@ fn english() -> Guide<'static> {
     }
 }
 
-fn effect(id: &str) -> (String, Vec<u8>) {
-    let curve: Vec<_> = (0..256).map(|i| i * 64).collect();
-    let value = json!({"effect_id": id, "name": "Test", "flags": 0,
-        "matrix": [8192, 0, 0, 0, 8192, 0, 0, 0, 8192],
-        "curves": [&curve, &curve, &curve]});
-    (
-        effects::filename(id).unwrap(),
-        effects::encode(&value, &vec![0; 6400]).unwrap(),
-    )
-}
-
 fn package() -> Vec<u8> {
     assemble(
-        &runtime_fixture(),
-        &build(),
-        &Files::from([effect("test-effect")]),
+        &runtime(),
+        &testing::effect_set(&["test-effect"]),
         Selection::ALL,
         &camera::GR3,
         &english(),
     )
     .unwrap()
+    .bytes
 }
 
 fn with_sums(mut files: Files) -> Files {
@@ -89,8 +75,8 @@ fn package_round_trip_is_deterministic_and_preserves_metadata() {
     let first = package();
     assert_eq!(first, package());
     let verified = verify_package(&first).unwrap();
-    assert_eq!(verified["effect_ids"], json!(["test-effect"]));
-    assert_eq!(verified["target"], json!("gr3-2.10"));
+    assert_eq!(verified.effect_ids, ["test-effect"]);
+    assert_eq!(verified.target, json!("gr3-2.10"));
     let mut archive = ZipArchive::new(Cursor::new(first)).unwrap();
     for index in 0..archive.len() {
         let entry = archive.by_index(index).unwrap();
@@ -231,17 +217,10 @@ fn production_boundaries_are_enforced() {
         ("startup_activation", "test-effect"),
         ("target", "other"),
     ] {
-        let mut altered = build();
+        let files = runtime_fixture();
+        let mut altered = manifest("gr3-2.10", &files);
         altered[key] = json!(value);
-        assert!(assemble(
-            &runtime_fixture(),
-            &altered,
-            &Files::new(),
-            Selection::ALL,
-            &camera::GR3,
-            &english()
-        )
-        .is_err());
+        assert!(load_runtime(&json_bytes(&Value::Object(altered)).unwrap(), &files).is_err());
     }
     for suffix in [b"--select test-effect".as_slice(), b"changed"] {
         let mut altered = runtime_fixture();
@@ -255,83 +234,74 @@ fn production_boundaries_are_enforced() {
 
 #[test]
 fn target_capacity_and_empty_effect_selection_are_supported() {
-    let mut effects: Files = (0..runtime::MAX_COUNT)
-        .map(|i| effect(&format!("effect-{i}")))
-        .collect();
+    let mut effects = EffectSet::default();
+    for i in 0..runtime::MAX_COUNT {
+        effects
+            .insert(testing::effect(&format!("effect-{i}")))
+            .unwrap();
+    }
     let bytes = assemble(
-        &runtime_fixture(),
-        &build(),
+        &runtime(),
         &effects,
         Selection::ALL,
         &camera::GR3,
         &english(),
     )
-    .unwrap();
+    .unwrap()
+    .bytes;
     assert_eq!(
-        verify_package(&bytes).unwrap()["effect_ids"]
-            .as_array()
-            .unwrap()
-            .len(),
+        verify_package(&bytes).unwrap().effect_ids.len(),
         runtime::MAX_COUNT
     );
-    effects.extend([effect("effect-overflow")]);
-    assert!(assemble(
-        &runtime_fixture(),
-        &build(),
-        &effects,
-        Selection::ALL,
-        &camera::GR3,
-        &english()
-    )
-    .is_err());
+    let error = effects
+        .insert(testing::effect("effect-overflow"))
+        .unwrap_err();
+    assert!(error.to_string().contains("at most 20 effects"), "{error}");
     let bytes = assemble(
-        &runtime_fixture(),
-        &build(),
-        &Files::new(),
+        &runtime(),
+        &EffectSet::default(),
         Selection::ALL,
         &camera::GR3,
         &english(),
     )
-    .unwrap();
-    assert_eq!(verify_package(&bytes).unwrap()["effect_ids"], json!([]));
+    .unwrap()
+    .bytes;
+    assert_eq!(
+        verify_package(&bytes).unwrap().effect_ids,
+        Vec::<String>::new()
+    );
 }
 
 #[test]
 fn selected_plugins_are_packaged_and_verified() {
-    let effects = Files::from([effect("test-effect")]);
+    let effects = testing::effect_set(&["test-effect"]);
     let plugins = Selection::from_names(["date-stamp", "image-control"]).unwrap();
-    let bytes = assemble(
-        &runtime_fixture(),
-        &build(),
-        &effects,
-        plugins,
-        &camera::GR3,
-        &english(),
-    )
-    .unwrap();
+    let bytes = assemble(&runtime(), &effects, plugins, &camera::GR3, &english())
+        .unwrap()
+        .bytes;
     let files = unpack(&bytes);
     assert_eq!(
         files["SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT"],
         b"image-control\ndate-stamp\n"
     );
     assert_eq!(
-        verify_package(&bytes).unwrap()["plugins"],
-        json!(["image-control", "date-stamp"])
+        verify_package(&bytes).unwrap().plugins.names(),
+        ["image-control", "date-stamp"]
     );
     // A package with every plugin has no file and keeps its earlier bytes.
     let plain = assemble(
-        &runtime_fixture(),
-        &build(),
+        &runtime(),
         &effects,
         Selection::ALL,
         &camera::GR3,
         &english(),
     )
-    .unwrap();
+    .unwrap()
+    .bytes;
     assert!(!unpack(&plain).contains_key("SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT"));
     assert_eq!(
-        verify_package(&plain).unwrap()["plugins"],
-        json!(grkit_core::modules::NAMES)
+        verify_package(&plain).unwrap().plugins.names(),
+        grkit_core::modules::NAMES
     );
     assert_eq!(plain, package());
 }
@@ -370,26 +340,25 @@ fn invalid_plugin_files_and_empty_menus_are_rejected() {
     // Image Control alone needs effects.
     let image_control = Selection::from_names(["image-control"]).unwrap();
     assert!(assemble(
-        &runtime_fixture(),
-        &build(),
-        &Files::new(),
+        &runtime(),
+        &EffectSet::default(),
         image_control,
         &camera::GR3,
         &english()
     )
     .is_err());
     let bytes = assemble(
-        &runtime_fixture(),
-        &build(),
-        &Files::from([effect("test-effect")]),
+        &runtime(),
+        &testing::effect_set(&["test-effect"]),
         image_control,
         &camera::GR3,
         &english(),
     )
-    .unwrap();
+    .unwrap()
+    .bytes;
     assert_eq!(
-        verify_package(&bytes).unwrap()["plugins"],
-        json!(["image-control"])
+        verify_package(&bytes).unwrap().plugins.names(),
+        ["image-control"]
     );
 }
 
@@ -533,19 +502,10 @@ fn symlink_and_encrypted_entries_are_rejected() {
 #[test]
 fn runtime_builds_must_match_their_manifest_exactly() {
     let files = runtime_fixture();
-    let manifest = |files: &Files| {
-        let mut value = build();
-        value["files"] = files
-            .iter()
-            .map(
-                |(path, bytes)| json!({"path": path, "size": bytes.len(), "sha256": sha256(bytes)}),
-            )
-            .collect();
-        json_bytes(&value).unwrap()
-    };
-    let (runtime, loaded) = load_runtime(&manifest(&files), &files).unwrap();
-    assert_eq!(runtime, files);
-    assert_eq!(loaded["target"], json!("gr3-2.10"));
+    let manifest = |files: &Files| testing::manifest("gr3-2.10", files);
+    let runtime = load_runtime(&manifest(&files), &files).unwrap();
+    assert_eq!(runtime.files(), &files);
+    assert_eq!(runtime.target(), "gr3-2.10");
 
     let mut extra = files.clone();
     extra.insert("SCRIPT/EXTRA.SH".into(), b"x".to_vec());
@@ -570,20 +530,20 @@ fn runtime_builds_must_match_their_manifest_exactly() {
 
 #[test]
 fn each_camera_gets_its_modeset_file_and_guide() {
-    let effects = Files::from([effect("test-effect")]);
+    let effects = testing::effect_set(&["test-effect"]);
     let gr3 = unpack(&package());
     let bytes = assemble(
-        &runtime_fixture(),
-        &build(),
+        &runtime(),
         &effects,
         Selection::ALL,
         &camera::GR3X,
         &english(),
     )
-    .unwrap();
+    .unwrap()
+    .bytes;
     let verified = verify_package(&bytes).unwrap();
-    assert_eq!(verified["camera"], "gr3x");
-    assert_eq!(verified["target"], "gr3-2.10");
+    assert_eq!(verified.camera.id, "gr3x");
+    assert_eq!(verified.target, "gr3-2.10");
     let gr3x = unpack(&bytes);
     assert!(gr3x.contains_key("SD_ROOT/00078490.609"));
     assert!(!gr3x.contains_key("SD_ROOT/00078350.588"));
@@ -676,18 +636,18 @@ fn the_gr4_guide_names_each_release_once() {
 
 #[test]
 fn a_package_has_the_guide_of_its_language_only() {
-    let effects = Files::from([effect("test-effect")]);
+    let effects = testing::effect_set(&["test-effect"]);
     for language in Language::ALL {
         let bytes = assemble(
-            &runtime_fixture(),
-            &build(),
+            &runtime(),
             &effects,
             Selection::ALL,
             &camera::GR3X,
             &Guide { language, pdf: PDF },
         )
-        .unwrap();
-        assert_eq!(verify_package(&bytes).unwrap()["language"], language.code());
+        .unwrap()
+        .bytes;
+        assert_eq!(verify_package(&bytes).unwrap().language, language);
         let files = unpack(&bytes);
         assert_eq!(files[&language.guide_path()], PDF);
         let guides = files.keys().filter(|name| name.ends_with(".pdf")).count();
@@ -737,9 +697,8 @@ fn a_package_has_exactly_one_pdf_guide() {
         pdf: b"# GRKit\n",
     };
     assert!(assemble(
-        &runtime_fixture(),
-        &build(),
-        &Files::new(),
+        &runtime(),
+        &EffectSet::default(),
         Selection::ALL,
         &camera::GR3,
         &text_guide,
@@ -769,31 +728,27 @@ fn a_package_has_the_modeset_file_of_exactly_one_camera() {
 }
 
 fn gr4_runtime_fixture() -> Files {
-    let mut binary = vec![0; 52];
-    binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
-    binary[16..20].copy_from_slice(b"\x02\x00\x28\x00");
-    runtime::runtime_files_for(&binary, runtime::icon_stride("gr4-1.11").unwrap())
+    testing::runtime_files(&testing::installer(), "gr4-1.11")
 }
 
-fn gr4_build() -> Value {
-    json!({"target": "gr4-1.11", "profile": "production", "startup_activation": "Off"})
+fn gr4_runtime() -> VerifiedRuntime {
+    testing::runtime("gr4-1.11")
 }
 
 #[test]
 fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
-    let runtime = gr4_runtime_fixture();
     let bytes = assemble(
-        &runtime,
-        &gr4_build(),
-        &Files::new(),
+        &gr4_runtime(),
+        &EffectSet::default(),
         Selection::ALL,
         &camera::GR4,
         &english(),
     )
-    .unwrap();
+    .unwrap()
+    .bytes;
     let verified = verify_package(&bytes).unwrap();
-    assert_eq!(verified["camera"], "gr4");
-    assert_eq!(verified["target"], "gr4-1.11");
+    assert_eq!(verified.camera.id, "gr4");
+    assert_eq!(verified.target, "gr4-1.11");
     let files = unpack(&bytes);
     assert!(files.contains_key("SD_ROOT/00078560.636"));
     assert_eq!(files["GRKit Installation Guide.pdf"], PDF);
@@ -806,9 +761,8 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     );
     // A GR III runtime does not run on GR IV.
     assert!(assemble(
-        &runtime_fixture(),
-        &build(),
-        &Files::new(),
+        &runtime(),
+        &EffectSet::default(),
         Selection::ALL,
         &camera::GR4,
         &english()
@@ -816,24 +770,20 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     .is_err());
     // GR IV has Image Control.
     let bytes = assemble(
-        &runtime,
-        &gr4_build(),
-        &Files::from([effect("test-effect")]),
+        &gr4_runtime(),
+        &testing::effect_set(&["test-effect"]),
         Selection::ALL,
         &camera::GR4,
         &english(),
     )
-    .unwrap();
-    assert_eq!(
-        verify_package(&bytes).unwrap()["effect_ids"],
-        json!(["test-effect"])
-    );
+    .unwrap()
+    .bytes;
+    assert_eq!(verify_package(&bytes).unwrap().effect_ids, ["test-effect"]);
     // GR IV has Framing, so Framing alone without effects shows a menu.
     let framing = Selection::from_names(["framing"]).unwrap();
     assert!(assemble(
-        &runtime,
-        &gr4_build(),
-        &Files::new(),
+        &gr4_runtime(),
+        &EffectSet::default(),
         framing,
         &camera::GR4,
         &english()
@@ -841,9 +791,8 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     .is_ok());
     let image_control = Selection::from_names(["image-control"]).unwrap();
     assert!(assemble(
-        &runtime,
-        &gr4_build(),
-        &Files::new(),
+        &gr4_runtime(),
+        &EffectSet::default(),
         image_control,
         &camera::GR4,
         &english()
@@ -925,34 +874,32 @@ fn dump_packages_hold_the_tool_files_and_their_checksums() {
 }
 
 fn marked_gr4_runtime(target: &str) -> Files {
-    let mut binary = vec![0; 52];
-    binary[..6].copy_from_slice(b"\x7fELF\x01\x01");
-    binary[16..20].copy_from_slice(b"\x02\x00\x28\x00");
+    let mut binary = testing::installer();
     binary.extend_from_slice(format!("{TARGET_MARKER}{target}\0").as_bytes());
-    runtime::runtime_files_for(&binary, runtime::icon_stride(target).unwrap())
+    testing::runtime_files(&binary, target)
 }
 
 #[test]
 fn the_installer_names_the_runtime_build_of_a_package() {
-    let package = |runtime: &Files, target: &str| {
-        let build = json!({"target": target, "profile": "production", "startup_activation": "Off"});
+    let package = |files: &Files, target: &str| {
+        let runtime = load_runtime(&testing::manifest(target, files), files)?;
         assemble(
-            runtime,
-            &build,
-            &Files::new(),
+            &runtime,
+            &EffectSet::default(),
             Selection::ALL,
             &camera::GR4,
             &english(),
         )
+        .map(|package| package.bytes)
     };
     let bytes = package(&marked_gr4_runtime("gr4-1.20"), "gr4-1.20").unwrap();
-    assert_eq!(verify_package(&bytes).unwrap()["target"], "gr4-1.20");
+    assert_eq!(verify_package(&bytes).unwrap().target, "gr4-1.20");
     let bytes = package(&marked_gr4_runtime("gr4-1.11"), "gr4-1.11").unwrap();
-    assert_eq!(verify_package(&bytes).unwrap()["target"], "gr4-1.11");
+    assert_eq!(verify_package(&bytes).unwrap().target, "gr4-1.11");
     // The installer and the build manifest must name the same build.
     let error = package(&marked_gr4_runtime("gr4-1.20"), "gr4-1.11").unwrap_err();
     assert!(error.to_string().contains("is the gr4-1.20 runtime"));
     // An installer from before the marker is the first GR IV build.
     let bytes = package(&gr4_runtime_fixture(), "gr4-1.11").unwrap();
-    assert_eq!(verify_package(&bytes).unwrap()["target"], "gr4-1.11");
+    assert_eq!(verify_package(&bytes).unwrap().target, "gr4-1.11");
 }

@@ -712,7 +712,7 @@ fn builtin_effects_brighten_with_exposure() -> Result<()> {
         let definition = grkit_core::effects::parse_json(&fs::read(&path)?)?;
         let (effect, _) =
             grkit_core::effects::decode(&grkit_core::effects::compile_definition(&definition)?)?;
-        let params = grkit_core::site::params(&effect)?;
+        let params = grkit_core::site::params(&effect);
         let mut worst = 0.0f64;
         for k in 0..36 {
             let hue = std::f64::consts::TAU * k as f64 / 36.0;
