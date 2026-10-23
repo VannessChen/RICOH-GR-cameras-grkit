@@ -133,6 +133,12 @@ pub fn source_hashes() -> BTreeMap<String, String> {
     ] {
         sources.insert(format!("crates/grkit-build/src/{name}"), sha256(bytes));
     }
+    for (name, bytes) in target::SOURCES {
+        sources.insert(
+            format!("crates/grkit-build/src/target/{name}"),
+            sha256(bytes),
+        );
+    }
     for (name, bytes) in [
         (
             "artwork.rs",
@@ -225,18 +231,15 @@ fn build_image(
     fs::write(runtime.join("hooks.h"), components::hooks_header(image)?)?;
     // A target without a layout gets the loader and the installer only.
     let mut built: Vec<(&str, components::Component)> = Vec::new();
-    if let Some(layout) = image.target.layout {
-        if let Some(region) = layout.processing {
-            let component =
-                components::processing(&objects, &runtime, image, tools, layout, region)?;
+    if image.target.layout.is_some() {
+        if image.target.family.processing_source.is_some() {
+            let component = components::processing(&objects, &runtime, image, tools)?;
             built.push(("processing", component));
         }
-        let component = components::menu(&objects, &runtime, image, tools, layout)?;
+        let component = components::menu(&objects, &runtime, image, tools)?;
         built.push(("menu", component));
-        if let Some(region) = layout.framing {
-            let component = components::framing(&objects, &runtime, image, tools, layout, region)?;
-            built.push(("framing", component));
-        }
+        let component = components::framing(&objects, &runtime, image, tools)?;
+        built.push(("framing", component));
     }
     let components: Vec<_> = built.iter().map(|(_, component)| component).collect();
     // The installer publishes every code payload before any firmware change.

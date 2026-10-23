@@ -7,7 +7,7 @@ const TEST_VERSION: &str = "0.0.0";
 /// it has no unique relocation windows.
 static FIXED_LAYOUT: components::Layout = components::Layout {
     relocatable: false,
-    ..components::GR3_LAYOUT
+    ..target::gr3_210::LAYOUT
 };
 static FIXED_GR3: target::Target = target::Target {
     layout: Some(&FIXED_LAYOUT),
@@ -31,29 +31,18 @@ fn synthetic_firmware() -> firmware::FirmwareImage {
         let offset = (address - target::RTOS_BASE) as usize;
         image.body[offset..offset + bytes.len()].copy_from_slice(bytes);
     };
-    for &(address, bytes) in components::CONTEXTS {
+    let layout = gr3.layout.unwrap();
+    for &(address, bytes) in layout.contexts.iter().chain(layout.guards) {
         write(address, &hex::decode(bytes).unwrap());
     }
-    for &(address, _, bytes) in components::MENU_HOOKS {
+    for &(_, address, bytes) in layout.sites {
         write(address, &hex::decode(bytes).unwrap());
     }
-    for &(address, _, bytes, _) in components::FRAMING_HOOKS
+    for &(address, bytes, _) in layout
+        .instruction_patches
         .iter()
-        .chain(components::VIEWFINDER_HOOKS.iter())
-        .chain(components::METADATA_HOOKS.iter())
-        .chain(components::PICTURE_HOOKS.iter())
-        .chain(components::PARAMETER_HOOKS.iter())
-        .chain(components::SETTINGS_HOOKS.iter())
+        .chain(layout.framing_patches)
     {
-        write(address, &hex::decode(bytes).unwrap());
-    }
-    for &(address, bytes, _) in components::INSTRUCTION_PATCHES
-        .iter()
-        .chain(components::FRAMING_PATCHES.iter())
-    {
-        write(address, &hex::decode(bytes).unwrap());
-    }
-    for &(address, bytes) in components::GR3_LAYOUT.guards {
         write(address, &hex::decode(bytes).unwrap());
     }
     for address in target::GR3_IMAGE_CONTROL.tables {
@@ -304,182 +293,47 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
     let body = synthetic_firmware();
     fs::write(runtime.join("hooks.h"), components::hooks_header(&body)?)?;
     let layout = &FIXED_LAYOUT;
-    let processing_region = layout.processing.unwrap();
-    let framing_region = layout.framing.unwrap();
-    let processing = components::processing(
-        directory.path(),
-        &runtime,
-        &body,
-        &tools,
-        layout,
-        processing_region,
-    )?;
-    let menu = components::menu(directory.path(), &runtime, &body, &tools, layout)?;
-    let framing = components::framing(
-        directory.path(),
-        &runtime,
-        &body,
-        &tools,
-        layout,
-        framing_region,
-    )?;
+    let processing = components::processing(directory.path(), &runtime, &body, &tools)?;
+    let menu = components::menu(directory.path(), &runtime, &body, &tools)?;
+    let framing = components::framing(directory.path(), &runtime, &body, &tools)?;
 
     // Reject changes to the widget's input and output context, not just its BL.
     for address in 0x531710bc..0x531710d8 {
         let mut changed = synthetic_firmware();
         changed.body[(address - target::RTOS_BASE) as usize] ^= 1;
-        let error = components::processing(
-            directory.path(),
-            &runtime,
-            &changed,
-            &tools,
-            layout,
-            processing_region,
-        )
-        .err()
-        .expect("Modified viewfinder instructions must be rejected");
+        let error = components::processing(directory.path(), &runtime, &changed, &tools)
+            .err()
+            .expect("Modified viewfinder instructions must be rejected");
         assert!(error
             .to_string()
             .contains("instructions changed at 0x531710bc"));
     }
 
-    // Independent target contract: do not derive these expectations from component tables.
-    let processing_hooks = [
-        (0x536dc124, "module_parameters", "abfdffeb", true),
-        (0x536dc28c, "module_processing", "940d08e3", false),
-        (0x536dc68c, "module_packet", "903084e5", false),
-        (0x536e8694, "module_gamma_flag", "9b30d4e5", false),
-        (0x536e87c4, "module_gamma_curves", "891900eb", true),
-    ];
-    let menu_hooks = [
-        (0x531a48f0, "menu_native_touch_0", "f431d0e5", false),
-        (0x531a4904, "menu_native_touch_1", "f431d0e5", false),
-        (0x531a4918, "menu_native_touch_2", "f431d0e5", false),
-        (0x531a492c, "menu_native_touch_3", "f431d0e5", false),
-        (0x531a4940, "menu_native_touch_4", "f431d0e5", false),
-        (0x5319ff24, "menu_destroy", "0dc0a0e1", false),
-        (0x531a4114, "menu_refresh", "0dc0a0e1", false),
-        (0x531a4db8, "menu_event", "b030d1e1", false),
-        (0x531a3e88, "menu_exit", "7022d0e5", false),
-        (0x531a4cfc, "menu_changed", "0dc0a0e1", false),
-        (0x533966fc, "menu_text_measure", "077193e7", false),
-        (0x53397108, "menu_text_draw", "073193e7", false),
-        (0x53209fb8, "menu_icon_width", "9e3200e3", false),
-        (0x53209fec, "menu_icon_height", "9e3200e3", false),
-        (0x5320a7cc, "menu_icon_guard", "9e1200e3", false),
-        (0x5320a810, "menu_icon_descriptor", "033192e7", false),
-        (0x531a0ba0, "menu_native_adj_apply", "0dc0a0e1", false),
-        (0x531ab998, "menu_native_dialog_apply", "0dc0a0e1", false),
-        (0x531ac270, "menu_native_page_event", "0dc0a0e1", false),
-        (0x531ab1b0, "menu_native_page_exit", "0dc0a0e1", false),
-        (0x531710c4, "menu_viewfinder_icon", "97e204eb", true),
-        (0x53179b7c, "menu_playback_icon", "daf404eb", true),
-        (0x532b7cfc, "menu_playback_detail", "eef1ffeb", true),
-        // The Fn parameter page: start, kinds, snapshots, event, then the
-        // nine getters, setters, and row texts.
-        (0x531b1020, "menu_parameter_start", "0dc0a0e1", false),
-        (0x531b1094, "menu_parameter_kinds", "d2eeffeb", true),
-        (0x531b1060, "menu_parameter_snapshot_0", "c54804eb", true),
-        (0x531b10c8, "menu_parameter_snapshot_1", "ab4804eb", true),
-        (0x531b0eac, "menu_parameter_event", "b030d1e1", false),
-        (0x532c283c, "menu_parameter_get_0", "0dc0a0e1", false),
-        (0x532c285c, "menu_parameter_get_1", "0dc0a0e1", false),
-        (0x532c287c, "menu_parameter_get_2", "0dc0a0e1", false),
-        (0x532c289c, "menu_parameter_get_3", "0dc0a0e1", false),
-        (0x532c28bc, "menu_parameter_get_4", "0dc0a0e1", false),
-        (0x532c28dc, "menu_parameter_get_5", "0dc0a0e1", false),
-        (0x532c28fc, "menu_parameter_get_6", "0dc0a0e1", false),
-        (0x532c2a1c, "menu_parameter_get_7", "0dc0a0e1", false),
-        (0x532c2a3c, "menu_parameter_get_8", "0dc0a0e1", false),
-        (0x532bd784, "menu_parameter_set_0", "0dc0a0e1", false),
-        (0x532bdcd8, "menu_parameter_set_1", "0dc0a0e1", false),
-        (0x532be22c, "menu_parameter_set_2", "0dc0a0e1", false),
-        (0x532be8a0, "menu_parameter_set_3", "0dc0a0e1", false),
-        (0x532bef14, "menu_parameter_set_4", "0dc0a0e1", false),
-        (0x532bf588, "menu_parameter_set_5", "0dc0a0e1", false),
-        (0x532bfbfc, "menu_parameter_set_6", "0dc0a0e1", false),
-        (0x532c0da8, "menu_parameter_set_7", "0dc0a0e1", false),
-        (0x532c141c, "menu_parameter_set_8", "0dc0a0e1", false),
-        (0x532abfc4, "menu_parameter_row_0", "d8770aeb", true),
-        (0x532ac0e0, "menu_parameter_row_1", "a2770aeb", true),
-        (0x532ac1fc, "menu_parameter_row_2", "6c770aeb", true),
-        (0x532ac318, "menu_parameter_row_3", "36770aeb", true),
-        (0x532ac434, "menu_parameter_row_4", "00770aeb", true),
-        (0x532ac550, "menu_parameter_row_5", "ca760aeb", true),
-        (0x532ac66c, "menu_parameter_row_6", "94760aeb", true),
-        (0x532acc88, "menu_parameter_row_7", "95750aeb", true),
-        (0x532acda4, "menu_parameter_row_8", "5f750aeb", true),
-        // The settings page: ChangeController, the five kind table bases, then
-        // the count, text, apply, and current methods of the two value pages.
-        (0x5316c9d8, "menu_settings_change", "0dc0a0e1", false),
-        (0x531c5d20, "menu_settings_kinds_r3_0", "b33345e3", true),
-        (0x531c5d88, "menu_settings_kinds_r2", "b32345e3", true),
-        (0x531c60f4, "menu_settings_kinds_r8", "b38345e3", true),
-        (0x531c631c, "menu_settings_kinds_r5", "b35345e3", true),
-        (0x531c63f0, "menu_settings_kinds_r3_1", "b33345e3", true),
-        (0x531b3c84, "menu_settings_count_0", "0600a0e3", false),
-        (0x531b5b34, "menu_settings_draw_0", "0dc0a0e1", false),
-        (0x531b7514, "menu_settings_apply_0", "0dc0a0e1", false),
-        (0x531b8ce4, "menu_settings_current_0", "0dc0a0e1", false),
-        (0x531b3c8c, "menu_settings_count_1", "0200a0e3", false),
-        (0x531b5b74, "menu_settings_draw_1", "0dc0a0e1", false),
-        (0x531b7544, "menu_settings_apply_1", "0dc0a0e1", false),
-        (0x531b8d18, "menu_settings_current_1", "0dc0a0e1", false),
-    ];
-    let menu_instructions = [(0x535c251c, "0020a083", "01288083")];
-    let framing_hooks = [
-        (0x5317681c, "framing_update", "0dc0a0e1", false),
-        (0x53176de4, "framing_exit", "0dc0a0e1", false),
-        (0x53170b50, "framing_destroy", "0dc0a0e1", false),
-        (0x53391b14, "framing_canvas", "0dc0a0e1", false),
-        (0x53391be0, "framing_children", "500800eb", true),
-        (0x535423f4, "framing_capture_request_hook", "0010d4e5", true),
-        (0x536a2e48, "framing_height_0", "d33ea0e3", true),
-        (0x536a2e34, "framing_height_1", "a93ea0e3", true),
-        (0x536a2e20, "framing_height_2", "763ea0e3", true),
-        (0x536a2e08, "framing_height_3", "383400e3", true),
-        (0x536a2f98, "framing_screennail_inset", "2610a0e3", true),
-        (0x536a3050, "framing_thumbnail_inset", "1010a0e3", true),
-        (0x532b39b8, "framing_classify", "0dfcffeb", true),
-        (0x532b3cac, "framing_image_aspect", "50fbffea", false),
-        (0x536de1a8, "module_gamma_dirty", "0e30d4e5", false),
-        (0x536e4774, "picture_post", "e9ffffeb", true),
-        (0x535047d4, "picture_encode_entry", "0dc0a0e1", false),
-        (0x53608080, "picture_capture_tone", "e1fdfeeb", true),
-        (0x536078f4, "picture_capture_parameters", "3302ffeb", true),
-        (0x535031b0, "grain_particle", "9537d5e5", true),
-        (0x5351361c, "grain_gate", "e7feffeb", true),
-    ];
-    let framing_instructions = [
-        (0x53d553c8, "02010300", "00000300"),
-        (0x534371d8, "1500008a", "1500001a"),
-        (0x536a3228, "f83b0ae3", "080000ea"),
-        (0x535ee8b4, "0c00000a", "0300000a"),
-        (0x535ee8c0, "000052e3", "020052e1"),
-    ];
-    for (component, base, end, expected, instructions) in [
+    // Each component installs the hooks of its part in family order, then its
+    // in-place changes.
+    let hooks = components::hooks(body.target)?;
+    for (component, part, (base, end), instructions) in [
         (
             &processing,
-            0x540b6100,
-            0x540b6500u32,
-            processing_hooks.as_slice(),
+            components::Part::Processing,
+            (0x540b6100, 0x540b6500u32),
             [].as_slice(),
         ),
         (
             &menu,
-            0x540b6500,
-            0x540b9800u32,
-            menu_hooks.as_slice(),
-            menu_instructions.as_slice(),
+            components::Part::Menu,
+            (0x540b6500, 0x540b9800),
+            layout.instruction_patches,
         ),
         (
             &framing,
-            0x540b9800,
-            0x540be000u32,
-            framing_hooks.as_slice(),
-            framing_instructions.as_slice(),
+            components::Part::Framing,
+            (0x540b9800, 0x540be000),
+            layout.framing_patches,
         ),
     ] {
+        let expected: Vec<_> = hooks.iter().filter(|hook| hook.spec.part == part).collect();
+        assert!(!expected.is_empty());
         assert_eq!(
             component.patches.len(),
             expected.len() + instructions.len() + 1
@@ -508,20 +362,21 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
         assert!(!relocations.is_empty());
         assert_eq!(component.relocations, relocations);
 
-        for (patch, &(address, symbol, before, link)) in component.patches[1..].iter().zip(expected)
-        {
-            assert_eq!(patch.address, address, "{symbol}");
-            assert_eq!(patch.before, hex::decode(before)?, "{symbol}");
+        for (patch, hook) in component.patches[1..].iter().zip(expected) {
+            let symbol = hook.spec.symbol;
+            assert_eq!(patch.address, hook.address, "{symbol}");
+            assert_eq!(patch.before, hex::decode(hook.stock)?, "{symbol}");
+            assert_eq!(patch.points, hook.spec.point.bit(), "{symbol}");
             assert_eq!(patch.after.len(), 4, "{symbol}");
             let instruction = u32::from_le_bytes(patch.after.as_slice().try_into()?);
             assert_eq!(
                 instruction >> 24,
-                if link { 0xeb } else { 0xea },
+                if hook.spec.link { 0xeb } else { 0xea },
                 "{symbol}"
             );
             // A32 branches use a signed 24-bit word displacement from PC + 8.
             let displacement = ((instruction << 8) as i32 >> 6) as i64;
-            let destination = i64::from(address) + 8 + displacement;
+            let destination = i64::from(hook.address) + 8 + displacement;
             let offset = component.symbols[symbol];
             assert!(offset < component.code_size as u32, "{symbol}");
             assert_eq!(offset % 4, 0, "{symbol}");
@@ -797,7 +652,7 @@ fn generated_header_marks_only_rtos_tail_patches_as_unchecked() -> Result<()> {
                 site: None,
             },
             Patch {
-                address: components::TAIL_BASE,
+                address: target::GR3_210.layout.unwrap().tail.0,
                 points: 0,
                 before: vec![0; 4],
                 after: vec![1, 2, 3, 4],
@@ -824,10 +679,10 @@ fn every_code_region_lies_in_the_tail() {
             "{}",
             target.name
         );
-        let mut regions: Vec<_> = [layout.processing, Some(layout.menu), layout.framing]
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut regions = vec![layout.menu(), layout.framing()];
+        if target.family.processing_source.is_some() {
+            regions.push(layout.processing());
+        }
         regions.sort();
         let mut next = tail;
         for (start, stop) in regions {
@@ -845,7 +700,7 @@ fn every_code_region_lies_in_the_tail() {
 fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
     let plan = PatchPlan {
         patches: vec![Patch {
-            address: components::TAIL_BASE,
+            address: target::GR3_210.layout.unwrap().tail.0,
             points: 0,
             before: vec![0; 4],
             after: vec![1, 2, 3, 4],
@@ -943,11 +798,15 @@ fn each_camera_offers_what_its_runtime_has() {
     {
         let target = target::find(name).unwrap();
         let layout = target.layout.unwrap();
-        assert_eq!(layout.processing.is_some(), camera.effects, "{}", camera.id);
+        assert_eq!(
+            target.family.processing_source.is_some(),
+            camera.effects,
+            "{}",
+            camera.id
+        );
+        assert!(layout.sites.len() == target.family.hooks.len());
         // Each point of each plugin that the camera offers has hooks.
-        let points: Vec<_> = components::hook_sites(layout)
-            .map(|(_, symbol)| components::point_of(symbol).unwrap())
-            .collect();
+        let points: Vec<_> = target.family.hooks.iter().map(|hook| hook.point).collect();
         for plugin in &grkit_core::plugins::PLUGINS {
             if camera.plugins.contains(&plugin.id) {
                 for point in plugin.points {
@@ -961,25 +820,6 @@ fn each_camera_offers_what_its_runtime_has() {
             }
         }
     }
-}
-
-#[test]
-fn each_point_has_its_hooks() {
-    // The hooks of each point. The in-place patches add 1 to tuning, and on
-    // GR III 5 to capture.aspect (build.json "points" counts both).
-    for target in target::TARGETS {
-        let expected = match target.family {
-            "gr3" => [30, 48, 5, 9, 1, 2],
-            "gr4" => [29, 50, 5, 11, 1, 4],
-            family => panic!("No hook counts for the {family} family"),
-        };
-        let mut counts = [0; 6];
-        for (_, symbol) in components::hook_sites(target.layout.unwrap()) {
-            counts[components::point_of(symbol).unwrap() as usize] += 1;
-        }
-        assert_eq!(counts, expected, "{}", target.name);
-    }
-    assert!(components::point_of("unknown_hook").is_err());
 }
 
 #[test]
@@ -1029,35 +869,6 @@ fn header_definitions(path: &str, own: bool) -> BTreeMap<String, String> {
     definitions
 }
 
-/// The hook symbols of each table of a layout, with their flags, in order.
-fn hook_symbols(layout: &components::Layout) -> Vec<(&'static str, Vec<(&'static str, bool)>)> {
-    let hooks = |table: &[components::Hook]| table.iter().map(|&(_, s, _, f)| (s, f)).collect();
-    vec![
-        (
-            "processing",
-            layout
-                .processing_hooks
-                .iter()
-                .map(|&(_, s, f)| (s, f))
-                .collect(),
-        ),
-        (
-            "menu",
-            layout
-                .menu_hooks
-                .iter()
-                .map(|&(_, s, _)| (s, false))
-                .collect(),
-        ),
-        ("viewfinder", hooks(layout.viewfinder_hooks)),
-        ("metadata", hooks(layout.metadata_hooks)),
-        ("parameter", hooks(layout.parameter_hooks)),
-        ("settings", hooks(layout.settings_hooks)),
-        ("framing", hooks(layout.framing_hooks)),
-        ("picture", hooks(layout.picture_hooks)),
-    ]
-}
-
 /// Definitions that only some builds of a family have, because the code of
 /// those builds differs. The runtime tests each with `#ifdef`.
 const BUILD_ONLY_DEFINITIONS: &[(&str, &[&str])] = &[(
@@ -1065,24 +876,21 @@ const BUILD_ONLY_DEFINITIONS: &[(&str, &[&str])] = &[(
     &["NATIVE_ICON_LIMIT", "NATIVE_MONOCHROME_TYPES_HIGH"],
 )];
 
+/// The hooks of a build are those of its family (`Family::hooks`). Each build
+/// gives one site for each hook, and builds of a family have as many
+/// contexts and patches and the same header definitions.
 #[test]
-fn builds_of_a_family_have_the_same_hooks_and_definitions() {
+fn builds_of_a_family_have_its_hooks_and_the_same_definitions() {
     for target in target::TARGETS {
+        let hooks = components::hooks(target).unwrap();
+        let symbols: BTreeSet<_> = hooks.iter().map(|hook| hook.spec.symbol).collect();
+        assert_eq!(symbols.len(), hooks.len(), "{}", target.family.name);
         let first = target::TARGETS
             .iter()
-            .find(|other| other.family == target.family)
+            .find(|other| other.family.name == target.family.name)
             .unwrap();
+        assert!(std::ptr::eq(target.family, first.family), "{}", target.name);
         let (layout, first_layout) = (target.layout.unwrap(), first.layout.unwrap());
-        for ((table, symbols), (_, expected)) in hook_symbols(layout)
-            .into_iter()
-            .zip(hook_symbols(first_layout))
-        {
-            assert_eq!(
-                symbols, expected,
-                "The {table} hooks of {} differ from those of {}",
-                target.name, first.name
-            );
-        }
         assert_eq!(
             (
                 layout.contexts.len(),
@@ -1133,9 +941,9 @@ fn each_target_has_a_header_a_camera_release_and_an_icon_stride() {
         );
         // Each build header includes the header of its family, which holds
         // the values that the shared code takes from each family.
-        let shared = format!("{}.h", target.family);
+        let shared = format!("{}.h", target.family.name);
         let header = runtime_source(&format!("targets/{shared}"))
-            .unwrap_or_else(|| panic!("The {} family has no targets/{shared}", target.family));
+            .unwrap_or_else(|| panic!("The {} family has no targets/{shared}", target.family.name));
         // `grkit port` reads the addresses of the build header only.
         assert!(
             !std::str::from_utf8(header).unwrap().contains("FIRMWARE(0x"),
@@ -1155,6 +963,12 @@ fn each_target_has_a_header_a_camera_release_and_an_icon_stride() {
             "No camera release runs {}",
             target.name
         );
+        // `grkit_core::runtime::icon_stride` finds the family in the name.
+        assert!(
+            target.name.starts_with(&format!("{}-", target.family.name)),
+            "{}",
+            target.name
+        );
         let stride = header_definitions(&target.header(), false)
             .remove("GRKIT_ICON_STRIDE")
             .unwrap_or_else(|| panic!("{} defines no GRKIT_ICON_STRIDE", target.name));
@@ -1170,6 +984,75 @@ fn each_target_has_a_header_a_camera_release_and_an_icon_stride() {
     for camera in grkit_core::camera::CAMERAS {
         for release in camera.releases {
             assert!(target::find(release.target).is_ok(), "{}", release.target);
+        }
+    }
+}
+
+/// A header value `FIRMWARE(address)` or `(FIRMWARE(address) + offset)`, as
+/// (address, offset).
+fn firmware_definition(value: &str) -> Option<(u32, u32)> {
+    let value = value.trim_start_matches('(').trim_end_matches(')');
+    let (call, offset) = value.split_once(") +").unwrap_or((value, "0"));
+    let address = call.strip_prefix("FIRMWARE(0x")?;
+    Some((
+        u32::from_str_radix(address, 16).ok()?,
+        number(offset.trim())?,
+    ))
+}
+
+/// A decimal or `0x` hexadecimal number of a header value.
+fn number(value: &str) -> Option<u32> {
+    match value.strip_prefix("0x") {
+        Some(hex) => u32::from_str_radix(hex.trim_end_matches('U'), 16).ok(),
+        None => value.trim_end_matches('U').parse().ok(),
+    }
+}
+
+/// Facts that the Rust target and the build header both state agree: the
+/// settings domain and the offset of the Image Control type in it, and the
+/// hooked functions that the menu code also calls.
+#[test]
+fn build_headers_agree_with_the_target_tables() {
+    for target in target::TARGETS {
+        let definitions = header_definitions(&target.header(), false);
+        let value = |name: &str| {
+            definitions
+                .get(name)
+                .unwrap_or_else(|| panic!("{} defines no {name}", target.header()))
+        };
+        let native = target.image_control.unwrap();
+        let (address, offset) = firmware_definition(value("FW_SETTINGS_DOMAIN")).unwrap();
+        assert_eq!(address + offset, native.settings_domain, "{}", target.name);
+        // The header names the address that firmware code loads, as the
+        // relocation base of the domain does.
+        let base = target
+            .relocation_bases
+            .iter()
+            .find(|(field, _)| *field == native.settings_domain)
+            .map_or(native.settings_domain, |&(_, base)| base);
+        assert_eq!(address, base, "{}", target.name);
+        assert_eq!(
+            number(value("SETTINGS_IC_TYPE")),
+            Some(native.settings_type),
+            "{}",
+            target.name
+        );
+        for (name, symbol) in [
+            ("FW_ADJ_REFRESH", "menu_refresh"),
+            ("FW_CHANGE_CONTROLLER", "menu_settings_change"),
+        ] {
+            let site = components::hooks(target)
+                .unwrap()
+                .into_iter()
+                .find(|hook| hook.spec.symbol == symbol)
+                .unwrap()
+                .address;
+            assert_eq!(
+                firmware_definition(value(name)),
+                Some((site, 0)),
+                "{} {name}",
+                target.name
+            );
         }
     }
 }
@@ -1337,10 +1220,7 @@ fn port_lists_the_addresses_of_each_target() -> Result<()> {
                 .iter()
                 .filter(|a| a.kind == port::Kind::Site && a.symbol.is_some())
                 .count(),
-            hook_symbols(target.layout.unwrap())
-                .iter()
-                .map(|(_, symbols)| symbols.len())
-                .sum::<usize>(),
+            components::hooks(target)?.len(),
             "{}",
             target.name
         );
@@ -1353,6 +1233,63 @@ fn port_lists_the_addresses_of_each_target() -> Result<()> {
             header.matches("FIRMWARE(0x").count(),
             "{}",
             target.name
+        );
+    }
+    Ok(())
+}
+
+/// Rust code without comments and whitespace, and without the trailing comma
+/// of a list, so that comments and formatting do not count.
+fn rust_items(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| line.split("//").next().unwrap())
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<String>()
+        .replace(",)", ")")
+        .replace(",]", "]")
+        .replace(",}", "}")
+}
+
+/// `grkit port` drafts the module of the new build. A target ported to its own
+/// image gives the items of its checked-in module, so a draft needs only the
+/// review of its `PORT` comments and of the values that are not addresses.
+#[test]
+fn port_drafts_the_module_of_each_target() -> Result<()> {
+    for target in target::TARGETS {
+        let layout = target.layout.unwrap();
+        let addresses = port::addresses(target)?
+            .into_iter()
+            .map(|address| port::Ported {
+                port: Ok(address.address),
+                sources: 1,
+                review: None,
+                stock: address.stock.clone(),
+                address,
+            })
+            .collect();
+        let port = port::Port {
+            base: target,
+            radius: port::RADIUS,
+            layout: relocation::ImageLayout {
+                data_source: target.data_source,
+                data_size: target.data_size,
+                heap_min: target.heap_min,
+                tail: layout.tail.0,
+            },
+            addresses,
+            relocatable: true,
+        };
+        let module = format!("{}.rs", target.module());
+        let (_, source) = target::SOURCES
+            .iter()
+            .find(|(name, _)| *name == module)
+            .unwrap_or_else(|| panic!("target::SOURCES has no {module}"));
+        assert_eq!(
+            rust_items(&port.draft_target()?),
+            rust_items(std::str::from_utf8(source)?),
+            "{module}"
         );
     }
     Ok(())

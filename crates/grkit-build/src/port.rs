@@ -3,19 +3,22 @@
 //! the installer, or whose code changed (`docs/architecture.md`, Porting).
 //!
 //! The port takes each address that the target names: its hook and patch
-//! sites (`components::Layout`), the `FIRMWARE()` addresses of its runtime
-//! header, and the data addresses of `Target`. It finds each one in the other
-//! build with the windows of the installer (`crate::relocation`), within a
-//! larger radius, and gives data that code loads that code as a second
-//! source. The family header has no addresses (a test checks it). An address whose code or data differs in the other build
+//! sites (`components::hooks`, `components::Layout`), the `FIRMWARE()`
+//! addresses of its runtime header, and the data addresses of `Target`. It
+//! finds each one in the other build with the windows of the installer
+//! (`crate::relocation`), within a larger radius, and gives data that code
+//! loads that code as a second source. The family header has no addresses (a
+//! test checks it). An address whose code or data differs in the other build
 //! has no port, and a person must port it.
 //!
 //! The port does not check values that are not addresses: object offsets, text
 //! IDs, enum values, and the offsets that header expressions add to an
-//! address. The draft header marks each expression with an offset.
+//! address. The draft header marks each expression with an offset. The draft
+//! target module (`Port::draft_target`) is the module of the new build in
+//! `crate::target`, with a comment on each value to check.
 
 use crate::{
-    components::Layout,
+    components,
     firmware::FirmwareImage,
     loader::firmware_symbol,
     relocation::{self, ImageLayout, Planner},
@@ -58,81 +61,55 @@ impl Kind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Address {
     pub kind: Kind,
-    /// `<table>:<symbol>` or `<table>:<index>` for a site, the definition name
+    /// `hook:<symbol>` or `<table>:<index>` for a site, the definition name
     /// for a header address (with `#<n>` after the first one in a definition),
     /// or the field of `Target`.
     pub name: String,
     pub address: u32,
     /// The stock bytes at a site.
     pub stock: Option<String>,
-    /// For a site: its symbol, if its table has one, and the Rust of the
-    /// fields after the stock bytes in its table row (`components.rs`).
+    /// For a site: the symbol of its hook, if it is one, and the Rust of the
+    /// fields after the stock bytes in its table row (the target module).
     pub symbol: Option<&'static str>,
     pub rest: String,
 }
 
-/// The sites of a layout, by table, in table order.
-fn sites(layout: &Layout) -> Vec<Address> {
+/// The sites of a target: its hooks, then the contexts, the patches, and the
+/// guards of its layout, each in table order.
+fn sites(target: &Target) -> Result<Vec<Address>> {
+    let layout = target
+        .layout
+        .with_context(|| format!("{} has no layout", target.name))?;
     let mut sites = Vec::new();
-    let mut add = |table: &str,
-                   symbol: Option<&'static str>,
-                   index: usize,
-                   address: u32,
-                   stock: Option<&str>,
-                   rest: String| {
-        sites.push(Address {
-            kind: Kind::Site,
-            name: format!(
-                "{table}:{}",
-                symbol.map_or(index.to_string(), str::to_string)
-            ),
-            address,
-            stock: stock.map(str::to_string),
-            symbol,
-            rest,
-        });
-    };
-    for (index, &(address, symbol, flag)) in layout.processing_hooks.iter().enumerate() {
+    let mut add =
+        |name: String, symbol: Option<&'static str>, address: u32, stock: &str, rest: String| {
+            sites.push(Address {
+                kind: Kind::Site,
+                name,
+                address,
+                stock: Some(stock.to_string()),
+                symbol,
+                rest,
+            });
+        };
+    for hook in components::hooks(target)? {
+        let symbol = hook.spec.symbol;
         add(
-            "processing",
+            format!("hook:{symbol}"),
             Some(symbol),
-            index,
-            address,
-            None,
-            format!("{flag}"),
-        );
-    }
-    for (index, &(address, stock)) in layout.contexts.iter().enumerate() {
-        add("context", None, index, address, Some(stock), String::new());
-    }
-    for (index, &(address, symbol, stock)) in layout.menu_hooks.iter().enumerate() {
-        add(
-            "menu",
-            Some(symbol),
-            index,
-            address,
-            Some(stock),
+            hook.address,
+            hook.stock,
             String::new(),
         );
     }
-    for (table, hooks) in [
-        ("viewfinder", layout.viewfinder_hooks),
-        ("metadata", layout.metadata_hooks),
-        ("parameter", layout.parameter_hooks),
-        ("settings", layout.settings_hooks),
-        ("framing", layout.framing_hooks),
-        ("picture", layout.picture_hooks),
-    ] {
-        for (index, &(address, symbol, stock, flag)) in hooks.iter().enumerate() {
-            add(
-                table,
-                Some(symbol),
-                index,
-                address,
-                Some(stock),
-                format!("{flag}"),
-            );
-        }
+    for (index, &(address, stock)) in layout.contexts.iter().enumerate() {
+        add(
+            format!("context:{index}"),
+            None,
+            address,
+            stock,
+            String::new(),
+        );
     }
     for (table, patches) in [
         ("instruction", layout.instruction_patches),
@@ -140,11 +117,10 @@ fn sites(layout: &Layout) -> Vec<Address> {
     ] {
         for (index, &(address, stock, after)) in patches.iter().enumerate() {
             add(
-                table,
+                format!("{table}:{index}"),
                 None,
-                index,
                 address,
-                Some(stock),
+                stock,
                 format!("{after:?}"),
             );
         }
@@ -152,10 +128,16 @@ fn sites(layout: &Layout) -> Vec<Address> {
     // The startup literals stay at their address in each build.
     for (index, &(address, stock)) in layout.guards.iter().enumerate() {
         if address != relocation::STARTUP_LITERALS {
-            add("guard", None, index, address, Some(stock), String::new());
+            add(
+                format!("guard:{index}"),
+                None,
+                address,
+                stock,
+                String::new(),
+            );
         }
     }
-    sites
+    Ok(sites)
 }
 
 /// Each definition of a runtime header, as (name, value), with continuation
@@ -194,10 +176,7 @@ fn header(target: &Target) -> Result<&'static str> {
 /// Every address that `target` names: its sites, its header addresses, then
 /// its data addresses.
 pub fn addresses(target: &Target) -> Result<Vec<Address>> {
-    let layout = target
-        .layout
-        .with_context(|| format!("{} has no layout", target.name))?;
-    let mut addresses = sites(layout);
+    let mut addresses = sites(target)?;
     for (name, value) in definitions(header(target)?) {
         for (index, address) in firmware_addresses(&value).into_iter().enumerate() {
             addresses.push(Address {
@@ -613,84 +592,368 @@ impl Port {
         Ok(out)
     }
 
-    /// The site tables of the base layout at the ported sites, with the stock
-    /// bytes of the other build, as Rust items. A comment marks each site
-    /// without a port; it keeps the base address and stock bytes.
-    pub fn draft_layout(&self) -> Result<String> {
-        let mut out = format!(
-            "// Draft from `grkit port`: the sites of {} in the other build.\n",
-            self.base.name
-        );
-        let mut table = "";
-        for ported in self
-            .addresses
-            .iter()
-            .filter(|ported| ported.address.kind == Kind::Site)
-        {
-            let site = &ported.address;
-            let name = site.name.split_once(':').map_or("", |(name, _)| name);
-            if name != table {
-                if !table.is_empty() {
-                    out.push_str("];\n");
-                }
-                writeln!(out, "const {}: &[_] = &[", name.to_uppercase())?;
-                table = name;
-            }
-            let (address, stock, note) = match (&ported.port, &ported.stock) {
-                (Ok(at), stock) => (
-                    *at,
-                    stock.clone(),
-                    ported
-                        .review
-                        .as_ref()
-                        .map_or(String::new(), |reason| format!(" // PORT: check: {reason}")),
-                ),
-                (Err(error), _) => (
-                    site.address,
-                    site.stock.clone(),
-                    format!(" // PORT: {error}"),
-                ),
-            };
-            let fields: Vec<String> = [Some(format!("{address:#x}"))]
-                .into_iter()
-                .chain([
-                    site.symbol.map(|symbol| format!("{symbol:?}")),
-                    stock.map(|stock| format!("{stock:?}")),
-                    (!site.rest.is_empty()).then(|| site.rest.clone()),
-                ])
-                .flatten()
-                .collect();
-            writeln!(out, "    ({}),{note}", fields.join(", "))?;
-        }
-        if !table.is_empty() {
-            out.push_str("];\n");
-        }
-        let mut fields = String::new();
-        for ported in self
-            .addresses
-            .iter()
-            .filter(|ported| ported.address.kind == Kind::Target)
-        {
-            match &ported.port {
-                Ok(at) if ported.review.is_some() => writeln!(
-                    fields,
-                    "//   {}: {at:#x} PORT: check: {}",
-                    ported.address.name,
-                    ported.review.as_deref().unwrap_or_default()
-                )?,
-                Ok(at) => writeln!(fields, "//   {}: {at:#x}", ported.address.name)?,
-                Err(error) => writeln!(
-                    fields,
-                    "//   {}: {:#x} PORT: {error}",
-                    ported.address.name, ported.address.address
-                )?,
-            }
-        }
-        write!(
-            out,
-            "// Target: data_source {:#x}, data_size {:#x}, heap_min {:#x}, tail {:#x}\n{fields}",
-            self.layout.data_source, self.layout.data_size, self.layout.heap_min, self.layout.tail
-        )?;
-        Ok(out)
+    /// The port of an address and the note of its line. An address without a
+    /// port keeps its base value.
+    fn value(&self, kind: Kind, name: &str) -> Result<(u32, String)> {
+        let ported = self
+            .find(kind, name)
+            .with_context(|| format!("No address {name}"))?;
+        Ok(match &ported.port {
+            Ok(at) => (
+                *at,
+                ported
+                    .review
+                    .as_ref()
+                    .map_or(String::new(), |reason| format!("PORT: check: {reason}")),
+            ),
+            Err(error) => (ported.address.address, format!("PORT: {error}")),
+        })
     }
+
+    /// An array field of `ImageControl`, from its ported entries.
+    fn draft_list(&self, out: &mut String, field: &str, count: usize) -> Result<()> {
+        let mut values = Vec::new();
+        let mut notes = Vec::new();
+        for index in 0..count {
+            let (value, note) =
+                self.value(Kind::Target, &format!("image_control.{field}[{index}]"))?;
+            values.push(format!("{value:#x}"));
+            if !note.is_empty() {
+                notes.push(format!("[{index}] {note}"));
+            }
+        }
+        push(
+            out,
+            4,
+            &format!("{field}: [{}],", values.join(", ")),
+            &notes.join("; "),
+        );
+        Ok(())
+    }
+
+    /// A site table: the sites whose name starts with `prefix`, at their
+    /// ports, with the stock bytes of the other build.
+    fn draft_table(&self, out: &mut String, name: &str, kind: &str, prefix: &str) -> Result<()> {
+        let rows: Vec<&Ported> = self
+            .addresses
+            .iter()
+            .filter(|ported| {
+                ported.address.kind == Kind::Site && ported.address.name.starts_with(prefix)
+            })
+            .collect();
+        push(out, 0, "", "");
+        if rows.is_empty() {
+            push(out, 0, &format!("const {name}: {kind} = &[];"), "");
+            return Ok(());
+        }
+        push(out, 0, &format!("const {name}: {kind} = &["), "");
+        for ported in rows {
+            let site = &ported.address;
+            let (address, mut note) = self.value(Kind::Site, &site.name)?;
+            let stock = if ported.port.is_ok() {
+                ported.stock.clone()
+            } else {
+                site.stock.clone()
+            }
+            .unwrap_or_default();
+            // The new bytes of a patch follow the stock bytes.
+            if !site.rest.is_empty() && ported.port.is_ok() && ported.stock != site.stock {
+                note = [
+                    note.as_str(),
+                    "PORT: the stock bytes changed; check the new bytes",
+                ]
+                .iter()
+                .filter(|part| !part.is_empty())
+                .copied()
+                .collect::<Vec<_>>()
+                .join("; ");
+            }
+            let fields: Vec<String> = site
+                .symbol
+                .map(|symbol| format!("{symbol:?}"))
+                .into_iter()
+                .chain([format!("{address:#x}"), format!("{stock:?}")])
+                .chain((!site.rest.is_empty()).then(|| site.rest.clone()))
+                .collect();
+            let single = format!("({}),", fields.join(", "));
+            if single.len() + 4 <= 100 {
+                push(out, 4, &single, &note);
+            } else {
+                // As rustfmt wraps a long tuple.
+                push(out, 4, "(", "");
+                for field in &fields {
+                    push(out, 8, &format!("{field},"), "");
+                }
+                push(out, 4, "),", &note);
+            }
+        }
+        push(out, 0, "];", "");
+        Ok(())
+    }
+
+    /// The module of the new build in `crate::target`: the data of the base
+    /// target with each address ported, and the sites at the ported sites
+    /// with the stock bytes of the other build. Values that are not addresses
+    /// are those of the base target. A `PORT` comment marks each value to
+    /// check and each address without a port, which keeps its base value. The
+    /// module has the items of the checked-in target modules (tests).
+    pub fn draft_target(&self) -> Result<String> {
+        let base = self.base;
+        let layout = base.layout.context("A port target has a layout")?;
+        let out = &mut String::new();
+        let base_note = |what: &str| format!("PORT: {what} ({} in the base)", base.name);
+        push(
+            out,
+            0,
+            &format!(
+                "//! Draft from `grkit port`: {} in another build. Values that are not",
+                base.name
+            ),
+            "",
+        );
+        push(
+            out,
+            0,
+            "//! addresses are those of the base; check each `PORT` comment.",
+            "",
+        );
+        push(out, 0, "", "");
+        push(
+            out,
+            0,
+            &format!("use super::{{{}, ImageControl, Target}};", base.family.name),
+            "",
+        );
+        push(
+            out,
+            0,
+            "use crate::components::{InstructionPatch, Layout, Site};",
+            "",
+        );
+
+        push(out, 0, "", "");
+        push(out, 0, "pub const TARGET: Target = Target {", "");
+        push(
+            out,
+            4,
+            &format!("name: {:?},", base.name),
+            &base_note("the name of the new target"),
+        );
+        push(
+            out,
+            4,
+            &format!("family: &{}::FAMILY,", base.family.name),
+            "",
+        );
+        push(
+            out,
+            4,
+            &format!("firmware: {:?},", base.firmware),
+            &base_note("the model and version"),
+        );
+        push(
+            out,
+            4,
+            &format!("firmware_sha256: {:?},", base.firmware_sha256),
+            &base_note("the SHA-256 of the firmware file"),
+        );
+        push(
+            out,
+            4,
+            &format!("decoded_sha256: {:?},", base.decoded_sha256),
+            &base_note("the SHA-256 of the decoded firmware"),
+        );
+        push(out, 4, &format!("data_start: {:#x},", base.data_start), "");
+        push(
+            out,
+            4,
+            &format!("data_source: {:#x},", self.layout.data_source),
+            "",
+        );
+        push(
+            out,
+            4,
+            &format!("data_size: {:#x},", self.layout.data_size),
+            "",
+        );
+        for field in ["array_table", "array_count", "heap_min"] {
+            let (value, note) = self.value(Kind::Target, field)?;
+            push(out, 4, &format!("{field}: {value:#x},"), &note);
+        }
+        push(out, 4, &format!("heap_end: {:#x},", base.heap_end), "");
+        for field in ["english_slot", "pixel_base_slot"] {
+            let (value, note) = self.value(Kind::Target, field)?;
+            push(out, 4, &format!("{field}: {value:#x},"), &note);
+        }
+        push(
+            out,
+            4,
+            &format!("pixel_base_indirect: {},", base.pixel_base_indirect),
+            "",
+        );
+        let page = base
+            .native_tone_page
+            .map_or("None".to_string(), |page| format!("Some({page:#x})"));
+        push(out, 4, &format!("native_tone_page: {page},"), "");
+        push(out, 4, "layout: Some(&LAYOUT),", "");
+        let image_control = match base.image_control {
+            Some(_) => "image_control: Some(&IMAGE_CONTROL),",
+            None => "image_control: None,",
+        };
+        push(out, 4, image_control, "");
+        // A relocation base keeps its offset from its field.
+        let mut bases = Vec::new();
+        let mut notes = Vec::new();
+        for &(field, address) in base.relocation_bases {
+            let ported = self
+                .addresses
+                .iter()
+                .find(|ported| {
+                    ported.address.kind == Kind::Target && ported.address.address == field
+                })
+                .with_context(|| format!("No data address {field:#x}"))?;
+            let (at, note) = self.value(Kind::Target, &ported.address.name)?;
+            bases.push(format!("({at:#x}, {:#x})", at - (field - address)));
+            if !note.is_empty() {
+                notes.push(format!("{}: {note}", ported.address.name));
+            }
+        }
+        push(
+            out,
+            4,
+            &format!("relocation_bases: &[{}],", bases.join(", ")),
+            &notes.join("; "),
+        );
+        push(out, 0, "};", "");
+
+        if let Some(native) = base.image_control {
+            push(out, 0, "", "");
+            push(
+                out,
+                0,
+                "pub const IMAGE_CONTROL: ImageControl = ImageControl {",
+                "",
+            );
+            self.draft_list(out, "tables", native.tables.len())?;
+            push(
+                out,
+                4,
+                &format!("table_bytes: {},", native.table_bytes),
+                &base_note("the bytes of each table"),
+            );
+            for field in ["record", "coefficients"] {
+                let (value, note) = self.value(Kind::Target, &format!("image_control.{field}"))?;
+                push(out, 4, &format!("{field}: {value:#x},"), &note);
+            }
+            self.draft_list(out, "record_tail", native.record_tail.len())?;
+            for field in ["base_gamma", "settings_domain"] {
+                let (value, note) = self.value(Kind::Target, &format!("image_control.{field}"))?;
+                push(out, 4, &format!("{field}: {value:#x},"), &note);
+            }
+            push(
+                out,
+                4,
+                &format!("settings_type: {:#x},", native.settings_type),
+                &base_note("the offset of the type in the settings"),
+            );
+            push(
+                out,
+                4,
+                &format!("type_count: {},", native.type_count),
+                &base_note("the number of native types"),
+            );
+            push(out, 0, "};", "");
+        }
+
+        let (tail, end) = layout.tail;
+        push(out, 0, "", "");
+        push(out, 0, "pub const LAYOUT: Layout = Layout {", "");
+        push(
+            out,
+            4,
+            &format!("define: {:?},", layout.define),
+            &base_note("the definition that selects the new header in runtime/firmware.h"),
+        );
+        push(
+            out,
+            4,
+            &format!(
+                "tail: ({:#x}, {:#x}),",
+                self.layout.tail,
+                self.layout.tail + (end - tail)
+            ),
+            "",
+        );
+        for field in [
+            "contexts: CONTEXTS,",
+            "sites: SITES,",
+            "instruction_patches: INSTRUCTION_PATCHES,",
+            "framing_patches: FRAMING_PATCHES,",
+            "guards: GUARDS,",
+            "relocatable: true,",
+        ] {
+            push(out, 4, field, "");
+        }
+        push(out, 0, "};", "");
+
+        self.draft_table(out, "SITES", "&[Site]", "hook:")?;
+        self.draft_table(out, "CONTEXTS", "&[(u32, &str)]", "context:")?;
+        self.draft_table(
+            out,
+            "INSTRUCTION_PATCHES",
+            "&[InstructionPatch]",
+            "instruction:",
+        )?;
+        self.draft_table(
+            out,
+            "FRAMING_PATCHES",
+            "&[InstructionPatch]",
+            "framing_patch:",
+        )?;
+
+        // The guards in the order of the base: the startup literals of the
+        // other build, and the ported guards.
+        push(out, 0, "", "");
+        push(out, 0, "const GUARDS: &[(u32, &str)] = &[", "");
+        for (index, &(address, _)) in layout.guards.iter().enumerate() {
+            if address == relocation::STARTUP_LITERALS {
+                let literals: Vec<u8> = [
+                    self.layout.data_source,
+                    relocation::DATA_START,
+                    self.layout.data_size,
+                ]
+                .into_iter()
+                .flat_map(u32::to_le_bytes)
+                .collect();
+                let literals = hex::encode(literals);
+                push(out, 4, &format!("({address:#x}, {literals:?}),"), "");
+                continue;
+            }
+            let name = format!("guard:{index}");
+            let ported = self
+                .find(Kind::Site, &name)
+                .with_context(|| format!("No address {name}"))?;
+            let (at, note) = self.value(Kind::Site, &name)?;
+            let stock = if ported.port.is_ok() {
+                ported.stock.clone()
+            } else {
+                ported.address.stock.clone()
+            }
+            .unwrap_or_default();
+            push(out, 4, &format!("({at:#x}, {stock:?}),"), &note);
+        }
+        push(out, 0, "];", "");
+        Ok(std::mem::take(out))
+    }
+}
+
+/// Appends a line of `indent` spaces, `text`, and a `note` comment if any.
+fn push(out: &mut String, indent: usize, text: &str, note: &str) {
+    out.push_str(&" ".repeat(indent));
+    out.push_str(text);
+    if !note.is_empty() {
+        out.push_str(" // ");
+        out.push_str(note);
+    }
+    out.push('\n');
 }

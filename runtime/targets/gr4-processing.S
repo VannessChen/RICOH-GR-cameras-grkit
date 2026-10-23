@@ -2,7 +2,8 @@
 // (runtime/processing.S describes the GR III 2.10 version, and processing.h
 // has the parts that each family shares). The build header
 // gives the frame slot of the type table index (PROCESSING_INDEX_SLOT). The
-// comments name the sites of 1.11; components.rs has the sites of each build.
+// comments name the sites of 1.11; crates/grkit-build/src/target has the sites
+// of each build.
 // The build places this code after the RTOS image. Local calls use BL words. The firmware addresses
 // are FIRMWARE() symbols (hooks.h), which the installer relocates.
 // The header fields are those of abi.h.

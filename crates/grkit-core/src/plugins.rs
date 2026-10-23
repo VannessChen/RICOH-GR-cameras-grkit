@@ -20,7 +20,7 @@ use crate::{
 
 /// An extension point: the firmware changes that a group of plugins needs.
 /// The installer applies the patches of a point only when an installed plugin
-/// needs it. `grkit_build::components::point_of` gives the point of each hook.
+/// needs it. The hooks of each family in `grkit_build::target` give their points.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Point {
     /// The private ADJ entry, its list, text, and icons.

@@ -43,9 +43,9 @@ fn words(output: &mut String, name: &str, values: impl IntoIterator<Item = u32>)
 pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<String> {
     let target = body.target;
     let modules = target.layout.is_some();
-    // A layout with processing hooks has Image Control and its native data.
+    // A family with processing hooks has Image Control and its native data.
     let image_control = match target.layout {
-        Some(layout) if layout.processing.is_some() => Some(
+        Some(_) if target.family.processing_source.is_some() => Some(
             target
                 .image_control
                 .with_context(|| format!("{} lacks native Image Control data", target.firmware))?,
@@ -131,7 +131,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         grkit_core::packaging::TARGET_MARKER,
         target.name
     )?;
-    if target.icon_descriptor_bytes == 12 {
+    if target.icon_descriptor_bytes()? == 12 {
         // GR IV icon descriptors: width and a valid flag, height, pixel offset.
         result.push_str("#define GRKIT_ICON_DESCRIPTOR_12 1\n");
     }

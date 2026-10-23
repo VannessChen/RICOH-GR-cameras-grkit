@@ -49,7 +49,7 @@ module_processing:
     ldr pc, =FIRMWARE(0x536dc2ac)
 processing_stock:
     pop {r0-r3, r12, lr}
-    // The eight replaced instructions (components::PROCESSING_ORIGINAL), with
+    // The eight replaced instructions (a context of target/gr3_210.rs), with
     // literal words for the three type tables instead of MOVW and MOVT pairs.
     ldr r0, =FIRMWARE(0x55018d94)
     ldr r12, =FIRMWARE(0x55018cf0)

@@ -13,14 +13,21 @@ pub use crate::abi::{
 };
 use crate::plugins;
 
-/// The icon slot of GR III 2.10: an 8-byte native descriptor, then 40 x 40 RGBA.
+/// The icon slot of GR III: an 8-byte native descriptor, then 40 x 40 RGBA.
 pub const ICON_STRIDE: usize = 6408;
+/// The icon slot of each camera family. GR IV descriptors have 12 bytes.
+/// The family header in `runtime/targets` defines the same value.
+const FAMILY_ICON_STRIDES: [(&str, usize); 2] = [("gr3", ICON_STRIDE), ("gr4", 6412)];
 
-/// The icon slot size of a runtime target. GR IV 1.11 has 12-byte descriptors.
+/// The icon slot size of a runtime target that a camera release runs. The
+/// slot belongs to the family, the target name before its first `-`.
 pub fn icon_stride(target: &str) -> Result<usize> {
-    match target {
-        "gr3-2.10" => Ok(ICON_STRIDE),
-        "gr4-1.11" | "gr4-1.20" => Ok(6412),
+    let family = target.split_once('-').map(|(family, _)| family);
+    match FAMILY_ICON_STRIDES
+        .iter()
+        .find(|(name, _)| Some(*name) == family)
+    {
+        Some(&(_, stride)) if crate::camera::CAMERAS.iter().any(|c| c.runs(target)) => Ok(stride),
         _ => anyhow::bail!("Unknown runtime target {target:?}"),
     }
 }

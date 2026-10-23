@@ -38,13 +38,13 @@ The CLI embeds `runtime/` and `resources/`, so it works outside the checkout.
 
 ## Targets
 
-A target is one firmware build. Each target has its own regions and hooks in `components::Layout`.
+A target is one firmware build. Its module in `crates/grkit-build/src/target/` holds its data, the private tail, and the site of each hook in its build.
 
-The targets of one camera line form a family, such as the GR IV builds. They share the runtime code and the hook symbols.
+The targets of one camera line form a family, such as the GR IV builds. They share the runtime code and the hooks. The family module in `crates/grkit-build/src/target/` lists each hook once: its symbol, the code component that holds it, its extension point, and whether its site gets a B or a BL. A build gives only the address and the stock instruction of each hook, so the builds of a family have the same hooks.
 Each family has the header `runtime/targets/<family>.h`, which each build header of the family includes. It holds the object layouts, events, and constants of the family. It also holds the values that the shared code takes from each family, such as the icon slot and the Framing ratios. The shared code has no default for them, so a new family that does not define one does not build.
 The build header `runtime/targets/<target>.h` holds the firmware addresses and the values that differ in that build.
 
-Tests require each build of a family to have the same hook symbols and the same header definitions. A build declares the definitions that only it has in `BUILD_ONLY_DEFINITIONS`. A change for one build therefore fails the tests until it reaches each build of the family.
+Tests require each build of a family to have a site for each hook of the family and the same header definitions. A build declares the definitions that only it has in `BUILD_ONLY_DEFINITIONS`. A change for one build therefore fails the tests until it reaches each build of the family.
 
 | Target | Cameras |
 | --- | --- |
@@ -153,7 +153,7 @@ A new firmware version needs one of two changes:
 - If its code moves by less than the relocation radius, the existing target runs on it. Add the release to `camera.rs` with the existing target.
 - If its code moves farther, or code at a hook changed, it needs a new target in the family of the existing one.
 
-`grkit port` finds each address of an existing target in another build. It uses the windows of [Relocation](#relocation), within a larger radius. It takes the hook and patch sites of the layout, the `FIRMWARE()` addresses of the build header, and the data addresses of `Target`.
+`grkit port` finds each address of an existing target in another build. It uses the windows of [Relocation](#relocation), within a larger radius. It takes the hook and patch sites of the target module, the `FIRMWARE()` addresses of the build header, and the data addresses of `Target`. It writes drafts of the build header and of the target module for the new build.
 The port cannot find an address whose code or data changed. It also does not check values that are not addresses, such as object offsets, text IDs, and enum values.
 
 A data address that code loads gets that code as a second source, and the sources must agree. A port whose sources are all in windows of mostly addresses needs a review, because a table that grew can match at another start.
@@ -165,9 +165,9 @@ To add a target for a new firmware build:
 1. Run `grkit port --target <target> --firmware <its firmware> --to <new firmware> --out <directory>`. Use `--to-rtos` for an RTOS image, such as a GRDUMP capture.
 2. If the output gives `"relocatable": true`, add the release to the existing target instead. Test the existing target on the new firmware.
 3. Make `runtime/targets/<new target>.h` from `header.h` of the output. Resolve each `PORT` comment: port the address by hand, or check the offset that an expression adds. Check each value that is not an address.
-4. Add the site tables from `sites.rs` to `components.rs`, and the `Target` from the fields at its end, with the family of the existing target.
-5. Give each site whose code changed a hook that fits the new code. The runtime tests a definition that only the new build has with `#ifdef`. Add that definition to `BUILD_ONLY_DEFINITIONS`.
-6. Select the header in `runtime/firmware.h`. Add the release to `camera.rs` as experimental, and the icon stride of the target to `grkit_core::runtime::icon_stride`.
+4. Save `target.rs` of the output as `crates/grkit-build/src/target/<module>.rs`. The module name is the target name with `_` for `-` and without `.`. Resolve each `PORT` comment: give the name, the firmware, its SHA-256 values, and the header definition of the new target, port each address without a port, and check each value that is not an address. Add the module to `crates/grkit-build/src/target.rs`, to `TARGETS`, and to `SOURCES`.
+5. If the code at a site changed, change the hook of the family so that it fits the code of each build. The runtime tests a definition that only the new build has with `#ifdef`. Add that definition to `BUILD_ONLY_DEFINITIONS`.
+6. Select the header in `runtime/firmware.h`. Add the release to `camera.rs` as experimental.
 7. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`, and add an entry for the target to `web/src/cameras.ts`.
 8. Add the firmware to the release workflow and to the private firmware backup (`docs/releasing.md`).
 9. Run `grkit port` again with `--check <new target>`. No address may differ without a review.
@@ -177,7 +177,7 @@ If a step is missing, a test names it, except steps 8 and 10.
 
 A firmware update that cannot be undone moves each camera to the new build, so the old build gets fewer users over time.
 A maintainer can freeze such a build when keeping it current costs more than it gives. A frozen build still builds and gets fixes, but a new feature does not have to reach it.
-To freeze a build, exempt it in the family test for the hooks and definitions that it does not get. The runtime must then leave the feature out on that build, as the settings page does without `SETTINGS_SUBMENU`. The C code gates a feature on a header definition, and the assembly and INSTALL follow the hooks of the build. The assembly stops the build if a build has one without the other.
+To freeze a build, let `components::hooks` leave out the hooks that the build does not get, and exempt the build in the family test for the definitions that it does not get. The runtime must then leave the feature out on that build, as the settings page does without `SETTINGS_SUBMENU`. The C code gates a feature on a header definition, and the assembly and INSTALL follow the hooks of the build. The assembly stops the build if a build has one without the other.
 
 ## Code areas
 

@@ -62,8 +62,8 @@ enum Command {
         /// A runtime build of the other firmware to compare the port with.
         #[arg(long, value_parser = grkit_build::target::TARGETS.map(|target| target.name))]
         check: Option<String>,
-        /// A new directory for report.json, the draft header, and the draft
-        /// site tables.
+        /// A new directory for report.json, the draft build header (header.h),
+        /// and the draft target module (target.rs).
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -275,7 +275,7 @@ fn run(command: Command) -> Result<Value> {
                 let files: Files = [
                     ("report.json", serde_json::to_vec_pretty(&port.report())?),
                     ("header.h", port.draft_header()?.into_bytes()),
-                    ("sites.rs", port.draft_layout()?.into_bytes()),
+                    ("target.rs", port.draft_target()?.into_bytes()),
                 ]
                 .into_iter()
                 .map(|(name, bytes)| (name.to_string(), bytes))

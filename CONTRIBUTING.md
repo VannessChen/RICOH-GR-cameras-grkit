@@ -62,7 +62,7 @@ For the web site, see [web/README.md](web/README.md).
 - Do not edit `runtime/abi.h`, `runtime/generated/`, or `web/src/generated/`. Change the layout tables in `crates/grkit-core/src/abi.rs` or the plugin registry in `crates/grkit-core/src/plugins.rs`. Then run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
 - To add a plugin, follow [Add a plugin](docs/architecture.md#add-a-plugin).
 - Keep firmware details in the core. A plugin under `runtime/plugins/<id>/` includes only `runtime/plugin.h`. If a plugin needs a firmware function, add a core service to `runtime/plugin.h`.
-- Give each new hook an extension point in `components::point_of`. A hook without a point fails the build.
+- Add each new hook to the hooks of its family in `crates/grkit-build/src/target/<family>.rs`, with its extension point, and give its site in each target module of the family. A build without a site for a hook of its family fails.
 - Keep processing records valid while camera tasks use them.
 - Do not change persistent native camera settings.
 - Add focused tests for new behavior. Keep GRF bytes unchanged in compatible refactors.
