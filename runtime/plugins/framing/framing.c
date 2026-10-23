@@ -22,16 +22,23 @@ GRKIT_MAYBE_UNUSED static u32 framing_capture_id(volatile u32 *h) {
 static u32 framing_badge_value(volatile u32 *h) {
     return native_display()==DISPLAY_FULL ? framing_value(h) : 0;
 }
-/* Black at 50% alpha outside the photo area. */
+/* Black at 50% alpha outside the photo area. Each full draw paints the mask,
+   so the loops write only the bars: the rows above and below the photo area,
+   and the columns at its sides. */
+#define FRAMING_MASK_COLOR 0x80000000U
+static void mask_span(volatile u32 *row,u32 from,u32 to) {
+    for(;from<to;++from) row[from]=FRAMING_MASK_COLOR;
+}
 static void framing_mask(const Surface *s,u32 value) {
-    u32 x,y;
+    u32 y;
     volatile u32 *row;
     (void)value;
     if(!s->area) return;
     for(y=0;y<480;++y) {
         row=OVERLAY_PIXELS(s->data+y*s->stride*4);
-        for(x=0;x<720;++x)
-            if(y<s->box[1] || y>=s->box[3] || x<s->box[0] || x>=s->box[2]) row[x]=0x80000000;
+        if(y<s->box[1] || y>=s->box[3]) { mask_span(row,0,720); continue; }
+        mask_span(row,0,s->box[0]);
+        mask_span(row,s->box[2],720);
     }
 }
 

@@ -57,6 +57,10 @@ pub const STATE_FILE: &str = "STATE.TXT";
 pub const STATE_TEMPORARY: &str = "STATE.TMP";
 /// The largest state file that the loader reads.
 pub const STATE_MAX_BYTES: usize = 1024;
+/// The resident loader reads the selections at this interval. It writes the
+/// state file when two reads in a row agree, so a change reaches the card
+/// one to two intervals after the last change.
+pub const STATE_POLL_MS: u32 = 2000;
 
 /// `STATE.TXT` keeps the state keys of the plugins (`plugins::state_keys`).
 /// The file holds two lines for each key: the key ID (`state_key_id`), then
@@ -279,16 +283,30 @@ fn state_script() -> Vec<String> {
     let keys = state_keys.iter().enumerate();
     let mut lines: Vec<String> = vec![":resident".into(), "call restore".into()];
 
-    // Save after a change. `filerename` cannot replace a file, and its result
-    // is 0 for success and failure, so each step checks the files. If power
-    // fails between the steps, the restore reads STATE.TMP.
+    // Save after a change, when two polls in a row read the same selections.
+    // A series of changes, such as Fn adjustments, then writes the card once
+    // after its last change. `filerename` cannot replace a file, and its
+    // result is 0 for success and failure, so each step checks the files. If
+    // power fails between the steps, the restore reads STATE.TMP.
     lines.extend([
         ":watch".into(),
-        "mpause 2000".into(),
+        format!("mpause {STATE_POLL_MS}"),
         "call snapshot".into(),
         "call save".into(),
         "goto watch".into(),
         ":save".into(),
+        "stable = 1".into(),
+    ]);
+    for (i, _) in keys.clone() {
+        lines.extend([
+            format!("if value{i} <> last{i} stable = 0"),
+            format!("last{i} = value{i}"),
+        ]);
+    }
+    lines.extend([
+        "if pchanges <> plast stable = 0".into(),
+        "plast = pchanges".into(),
+        "if stable = 0 goto save_end".into(),
         "changed = 0".into(),
     ]);
     for (i, _) in keys.clone() {
@@ -551,9 +569,14 @@ fn state_script() -> Vec<String> {
         ":restore_end".into(),
         "call snapshot".into(),
         "psaved = pchanges".into(),
+        "plast = pchanges".into(),
     ]);
+    // `save` reads `last` and `saved`: an unset variable is a runtime error.
     for (i, _) in keys {
-        lines.push(format!("saved{i} = value{i}"));
+        lines.extend([
+            format!("saved{i} = value{i}"),
+            format!("last{i} = value{i}"),
+        ]);
     }
     lines.push("return".into());
     lines
@@ -649,6 +672,40 @@ mod tests {
         assert!(script.contains("if pcount < 0 pcount = 0"));
         assert!(script.contains(&format!("if pcount > {MAX_COUNT} pcount = 0")));
         assert_eq!(script.matches("if pindex >= pcount goto").count(), 2);
+    }
+
+    /// A series of changes writes the card once: `save` writes only when two
+    /// polls in a row read the same selections. Restore sets each variable
+    /// that `save` reads, because an unset variable is a runtime error.
+    #[test]
+    fn the_resident_script_saves_after_the_selections_settle() {
+        let script = state_script();
+        let at = |line: &str| {
+            script
+                .iter()
+                .position(|l| l == line)
+                .unwrap_or_else(|| panic!("{line}"))
+        };
+        let save = at(":save");
+        let settle = at("if stable = 0 goto save_end");
+        let write = at("filecreate sfh 'C:\\SCRIPT\\PLUGINS\\STATE.TMP'");
+        assert!(save < settle && settle < at("changed = 0") && settle < write);
+        assert!(at(&format!("mpause {STATE_POLL_MS}")) < save);
+        let restored = at(":restore_end");
+        let mut read = vec!["plast".to_string()];
+        read.extend((0..plugins::state_keys().len()).map(|i| format!("last{i}")));
+        for name in read {
+            let compare = script[save..settle]
+                .iter()
+                .position(|l| l.contains(&format!("<> {name} ")))
+                .unwrap_or_else(|| panic!("{name}"));
+            assert!(script[save..save + compare]
+                .iter()
+                .all(|l| !l.starts_with(&format!("{name} ="))));
+            assert!(script[restored..]
+                .iter()
+                .any(|l| l.starts_with(&format!("{name} ="))));
+        }
     }
 
     #[test]
