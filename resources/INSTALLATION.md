@@ -25,7 +25,7 @@ Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-
 Photo: [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/) by nagi usano, [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/).
 
 - **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. On the GRK menu, press Fn on the Image Control row to adjust the selected effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings.
-- **Framing:** select XPan, 16:9, or 4:3. The viewfinder dims the area outside the photo. Framing works only with the native 3:2 aspect ratio. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
+- **Framing:** select XPan, 2.35:1, 16:9, 4:3, 5:4, or 1:1. 1:1 sets the camera's own 1:1 aspect ratio. Each other ratio sets the native aspect ratio to 3:2, and the viewfinder dims the area outside the photo. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
 - **Guides:** select a guide style. The lines show only in the viewfinder.
 - **Date Imprint:** press OK to open its settings. In **Date Style**, select a date style. In **Date Look**, select the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.

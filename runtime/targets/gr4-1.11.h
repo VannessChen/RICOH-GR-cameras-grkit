@@ -22,6 +22,7 @@
    the mode check 0x5363fa84 call, and the still aspect resend. */
 #define FW_CAPTURE_ASPECT_GET FIRMWARE(0x5375840c)
 #define FW_STILL_ASPECT_RESEND FIRMWARE(0x53284454)
+#define FW_STILL_ASPECT_SET FIRMWARE(0x532f8490)
 /* The size classifier is 0x533a2820. */
 
 /* Allocation and the vector helpers of View children. */

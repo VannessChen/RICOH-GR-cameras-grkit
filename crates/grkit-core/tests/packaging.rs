@@ -403,11 +403,11 @@ fn runtime_layout_matches_target_capacity() {
     assert_eq!(runtime::MAX_COUNT, 20);
     assert_eq!(
         runtime::layout(0).unwrap(),
-        json!({"words": 42658, "icon_words": [36846]})
+        json!({"words": 43682, "icon_words": [41652]})
     );
     assert_eq!(
         runtime::layout(20).unwrap(),
-        json!({"words": 64418, "icon_words": [64080, 4806]})
+        json!({"words": 65442, "icon_words": [64080, 9612]})
     );
     assert!(runtime::layout(21).is_err());
 }
@@ -427,22 +427,22 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
         // text, then the live-view labels.
         assert_eq!(
             words * 4,
-            512 + count * 0x1100 + 141376 + 72 + 16384 + 12288,
+            512 + count * 0x1100 + 141376 + 72 + 16384 + 16384,
             "count {count}"
         );
         assert_eq!(
             icons.iter().sum::<usize>() * 4,
-            (count + 23) * 6408,
+            (count + 26) * 6408,
             "count {count}"
         );
         assert!(std::iter::once(&words)
             .chain(&icons)
             .all(|v| (1..=65536).contains(v)));
-        // The 23 host icons come first, so effects after the seventeenth
+        // The 26 host icons come first, so effects after the fourteenth
         // continue in a second 40-icon chunk.
         assert_eq!(
             icons.len(),
-            if count <= 17 { 1 } else { 2 },
+            if count <= 14 { 1 } else { 2 },
             "count {count}"
         );
     }

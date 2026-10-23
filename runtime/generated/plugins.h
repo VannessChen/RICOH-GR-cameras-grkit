@@ -21,15 +21,15 @@
 /* The artwork tiles of each plugin. They follow each other in plugin order and
    end below the GRKit tile. */
 #define IMAGE_CONTROL_TILES 0U
-#define FRAMING_TILES 4U
+#define FRAMING_TILES 7U
 #define GUIDES_TILES 6U
 #define DATE_STAMP_TILES 6U
 #define GRAIN_TILES 4U
-#define PLUGIN_TILES 20U
+#define PLUGIN_TILES 23U
 /* The largest value of each state key. The loader restores a larger value as
    0. */
 #define IMAGE_CONTROL_EFFECT_MAX 65535U
-#define FRAMING_RATIO_MAX 3U
+#define FRAMING_RATIO_MAX 6U
 #define GUIDES_STYLE_MAX 5U
 #define DATE_STAMP_STYLE_MAX 5U
 #define DATE_STAMP_LOOK_MAX 2U

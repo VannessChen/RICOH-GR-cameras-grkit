@@ -134,6 +134,15 @@ const HOOKS: &[HookSpec] = &[
     bl("framing_height_3", Framing, CaptureAspect),
     bl("framing_screennail_inset", Framing, CaptureAspect),
     bl("framing_thumbnail_inset", Framing, CaptureAspect),
+    // GetResolution id 1 widths (L, M, S, XS), then the id 1 left inset of
+    // the screennail and the second store of the thumbnail insets: 5:4
+    // narrows the 4:3 capture aspect.
+    bl("framing_width_0", Framing, CaptureAspect),
+    bl("framing_width_1", Framing, CaptureAspect),
+    bl("framing_width_2", Framing, CaptureAspect),
+    bl("framing_width_3", Framing, CaptureAspect),
+    bl("framing_narrow_screennail", Framing, CaptureAspect),
+    bl("framing_narrow_thumbnail", Framing, CaptureAspect),
     // Playback size classifier and image aspect getter.
     bl("framing_classify", Framing, CaptureAspect),
     b("framing_image_aspect", Framing, CaptureAspect),

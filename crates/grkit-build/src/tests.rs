@@ -714,7 +714,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     ));
     assert_eq!(
         sha256(header.as_bytes()),
-        "132ba75aed065bc60a7ca5359f7153fa035d3f642123f421da037f81a7394e64"
+        "7ea3c21594e01fce0053d5df9121780e50cb7382ad20074544d18384fe596967"
     );
     Ok(())
 }
@@ -828,7 +828,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/PLUGINS/PLUGINS.TTL",
-            "ae6bd3f357879e2f8300577d0690be4593e7ab4b7774f54337a464f9597f8354",
+            "859f23e0a6f88a94abc965bd539fc01c183363789aec242b6f53f7307587136b",
         ),
         (
             "SCRIPT/PLUGINS/INSTALL.BIN",

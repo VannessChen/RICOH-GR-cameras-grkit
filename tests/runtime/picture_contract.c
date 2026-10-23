@@ -339,6 +339,17 @@ int main(void)
         struct box b = changes(1, 0);
         assert(b.lit && b.bottom <= 480 - 38 && b.top > 240);
     }
+    /* 2.35:1 Framing: above its bar, which is lower than the XPan bar. */
+    encode_setup();
+    fill_planes(40, 128, 128);
+    header[GRKIT_HOST_STAMP / 4] = 3;
+    header[GRKIT_HOST_FRAME_RATIO / 4] = 4;
+    picture_encode(0, MESSAGE);
+    {
+        struct box sn = changes(1, 0), th = changes(2, 0);
+        assert(sn.lit && sn.bottom <= 480 - 87 && sn.bottom > 480 - 107 && sn.top > 240);
+        assert(th.lit && th.bottom <= 120 - 26 && th.bottom > 120 - 30);
+    }
 #else
     /* GR IV: XPan applies to native 3:2 and native 16:9 captures. The
        screennail and thumbnail stamps stay above the bar of the capture. */
@@ -363,8 +374,51 @@ int main(void)
         assert(th[2][0].bottom <= 120 - 16 && th[2][0].bottom > 120 - 30);
         assert(sn[2][1].bottom <= 480 - 107 && sn[2][1].top > 240);
         assert(th[2][1].bottom <= 120 - 30);
+        /* 2.35:1 also applies to native 3:2 and native 16:9, above its bar. */
+        for (u32 native = 0; native <= 2; native += 2) {
+            encode_setup();
+            fill_planes(40, 128, 128);
+            header[GRKIT_HOST_STAMP / 4] = 3;
+            header[GRKIT_HOST_FRAME_RATIO / 4] = 4;
+            native_aspect = native;
+            picture_encode(0, MESSAGE);
+            struct box b = changes(1, 0), t = changes(2, 0);
+            assert(b.lit && b.bottom <= 480 - 87 && b.bottom > 480 - 107);
+            assert(t.lit && t.bottom <= 120 - 26 && t.bottom > 120 - 30);
+        }
+        native_aspect = 0;
     }
 #endif
+    /* 5:4 Framing (native 3:2 on each camera): left of its right bar, which
+       is narrower than the 1:1 bar. A 1:1 value is native on each camera, so
+       it is no crop: its stamp stays where Off puts it. */
+    {
+        struct box crop, off, square;
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 3;
+        picture_encode(0, MESSAGE);
+        off = changes(1, 0);
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 3;
+        header[GRKIT_HOST_FRAME_RATIO / 4] = 6;
+        picture_encode(0, MESSAGE);
+        crop = changes(1, 0);
+        {
+            struct box th = changes(2, 0);
+            assert(th.lit && th.right <= 160 - 6 && th.left > 80);
+        }
+        assert(crop.lit && crop.right <= 720 - 60 && crop.left > 360 && crop.top > 240);
+        assert(crop.right < off.right);
+        encode_setup();
+        fill_planes(40, 128, 128);
+        header[GRKIT_HOST_STAMP / 4] = 3;
+        header[GRKIT_HOST_FRAME_RATIO / 4] = 5;
+        picture_encode(0, MESSAGE);
+        square = changes(1, 0);
+        assert(!memcmp(&square, &off, sizeof(struct box)));
+    }
     /* A monochrome GRKit effect keeps neutral chroma: the stamp lights only Y. */
     encode_setup();
     fill_planes(40, 128, 128);

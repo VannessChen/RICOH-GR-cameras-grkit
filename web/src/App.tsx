@@ -322,9 +322,7 @@ export function App() {
                   <span className="module-text">
                     <span className="module-name">{t.moduleNames[module.key]}</span>
                     <span className="module-description">
-                      {module.key === 'framing' && support?.xpanOnly
-                        ? t.framingXpanOnly
-                        : t.modulesText[module.key]}
+                      {t.modulesText[module.key]}
                     </span>
                     {module.key === 'imageControl' &&
                       enabled.has('imageControl') &&

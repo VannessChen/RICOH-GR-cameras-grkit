@@ -59,9 +59,9 @@ fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
         "4119d11482f7f7a0636d481beae529aa4d87a4ec8d4afc62c2d8d4c8b295b0c6"
     );
     let modules = grkit_core::plugins::tiles();
-    // Four Framing, six Guides, six Date Stamp, and four Grain tiles,
+    // Seven Framing, six Guides, six Date Stamp, and four Grain tiles,
     // addressed by offset from the first.
-    assert_eq!(modules.len(), 20);
+    assert_eq!(modules.len(), 23);
     assert_eq!(modules[0], artwork::framing_pixels());
     for pixels in [
         artwork::plugins_pixels(),

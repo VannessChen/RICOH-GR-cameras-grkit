@@ -202,9 +202,9 @@ pub const PLUGINS: [Plugin; 5] = [
         state: &[StateKey {
             name: "ratio",
             slot: Slot::Core(HOST_FRAME_RATIO),
-            max: 3,
+            max: 6,
         }],
-        tiles: 4,
+        tiles: 7,
         artwork: artwork::framing_tiles,
         handlers: Some("framing.c"),
         layers: &[

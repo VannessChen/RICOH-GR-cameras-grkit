@@ -36,7 +36,9 @@ static u32 module_icon(u32 module,u32 icon) {
 static void frame_preview(volatile u32 *h,u32 canvas,u32 movie) {
     u32 module=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE ? h[GRKIT_HOST_MODULE/4] : 0;
     u32 page=module==PLUGIN_FRAMING || module==PLUGIN_GUIDES;
-    u32 ratio=module==PLUGIN_FRAMING ? h[GRKIT_HOST_MENU_CURSOR/4] : frame_ratio(h);
+    /* Other pages show the crop that the live view draws. A native ratio has
+       the native viewfinder, so it has no mask. */
+    u32 ratio=module==PLUGIN_FRAMING ? framing_ratio(h[GRKIT_HOST_MENU_CURSOR/4]) : framing_crop(h);
     u32 style=module==PLUGIN_GUIDES ? h[GRKIT_HOST_MENU_CURSOR/4] : guide_style(h);
     if(movie) { h[GRKIT_HOST_FRAME_PREVIEW/4]=0; return; }
     h[GRKIT_HOST_GUIDE_PREVIEW/4]=style;

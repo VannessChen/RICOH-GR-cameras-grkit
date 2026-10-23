@@ -12,6 +12,12 @@
 #define FW_SETTINGS FIRMWARE(0x5320b31c)
 #define FW_STILL_ASPECT_GET FIRMWARE(0x53245260)
 #define FW_STILL_ASPECT_SET FIRMWARE(0x532525a4)
+/* ShootingModel singleton, and the two requests with which a controller that
+   needs no live view stops it (Controller live-view dispatch 0x5316d9b4,
+   state 1). Each takes the model and a completion callback. */
+#define FW_SHOOTING_MODEL FIRMWARE(0x5320b19c)
+#define FW_LIVE_VIEW_END FIRMWARE(0x53238b40)
+#define FW_LIVE_VIEW_STOP FIRMWARE(0x53238724)
 #define FW_CAPTURE_PROPERTIES FIRMWARE(0x53525d5c)
 /* Settings domain: +0x518 -> control -> payload with the native Image Control
    type at +0x77c. Standard is type 11. */

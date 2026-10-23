@@ -79,16 +79,21 @@ void picture_post(u32 object,u32 context,u32 settings) {
 /* The family header maps a native aspect to its visible-area id. */
 #error "The family header defines PICTURE_NATIVE_ID"
 #endif
-/* Visible-area id of the capture: 0 3:2, 1 4:3, 2 16:9, 3 1:1, 4 XPan. */
+/* Visible-area id of the capture: 0 3:2, 1 4:3, 2 16:9, 3 1:1, 4 XPan,
+   5 2.35:1, 6 5:4. */
 #ifdef FRAMING_XPAN_NATIVE
-/* XPan applies to native 3:2 and native FRAMING_XPAN_NATIVE photos. Other
-   native aspects ignore it. */
+/* XPan and 2.35:1 apply to native 3:2 and native FRAMING_XPAN_NATIVE photos,
+   and 5:4 to native 3:2 photos. Other native aspects ignore them. */
 #define PICTURE_AREA_ID(native,ratio) \
-    (((native)==0 || (native)==FRAMING_XPAN_NATIVE) && (ratio)==1 ? 4 : PICTURE_NATIVE_ID(native))
+    (((native)==0 || (native)==FRAMING_XPAN_NATIVE) && ((ratio)==1 || (ratio)==4) ? \
+     ((ratio)==1 ? 4 : 5) : (native)==0 && (ratio)==6 ? 6 : PICTURE_NATIVE_ID(native))
 #else
-/* Framing ratios (Off, XPan, 16:9, 4:3) apply only to native 3:2 captures. */
+/* Framing ratio values (runtime/firmware.h) apply only to native 3:2 captures. */
 #define PICTURE_AREA_ID(native,ratio) ((native) ? PICTURE_NATIVE_ID(native) : \
-    (ratio)==1 ? 4 : (ratio)==2 ? 2 : (ratio)==3 ? 1 : 0)
+    (ratio)<7 ? picture_area_ids[ratio] : 0)
+/* By crop value: Off, XPan, 16:9, 4:3, 2.35:1, 1:1 (native on each camera,
+   so never a crop), 5:4. */
+static const u8 picture_area_ids[7]={0,4,2,1,5,0,6};
 #endif
 #ifndef PICTURE_SCRATCH
 /* Stamp masks after the header and the records, inside the loader's registry array. */
@@ -120,9 +125,10 @@ static void local_time(u8 *out) { PICTURE_DATE(out); }
 
 /* Visible area of a preview picture: black bars depend on the capture aspect. */
 static void visible_area(volatile u32 *h,Plane *p) {
-    /* Screennail and thumbnail insets for ids 0 (3:2), 1 (4:3), 2 (16:9), 3 (1:1), then XPan. */
-    static const u8 screennail[5][2]={{0,0},{40,0},{0,38},{120,0},{0,107}};
-    static const u8 thumbnail[5][2]={{0,8},{0,0},{0,16},{20,0},{0,30}};
+    /* Screennail and thumbnail insets for ids 0 (3:2), 1 (4:3), 2 (16:9), 3 (1:1), then XPan,
+       2.35:1, and 5:4 (runtime/framing.S). */
+    static const u8 screennail[7][2]={{0,0},{40,0},{0,38},{120,0},{0,107},{0,87},{60,0}};
+    static const u8 thumbnail[7][2]={{0,8},{0,0},{0,16},{20,0},{0,30},{0,26},{6,0}};
     /* The capture area: the Framing ratio when Framing is installed. */
     u32 ratio=PLUGIN_INSTALLED(h,PLUGIN_FRAMING) ? h[GRKIT_HOST_FRAME_RATIO/4] : 0;
     u32 native=PICTURE_NATIVE_ASPECT(), id;

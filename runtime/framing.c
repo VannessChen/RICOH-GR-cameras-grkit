@@ -41,7 +41,9 @@ static u32 framing_display_mode(void) {
 #endif
 
 /* Plugin services (runtime/plugin.h). */
-static u32 framing_ratios(void) { return FRAMING_RATIO_COUNT; }
+static const u8 framing_rows[]={FRAMING_RATIO_ROWS};
+static u32 framing_ratios(void) { return sizeof(framing_rows); }
+static u32 framing_ratio(u32 row) { return row<sizeof(framing_rows) ? framing_rows[row] : 0; }
 static u32 native_display(void) { return FRAMING_DISPLAY_MODE(); }
 #ifndef LABEL_MAP
 #define LABEL_MAP(address) ((const volatile u8 *)(address))
@@ -139,12 +141,12 @@ static u32 capture_area(volatile u32 *h) {
 }
 
 #ifdef FRAMING_XPAN_NATIVE
-/* The live view shows the Framing ratio in native 3:2. XPan also crops the
-   native aspect FRAMING_XPAN_NATIVE, whose live view shows only XPan. In other
-   native aspects nothing shows: clear `data`. */
+/* The live view shows the Framing ratio in native 3:2. XPan and 2.35:1 also
+   crop the native aspect FRAMING_XPAN_NATIVE, whose live view shows only
+   them. In other native aspects nothing shows: clear `data`. */
 #define SHOWN_AREA(data,area) do { \
     u32 native=FRAMING_NATIVE_ASPECT(); \
-    if(native!=0 && (native!=FRAMING_XPAN_NATIVE || (area)!=1)) (data)=0; \
+    if(native!=0 && (native!=FRAMING_XPAN_NATIVE || ((area)!=1 && (area)!=4))) (data)=0; \
 } while(0)
 #else
 /* canvas_pixels() accepts only the native 3:2 aspect, where each ratio shows. */
@@ -168,13 +170,13 @@ static void capture_sync(u32 controller) {
 }
 #ifdef FW_CAPTURE_ASPECT_GET
 /* The live view follows the capture aspect where the native firmware has a
-   live-view mode for each aspect (GR IV). A capture id 2 with the native 3:2
-   UI aspect comes from the Framing request above, so the live view keeps
+   live-view mode for each aspect (GR IV). A capture id 1 or 2 with the native
+   3:2 UI aspect comes from the Framing request above, so the live view keeps
    mode 3:2. The live-view mode function and the mode check call this instead
    of the capture aspect getter. */
 u32 framing_live_aspect(u32 property) {
     u32 id=((u32 (*)(u32))FW_CAPTURE_ASPECT_GET)(property);
-    return id==2 && FRAMING_NATIVE_ASPECT()==0 ? 0 : id;
+    return (id==1 || id==2) && FRAMING_NATIVE_ASPECT()==0 ? 0 : id;
 }
 #endif
 #else
@@ -226,8 +228,10 @@ static u32 canvas_pixels(u32 canvas,u32 bitmap) {
 #endif
     return canvas_bitmap(canvas,bitmap);
 }
-/* Photo area {left,top,right,bottom} on the 720x480 canvas for each capture area. */
-static const u16 photo_boxes[4][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480}};
+/* Photo area {left,top,right,bottom} on the 720x480 canvas for each capture
+   area: 3:2, XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
+static const u16 photo_boxes[7][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
+                                    {0,87,720,393},{120,0,600,480},{60,0,660,480}};
 void framing_prepare(u32 canvas) {
     volatile u32 *h=framing_header();
     /* Canvas::Draw clears the full native bitmap before drawing its children.

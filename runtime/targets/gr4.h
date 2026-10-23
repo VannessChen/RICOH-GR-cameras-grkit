@@ -19,12 +19,16 @@
    native Image Control type at +0x79c. Standard is type 11. The shot settings
    hold the type at the same offset as the settings payload. */
 #define SETTINGS_IC_TYPE 0x79c
-/* Framing: GR IV has native 4:3 and 16:9, so Framing offers Off and XPan.
-   XPan uses capture aspect id 2 with the 65:24 heights. In native 3:2 the
-   capture request hook maps the 3:2 request to id 2, and the live-view hooks
-   keep the live view in 3:2, as on GR III. In native 16:9 XPan crops the
-   native 16:9 photos. */
-#define FRAMING_RATIO_COUNT 2U
+/* Framing: the rows of every family (runtime/firmware.h). GR IV has the
+   native aspects 3:2, 4:3, 16:9, and 1:1, so Framing sets the native aspect
+   for 16:9, 4:3, and 1:1. XPan and 2.35:1 use capture aspect id 2 with their
+   own heights, and 5:4 uses id 1 with its own widths. In native 3:2 the
+   capture request hook maps the 3:2 request to that id, and the live-view
+   hooks keep the live view in 3:2, as on GR III. In native 16:9, XPan and
+   2.35:1 also crop the native 16:9 photos. */
+#define FRAMING_RATIO_ROWS 0,1,4,2,3,6,5
+/* The native aspect id of each ratio value, or 0xff for a Framing crop. */
+#define FRAMING_NATIVE_IDS 0,0xff,2,1,0xff,3,0xff
 #define FRAMING_XPAN_NATIVE 2
 /* FW_CAPTURE_ASPECT_GET reads the capture aspect (property 0xdf,
    CommonProperty +0x7da); the live-view mode function and the mode check call
@@ -35,13 +39,32 @@
 #define FRAMING_CAPTURE_ASPECT() BYTE(WORD(WORD(WORD(FW_SETTINGS_DOMAIN,0),0x518),4),0x7da)
 #define FRAMING_REQUEST_ASPECT() (((void (*)(u32))FW_STILL_ASPECT_RESEND)(FRAMING_SETTINGS()))
 #define MENU_FRAMING_REQUEST() (((void (*)(u32))FW_STILL_ASPECT_RESEND)(CALL0(FW_SETTINGS)()))
-/* ImageResolutionTranslatorKb636 GetResolution id 2: the stock 16:9 height and
-   the 65:24 height (width x 24 / 65, a multiple of 8) of each size. */
-#define XPAN_HEIGHT_0 3480, 2288
-#define XPAN_HEIGHT_1 2784, 1824
-#define XPAN_HEIGHT_2 1968, 1296
-#define XPAN_HEIGHT_3 1080, 712
+/* The native StillAspectRatio, and its setter as the native menu calls it:
+   FW_STILL_ASPECT_SET writes the UI aspect (+0x49f) and runs the resend, which
+   applies a change, posts the UI event, and switches the live view. */
+#define MENU_NATIVE_ASPECT() CALL1(FW_STILL_ASPECT_GET)(CALL0(FW_SETTINGS)())
+#define MENU_SET_NATIVE_ASPECT(id) CALL2(FW_STILL_ASPECT_SET)(CALL0(FW_SETTINGS)(),(id))
+/* GR IV stops no live view for a native aspect change. Its live-view mode
+   function and mode check read the capture aspect (framing_live_mode,
+   framing_live_check). */
+#define MENU_STOP_LIVE_VIEW() ((void)0)
+/* ImageResolutionTranslatorKb636 GetResolution id 2: the stock 16:9 height,
+   the 65:24 height (width x 24 / 65), and the 2.35:1 height (width / 2.35) of
+   each size, rounded to a multiple of 8. */
+#define XPAN_HEIGHT_0 3480, 2288, 2632
+#define XPAN_HEIGHT_1 2784, 1824, 2104
+#define XPAN_HEIGHT_2 1968, 1296, 1488
+#define XPAN_HEIGHT_3 1080, 712, 816
 #define XPAN_SIZES 6192, 2288, 4944, 1824, 3504, 1296, 1920, 712
+#define SCOPE_SIZES 6192, 2632, 4944, 2104, 3504, 1488, 1920, 816
+/* GetResolution id 1: the stock 4:3 width and the 5:4 width (height x 5 / 4)
+   of each size. The pipeline crops the width from the center. */
+#define NARROW_WIDTH_0 5504, 5160
+#define NARROW_WIDTH_1 4400, 4120
+#define NARROW_WIDTH_2 3120, 2920
+#define NARROW_WIDTH_3 1920, 1800
+/* The 5:4 sizes (width, height), largest first. */
+#define NARROW_SIZES 5160, 4128, 4120, 3296, 2920, 2336, 1800, 1440
 /* The size classifier at its aspect BL: the frame is {r3-r6,fp,ip,lr,pc},
    r6 = width, r4 = height, r5 = class pointer. */
 #define CLASSIFY_WIDTH r6
