@@ -215,7 +215,7 @@ pub const SHOT_RECORD: usize = 4;
 /// The picture scratch after the records: the masks, then the shot ring.
 pub const PICTURE_SCRATCH: usize = PICTURE_MASKS + SHOT_ENTRY + SHOT_STRIDE * SHOT_ENTRIES;
 /// Bytes of the live-view labels after the menu text (`artwork::overlay_labels`).
-pub const LABELS_SIZE: usize = 12288;
+pub const LABELS_SIZE: usize = 16384;
 /// Everything after the records: the picture scratch, the menu text, then the
 /// live-view labels.
 pub const TAIL_SIZE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE + LABELS_SIZE;

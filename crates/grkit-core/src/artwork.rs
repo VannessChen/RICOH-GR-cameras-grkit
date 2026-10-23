@@ -526,14 +526,17 @@ fn ratio_pixels(label: &str, width: usize, height: usize) -> Vec<u8> {
     rgba
 }
 
-/// Framing artwork in runtime order: the module tile, then the XPan (65:24),
-/// 16:9, and 4:3 ratios.
+/// Framing artwork in the order of the ratio values (`runtime/firmware.h`):
+/// the module tile, then XPan (65:24), 16:9, 4:3, 2.35:1, 1:1, and 5:4.
 pub fn framing_tiles() -> Vec<Vec<u8>> {
     vec![
         framing_pixels(),
         ratio_pixels("XPan", 30, 11),
         ratio_pixels("16:9", 30, 17),
         ratio_pixels("4:3", 24, 18),
+        ratio_pixels("2.35", 30, 13),
+        ratio_pixels("1:1", 18, 18),
+        ratio_pixels("5:4", 22, 18),
     ]
 }
 
@@ -688,8 +691,9 @@ pub fn version_pixels() -> Vec<u8> {
 }
 
 /// The live-view labels in label order: the load cue, then the Framing ratios
-/// in Framing row order, so label n names Framing row n.
-pub const OVERLAY_LABELS: [&str; 4] = ["GRKit Loaded", "XPan", "16:9", "4:3"];
+/// in capture area order (runtime/framing.c: photo_boxes), so label n names
+/// capture area n.
+pub const OVERLAY_LABELS: [&str; 7] = ["GRKit Loaded", "XPan", "16:9", "4:3", "2.35", "1:1", "5:4"];
 /// The width of the black outline around the text. The native live-view text
 /// has one black pixel around the gray edge of each stroke, and keeps the
 /// gaps between characters transparent.

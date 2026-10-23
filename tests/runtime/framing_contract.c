@@ -69,11 +69,16 @@ static const volatile uint8_t *mapped_labels(uint32_t address)
 
 static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
 volatile u32 *framing_header(void) { return header; }
-/* The last Framing ratio of the target: 4:3 on GR III, XPan on GR IV. */
-#define LAST_RATIO (FRAMING_RATIO_COUNT - 1)
-/* The capture aspect id of each ratio: 3:2, then 16:9 for XPan and 16:9,
-   and 4:3. */
-static const u32 capture_ids[] = {0, 2, 2, 1};
+/* 5:4: a crop on every camera, and the last crop row. */
+#define LAST_RATIO 6U
+/* Off, and each ratio value that the target crops. A ratio that the camera
+   has natively (FRAMING_NATIVE_IDS) is a native setting: Framing draws and
+   crops nothing for it. */
+static u32 cropped(u32 value) { return value == 0 || (framing_row(value) && framing_native(value) == FRAMING_CROP); }
+/* The capture aspect id of each crop value: 3:2, then 16:9 for XPan and
+   16:9, 4:3, 16:9 for 2.35:1, none for 1:1 (native on each camera), and 4:3
+   for 5:4. */
+static const u32 capture_ids[] = {0, 2, 2, 1, 2, 0, 1};
 
 static void reset(void)
 {
@@ -142,9 +147,15 @@ static u32 expected_badge(u32 ratio,u32 x,u32 y,u32 background)
 /* Independent guide fixtures. Each value is a division, and its 2-pixel line
    covers the pixel before it and the pixel at it, as the native grid does.
    Thirds are at multiples of floor(span / 3). The golden section is rounded. */
-static const u32 boxes[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480}};
-static const u32 thirds[][4]={{240,480,160,320},{240,480,195,283},{240,480,172,307},{253,466,160,320}};
-static const u32 golden[][4]={{275,445,183,297},{275,445,209,271},{275,445,192,287},{284,436,183,297}};
+/* By ratio value: 3:2 (Off), XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
+static const u32 boxes[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
+                             {0,87,720,393},{120,0,600,480},{60,0,660,480}};
+static const u32 thirds[][4]={{240,480,160,320},{240,480,195,283},{240,480,172,307},{253,466,160,320},
+                              {240,480,189,291},{280,440,160,320},{260,460,160,320}};
+static const u32 golden[][4]={{275,445,183,297},{275,445,209,271},{275,445,192,287},{284,436,183,297},
+                              {275,445,204,276},{303,417,183,297},{289,431,183,297}};
+/* The number of ratio values. It is also a value that no target offers. */
+#define RATIO_VALUES 7U
 static u32 on_line(u32 value,u32 line) { return value==line-1 || value==line; }
 static u32 expected_guide(u32 ratio,u32 style,u32 x,u32 y)
 {
@@ -208,8 +219,10 @@ static void assert_guides(u32 ratio,u32 style,u32 badge)
 int main(void)
 {
     /* Fixed rectangles are independent expected output, not a second renderer. */
-    const u32 rectangles[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480}};
-    for (u32 ratio=0; ratio<FRAMING_RATIO_COUNT; ++ratio) {
+    const u32 rectangles[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
+                               {0,87,720,393},{120,0,600,480},{60,0,660,480}};
+    for (u32 ratio=0; ratio<RATIO_VALUES; ++ratio) {
+        if(!cropped(ratio)) continue;
         reset();
         header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
         framing_prepare(TEST_CANVAS);
@@ -246,10 +259,10 @@ int main(void)
        label. A label keeps the mask under its transparent pixels. A target
        paints only the ratios that it offers. */
     reset();
-    const u32 transitions[]={1,2,3,1,3,2};
+    const u32 transitions[]={1,2,3,4,5,6,1,3,6,2,5,4};
     for(u32 i=0, draws=0; i<sizeof(transitions)/sizeof(transitions[0]); ++i) {
         u32 ratio=transitions[i];
-        if(ratio>LAST_RATIO) continue;
+        if(!cropped(ratio)) continue;
         header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
         BYTE(TEST_CANVAS,0xa0)=0;
         framing_prepare(TEST_CANVAS);
@@ -298,7 +311,8 @@ int main(void)
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
     /* Guides stay inside the photo area of each ratio, below the badge. */
-    for (u32 ratio=0; ratio<FRAMING_RATIO_COUNT; ++ratio) for (u32 style=1; style<=GUIDES_STYLE_MAX; ++style) {
+    for (u32 ratio=0; ratio<RATIO_VALUES; ++ratio) for (u32 style=1; style<=GUIDES_STYLE_MAX; ++style) {
+        if(!cropped(ratio)) continue;
         reset();
         header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
         header[GRKIT_HOST_GUIDE/4]=style;
@@ -310,7 +324,7 @@ int main(void)
         assert(header[GRKIT_HOST_FRAME_BITMAP/4]==TEST_BITMAP);
     }
     /* The diagonals run corner to corner. */
-    for (u32 ratio=0; ratio<4; ++ratio) {
+    for (u32 ratio=0; ratio<RATIO_VALUES; ++ratio) {
         const u32 *box=boxes[ratio];
         assert(expected_guide(ratio,4,box[0],box[1]) && expected_guide(ratio,4,box[2]-1,box[3]-1));
         assert(expected_guide(ratio,4,box[2]-1,box[1]) && expected_guide(ratio,4,box[0],box[3]-1));
@@ -384,14 +398,23 @@ int main(void)
     header[GRKIT_HOST_GUIDE_PREVIEW/4]=GUIDES_STYLE_MAX+1;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
-    /* Native 3:2 requests record the Framing ratio; other native ratios pass. */
+    /* Native 3:2 requests record the Framing ratio; other native ratios pass.
+       XPan and 2.35:1 use id 2. */
     {
-        for(u32 ratio=0; ratio<FRAMING_RATIO_COUNT; ++ratio) {
+        for(u32 ratio=0; ratio<RATIO_VALUES; ++ratio) {
+            if(!cropped(ratio)) continue;
             header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
             assert(framing_capture_request(0)==capture_ids[ratio]);
             assert(framing_capture_request(3)==3);
             assert(framing_capture_request(1)==1);
         }
+        /* A native ratio value is not a crop. */
+        for(u32 ratio=1; ratio<RATIO_VALUES; ++ratio) if(!cropped(ratio)) {
+            header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
+            assert(framing_capture_request(0)==0);
+        }
+        header[GRKIT_HOST_FRAME_RATIO/4]=RATIO_VALUES;
+        assert(framing_capture_request(0)==0);
         header[GRKIT_HOST_FRAME_RATIO/4]=999;
         assert(framing_capture_request(0)==0);
     }
@@ -469,7 +492,7 @@ int main(void)
     /* GR III: the live view shows the layers only in native 3:2. */
     reset(); native_aspect=2; assert_rejected();
 #endif
-    reset(); header[GRKIT_HOST_FRAME_RATIO/4]=4;
+    reset(); header[GRKIT_HOST_FRAME_RATIO/4]=RATIO_VALUES;
     framing_paint(TEST_CANVAS,TEST_BITMAP); assert_untouched();
     reset(); framing_paint(TEST_CANVAS+4,TEST_BITMAP); assert_untouched();
     reset(); header[GRKIT_HOST_FRAME_OWNER/4]=0;

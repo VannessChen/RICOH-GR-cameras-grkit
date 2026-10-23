@@ -56,7 +56,7 @@ GR IIIx 1.60 runs the RTOS code of GR III 2.10, so both cameras use one runtime.
 GR III 2.20 and GR IIIx 1.70 change only the end screen. Their code moves by less than the relocation radius, so INSTALL [relocates](#relocation) the `gr3-2.10` runtime to them. `camera.rs` lists the releases of each camera and the runtime build of each release.
 GR IV 1.20 changes the code around several hooks and adds the monochrome Image Control types 31 and 32. It therefore has its own target (see [Porting](#porting)). Its hooks are those of 1.11. A package names its build in `INSTALL.BIN` (`GRKIT_TARGET=`), because the two GR IV builds have the same runtime file layout.
 An HDF camera runs the firmware of its base camera and uses the package of that camera.
-GR IV has its own layout and all plugins, but Framing offers only XPan (see [Framing](#framing)).
+GR IV has its own layout and all plugins.
 
 ## Installation
 
@@ -131,8 +131,11 @@ After INSTALL, the overlay core also shows a short "GRKit" label in the first st
 
 The live-view labels, the load cue and the Framing ratios, are rendered in Roboto Condensed Light at build time, in the size and style of the native live-view text (`grkit_core::artwork::overlay_labels`). The installer copies them after the menu text, because the code region has no room for them.
 
-Framing captures through hidden capture aspects, while the native aspect setting stays 3:2. DNG files keep the full sensor data and describe the crop.
-GR IV has a live-view mode for each native aspect, so Framing offers only Off and XPan there.
+Framing lists the same ratios on every camera. A ratio that the camera has natively sets the native aspect, so the native viewfinder, photo, and DNG apply it: 1:1 on GR III, and 16:9, 4:3, and 1:1 on GR IV. The page shows the ratio that the camera applies, so a change of the native aspect in the camera menu shows there too.
+Framing crops the other ratios. A crop sets the native aspect to 3:2 and captures through a hidden capture aspect. The live view stays 3:2, and DNG files keep the full sensor data and describe the crop.
+XPan and 2.35:1 share the 16:9 capture aspect with their own heights. 5:4 shares the 4:3 capture aspect with its own widths, which the pipeline crops from the center. Playback finds the geometry of a photo from its size.
+GR IV has a live-view mode for each capture aspect, so its live-view hooks keep the 3:2 mode for a crop. In native 16:9, XPan and 2.35:1 also crop the native photos.
+The camera saves a crop as a value, not as a menu row, so a release can add ratios without changing the meaning of a saved value.
 
 ## Recorded pictures
 

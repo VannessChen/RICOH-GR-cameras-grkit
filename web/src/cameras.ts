@@ -36,8 +36,6 @@ export interface Camera {
     modules: readonly ModuleKey[];
     /** Plugins of the runtime that the package always omits, so the installer never installs them. */
     excluded?: readonly ModuleKey[];
-    /** Framing offers only XPan, as a crop of native 16:9. */
-    xpanOnly?: boolean;
   };
 }
 
@@ -92,7 +90,7 @@ export const CAMERAS: readonly Camera[] = [
     key: 'gr4',
     id: 'gr4',
     name: 'GR IV / GR IV HDF',
-    support: { ...releases('gr4'), modules: CAMERA_PLUGINS.gr4, xpanOnly: true },
+    support: { ...releases('gr4'), modules: CAMERA_PLUGINS.gr4 },
   },
   // GR IV Monochrome runs the GR IV firmware with its own version: it shows 1.11 as 1.00 and 1.20
   // as 1.10. It uses the GR IV packages and ModeSet file. The effects are made for color sensors,
@@ -110,7 +108,6 @@ export const CAMERAS: readonly Camera[] = [
       ],
       modules: CAMERA_PLUGINS.gr4.filter((key) => key !== 'imageControl'),
       excluded: ['imageControl'],
-      xpanOnly: true,
     },
   },
 ];

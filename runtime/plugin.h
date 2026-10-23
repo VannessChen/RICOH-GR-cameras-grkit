@@ -95,9 +95,33 @@ GRKIT_MAYBE_UNUSED static const u16 *text(volatile u32 *h,u32 id);
 GRKIT_MAYBE_UNUSED static const u16 *effect_summary(volatile u32 *h,u32 n);
 /* The Framing rows of the target, Off included. */
 GRKIT_MAYBE_UNUSED static u32 framing_ratios(void);
+/* The Framing ratio value of a row (FRAMING_RATIO_ROWS), or 0 (Off). */
+GRKIT_MAYBE_UNUSED static u32 framing_ratio(u32 row);
+/* The row of a Framing ratio value, or 0 when the target does not offer it. */
+GRKIT_MAYBE_UNUSED static u32 framing_row(u32 value) {
+    u32 row;
+    for(row=1;row<framing_ratios();++row) if(framing_ratio(row)==value) return row;
+    return 0;
+}
+/* The native aspect id that a Framing ratio value sets, or FRAMING_CROP when
+   Framing crops it (FRAMING_NATIVE_IDS). Off sets the native 3:2. */
+#define FRAMING_CROP 0xffU
+GRKIT_MAYBE_UNUSED static u32 framing_native(u32 value) {
+    static const u8 ids[]={FRAMING_NATIVE_IDS};
+    return value<sizeof(ids) ? ids[value] : FRAMING_CROP;
+}
+/* The committed Framing crop: a ratio value that the target crops, or 0. A
+   ratio that the camera has natively is a native setting, not a crop. */
+GRKIT_MAYBE_UNUSED static u32 framing_crop(volatile u32 *h) {
+    u32 ratio=h[GRKIT_HOST_FRAME_RATIO/4];
+    return ratio && framing_row(ratio) && framing_native(ratio)==FRAMING_CROP ? ratio : 0;
+}
 /* Resend the native still aspect, as a native menu change does, so the
    capture.aspect hooks apply the Framing ratio. */
 GRKIT_MAYBE_UNUSED static void request_native_aspect(void);
+/* The native still aspect id, and its setter as the native menu calls it. */
+GRKIT_MAYBE_UNUSED static u32 camera_aspect(void);
+GRKIT_MAYBE_UNUSED static void set_camera_aspect(u32 id);
 
 /* ---- viewfinder.overlay --------------------------------------------------- */
 
@@ -129,7 +153,7 @@ typedef struct {
 #define DISPLAY_NO_INFO 2U
 #define DISPLAY_OFF 3U
 GRKIT_MAYBE_UNUSED static u32 native_display(void);
-/* Live-view labels (GRKIT_LABELS): the load cue, then Framing row n. */
+/* Live-view labels (GRKIT_LABELS): the load cue, then capture area n. */
 #define LABEL_GRKIT 0U
 #define LABEL_FRAMING(n) (n)
 /* The top of a label in the second row of the native live-view text. Its

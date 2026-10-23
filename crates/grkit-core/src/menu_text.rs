@@ -22,7 +22,7 @@ pub const TEXT_SETTINGS: usize = TEXT_PARAMETER_TITLE - 256;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).
-pub const STRINGS: usize = 50;
+pub const STRINGS: usize = 56;
 /// The longest effect name in a record.
 const NAME_UNITS: usize = 16;
 
@@ -50,9 +50,9 @@ struct Words {
     /// Before the version in the About row.
     version: &'static str,
     off: &'static str,
-    ratios: [&'static str; 3],
+    ratios: [&'static str; 6],
     /// The ratios in a summary, which has less room than a row.
-    ratio_values: [&'static str; 3],
+    ratio_values: [&'static str; 6],
     guide_styles: [&'static str; 5],
     stamp_styles: [&'static str; 5],
     looks: [&'static str; 3],
@@ -70,8 +70,8 @@ const ENGLISH: Words = Words {
     grain: "Grain",
     version: "Version",
     off: "Off",
-    ratios: ["XPan 65:24", "16:9", "4:3"],
-    ratio_values: ["XPan", "16:9", "4:3"],
+    ratios: ["XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
+    ratio_values: ["XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
     guide_styles: [
         "Thirds",
         "Center",
@@ -101,8 +101,8 @@ const SIMPLIFIED_CHINESE: Words = Words {
     grain: "颗粒感",
     version: "版本",
     off: "关闭",
-    ratios: ["XPan 65:24", "16:9", "4:3"],
-    ratio_values: ["XPan", "16:9", "4:3"],
+    ratios: ["XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
+    ratio_values: ["XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
     guide_styles: ["三分法", "中心", "黄金分割", "对角线", "三分法+中心"],
     stamp_styles: [
         "'YY M D",
@@ -126,8 +126,8 @@ const TRADITIONAL_CHINESE: Words = Words {
     grain: "粒紋感",
     version: "版本",
     off: "關閉",
-    ratios: ["XPan 65:24", "16:9", "4:3"],
-    ratio_values: ["XPan", "16:9", "4:3"],
+    ratios: ["XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
+    ratio_values: ["XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
     guide_styles: ["三分法", "中心", "黃金分割", "對角線", "三分法+中心"],
     stamp_styles: [
         "'YY M D",
@@ -153,8 +153,8 @@ const JAPANESE: Words = Words {
     grain: "粒状感",
     version: "バージョン",
     off: "オフ",
-    ratios: ["XPan 65:24", "16:9", "4:3"],
-    ratio_values: ["XPan", "16:9", "4:3"],
+    ratios: ["XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
+    ratio_values: ["XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
     guide_styles: ["9分割", "画面中央", "黄金比", "対角線", "9分割+画面中央"],
     stamp_styles: [
         "'YY M D",
@@ -198,7 +198,11 @@ pub const RUNS: &[Run] = &[
     run("DATE_LOOK", 1, ""),
     run("GRAIN", 1, ""),
     run("OFF", 1, ""),
-    run("RATIO", 3, "Framing rows 1..3: XPan 65:24, 16:9, 4:3."),
+    run(
+        "RATIO",
+        6,
+        "Framing values 1..6: XPan 65:24, 16:9, 4:3, 2.35:1, 1:1, 5:4.",
+    ),
     run(
         "GUIDE",
         5,
@@ -208,7 +212,7 @@ pub const RUNS: &[Run] = &[
     run("LOOK", 3, "Date Look values 0..2: classic, GR1s, GR II."),
     run("GRAIN_LEVEL", 3, "Grain rows 1..3: weak, medium, strong."),
     run("IMAGE_OFF_SUMMARY", 1, ""),
-    run("FRAMING_SUMMARY", 4, "Summaries for each value, Off first."),
+    run("FRAMING_SUMMARY", 7, "Summaries for each value, Off first."),
     run("GUIDES_SUMMARY", 6, ""),
     run("STAMP_SUMMARY", 6, ""),
     run("GRAIN_SUMMARY", 4, ""),

@@ -3,17 +3,18 @@
    and the other plugins read. */
 #include "../../plugin.h"
 
-/* Capture aspect ids: 0 = 3:2, 1 = 4:3, 2 = 16:9 and 65:24. GR III hides
-   ids 1 and 2 from its menu, but its capture and playback code support them. */
-GRKIT_MAYBE_UNUSED static u32 framing_capture_id(volatile u32 *h) {
-    u32 ratio=h[GRKIT_HOST_FRAME_RATIO/4];
-    return ratio==3 ? 1 : ratio==1 || ratio==2 ? 2 : 0;
-}
+/* The committed crop (runtime/plugin.h). A ratio that the camera has
+   natively, or a value that the target does not offer, draws and crops
+   nothing. */
+static u32 framing_value(volatile u32 *h) { return framing_crop(h); }
 
-/* The committed ratio, with an unknown value treated as Off. */
-static u32 framing_value(volatile u32 *h) {
-    u32 ratio=h[GRKIT_HOST_FRAME_RATIO/4];
-    return ratio<framing_ratios() ? ratio : 0;
+/* Capture aspect ids of the crops: 0 = 3:2, 1 = 4:3, 2 = 16:9. XPan and 2.35:1
+   use id 2 with their own heights, and 5:4 uses id 1 with its own widths
+   (runtime/framing.S). GR III hides ids 1 and 2 from its menu, but its capture
+   and playback code support them. 1:1 is native on each camera. */
+GRKIT_MAYBE_UNUSED static u32 framing_capture_id(volatile u32 *h) {
+    static const u8 ids[]={0,2,2,1,2,0,1};
+    return ids[framing_value(h)];
 }
 /* The ratio of the badge layer. The badge shows only with the full display,
    like the top row of native settings. The mask stays in each display,

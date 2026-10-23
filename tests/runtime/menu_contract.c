@@ -7,6 +7,14 @@
 #undef MENU_FRAMING_REQUEST
 static unsigned framing_requests;
 #define MENU_FRAMING_REQUEST() (++framing_requests)
+/* The native aspect that the camera applies, and the native setter calls. */
+#undef MENU_NATIVE_ASPECT
+#undef MENU_SET_NATIVE_ASPECT
+#undef MENU_STOP_LIVE_VIEW
+static unsigned native_aspect_value, native_sets, live_view_stops;
+#define MENU_NATIVE_ASPECT() (native_aspect_value)
+#define MENU_SET_NATIVE_ASPECT(id) (++native_sets, native_aspect_value = (id))
+#define MENU_STOP_LIVE_VIEW() (++live_view_stops)
 /* Camera addresses of the menu text map to text_arena, relative to the text
    start of the header, so the count of records can change during the test. */
 static const unsigned short *text_at(unsigned int address);
@@ -23,8 +31,8 @@ static unsigned test_language;
 #define STAMP_STYLE_ICON(style) (STAMP_ICON + (style))
 #define GRAIN_ICON (STAMP_ICON + DATE_STAMP_TILES)
 #define GRAIN_LEVEL_ICON(level) (GRAIN_ICON + (level))
-/* The last Framing ratio of the target: 4:3 on GR III, XPan on GR IV. */
-#define LAST_RATIO (FRAMING_RATIO_COUNT - 1)
+/* The ratio value of the last Framing row: 1:1 on GR III, 2.35:1 on GR IV. */
+#define CROP_RATIO 1U
 /* A page icon as its global ID. */
 #define PAGE_ICON(module, row) module_icon((module), modules[(module)].icon(test_header, (row)))
 #define CURRENT_ICON(row) module_icon(current_index(test_header), current_module(test_header)->icon(test_header, (row)))
@@ -44,8 +52,17 @@ static int same(const u16 *actual, const char *expected)
     for (; expected[i]; ++i) if (actual[i] != (u8)expected[i]) return 0;
     return actual[i] == 0;
 }
-static const char *const ratio_names[] = {"Off", "XPan 65:24", "16:9", "4:3"};
-static const char *const ratio_summaries[] = {"Framing: Off", "Framing: XPan", "Framing: 16:9", "Framing: 4:3"};
+/* Framing labels and summaries by ratio value, and the ratio value of each
+   row of the target. */
+static const char *const ratio_names[] = {"Off", "XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"};
+static const char *const ratio_summaries[] = {"Framing: Off", "Framing: XPan", "Framing: 16:9", "Framing: 4:3",
+                                              "Framing: 2.35:1", "Framing: 1:1", "Framing: 5:4"};
+/* A value that no target offers. */
+#define UNKNOWN_RATIO 7
+static const u32 ratio_rows[] = {FRAMING_RATIO_ROWS};
+#define ROW_COUNT ((u32)(sizeof(ratio_rows) / sizeof(ratio_rows[0])))
+/* XPan: row 1, and a crop on every camera. */
+#define CROP_ROW 1U
 static const char *const guide_names[] = {"Off", "Thirds", "Center", "Golden Ratio", "Diagonals", "Thirds + Center"};
 static const char *const stamp_names[] = {"Off", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"};
 static const char *const grain_names[] = {"Off", "Weak", "Medium", "Strong"};
@@ -263,73 +280,111 @@ int main(void)
     assert(menu_icon(FRAMING_RATIO_ICON(3)) == 0x59007000 + 3 * GRKIT_ICON_STRIDE);
     /* Guides tiles follow the Framing tiles. */
     assert(menu_icon(GUIDES_ICON) == 0x59007000 + FRAMING_TILES * GRKIT_ICON_STRIDE);
-    assert(menu_icon(GUIDE_STYLE_ICON(5)) == 0x59007000 + 9 * GRKIT_ICON_STRIDE);
-    /* Module tiles fill 0x7fe9..0x7ffc; the Version tile (0x7ffd) and the
+    assert(menu_icon(GUIDE_STYLE_ICON(5)) == 0x59007000 + 12 * GRKIT_ICON_STRIDE);
+    /* Module tiles fill 0x7fe6..0x7ffc; the Version tile (0x7ffd) and the
        GRKit tile (0x7ffe) follow them. */
     assert(menu_icon(PLUGIN_ICON - 1) == 0);
     assert(PLUGIN_ICON + PLUGIN_TILES == GRKIT_ICON_VERSION);
     assert(module_icon_count() == PLUGIN_TILES);
     /* Date Stamp tiles follow the Guides tiles. */
-    assert(menu_icon(STAMP_ICON) == 0x59007000 + 10 * GRKIT_ICON_STRIDE);
-    assert(menu_icon(STAMP_STYLE_ICON(5)) == 0x59007000 + 15 * GRKIT_ICON_STRIDE);
+    assert(menu_icon(STAMP_ICON) == 0x59007000 + 13 * GRKIT_ICON_STRIDE);
+    assert(menu_icon(STAMP_STYLE_ICON(5)) == 0x59007000 + 18 * GRKIT_ICON_STRIDE);
     /* Grain tiles follow the Date Stamp tiles and end below the Version tile. */
-    assert(menu_icon(GRAIN_ICON) == 0x59007000 + 16 * GRKIT_ICON_STRIDE);
-    assert(menu_icon(GRAIN_LEVEL_ICON(3)) == 0x59007000 + 19 * GRKIT_ICON_STRIDE);
+    assert(menu_icon(GRAIN_ICON) == 0x59007000 + 19 * GRKIT_ICON_STRIDE);
+    assert(menu_icon(GRAIN_LEVEL_ICON(3)) == 0x59007000 + 22 * GRKIT_ICON_STRIDE);
     assert(GRAIN_LEVEL_ICON(3) == 0x7ffc);
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     assert(current_module(test_header) == &modules[1]);
     assert(same(current_module(test_header)->summary(test_header), "Framing: Off"));
     assert(PAGE_ICON(1, 1) == PLUGIN_ICON);
-    test_header[GRKIT_HOST_FRAME_RATIO / 4] = LAST_RATIO;
-    assert(PAGE_ICON(1, 1) == FRAMING_RATIO_ICON(LAST_RATIO));
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = CROP_RATIO;
+    assert(PAGE_ICON(1, 1) == FRAMING_RATIO_ICON(CROP_RATIO));
     /* A ratio that the target does not offer reads as Off. */
-    test_header[GRKIT_HOST_FRAME_RATIO / 4] = FRAMING_RATIO_COUNT;
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = UNKNOWN_RATIO;
     assert(PAGE_ICON(1, 1) == FRAMING_RATIO_ICON(0));
-    test_header[GRKIT_HOST_FRAME_RATIO / 4] = LAST_RATIO;
-    /* Framing lists the ratios of the target and opens at the selected one. */
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = CROP_RATIO;
+    /* Framing lists every ratio and opens at the row of the selected one. */
     menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MENU_CURSOR / 4] == LAST_RATIO);
-    assert(count(test_header) == FRAMING_RATIO_COUNT);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MENU_CURSOR / 4] == CROP_ROW);
+    assert(count(test_header) == ROW_COUNT && ROW_COUNT == 7);
     assert(same(current_module(test_header)->title(test_header), "Framing"));
-    for (u32 row = 0; row < FRAMING_RATIO_COUNT; ++row) {
+    for (u32 row = 0; row < ROW_COUNT; ++row) {
+        u32 value = ratio_rows[row], native = framing_native(value);
+        u32 requests = framing_requests, sets = native_sets, stops = live_view_stops;
         test_header[GRKIT_HOST_MENU_CURSOR / 4] = row;
         menu_confirm(test_header);
         assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE);
-        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == row);
-        assert(framing_requests == row + 1);
+        if (native != FRAMING_CROP) {
+            /* A ratio that the camera has sets its native aspect and no crop. */
+            assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 0 && native_aspect_value == native);
+            assert(framing_requests - requests + native_sets - sets == 1);
+        } else {
+            /* A crop needs native 3:2, then resends the request. */
+            assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == value && native_aspect_value == 0);
+            assert(framing_requests == requests + 1);
+        }
+        /* Each native aspect change stops the live view first. */
+        assert(live_view_stops - stops == native_sets - sets);
         assert(current_module(test_header)->checked(test_header, row));
-        assert(!current_module(test_header)->checked(test_header, (row + 1) % FRAMING_RATIO_COUNT));
-        assert(same(current_module(test_header)->label(test_header, row), ratio_names[row]));
-        assert(CURRENT_ICON(row) == (row ? FRAMING_RATIO_ICON(row) : 0x7fff));
+        assert(!current_module(test_header)->checked(test_header, (row + 1) % ROW_COUNT));
+        assert(same(current_module(test_header)->label(test_header, row), ratio_names[value]));
+        assert(CURRENT_ICON(row) == (row ? FRAMING_RATIO_ICON(value) : 0x7fff));
+        assert(same(current_module(test_header)->summary(test_header), ratio_summaries[value]));
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
     }
+    /* 1:1 is native on each camera, and the last row. */
+    assert(framing_native(ratio_rows[ROW_COUNT - 1]) == 3 && native_aspect_value == 3);
+    /* A native aspect from the camera menu shows on the page. A crop applies
+       only in native 3:2, except XPan and 2.35:1 in GR IV native 16:9. */
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = CROP_RATIO;
+    assert(current_module(test_header)->committed(test_header) == ROW_COUNT - 1);
+#ifdef FRAMING_XPAN_NATIVE
+    native_aspect_value = FRAMING_XPAN_NATIVE;
+    assert(current_module(test_header)->committed(test_header) == CROP_ROW);
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = 6;
+    assert(current_module(test_header)->committed(test_header) == framing_row(2));
+    native_aspect_value = 1;
+    assert(current_module(test_header)->committed(test_header) == framing_row(3));
+#endif
+    native_aspect_value = 0;
+    /* A saved value that the target does not offer reads as Off. */
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = UNKNOWN_RATIO;
+    assert(current_module(test_header)->committed(test_header) == 0);
+    /* A saved native value is not a crop. */
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = 5;
+    assert(current_module(test_header)->committed(test_header) == 0);
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = CROP_RATIO;
     /* The Framing page shows its highlighted row on the ADJ canvas. */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     frame_preview(test_header, 0x5a000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 2);
+    /* The preview holds the value of the row: row 2 is 2.35:1 (value 4). */
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
+    frame_preview(test_header, 0x5a000000, 0);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 5);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5a000000);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
     frame_preview(test_header, 0x5a000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 1);
     frame_preview(test_header, 0x5a000000, 1);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 0);
-    test_header[GRKIT_HOST_MENU_CURSOR / 4] = LAST_RATIO;
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = CROP_ROW;
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 1);
     /* Other ADJ pages show the committed ratio, here the last one. */
     frame_preview(test_header, 0x5b000000, 0);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == LAST_RATIO + 1);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5b000000);
     /* A committed Off ends the mask but keeps the canvas for one erasing draw. */
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 0;
     frame_preview(test_header, 0x5b000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5b000000);
-    test_header[GRKIT_HOST_FRAME_RATIO / 4] = LAST_RATIO;
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = CROP_RATIO;
     test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] = 0;
     assert(!menu_back(test_header));
-    assert(same(current_module(test_header)->summary(test_header), ratio_summaries[LAST_RATIO]));
+    assert(same(current_module(test_header)->summary(test_header), ratio_summaries[CROP_RATIO]));
     /* Guides opens at the committed style and commits only its own setting. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
@@ -352,7 +407,7 @@ int main(void)
             assert(!current_module(test_header)->checked(test_header, (row + 1) % 6));
             assert(same(current_module(test_header)->label(test_header, row), guide_names[row]));
             assert(CURRENT_ICON(row) == (row ? GUIDE_STYLE_ICON(row) : 0x7fff));
-            assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == LAST_RATIO);
+            assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == CROP_RATIO);
             assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
         }
         assert(framing_requests == requests);
@@ -360,7 +415,7 @@ int main(void)
     /* The Guides page previews its highlighted style inside the committed ratio. */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
     frame_preview(test_header, 0x5a000000, 0);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == LAST_RATIO + 1);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1);
     assert(test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 2);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5a000000);
     /* A highlighted Off with no ratio keeps the canvas for the next row. */
@@ -376,7 +431,8 @@ int main(void)
     frame_preview(test_header, 0x5b000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 1);
     assert(test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 4);
-    /* The Framing page keeps the committed style with its highlighted ratio. */
+    /* The Framing page keeps the committed style with its highlighted ratio
+       (row 1, XPan). */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     menu_confirm(test_header);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
@@ -391,7 +447,7 @@ int main(void)
     test_header[GRKIT_HOST_GUIDE / 4] = 999;
     assert(guide_style(test_header) == 0);
     test_header[GRKIT_HOST_GUIDE / 4] = 0;
-    test_header[GRKIT_HOST_FRAME_RATIO / 4] = LAST_RATIO;
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = CROP_RATIO;
     test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] = 0;
     /* Date Stamp lists its styles, opens at the committed one, and changes nothing else. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
@@ -411,12 +467,12 @@ int main(void)
         assert(current_module(test_header)->checked(test_header, row));
         assert(same(current_module(test_header)->label(test_header, row), stamp_names[row]));
         assert(CURRENT_ICON(row) == (row ? STAMP_STYLE_ICON(row) : 0x7fff));
-        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == LAST_RATIO && test_header[GRKIT_HOST_GUIDE / 4] == 0);
+        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == CROP_RATIO && test_header[GRKIT_HOST_GUIDE / 4] == 0);
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
     }
     /* The Date Stamp page keeps the committed mask and guides on the ADJ canvas. */
     frame_preview(test_header, 0x5c000000, 0);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == LAST_RATIO + 1 && test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 0);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1 && test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 0);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3);
     assert(same(current_module(test_header)->summary(test_header), "Date Imprint: D M 'YY H:MM"));
     test_header[GRKIT_HOST_STAMP / 4] = 999;
@@ -441,7 +497,7 @@ int main(void)
         assert(current_module(test_header)->checked(test_header, row));
         assert(same(current_module(test_header)->label(test_header, row), grain_names[row]));
         assert(CURRENT_ICON(row) == (row ? GRAIN_LEVEL_ICON(row) : 0x7fff));
-        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == LAST_RATIO && test_header[GRKIT_HOST_STAMP / 4] == 0);
+        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == CROP_RATIO && test_header[GRKIT_HOST_STAMP / 4] == 0);
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
     }
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 4);
@@ -462,7 +518,7 @@ int main(void)
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 5;
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000 + 4 * GRKIT_RECORD_SIZE);
-    assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == LAST_RATIO);
+    assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == CROP_RATIO);
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     test_header[GRKIT_HOST_MODULE / 4] = 999;

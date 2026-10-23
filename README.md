@@ -16,7 +16,7 @@ Photo: [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/
 GRKit adds a sixth entry, GRK, to the ADJ menu. It has five modules:
 
 - **Image Control**: film looks such as Portra 400, Velvia 100, and Tri-X 400. The viewfinder previews the look.
-- **Framing**: XPan (65:24), 16:9, or 4:3 photos. The viewfinder dims the area outside the photo.
+- **Framing**: XPan (65:24), 2.35:1, 16:9, 4:3, 5:4, or 1:1 photos, on every camera. A ratio that the camera has uses its own aspect ratio. For the other ratios, the viewfinder dims the area outside the photo.
 - **Guides**: thirds, center, golden ratio, or diagonal lines.
 - **Date Imprint**: an orange date on the photo, like a film camera's data back.
 - **Grain**: film grain on the photo, in three strengths.
@@ -46,7 +46,7 @@ You select the modules when you make a package. The menu shows only those module
 
 A supported camera runs the same runtime as a tested camera, but is not tested itself. An experimental firmware version has not been tested on a camera.
 
-GR III 2.20 and GR IIIx 1.70 use the same package as 2.10 and 1.60. GR IV 1.20 needs its own package. Each HDF model runs the firmware of its base camera and uses the same package. GR IV Monochrome runs the firmware of GR IV and shows its own version: 1.00 is GR IV 1.11, and 1.10 is GR IV 1.20. On the GR IV models, Framing offers only XPan. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
+GR III 2.20 and GR IIIx 1.70 use the same package as 2.10 and 1.60. GR IV 1.20 needs its own package. Each HDF model runs the firmware of its base camera and uses the same package. GR IV Monochrome runs the firmware of GR IV and shows its own version: 1.00 is GR IV 1.11, and 1.10 is GR IV 1.20. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
 
 A camera can run another build of a supported firmware version. If GRKit does not load on a supported camera, the [firmware dump guide](resources/DUMP.md) tells you how to send its firmware image.
 

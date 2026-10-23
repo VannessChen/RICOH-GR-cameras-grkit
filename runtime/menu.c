@@ -159,6 +159,10 @@ A32_ENTRY u32 menu_viewfinder_icon_select(u32 native_icon,u32 movie) {
    change, so the capture hook maps it to the new ratio. */
 #error "The family header defines MENU_FRAMING_REQUEST"
 #endif
+#if !defined(MENU_NATIVE_ASPECT) || !defined(MENU_SET_NATIVE_ASPECT) || !defined(MENU_STOP_LIVE_VIEW)
+/* Framing sets the native aspect for a ratio that the camera has natively. */
+#error "The family header defines MENU_NATIVE_ASPECT, MENU_SET_NATIVE_ASPECT, and MENU_STOP_LIVE_VIEW"
+#endif
 #ifndef TOOLBAR_CREATED
 /* The first full ADJ draw follows the toolbar creation. */
 #define TOOLBAR_CREATED(widget,icon) ((void)0)
@@ -170,8 +174,14 @@ static const u16 *effect_summary(volatile u32 *h,u32 n) {
     return MENU_TEXT(GRKIT_TEXT(h)+GRKIT_TEXT_SUMMARY+
         (menu_language()*GRKIT_TEXT_RECORDS+n)*GRKIT_SUMMARY_UNITS*2);
 }
-static u32 framing_ratios(void) { return FRAMING_RATIO_COUNT; }
+static const u8 framing_rows[]={FRAMING_RATIO_ROWS};
+static u32 framing_ratios(void) { return sizeof(framing_rows); }
+static u32 framing_ratio(u32 row) { return row<sizeof(framing_rows) ? framing_rows[row] : 0; }
 static void request_native_aspect(void) { MENU_FRAMING_REQUEST(); }
+static u32 camera_aspect(void) { return MENU_NATIVE_ASPECT(); }
+/* A native aspect change stops the live view first where the family needs
+   that, as the native MENU does. */
+static void set_camera_aspect(u32 id) { MENU_STOP_LIVE_VIEW(); MENU_SET_NATIVE_ASPECT(id); }
 #include "modules.h"
 static u32 private_mode(u32 controller) {
     volatile u32 *h=menu_header();

@@ -24,7 +24,7 @@ After the installation, you can remove `00078560.636` and `DEVELOP.MOD` from the
 Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late. When GRKit has loaded, the shooting screen shows **GRKit** at the top for a few seconds. This label needs the Framing or Guides module.
 
 - **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. On the GRK menu, press Fn on the Image Control row to adjust the selected effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings. The effects were made for GR III, so their colors can differ on GR IV.
-- **Framing:** select XPan. The viewfinder stays 3:2 and dims the area outside the photo. XPan also works when the native aspect ratio is 16:9. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
+- **Framing:** select XPan, 2.35:1, 16:9, 4:3, 5:4, or 1:1. 16:9, 4:3, and 1:1 set the camera's own aspect ratio. XPan, 2.35:1, and 5:4 set the native aspect ratio to 3:2. The viewfinder then stays 3:2 and dims the area outside the photo. XPan and 2.35:1 also work when the native aspect ratio is 16:9. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
 - **Guides:** select a guide style. The lines show only in the viewfinder.
 - **Date Imprint:** press OK to open its settings. In **Date Style**, select a date style. In **Date Look**, select the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.

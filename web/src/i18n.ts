@@ -150,12 +150,11 @@ const en = {
   noModules: 'Select at least one module.',
   modulesText: {
     imageControl: 'The effects below, with live-view preview.',
-    framing: 'XPan 65:24, 16:9, or 4:3 photos. The viewfinder stays 3:2 and dims the rest.',
+    framing: 'XPan 65:24, 2.35:1, 16:9, 4:3, 5:4, or 1:1 photos. A ratio that the camera has uses its own aspect ratio. Otherwise the viewfinder stays 3:2 and dims the rest.',
     guides: 'Thirds, center, golden ratio, or diagonals inside the Framing area.',
     dateStamp: 'A date at the bottom right of photos, with classic, GR1s dot-matrix, or GR II digits: orange on color photos, white on black-and-white photos.',
     grain: "Film grain from the camera's grain stage, in three strengths. Photos only.",
   },
-  framingXpanOnly: 'XPan 65:24 photos. The viewfinder stays 3:2 and dims the rest.',
   steps: [
     ['Turn the camera off.'],
     ['Unzip GRKit.zip. Copy the contents of ', '`SD_ROOT', ' to the card root.'],
@@ -332,12 +331,11 @@ const zhHans: Strings = {
   noModules: '请至少选择一个模块。',
   modulesText: {
     imageControl: '使用下方选择的效果，可在实时显示中预览。',
-    framing: '拍摄 XPan 65:24、16:9 或 4:3 照片。显示屏仍为 3:2，画幅外的区域变暗。',
+    framing: '拍摄 XPan 65:24、2.35:1、16:9、4:3、5:4 或 1:1 照片。相机自带的画幅使用相机的长宽比。其他画幅时显示屏仍为 3:2，画幅外的区域变暗。',
     guides: '在画幅内显示三分法、中心、黄金分割或对角线。',
     dateStamp: '在照片右下角加印日期，字体可选经典、GR1s 点阵或 GR II：彩色照片为橙色，黑白照片为白色。',
     grain: '相机内置的颗粒感，分弱、中、强三档。仅用于照片。',
   },
-  framingXpanOnly: '拍摄 XPan 65:24 照片。显示屏仍为 3:2，画幅外的区域变暗。',
   steps: [
     ['关闭相机。'],
     ['解压 GRKit.zip，把 ', '`SD_ROOT', ' 中的内容复制到存储卡根目录。'],
@@ -506,12 +504,11 @@ const zhHant: Strings = {
   noModules: '請至少選擇一個模組。',
   modulesText: {
     imageControl: '使用下方選擇的效果，可在實時顯示中預覽。',
-    framing: '拍攝 XPan 65:24、16:9 或 4:3 照片。顯示屏仍為 3:2，畫幅外的區域變暗。',
+    framing: '拍攝 XPan 65:24、2.35:1、16:9、4:3、5:4 或 1:1 照片。相機內建的畫幅使用相機的長寬比。其他畫幅時顯示屏仍為 3:2，畫幅外的區域變暗。',
     guides: '在畫幅內顯示三分法、中心、黃金分割或對角線。',
     dateStamp: '在照片右下角加印日期，字體可選經典、GR1s 點陣或 GR II：彩色照片為橙色，黑白照片為白色。',
     grain: '相機內建的粒紋感，分弱、中、強三檔。僅用於照片。',
   },
-  framingXpanOnly: '拍攝 XPan 65:24 照片。顯示屏仍為 3:2，畫幅外的區域變暗。',
   steps: [
     ['關閉相機。'],
     ['解壓縮 GRKit.zip，把 ', '`SD_ROOT', ' 中的內容複製到記憶卡根目錄。'],
@@ -682,12 +679,11 @@ const ja: Strings = {
   noModules: 'モジュールを 1 つ以上選択してください。',
   modulesText: {
     imageControl: '下で選んだエフェクトを使います。ライブビューでプレビューできます。',
-    framing: 'XPan 65:24、16:9、4:3 の写真を撮影します。撮影画面は 3:2 のままで、範囲外が暗くなります。',
+    framing: 'XPan 65:24、2.35:1、16:9、4:3、5:4、1:1 の写真を撮影します。カメラにある比率はカメラのアスペクト比を使います。ほかの比率では撮影画面は 3:2 のままで、範囲外が暗くなります。',
     guides: 'フレーミングの範囲内に、9 分割、画面中央、黄金比、対角線のいずれかを表示します。',
     dateStamp: '写真の右下に日付を入れます。書体はクラシック、GR1s のドットマトリクス、GR II から選べます。カラー写真ではオレンジ色、白黒写真では白になります。',
     grain: 'カメラ内蔵の粒状感を、弱・中・強の 3 段階で加えます。静止画のみ。',
   },
-  framingXpanOnly: 'XPan 65:24 の写真を撮影します。撮影画面は 3:2 のままで、範囲外が暗くなります。',
   steps: [
     ['カメラの電源を切ります。'],
     ['GRKit.zip を展開し、', '`SD_ROOT', ' の中身をカードのルートにコピーします。'],
