@@ -118,8 +118,9 @@ fields!(HEADER_FIELDS {
     /// private session it holds the module of the root row where the next
     /// session opens (menu_reopen).
     HOST_MODULE = 188, 4;
-    /// Reserved and zero.
-    HOST_RESERVED_192 = 192, 4;
+    /// Load cue: 0 none, 1 after INSTALL, then 2 + the local second of the
+    /// day when the still live view first shows the cue.
+    HOST_LOAD_CUE = 192, 4;
     /// Aspect id 2 variant for the photo shown in playback: 0 none (shooting uses
     /// the Framing ratio), 1 not 65:24, 2 65:24.
     HOST_FRAME_FILE = 196, 4;
@@ -213,8 +214,11 @@ pub const SHOT_KEY: usize = 0;
 pub const SHOT_RECORD: usize = 4;
 /// The picture scratch after the records: the masks, then the shot ring.
 pub const PICTURE_SCRATCH: usize = PICTURE_MASKS + SHOT_ENTRY + SHOT_STRIDE * SHOT_ENTRIES;
-/// Everything after the records: the picture scratch, then the menu text.
-pub const TAIL_SIZE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE;
+/// Bytes of the live-view labels after the menu text (`artwork::overlay_labels`).
+pub const LABELS_SIZE: usize = 12288;
+/// Everything after the records: the picture scratch, the menu text, then the
+/// live-view labels.
+pub const TAIL_SIZE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE + LABELS_SIZE;
 // The summaries of every record in every menu language end before the
 // parameter page title.
 const _: () = assert!(
@@ -431,6 +435,15 @@ pub fn header() -> String {
     );
     define(
         &mut out,
+        "Live-view labels after the menu text. The installer copies the label \
+         table of the build (grkit_core::artwork::overlay_labels): for label n, a \
+         u16 width, a u16 height, and the u32 offset of its pixels from the table \
+         start at 8 n. Each pixel is one byte of text coverage, row by row.",
+        "LABELS_SIZE",
+        LABELS_SIZE,
+    );
+    define(
+        &mut out,
         "Everything after the records: the script array must hold it.",
         "TAIL_SIZE",
         TAIL_SIZE,
@@ -466,6 +479,13 @@ pub fn header() -> String {
     out.push_str(
         "#define GRKIT_TEXT(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE+GRKIT_PICTURE_SCRATCH)\n",
     );
+    out.push_str("#define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)\n");
+    writeln!(
+        out,
+        "#define GRKIT_LABEL_COUNT {}",
+        crate::artwork::OVERLAY_LABELS.len()
+    )
+    .unwrap();
     comment(
         &mut out,
         "String IDs of the label table, in grkit_core::menu_text order. A run of \

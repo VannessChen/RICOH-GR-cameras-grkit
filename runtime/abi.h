@@ -96,8 +96,9 @@
    session it holds the module of the root row where the next session opens
    (menu_reopen). */
 #define GRKIT_HOST_MODULE 188
-/* Reserved and zero. */
-#define GRKIT_HOST_RESERVED_192 192
+/* Load cue: 0 none, 1 after INSTALL, then 2 + the local second of the day when
+   the still live view first shows the cue. */
+#define GRKIT_HOST_LOAD_CUE 192
 /* Aspect id 2 variant for the photo shown in playback: 0 none (shooting uses
    the Framing ratio), 1 not 65:24, 2 65:24. */
 #define GRKIT_HOST_FRAME_FILE 196
@@ -236,8 +237,13 @@
    Control summary of each record in each language, GRKIT_SUMMARY_UNITS units
    each, language-major. */
 #define GRKIT_TEXT_SIZE 16384
+/* Live-view labels after the menu text. The installer copies the label table
+   of the build (grkit_core::artwork::overlay_labels): for label n, a u16
+   width, a u16 height, and the u32 offset of its pixels from the table start
+   at 8 n. Each pixel is one byte of text coverage, row by row. */
+#define GRKIT_LABELS_SIZE 12288
 /* Everything after the records: the script array must hold it. */
-#define GRKIT_TAIL_SIZE 157832
+#define GRKIT_TAIL_SIZE 170120
 #define GRKIT_TEXT_SUMMARY 8192
 /* The parameter page title of a GRKit session, after the summaries: the page,
    its vtable, and the descriptor of the effect name. */
@@ -249,6 +255,8 @@
 #define GRKIT_TEXT_LANGUAGES 4
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE+GRKIT_PICTURE_SCRATCH)
+#define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)
+#define GRKIT_LABEL_COUNT 4
 /* String IDs of the label table, in grkit_core::menu_text order. A run of IDs
    follows the rows or values that it names. */
 #define TEXT_IMAGE_CONTROL 0

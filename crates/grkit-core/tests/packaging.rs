@@ -403,11 +403,11 @@ fn runtime_layout_matches_target_capacity() {
     assert_eq!(runtime::MAX_COUNT, 20);
     assert_eq!(
         runtime::layout(0).unwrap(),
-        json!({"words": 39586, "icon_words": [36846]})
+        json!({"words": 42658, "icon_words": [36846]})
     );
     assert_eq!(
         runtime::layout(20).unwrap(),
-        json!({"words": 61346, "icon_words": [64080, 4806]})
+        json!({"words": 64418, "icon_words": [64080, 4806]})
     );
     assert!(runtime::layout(21).is_err());
 }
@@ -423,10 +423,11 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
             .iter()
             .map(|v| v.as_u64().unwrap() as usize)
             .collect();
-        // Picture scratch (the date stamp masks, then the shot ring), then the menu text.
+        // Picture scratch (the date stamp masks, then the shot ring), the menu
+        // text, then the live-view labels.
         assert_eq!(
             words * 4,
-            512 + count * 0x1100 + 141376 + 72 + 16384,
+            512 + count * 0x1100 + 141376 + 72 + 16384 + 12288,
             "count {count}"
         );
         assert_eq!(

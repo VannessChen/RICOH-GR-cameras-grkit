@@ -8,7 +8,7 @@ The files in `SD_ROOT/` are GRKit software, except the effect files. GRKit is li
 
 `INSTALL.BIN` also contains some bytes of the official RICOH firmware. GRKit uses them to identify the firmware before it changes the camera memory. These bytes are not GRKit software, and the MIT License does not apply to them.
 
-The text in the menu icons uses the [Inter](https://github.com/rsms/inter) typeface, which is licensed under the SIL Open Font License 1.1.
+The text in the menu icons and in the live view uses the [Roboto Condensed](https://github.com/googlefonts/roboto-classic) typeface, which is licensed under the SIL Open Font License 1.1. GRKit uses its Light, Bold, and Black weights, with only the ASCII characters.
 
 The installation guide uses the [Noto Sans CJK](https://github.com/notofonts/noto-cjk) typefaces, which are licensed under the SIL Open Font License 1.1. Its code text uses DejaVu Sans Mono, which is licensed under the DejaVu Fonts License.
 

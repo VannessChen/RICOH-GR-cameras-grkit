@@ -52,11 +52,11 @@ fn starter_definitions_match_existing_golden_bytes() {
 fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
     assert_eq!(
         hex::encode(Sha256::digest(artwork::plugins_pixels())),
-        "b23d6ffc030a2cca58b8e9795cf8bfe3e235cc04ad951469eb0998418be7ea54"
+        "5d9423843d61423d1a3b7d8cbbe84a7885b729ab29aa5b92333d3b7d43b25e46"
     );
     assert_eq!(
         hex::encode(Sha256::digest(artwork::version_pixels())),
-        "fa7c45417f33ad7212039ed188f884d91bca0b67d0db415cb10d3c53a12f038f"
+        "4119d11482f7f7a0636d481beae529aa4d87a4ec8d4afc62c2d8d4c8b295b0c6"
     );
     let modules = grkit_core::plugins::tiles();
     // Four Framing, six Guides, six Date Stamp, and four Grain tiles,
@@ -347,16 +347,17 @@ fn covers_without_a_number_show_a_large_name() {
         );
     }
     // With a number, a name too wide for the pixel font, or with lowercase, gets a smaller
-    // Inter Black on the name row. A name that fits keeps the pixel font.
-    for name in ["TEAL ORANGE", "VISION 2383", "Portra"] {
+    // Roboto Condensed Black on the name row. A name that fits keeps the pixel font.
+    // The condensed font fits every name of 12 characters.
+    for name in ["TEAL ORANGE", "VISION 2383", "Portra", "WWWWWWWWWWWW"] {
         assert!(
             artwork::render_box("Kodak", name, "400", true).is_ok(),
             "{name}"
         );
     }
-    let error = artwork::render_box("Kodak", "WWWWWWWWWWW", "400", true).unwrap_err();
+    let error = artwork::render_box("Kodak", "PORTRA", "WWWWWWWWWWWW", true).unwrap_err();
     assert!(format!("{error:#}").contains("does not fit"), "{error:#}");
-    // Lowercase works only in Inter Black.
+    // Lowercase works only in Roboto Condensed Black.
     assert!(artwork::render_box("Kodak", "Portra", "", true).is_ok());
 }
 
@@ -512,4 +513,56 @@ fn published_cover_icons_show_the_words_of_the_effect_name() {
             "{name}"
         );
     }
+}
+
+#[test]
+fn overlay_labels_fit_their_area_and_outline_their_text() {
+    let table = artwork::overlay_labels();
+    assert!(table.len() <= grkit_core::abi::LABELS_SIZE);
+    assert_eq!(table.len() % 4, 0);
+    let field = |at: usize, bytes: usize| {
+        let mut value = 0usize;
+        for (index, byte) in table[at..at + bytes].iter().enumerate() {
+            value |= usize::from(*byte) << (8 * index);
+        }
+        value
+    };
+    for index in 0..artwork::OVERLAY_LABELS.len() {
+        let (width, height, offset) = (
+            field(index * 8, 2),
+            field(index * 8 + 2, 2),
+            field(index * 8 + 4, 4),
+        );
+        assert_eq!(height, artwork::OVERLAY_LABEL_HEIGHT);
+        // A Framing label at the left of the row ends before the centered
+        // load cue starts.
+        let widest = if index == 0 { 200 } else { 80 };
+        assert!(
+            (30..=widest).contains(&width),
+            "label {index} is {width} wide"
+        );
+        let pixels = &table[offset..offset + width * height];
+        // White text, its black outline, and transparent pixels.
+        for value in [0, 1, 255] {
+            assert!(pixels.contains(&value), "label {index} lacks {value}");
+        }
+        // The outline separates the text from the live view on every side.
+        for y in 0..height {
+            for x in 0..width {
+                if pixels[y * width + x] <= 1 {
+                    continue;
+                }
+                assert!(x > 0 && y > 0 && x + 1 < width && y + 1 < height);
+                for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
+                    assert_ne!(pixels[ny * width + nx], 0, "label {index} at {x},{y}");
+                }
+            }
+        }
+    }
+    let cue = field(0, 2);
+    let widest = (1..artwork::OVERLAY_LABELS.len())
+        .map(|index| field(index * 8, 2))
+        .max()
+        .unwrap();
+    assert!(7 + widest < 360 - cue / 2);
 }

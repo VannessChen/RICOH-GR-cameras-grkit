@@ -9,8 +9,11 @@
 use ab_glyph::{point, Font, FontRef, PxScale, Rect, ScaleFont};
 use anyhow::{bail, ensure, Context, Result};
 
-/// Inter Medium 4.1, SIL Open Font License 1.1 (`assets/Inter-LICENSE.txt`).
-const FONT: &[u8] = include_bytes!("../assets/Inter-Medium.ttf");
+/// Roboto Condensed Bold, an instance of Roboto Condensed 3.008 at weight 700
+/// with the ASCII characters only, SIL Open Font License 1.1
+/// (`assets/RobotoCondensed-LICENSE.txt`). The native toolbar icons, such as
+/// "Focus", have bold condensed text.
+const FONT: &[u8] = include_bytes!("../assets/RobotoCondensed-Bold.ttf");
 /// Effect icon labels use capitals and digits, as the native text tiles do.
 const LABEL_CHARACTERS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 /// The largest label size. Its capitals are about 10 pixels high, close to the
@@ -169,9 +172,9 @@ pub fn render_tile(label: &str, shape: &str) -> Result<Vec<u8>> {
     Ok(rgba)
 }
 
-/// Inter Black 4.1, from the same release and license as `FONT`. Only the
-/// cover icons use it.
-const COVER_FONT: &[u8] = include_bytes!("../assets/Inter-Black.ttf");
+/// Roboto Condensed Black, the weight 900 instance of the same release, with
+/// the same characters and license as `FONT`. Only the cover icons use it.
+const COVER_FONT: &[u8] = include_bytes!("../assets/RobotoCondensed-Black.ttf");
 /// Cover shades: the light bands, the dark text on them, and the body.
 const LIGHT: u8 = 214;
 const DARK: u8 = 40;
@@ -192,7 +195,7 @@ fn fill(rgba: &mut [u8], top: i32, bottom: i32, shade: u8) {
     }
 }
 
-/// Draw `label` in Inter Black, centered on x = 20, with `capital` pixels of
+/// Draw `label` in Roboto Condensed Black, centered on x = 20, with `capital` pixels of
 /// capital height on the `baseline` row. The text compresses horizontally to
 /// fit `width` pixels. Returns `None`, and draws nothing, if the text would
 /// need a horizontal scale below `min_compression`.
@@ -389,10 +392,10 @@ const LARGE_NAME: [f32; 5] = [9.0, 8.0, 7.0, 6.0, 5.0];
 const SMALL_NAME: [f32; 2] = [5.0, 4.0];
 /// A name may compress to this horizontal scale before a smaller size is tried.
 const NAME_COMPRESSION: f32 = 0.6;
-/// The width of a name in Inter Black: the tile width less one pixel on each side.
+/// The width of a name in Roboto Condensed Black: the tile width less one pixel on each side.
 const NAME_WIDTH: f32 = 38.0;
 
-/// Draws `name` in Inter Black at the largest capital height in `capitals` that fits,
+/// Draws `name` in Roboto Condensed Black at the largest capital height in `capitals` that fits,
 /// centered vertically on `center`. Returns false, and draws nothing, if no size fits.
 fn fitted_name(rgba: &mut [u8], name: &str, capitals: &[f32], center: f32) -> bool {
     capitals.iter().any(|&capital| {
@@ -412,12 +415,12 @@ fn fitted_name(rgba: &mut [u8], name: &str, capitals: &[f32], center: f32) -> bo
 }
 
 /// A gray cover: a light band with the brand, then a dark body with the film
-/// name and a large number. The brand uses Inter Black when it fits without
+/// name and a large number. The brand uses Roboto Condensed Black when it fits without
 /// compression, and the pixel font otherwise. The name uses the pixel font. A
-/// name that the pixel font cannot draw in 40 pixels uses a smaller Inter Black.
-/// An empty `number` means no number: the name then uses Inter Black, as large
+/// name that the pixel font cannot draw in 40 pixels uses a smaller Roboto Condensed Black.
+/// An empty `number` means no number: the name then uses Roboto Condensed Black, as large
 /// as fits, centered on the body. A name that fits no large size uses the pixel
-/// font, and then the smaller Inter Black.
+/// font, and then the smaller Roboto Condensed Black.
 fn cover(brand: &str, name: &str, number: &str, bottom: Bottom) -> Result<Vec<u8>> {
     check_cover_label(brand, "brand")?;
     check_cover_label(name, "name")?;
@@ -457,7 +460,7 @@ fn cover(brand: &str, name: &str, number: &str, bottom: Bottom) -> Result<Vec<u8
         }
         return Ok(rgba);
     }
-    // `pixel_text` draws nothing when it fails, so a smaller Inter Black can take its place.
+    // `pixel_text` draws nothing when it fails, so a smaller Roboto Condensed Black can take its place.
     let pixel = pixel_text(&mut rgba, name, name_top, 255);
     if pixel.is_err() && !fitted_name(&mut rgba, name, &SMALL_NAME, name_top as f32 + 2.5) {
         pixel.with_context(|| format!("Cover name {name:?} does not fit"))?;
@@ -682,4 +685,152 @@ pub fn version_pixels() -> Vec<u8> {
     let mut rgba = background();
     text(&mut rgba, "VER", LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
     rgba
+}
+
+/// The live-view labels in label order: the load cue, then the Framing ratios
+/// in Framing row order, so label n names Framing row n.
+pub const OVERLAY_LABELS: [&str; 4] = ["GRKit Loaded", "XPan", "16:9", "4:3"];
+/// The width of the black outline around the text. The native live-view text
+/// has one black pixel around the gray edge of each stroke, and keeps the
+/// gaps between characters transparent.
+pub const OVERLAY_OUTLINE: usize = 1;
+/// The capital height of the native live-view text, such as the focus
+/// distance "2.5m".
+pub const OVERLAY_CAPITAL: usize = 24;
+/// Rows above the capitals for ascenders and round overshoot, such as the d
+/// and the G of "GRKit Loaded", and rows below the baseline for overshoot.
+const OVERLAY_ABOVE: usize = 2;
+const OVERLAY_BELOW: usize = 1;
+/// The height of each label: the capitals, the rows above and below them,
+/// and the outline.
+pub const OVERLAY_LABEL_HEIGHT: usize =
+    OVERLAY_ABOVE + OVERLAY_CAPITAL + OVERLAY_BELOW + 2 * OVERLAY_OUTLINE;
+/// Roboto Condensed Light, an instance of Roboto Condensed 3.008 at weight 300
+/// with the ASCII characters only, SIL Open Font License 1.1
+/// (`assets/RobotoCondensed-LICENSE.txt`). Its shapes and weight are close
+/// to those of the native live-view text.
+const OVERLAY_FONT: &[u8] = include_bytes!("../assets/RobotoCondensed-Light.ttf");
+/// The native text is narrower than Roboto Condensed: its digits are about 13
+/// pixels wide.
+const OVERLAY_CONDENSE: f32 = 0.87;
+/// The native text has more space between its characters.
+const OVERLAY_TRACKING: f32 = 3.0;
+
+/// The text coverage of `label`: its width, then one coverage value for each
+/// pixel, row by row. The capitals start `OVERLAY_OUTLINE + OVERLAY_ABOVE`
+/// rows from the top, and the text starts after the left outline.
+fn overlay_coverage(label: &str) -> (usize, Vec<f32>) {
+    let font = FontRef::try_from_slice(OVERLAY_FONT).expect("embedded font is valid");
+    let unit = font
+        .outline_glyph(font.glyph_id('H').with_scale(100.0))
+        .expect("the font has H")
+        .px_bounds()
+        .height()
+        / 100.0;
+    let size = OVERLAY_CAPITAL as f32 / unit;
+    let scale = PxScale {
+        x: size * OVERLAY_CONDENSE,
+        y: size,
+    };
+    let scaled = font.as_scaled(scale);
+    let mut caret = 0.0;
+    let mut previous = None;
+    let mut outlines = Vec::new();
+    for character in label.chars() {
+        let id = scaled.glyph_id(character);
+        if let Some(previous) = previous {
+            caret += scaled.kern(previous, id);
+        }
+        outlines.extend(font.outline_glyph(id.with_scale_and_position(scale, point(caret, 0.0))));
+        caret += scaled.h_advance(id) + OVERLAY_TRACKING;
+        previous = Some(id);
+    }
+    let bounds = outlines
+        .iter()
+        .map(|outline| outline.px_bounds())
+        .reduce(|a, b| Rect {
+            min: point(a.min.x.min(b.min.x), a.min.y.min(b.min.y)),
+            max: point(a.max.x.max(b.max.x), a.max.y.max(b.max.y)),
+        })
+        .expect("a label has outlines");
+    let width = bounds.width().ceil() as usize + 2 * OVERLAY_OUTLINE;
+    // Whole-pixel offsets keep vertical and horizontal stems sharp. The
+    // baseline is the row after the capitals.
+    let dx = OVERLAY_OUTLINE as i32 - bounds.min.x.floor() as i32;
+    let dy = (OVERLAY_OUTLINE + OVERLAY_ABOVE + OVERLAY_CAPITAL) as i32;
+    let mut coverage = vec![0f32; width * OVERLAY_LABEL_HEIGHT];
+    for outline in outlines {
+        let origin = outline.px_bounds().min;
+        outline.draw(|x, y, value| {
+            let (x, y) = (
+                origin.x as i32 + x as i32 + dx,
+                origin.y as i32 + y as i32 + dy,
+            );
+            if (0..width as i32).contains(&x) && (0..OVERLAY_LABEL_HEIGHT as i32).contains(&y) {
+                let cell = &mut coverage[y as usize * width + x as usize];
+                *cell = (*cell + value).min(1.0);
+            }
+        });
+    }
+    (width, coverage)
+}
+
+/// The pixels of `label`: 0 where the label is transparent, else the gray of
+/// an opaque pixel, 1 for the black outline and up to 255 for white text.
+/// Text edges blend toward the outline.
+fn overlay_label(label: &str) -> (usize, Vec<u8>) {
+    let (width, coverage) = overlay_coverage(label);
+    // The rasterizer leaves tiny coverage between overlapping contours, so
+    // only coverage that rounds to a gray counts as text.
+    let coverage: Vec<f32> = coverage
+        .into_iter()
+        .map(|value| if value * 255.0 < 0.5 { 0.0 } else { value })
+        .collect();
+    let height = OVERLAY_LABEL_HEIGHT;
+    let radius = OVERLAY_OUTLINE as i32;
+    let inked = |x: i32, y: i32| {
+        (0..width as i32).contains(&x)
+            && (0..height as i32).contains(&y)
+            && coverage[y as usize * width + x as usize] > 0.0
+    };
+    let mut pixels = vec![0u8; width * height];
+    for y in 0..height as i32 {
+        for x in 0..width as i32 {
+            let value = coverage[y as usize * width + x as usize];
+            // A round outline: each pixel within the radius of the text.
+            let outlined = (-radius..=radius).any(|oy| {
+                (-radius..=radius)
+                    .any(|ox| ox * ox + oy * oy <= radius * radius + 1 && inked(x + ox, y + oy))
+            });
+            pixels[y as usize * width + x as usize] = if value > 0.0 {
+                ((value * 255.0).round() as u8).max(1)
+            } else if outlined {
+                1
+            } else {
+                0
+            };
+        }
+    }
+    (width, pixels)
+}
+
+/// The label table that the installer copies after the menu text
+/// (`GRKIT_LABELS` in `runtime/abi.h`): for label n, a u16 width, a u16
+/// height, and the u32 offset of its pixels at 8 n, then the pixels of each
+/// label (`overlay_label`). The live view draws them as its own text: white
+/// with a black outline, without a background.
+pub fn overlay_labels() -> Vec<u8> {
+    let mut table = vec![0; OVERLAY_LABELS.len() * 8];
+    for (index, label) in OVERLAY_LABELS.iter().enumerate() {
+        let (width, pixels) = overlay_label(label);
+        let offset = table.len() as u32;
+        table[index * 8..index * 8 + 2].copy_from_slice(&(width as u16).to_le_bytes());
+        table[index * 8 + 2..index * 8 + 4]
+            .copy_from_slice(&(OVERLAY_LABEL_HEIGHT as u16).to_le_bytes());
+        table[index * 8 + 4..index * 8 + 8].copy_from_slice(&offset.to_le_bytes());
+        table.extend(pixels);
+    }
+    // Word alignment for the next copy.
+    table.resize(table.len().next_multiple_of(4), 0);
+    table
 }

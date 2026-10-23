@@ -21,7 +21,7 @@ After the installation, you can remove `00078560.636` and `DEVELOP.MOD` from the
 
 ## Use
 
-Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late.
+Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late. When GRKit has loaded, the shooting screen shows **GRKit** at the top for a few seconds. This label needs the Framing or Guides module.
 
 - **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. On the GRK menu, press Fn on the Image Control row to adjust the selected effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings. The effects were made for GR III, so their colors can differ on GR IV.
 - **Framing:** select XPan. The viewfinder stays 3:2 and dims the area outside the photo. XPan also works when the native aspect ratio is 16:9. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
@@ -46,7 +46,7 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 
 ### GRK does not show in ADJ
 
-1. Wait a few seconds after power-on. GRKit loads after the camera starts.
+1. Wait a few seconds after power-on. GRKit loads after the camera starts. When it has loaded, the shooting screen shows **GRKit** at the top for a few seconds.
 2. Look for GRK in ADJ. It is not in MENU.
 3. If the camera did not show Mode Set Command in step 3, do step 3 again.
 4. Make sure that the card root has the `SCRIPT` folder. Copy all the contents of `SD_ROOT`, including `SCRIPT`.

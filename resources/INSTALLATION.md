@@ -18,7 +18,7 @@ After the installation, you can remove `00078350.588` and `DEVELOP.MOD` from the
 
 ## Use
 
-Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late.
+Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late. When GRKit has loaded, the shooting screen shows **GRKit** at the top for a few seconds. This label needs the Framing or Guides module.
 
 ![The GRKit page lists the modules and shows the current effect.](images/grkit-root.jpg)
 
@@ -47,7 +47,7 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 
 ### GRK does not show in ADJ
 
-1. Wait a few seconds after power-on. GRKit loads after the camera starts.
+1. Wait a few seconds after power-on. GRKit loads after the camera starts. When it has loaded, the shooting screen shows **GRKit** at the top for a few seconds.
 2. Look for GRK in ADJ. It is not in MENU.
 3. If the camera did not show Mode Set Command in step 3, do step 3 again.
 4. Make sure that the card root has the `SCRIPT` folder. Copy all the contents of `SD_ROOT`, including `SCRIPT`.

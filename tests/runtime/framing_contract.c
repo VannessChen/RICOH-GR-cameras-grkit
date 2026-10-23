@@ -51,6 +51,20 @@ static uint32_t display_mode;
 #define FRAMING_DISPLAY_MODE() display_mode
 static uint32_t invalidations, invalidated;
 #define FRAMING_INVALIDATE(view) (++invalidations, invalidated = (view))
+static uint32_t local_second;
+#define FRAMING_SECOND() local_second
+/* The label table of the build, written by the test runner. The header puts
+   it at TEST_LABELS. */
+#include "abi.h"
+#include "overlay_labels.h"
+#define TEST_RECORDS 0x70000000U
+#define TEST_LABELS (TEST_RECORDS+GRKIT_PICTURE_SCRATCH+GRKIT_TEXT_SIZE)
+static const volatile uint8_t *mapped_labels(uint32_t address)
+{
+    assert(address == TEST_LABELS);
+    return overlay_labels;
+}
+#define LABEL_MAP(address) mapped_labels(address)
 #include "framing.c"
 
 static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
@@ -83,6 +97,7 @@ static void reset(void)
     /* Every plugin is installed. */
     header[GRKIT_HOST_PLUGINS/4]=(1U<<PLUGIN_COUNT)-1;
     header[GRKIT_HOST_ACTIVE/4]=0x59001000;
+    header[GRKIT_HOST_RECORDS/4]=TEST_RECORDS;
     header[GRKIT_HOST_FRAME_RATIO/4]=1;
     native_aspect=0;
     display_mode=0;
@@ -104,46 +119,25 @@ static void assert_rejected(void)
     assert_untouched();
     assert(header[GRKIT_HOST_FRAME_SKIPPED/4]==1);
 }
-/* These raster fixtures pin the badge independently of the runtime glyph table.
-   Each character cell has five columns and a one-column gap, scaled by two. */
-static const char *badge_rows[][7] = {
-    {
-        "#...#.####.............",
-        "#...#.#...#............",
-        ".#.#..#...#..###..#.##.",
-        "..#...####......#.##..#",
-        ".#.#..#......####.#...#",
-        "#...#.#.....#...#.#...#",
-        "#...#.#......####.#...#"
-    },
-    {
-        "..#.....##.........###.",
-        ".##....#.....##...#...#",
-        "..#...#......##...#...#",
-        "..#...####.........####",
-        "..#...#...#..##.......#",
-        "..#...#...#..##......#.",
-        ".###...###.........##.."
-    },
-    {
-        "...#.........###.",
-        "..##...##...#...#",
-        ".#.#...##.......#",
-        "#..#..........##.",
-        "#####..##.......#",
-        "...#...##...#...#",
-        "...#.........###."
-    }
-};
+/* A field of the label table. */
+static u32 table_field(u32 at,u32 bytes)
+{
+    u32 value=0;
+    for(u32 i=0; i<bytes; ++i) value|=(u32)overlay_labels[at+i]<<(8*i);
+    return value;
+}
+/* The pixel of label n at (x, y) when its top left is at (left, top): the
+   canvas where the label is transparent, else an opaque gray. */
+static u32 expected_label(u32 label,u32 left,u32 top,u32 x,u32 y,u32 background)
+{
+    u32 width=table_field(label*8,2), height=table_field(label*8+2,2);
+    if(x<left || x>=left+width || y<top || y>=top+height) return background;
+    u32 value=overlay_labels[table_field(label*8+4,4)+(y-top)*width+(x-left)];
+    return value ? 0xff000000U|value*0x010101U : background;
+}
 static u32 expected_badge(u32 ratio,u32 x,u32 y,u32 background)
 {
-    if(!ratio || x<204 || x>=270 || y<46 || y>=68) return background;
-    if(x>=208 && y>=50 && y<64) {
-        const char *line=badge_rows[ratio-1][(y-50)/2];
-        u32 column=(x-208)/2;
-        if(column<strlen(line) && line[column]=='#') return 0xffffffff;
-    }
-    return 0x80000000;
+    return ratio ? expected_label(ratio,LABEL_LEFT,LABEL_TOP,x,y,background) : background;
 }
 /* Independent guide fixtures. Each value is a division, and its 2-pixel line
    covers the pixel before it and the pixel at it, as the native grid does.
@@ -175,6 +169,28 @@ static u32 expected_guide(u32 ratio,u32 style,u32 x,u32 y)
         }
     }
     return 0;
+}
+/* The load cue is centered in the row of the Framing label. */
+static u32 expected_cue(u32 x,u32 y,u32 background)
+{
+    return expected_label(0,360-table_field(0,2)/2,LABEL_TOP,x,y,background);
+}
+/* Only the cue is on the canvas. */
+static void assert_cue(void)
+{
+    for(u32 y=0; y<480; ++y) for(u32 x=0; x<TEST_STRIDE; ++x)
+        assert(pixels[1+y*TEST_STRIDE+x]==(x<720 ? expected_cue(x,y,SENTINEL) : SENTINEL));
+    assert(pixels[0]==SENTINEL);
+}
+/* A reset with no layer and a pending cue. */
+static void reset_cue(u32 second)
+{
+    reset();
+    header[GRKIT_HOST_FRAME_RATIO/4]=0;
+    header[GRKIT_HOST_LOAD_CUE/4]=CUE_PENDING;
+    local_second=second;
+    invalidations=0;
+    invalidated=0;
 }
 static void assert_guides(u32 ratio,u32 style,u32 badge)
 {
@@ -226,8 +242,9 @@ int main(void)
     assert(BYTE(TEST_CANVAS,0xa0)==0);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
-    /* Badge replacement erases old characters even before a native full clear.
-       A target paints only the ratios that it offers. */
+    /* Each draw requests the native full clear, which removes the previous
+       label. A label keeps the mask under its transparent pixels. A target
+       paints only the ratios that it offers. */
     reset();
     const u32 transitions[]={1,2,3,1,3,2};
     for(u32 i=0, draws=0; i<sizeof(transitions)/sizeof(transitions[0]); ++i) {
@@ -237,9 +254,13 @@ int main(void)
         BYTE(TEST_CANVAS,0xa0)=0;
         framing_prepare(TEST_CANVAS);
         assert(BYTE(TEST_CANVAS,0xa0)==1);
+        for(u32 j=1; j<=TEST_STRIDE*480; ++j) pixels[j]=0;
         framing_paint(TEST_CANVAS,TEST_BITMAP);
-        for(u32 y=46; y<68; ++y) for(u32 x=204; x<270; ++x)
-            assert(pixels[1+y*TEST_STRIDE+x]==expected_badge(ratio,x,y,SENTINEL));
+        const u32 *box=boxes[ratio];
+        for(u32 y=0; y<120; ++y) for(u32 x=0; x<720; ++x) {
+            u32 masked=x<box[0] || x>=box[2] || y<box[1] || y>=box[3];
+            assert(pixels[1+y*TEST_STRIDE+x]==expected_badge(ratio,x,y,masked ? 0x80000000U : 0));
+        }
         assert(header[GRKIT_HOST_FRAME_DRAWS/4]==++draws);
     }
     /* The ADJ preview canvas shows the highlighted ratio's mask without a badge. */
@@ -482,5 +503,86 @@ int main(void)
     assert(BYTE(TEST_CANVAS,0xa0)==0);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
+
+    /* The load cue starts at the first still live view and redraws it. */
+    reset_cue(1000);
+    framing_bind(TEST_OWNER);
+    assert(header[GRKIT_HOST_LOAD_CUE/4]==1002);
+    assert(invalidations==1 && invalidated==TEST_CANVAS);
+    framing_prepare(TEST_CANVAS);
+    assert(BYTE(TEST_CANVAS,0xa0)==1);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert_cue();
+    assert(header[GRKIT_HOST_FRAME_DRAWS/4]==1);
+    assert(header[GRKIT_HOST_FRAME_BITMAP/4]==TEST_BITMAP);
+    /* It stays for CUE_SECONDS without more redraws, then ends with one. */
+    local_second=1000+CUE_SECONDS-1;
+    framing_bind(TEST_OWNER);
+    assert(header[GRKIT_HOST_LOAD_CUE/4]==1002 && invalidations==1);
+    local_second=1000+CUE_SECONDS;
+    framing_bind(TEST_OWNER);
+    assert(header[GRKIT_HOST_LOAD_CUE/4]==0 && invalidations==2);
+    /* The next draw clears the native bitmap once, as for Off. */
+    BYTE(TEST_CANVAS,0xa0)=0;
+    framing_prepare(TEST_CANVAS);
+    assert(BYTE(TEST_CANVAS,0xa0)==1);
+    for(u32 i=1; i<=TEST_STRIDE*480; ++i) pixels[i]=0;
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert(header[GRKIT_HOST_FRAME_BITMAP/4]==0);
+    for(u32 i=1; i<=TEST_STRIDE*480; ++i) assert(pixels[i]==0);
+    framing_bind(TEST_OWNER);
+    assert(invalidations==2);
+
+    /* A cue that starts before midnight ends after it. */
+    reset_cue(24*3600-2);
+    framing_bind(TEST_OWNER);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    local_second=CUE_SECONDS-3;
+    framing_bind(TEST_OWNER);
+    assert(header[GRKIT_HOST_LOAD_CUE/4]==24*3600 && invalidations==1);
+    local_second=CUE_SECONDS-2;
+    framing_bind(TEST_OWNER);
+    assert(header[GRKIT_HOST_LOAD_CUE/4]==0 && invalidations==2);
+
+    /* The movie live view keeps the cue pending. */
+    reset_cue(1000);
+    BYTE(TEST_OWNER,LIVEVIEW_MOVIE)=1;
+    framing_bind(TEST_OWNER);
+    assert(header[GRKIT_HOST_LOAD_CUE/4]==CUE_PENDING && invalidations==0);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert_untouched();
+    BYTE(TEST_OWNER,LIVEVIEW_MOVIE)=0;
+    framing_bind(TEST_OWNER);
+    assert(header[GRKIT_HOST_LOAD_CUE/4]==1002 && invalidations==1);
+
+    /* DISP Off hides the cue, and its time still runs. */
+    reset_cue(1000);
+    display_mode=DISPLAY_OFF;
+    framing_bind(TEST_OWNER);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert_untouched();
+    assert(header[GRKIT_HOST_FRAME_SKIPPED/4]==1);
+    /* Each other display shows it. */
+    for(u32 mode=DISPLAY_FULL; mode<DISPLAY_OFF; ++mode) {
+        reset_cue(1000);
+        display_mode=mode;
+        framing_bind(TEST_OWNER);
+        framing_paint(TEST_CANVAS,TEST_BITMAP);
+        assert_cue();
+    }
+
+    /* The cue shows in a native aspect where the layers do not. */
+    reset_cue(1000);
+    header[GRKIT_HOST_FRAME_RATIO/4]=LAST_RATIO;
+    native_aspect=3;
+    framing_bind(TEST_OWNER);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert_cue();
+
+    /* The cue does not start without the canvas of a still live view. */
+    reset_cue(1000);
+    WORD(TEST_OWNER,LIVEVIEW_CANVAS)=0;
+    framing_bind(TEST_OWNER);
+    assert(header[GRKIT_HOST_LOAD_CUE/4]==CUE_PENDING && invalidations==0);
     return 0;
 }

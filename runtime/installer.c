@@ -455,6 +455,8 @@ static int install(void)
     store(base + GRKIT_HOST_COUNT, count); store(base + GRKIT_HOST_RECORDS, base + GRKIT_HOST_HEADER_SIZE);
     store(base + GRKIT_HOST_MAGIC, GRKIT_HOST_MAGIC_VALUE); store(base + GRKIT_HOST_VERSION, GRKIT_HOST_VERSION_VALUE);
     store(base + GRKIT_HOST_PLUGINS, selected);
+    /* The next still live view shows that GRKit has loaded (runtime/framing.c). */
+    store(base + GRKIT_HOST_LOAD_CUE, 1);
 #ifndef GRKIT_NO_MODULES
     for (u32 i = 0; i < icon_chunks; ++i) {
         zero(at(icon_bases[i]), chunk_count(i) * ICON_STRIDE);
@@ -465,6 +467,8 @@ static int install(void)
     _Static_assert(MENU_TEXT_BYTES <= GRKIT_TEXT_SUMMARY, "Menu text table overlaps the summaries");
     u32 text = base + GRKIT_HOST_HEADER_SIZE + count * GRKIT_RECORD_SIZE + GRKIT_PICTURE_SCRATCH;
     copy(at(text), menu_text, MENU_TEXT_BYTES);
+    _Static_assert(LABELS_BYTES <= GRKIT_LABELS_SIZE, "Live-view labels exceed their area");
+    copy(at(text + GRKIT_TEXT_SIZE), overlay_labels, LABELS_BYTES);
 #ifndef GRKIT_NO_IMAGE_CONTROL
     for (u32 i = 0; i < count; ++i) {
         u32 record = base + GRKIT_HOST_HEADER_SIZE + i * GRKIT_RECORD_SIZE;

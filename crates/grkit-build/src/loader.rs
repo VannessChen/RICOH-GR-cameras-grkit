@@ -174,6 +174,10 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         let text = grkit_core::menu_text::table(version)?;
         writeln!(result, "#define MENU_TEXT_BYTES {}U", text.len())?;
         array(&mut result, "menu_text", &text, true);
+        // The live-view labels follow the menu text.
+        let labels = grkit_core::artwork::overlay_labels();
+        writeln!(result, "#define LABELS_BYTES {}U", labels.len())?;
+        array(&mut result, "overlay_labels", &labels, true);
     }
     if let Some(native) = image_control {
         let mut tables = Vec::new();

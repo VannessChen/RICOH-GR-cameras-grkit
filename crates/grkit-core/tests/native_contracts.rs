@@ -621,14 +621,25 @@ fn native_framing_contract_preserves_canvas_bounds_and_settings() {
         return;
     };
     let temporary = tempfile::tempdir().unwrap();
+    let labels = grkit_core::artwork::overlay_labels()
+        .iter()
+        .map(u8::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    std::fs::write(
+        temporary.path().join("overlay_labels.h"),
+        format!("static const unsigned char overlay_labels[] = {{{labels}}};\n"),
+    )
+    .unwrap();
     for (index, target) in targets().iter().enumerate() {
         let executable = temporary.path().join(format!("framing_contract_{index}"));
-        compile_for(
+        compile_with(
             target,
             &compiler,
             &root().join("tests/runtime/framing_contract.c"),
             &executable,
             &[],
+            Some(temporary.path()),
         );
         checked(&mut Command::new(&executable));
     }

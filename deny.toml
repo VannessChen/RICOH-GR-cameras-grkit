@@ -6,7 +6,7 @@ all-features = true
 [advisories]
 # Each ignored advisory needs a reason. Remove the entry when the dependency is updated.
 ignore = [
-    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained. ab_glyph uses it only to parse the bundled Inter fonts, which are trusted input." },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained. ab_glyph uses it only to parse the bundled Roboto Condensed fonts, which are trusted input." },
 ]
 
 [licenses]

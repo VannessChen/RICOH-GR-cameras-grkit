@@ -129,6 +129,19 @@ typedef struct {
 #define DISPLAY_NO_INFO 2U
 #define DISPLAY_OFF 3U
 GRKIT_MAYBE_UNUSED static u32 native_display(void);
+/* Live-view labels (GRKIT_LABELS): the load cue, then Framing row n. */
+#define LABEL_GRKIT 0U
+#define LABEL_FRAMING(n) (n)
+/* The top of a label in the second row of the native live-view text. Its
+   capitals then share the baseline of the focus distance, such as "2.5m". */
+#define LABEL_TOP 45U
+/* The left edge of a label whose text lines up with the native icons of the
+   top row. The outline lies left of the text. */
+#define LABEL_LEFT 7U
+/* Draw a label with its top left at (left, top) in the style of the native
+   live-view text: white Roboto Condensed Light with a black outline. A label
+   that does not fit the surface draws nothing. */
+GRKIT_MAYBE_UNUSED static void overlay_label(const Surface *s,u32 label,u32 left,u32 top);
 #ifndef OVERLAY_PIXELS
 #define OVERLAY_PIXELS(address) ((volatile u32 *)(address))
 #endif
