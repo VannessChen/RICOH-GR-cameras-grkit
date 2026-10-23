@@ -23,6 +23,8 @@ static unsigned test_language;
 #define STAMP_STYLE_ICON(style) (STAMP_ICON + (style))
 #define GRAIN_ICON (STAMP_ICON + DATE_STAMP_TILES)
 #define GRAIN_LEVEL_ICON(level) (GRAIN_ICON + (level))
+/* The last Framing ratio of the target: 4:3 on GR III, XPan on GR IV. */
+#define LAST_RATIO (FRAMING_RATIO_COUNT - 1)
 /* A page icon as its global ID. */
 #define PAGE_ICON(module, row) module_icon((module), modules[(module)].icon(test_header, (row)))
 #define CURRENT_ICON(row) module_icon(current_index(test_header), current_module(test_header)->icon(test_header, (row)))
@@ -43,6 +45,7 @@ static int same(const u16 *actual, const char *expected)
     return actual[i] == 0;
 }
 static const char *const ratio_names[] = {"Off", "XPan 65:24", "16:9", "4:3"};
+static const char *const ratio_summaries[] = {"Framing: Off", "Framing: XPan", "Framing: 16:9", "Framing: 4:3"};
 static const char *const guide_names[] = {"Off", "Thirds", "Center", "Golden Ratio", "Diagonals", "Thirds + Center"};
 static const char *const stamp_names[] = {"Off", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"};
 static const char *const grain_names[] = {"Off", "Weak", "Medium", "Strong"};
@@ -134,15 +137,15 @@ int main(void)
     assert(!menu_press(1, 0));
     assert(!menu_press(2, 1));
     assert(!menu_press(2, 100));
-    assert(back_event(test_header, 5, 1) == 1);
-    assert(back_event(test_header, 5, 1) == 2);
+    assert(back_event(test_header, EV_SWITCH, 1) == 1);
+    assert(back_event(test_header, EV_SWITCH, 1) == 2);
     assert(back_event(test_header, 0x19d, 1) == 0);
-    assert(back_event(test_header, 0xd8, 0) == 2);
-    assert(back_event(test_header, 0xd8, 0) == 0);
-    assert(back_event(test_header, 5, 0) == 0);
-    assert(back_event(test_header, 5, 1) == 1);
-    assert(back_event(test_header, 8, 1) == 0);
-    assert(back_event(test_header, 0xd8, 1) == 0);
+    assert(back_event(test_header, EV_CONFIRM, 0) == 2);
+    assert(back_event(test_header, EV_CONFIRM, 0) == 0);
+    assert(back_event(test_header, EV_SWITCH, 0) == 0);
+    assert(back_event(test_header, EV_SWITCH, 1) == 1);
+    assert(back_event(test_header, EV_SWITCH_END, 1) == 0);
+    assert(back_event(test_header, EV_CONFIRM, 1) == 0);
     /* List restoration changes level to native before rebuilding the rows. */
     test_header[GRKIT_HOST_ACTIVE / 4] = 0x59005000;
     test_header[GRKIT_HOST_MENU_CONTROLLER / 4] = 0x1000;
@@ -158,7 +161,7 @@ int main(void)
     menu_changed(0x1000);
     assert(native_changes == 1);
     {
-        const u16 confirm[] = {0xd8};
+        const u16 confirm[] = {EV_CONFIRM};
         test_header[GRKIT_HOST_MENU_LEVEL / 4] = 0;
         test_header[GRKIT_HOST_BACK_PENDING / 4] = 1;
         assert(menu_event(0x1000, confirm) == 0);
@@ -168,21 +171,37 @@ int main(void)
     }
     /* The event ring distinguishes MENU's confirm from OK and ADJ press confirms. */
     test_header[GRKIT_HOST_MENU_EVENTS / 4] = 18;
-    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = 5 | (2 << 16);
-    test_header[GRKIT_HOST_MENU_EVENT_RING / 4 + 1] = 0xd8;
+    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = EV_SWITCH | (2 << 16);
+    test_header[GRKIT_HOST_MENU_EVENT_RING / 4 + 1] = EV_CONFIRM;
     assert(after_menu_switch(test_header));
-    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = 8;
+    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = EV_SWITCH_END;
     assert(!after_menu_switch(test_header));
-    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = 0x1e;
+    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = EV_ADJ_PRESS;
     assert(!after_menu_switch(test_header));
     /* An ADJ press is EV_ADJ_PRESS, then the confirm. OK and MENU are not. */
     assert(after_adj_press(test_header));
-    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = 8 | (2 << 16);
+    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = EV_SWITCH_END | (2 << 16);
     assert(!after_adj_press(test_header));
-    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = 5 | (2 << 16);
+    test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = EV_SWITCH | (2 << 16);
     assert(!after_adj_press(test_header));
     test_header[GRKIT_HOST_MENU_EVENTS / 4] = 0;
     test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = test_header[GRKIT_HOST_MENU_EVENT_RING / 4 + 1] = 0;
+#ifdef EV_FN_ACTION
+    /* GR IV: the Fn press that opens a GRKit parameter page also sends the
+       native Fn action, which must not open the native page. */
+    {
+        const u16 action[] = {EV_FN_ACTION};
+        u32 events = native_events;
+        test_header[GRKIT_HOST_RETURN / 4] = RETURN_OPENING;
+        assert(menu_event(0x1000, action) == 0);
+        test_header[GRKIT_HOST_RETURN / 4] = RETURN_PARAMETERS | RETURN_ROOT;
+        assert(menu_event(0x1000, action) == 0);
+        assert(native_events == events);
+        test_header[GRKIT_HOST_RETURN / 4] = 0;
+        test_header[GRKIT_HOST_MENU_EVENTS / 4] = 0;
+        test_header[GRKIT_HOST_MENU_EVENT_RING / 4] = test_header[GRKIT_HOST_MENU_EVENT_RING / 4 + 1] = 0;
+    }
+#endif
     /* Playback matches only extracted non-native tags with the private code bit. */
     {
         u32 count = test_header[GRKIT_HOST_COUNT / 4];
@@ -205,16 +224,16 @@ int main(void)
     assert(menu_icon(0x166) == 0);
     assert(menu_icon(0x8005) == 0);
     assert(menu_icon(0xffff) == 0);
-    assert(wrapped_edge(0xcf, 3, 0, 0) == 2);
-    assert(wrapped_edge(0xce, 1, 4, 0) == 1);
-    assert(wrapped_edge(0xcf, 1, 2, 0) == 0);
-    assert(wrapped_edge(0xce, 3, 2, 0) == 0);
-    assert(wrapped_edge(0xcf, 4, 0, 1) == 0);
+    assert(wrapped_edge(EV_RIGHT, 3, 0, 0) == 2);
+    assert(wrapped_edge(EV_LEFT, 1, 4, 0) == 1);
+    assert(wrapped_edge(EV_RIGHT, 1, 2, 0) == 0);
+    assert(wrapped_edge(EV_LEFT, 3, 2, 0) == 0);
+    assert(wrapped_edge(EV_RIGHT, 4, 0, 1) == 0);
     assert(wrapped_edge(0x35, 4, 0, 0) == 0);
-    assert(advance_from_private(0xcf, 1) == 1);
-    assert(advance_from_private(0xce, 1) == 0);
-    assert(advance_from_private(0xcf, 2) == 0);
-    assert(advance_from_private(0xce, 2) == 1);
+    assert(advance_from_private(EV_RIGHT, 1) == 1);
+    assert(advance_from_private(EV_LEFT, 1) == 0);
+    assert(advance_from_private(EV_RIGHT, 2) == 0);
+    assert(advance_from_private(EV_LEFT, 2) == 1);
     /* ADJ exits once for the parameter page. An exit from GRKit, or MENU or OK
        that closed ADJ from GRKit, opens GRKit at the next ADJ. Any other exit
        ends the return. */
@@ -262,21 +281,25 @@ int main(void)
     assert(current_module(test_header) == &modules[1]);
     assert(same(current_module(test_header)->summary(test_header), "Framing: Off"));
     assert(PAGE_ICON(1, 1) == PLUGIN_ICON);
-    test_header[GRKIT_HOST_FRAME_RATIO / 4] = 2;
-    assert(PAGE_ICON(1, 1) == FRAMING_RATIO_ICON(2));
-    /* Framing lists the ratios directly and opens at the selected one. */
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = LAST_RATIO;
+    assert(PAGE_ICON(1, 1) == FRAMING_RATIO_ICON(LAST_RATIO));
+    /* A ratio that the target does not offer reads as Off. */
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = FRAMING_RATIO_COUNT;
+    assert(PAGE_ICON(1, 1) == FRAMING_RATIO_ICON(0));
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = LAST_RATIO;
+    /* Framing lists the ratios of the target and opens at the selected one. */
     menu_confirm(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2);
-    assert(count(test_header) == 4);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MENU_CURSOR / 4] == LAST_RATIO);
+    assert(count(test_header) == FRAMING_RATIO_COUNT);
     assert(same(current_module(test_header)->title(test_header), "Framing"));
-    for (u32 row = 0; row < 4; ++row) {
+    for (u32 row = 0; row < FRAMING_RATIO_COUNT; ++row) {
         test_header[GRKIT_HOST_MENU_CURSOR / 4] = row;
         menu_confirm(test_header);
         assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE);
         assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == row);
         assert(framing_requests == row + 1);
         assert(current_module(test_header)->checked(test_header, row));
-        assert(!current_module(test_header)->checked(test_header, (row + 1) % 4));
+        assert(!current_module(test_header)->checked(test_header, (row + 1) % FRAMING_RATIO_COUNT));
         assert(same(current_module(test_header)->label(test_header, row), ratio_names[row]));
         assert(CURRENT_ICON(row) == (row ? FRAMING_RATIO_ICON(row) : 0x7fff));
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
@@ -291,22 +314,22 @@ int main(void)
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 1);
     frame_preview(test_header, 0x5a000000, 1);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 0);
-    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 3;
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = LAST_RATIO;
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 1);
-    /* Other ADJ pages show the committed ratio, here 4:3. */
+    /* Other ADJ pages show the committed ratio, here the last one. */
     frame_preview(test_header, 0x5b000000, 0);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 4);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == LAST_RATIO + 1);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5b000000);
     /* A committed Off ends the mask but keeps the canvas for one erasing draw. */
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 0;
     frame_preview(test_header, 0x5b000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5b000000);
-    test_header[GRKIT_HOST_FRAME_RATIO / 4] = 3;
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = LAST_RATIO;
     test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] = 0;
     assert(!menu_back(test_header));
-    assert(same(current_module(test_header)->summary(test_header), "Framing: 4:3"));
+    assert(same(current_module(test_header)->summary(test_header), ratio_summaries[LAST_RATIO]));
     /* Guides opens at the committed style and commits only its own setting. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
@@ -329,7 +352,7 @@ int main(void)
             assert(!current_module(test_header)->checked(test_header, (row + 1) % 6));
             assert(same(current_module(test_header)->label(test_header, row), guide_names[row]));
             assert(CURRENT_ICON(row) == (row ? GUIDE_STYLE_ICON(row) : 0x7fff));
-            assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 3);
+            assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == LAST_RATIO);
             assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
         }
         assert(framing_requests == requests);
@@ -337,7 +360,7 @@ int main(void)
     /* The Guides page previews its highlighted style inside the committed ratio. */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
     frame_preview(test_header, 0x5a000000, 0);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 4);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == LAST_RATIO + 1);
     assert(test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 2);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5a000000);
     /* A highlighted Off with no ratio keeps the canvas for the next row. */
@@ -356,9 +379,9 @@ int main(void)
     /* The Framing page keeps the committed style with its highlighted ratio. */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     menu_confirm(test_header);
-    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     frame_preview(test_header, 0x5b000000, 0);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 3);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 2);
     assert(test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 4);
     /* Committed Off for both ends the drawing. */
     assert(menu_back(test_header));
@@ -368,7 +391,7 @@ int main(void)
     test_header[GRKIT_HOST_GUIDE / 4] = 999;
     assert(guide_style(test_header) == 0);
     test_header[GRKIT_HOST_GUIDE / 4] = 0;
-    test_header[GRKIT_HOST_FRAME_RATIO / 4] = 3;
+    test_header[GRKIT_HOST_FRAME_RATIO / 4] = LAST_RATIO;
     test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] = 0;
     /* Date Stamp lists its styles, opens at the committed one, and changes nothing else. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
@@ -388,12 +411,12 @@ int main(void)
         assert(current_module(test_header)->checked(test_header, row));
         assert(same(current_module(test_header)->label(test_header, row), stamp_names[row]));
         assert(CURRENT_ICON(row) == (row ? STAMP_STYLE_ICON(row) : 0x7fff));
-        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 3 && test_header[GRKIT_HOST_GUIDE / 4] == 0);
+        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == LAST_RATIO && test_header[GRKIT_HOST_GUIDE / 4] == 0);
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
     }
     /* The Date Stamp page keeps the committed mask and guides on the ADJ canvas. */
     frame_preview(test_header, 0x5c000000, 0);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 4 && test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 0);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == LAST_RATIO + 1 && test_header[GRKIT_HOST_GUIDE_PREVIEW / 4] == 0);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3);
     assert(same(current_module(test_header)->summary(test_header), "Date Imprint: D M 'YY H:MM"));
     test_header[GRKIT_HOST_STAMP / 4] = 999;
@@ -418,7 +441,7 @@ int main(void)
         assert(current_module(test_header)->checked(test_header, row));
         assert(same(current_module(test_header)->label(test_header, row), grain_names[row]));
         assert(CURRENT_ICON(row) == (row ? GRAIN_LEVEL_ICON(row) : 0x7fff));
-        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 3 && test_header[GRKIT_HOST_STAMP / 4] == 0);
+        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == LAST_RATIO && test_header[GRKIT_HOST_STAMP / 4] == 0);
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
     }
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 4);
@@ -439,7 +462,7 @@ int main(void)
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 5;
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000 + 4 * GRKIT_RECORD_SIZE);
-    assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 3);
+    assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == LAST_RATIO);
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     test_header[GRKIT_HOST_MODULE / 4] = 999;
@@ -622,6 +645,7 @@ int main(void)
         const Setting *page = modules[PLUGIN_DATE_STAMP].settings;
         volatile u32 *block = settings_block(test_header);
         const u32 view = 0x59100000;
+        static const u32 row_texts[] = SETTINGS_ROW_TEXTS, pages[] = SETTINGS_PAGES;
         assert(same(page[0].label(test_header), "Date Style") && same(page[1].label(test_header), "Date Look"));
         assert(page[0].values(test_header) == 6 && page[1].values(test_header) == 3);
         for (u32 value = 0; value < 6; ++value)
@@ -655,14 +679,14 @@ int main(void)
         block[SETTINGS_VIEWS / 4 + 4] = 0x104;
         assert(menu_text_override(view, SETTINGS_TITLE_TEXT) == ((u32)(block + SETTINGS_VIEWS / 4 + 4) | 1U));
         assert(menu_text_override(view + 4, SETTINGS_TITLE_TEXT) == ((u32)(block + SETTINGS_LABELS / 4) | 1U));
-        assert(menu_text_override(view, 0x1e9) == ((u32)(block + SETTINGS_LABELS / 4 + 2) | 1U));
-        assert(menu_text_override(view, 0x1eb) == ((u32)(block + SETTINGS_LABELS / 4 + 4) | 1U));
+        assert(menu_text_override(view, row_texts[0]) == ((u32)(block + SETTINGS_LABELS / 4 + 2) | 1U));
+        assert(menu_text_override(view, row_texts[1]) == ((u32)(block + SETTINGS_LABELS / 4 + 4) | 1U));
         assert(!menu_text_override(view, 0x16e));
         /* A change to the submenu or to its value pages keeps the page. Any
            other controller, such as ADJ (0x2000000), ends it. */
-        menu_settings_controller(0x20000be);
-        menu_settings_controller(0x20000c3);
-        menu_settings_controller(0x20000c4);
+        menu_settings_controller(SETTINGS_SUBMENU);
+        menu_settings_controller(pages[0]);
+        menu_settings_controller(pages[1]);
         assert(test_header[GRKIT_HOST_SETTINGS / 4] == PLUGIN_DATE_STAMP + 1);
         menu_settings_controller(0x2000000);
         assert(!test_header[GRKIT_HOST_SETTINGS / 4] && !menu_text_override(view, SETTINGS_TITLE_TEXT));

@@ -32,7 +32,8 @@ pub struct Patch {
     pub points: u32,
     pub before: Vec<u8>,
     pub after: Vec<u8>,
-    /// On a relocatable target, what the address moves with. `None` keeps it.
+    /// What the address moves with when the installer relocates the private
+    /// code. `None` keeps it.
     pub site: Option<Anchor>,
 }
 
@@ -61,7 +62,7 @@ pub struct Reference {
 pub struct PatchPlan {
     pub patches: Vec<Patch>,
     pub relocations: Vec<(usize, usize)>,
-    /// The firmware references of a relocatable target.
+    /// The firmware and tail references of the private code.
     pub references: Vec<Reference>,
 }
 #[derive(Debug)]

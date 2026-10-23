@@ -140,10 +140,6 @@ pub struct Layout {
     /// RTOS image into the private tail regions. The installer checks them
     /// before it writes anything.
     pub guards: &'static [(u32, &'static str)],
-    /// The installer relocates the private code to the running build of the
-    /// firmware version (`crate::relocation`). The firmware addresses of the
-    /// code are then `FIRMWARE()` symbols, and the tail follows the image end.
-    pub relocatable: bool,
 }
 
 impl Layout {
@@ -168,18 +164,10 @@ impl Layout {
 pub fn hooks_header(body: &FirmwareImage) -> Result<String> {
     use std::fmt::Write;
     let mut result = format!("/* Generated for {}. */\n", body.target.name);
-    let Some(layout) = body.target.layout else {
-        return Ok(result);
-    };
-    // A relocatable target names each firmware address that the code uses
-    // with `FIRMWARE()` (runtime/firmware.h).
-    let value = |address: u32| {
-        if layout.relocatable {
-            format!("FIRMWARE({address:#x})")
-        } else {
-            format!("{address:#x}")
-        }
-    };
+    // The installer relocates the private code to the running build of the
+    // firmware version (`crate::relocation`), so the code names each firmware
+    // address with `FIRMWARE()` (runtime/firmware.h).
+    let value = |address: u32| format!("FIRMWARE({address:#x})");
     for hook in hooks(body.target)? {
         let address = hook.address;
         let word = u32::from_le_bytes(body.read(address, 4)?.try_into()?);
@@ -202,8 +190,7 @@ const FRAMING_FRAME_LIMIT: &str = "-Wframe-larger-than=1536";
 pub struct Component {
     pub patches: Vec<Patch>,
     pub relocations: Vec<usize>,
-    /// The firmware and tail references of a relocatable target. Patch 0 is
-    /// the payload.
+    /// The firmware and tail references. Patch 0 is the payload.
     pub references: Vec<Reference>,
     pub symbols: BTreeMap<String, u32>,
     pub code_size: usize,
@@ -216,7 +203,7 @@ fn code_component(
     symbols: BTreeMap<String, u32>,
     body: &FirmwareImage,
     (base, end): (u32, u32),
-    references: Option<Vec<Reference>>,
+    references: Vec<Reference>,
 ) -> Result<Component> {
     ensure!(
         u64::from(base) + code.len() as u64 <= u64::from(end),
@@ -237,16 +224,14 @@ fn code_component(
         .collect();
     ensure!(!relocations.is_empty(), "Missing private header literal");
     let code_size = code.len();
-    // On a relocatable target the payload moves with the tail.
-    let site = references.is_some().then_some(Anchor::Tail);
-    let references = references.unwrap_or_default();
     Ok(Component {
         patches: vec![Patch {
             address: base,
             points: 0,
             before: vec![0; code_size],
             after: code,
-            site,
+            // The payload moves with the tail.
+            site: Some(Anchor::Tail),
         }],
         relocations,
         references,
@@ -317,12 +302,10 @@ pub fn processing(
         body,
         tools,
         (base, end),
-        layout.relocatable,
     )?;
     add_patches(
         &mut component,
         body,
-        layout,
         base,
         (Point::Tuning, &[]),
         part_hooks(body, Part::Processing)?,
@@ -388,12 +371,10 @@ pub fn menu(
         body,
         tools,
         (base, end),
-        layout.relocatable,
     )?;
     add_patches(
         &mut component,
         body,
-        layout,
         base,
         (Point::Tuning, layout.instruction_patches),
         part_hooks(body, Part::Menu)?,
@@ -451,14 +432,12 @@ pub fn framing(
         body,
         tools,
         (base, end),
-        layout.relocatable,
     )?;
     // The capture hook changes nothing until a Framing ratio is selected, so
     // the data patches can follow it.
     add_patches(
         &mut component,
         body,
-        layout,
         base,
         (Point::CaptureAspect, layout.framing_patches),
         part_hooks(body, Part::Framing)?,
@@ -466,12 +445,11 @@ pub fn framing(
     Ok(component)
 }
 
-/// The preprocessor definition of the target, and on a relocatable target
-/// no MOVW and MOVT pairs for addresses: a literal word holds each one, so
-/// the installer moves it with one addition.
+/// The preprocessor definition of the target, and no MOVW and MOVT pairs for
+/// addresses: a literal word holds each one, so the installer moves it with
+/// one addition.
 fn target_flags<'a>(layout: &Layout) -> impl Iterator<Item = &'a str> {
-    let define: &'a str = layout.define;
-    std::iter::once(define).chain(layout.relocatable.then_some("-mno-movt"))
+    [layout.define, "-mno-movt"].into_iter()
 }
 
 /// The prefix of the symbol that `FIRMWARE(address)` names (runtime/firmware.h).
@@ -484,7 +462,6 @@ fn linked_component(
     body: &FirmwareImage,
     tools: &Toolchain,
     (base, end): (u32, u32),
-    relocatable: bool,
 ) -> Result<Component> {
     use std::fmt::Write;
     let mut script = format!("SECTIONS {{ . = {base:#x}; .text : {{ *(.text*) *(.rodata*) }} /DISCARD/ : {{ *(.ARM.exidx*) *(.comment*) }} }}\n");
@@ -512,23 +489,18 @@ fn linked_component(
     // without a relocation record, so the installer cannot move it.
     let mut arguments = vec![
         "--pic-veneer".to_owned(),
+        // The relocation records give the references that the installer moves.
+        "--emit-relocs".to_owned(),
         "-T".to_owned(),
         path(&script_path)?.to_owned(),
         "-o".to_owned(),
         path(&elf)?.to_owned(),
     ];
-    if relocatable {
-        arguments.push("--emit-relocs".to_owned());
-    }
     for object in objects {
         arguments.push(path(object)?.to_owned());
     }
     run(&tools.lld, arguments.iter().map(String::as_str))?;
     let (code, absolute, relocations) = elf_text_relocations(&fs::read(elf)?)?;
-    ensure!(
-        relocatable || relocations.is_empty(),
-        "Unresolved text relocations"
-    );
     if let Some(thunk) = absolute
         .keys()
         .find(|symbol| symbol.contains("ABSLongThunk"))
@@ -586,24 +558,12 @@ fn linked_component(
             anchor,
         });
     }
-    code_component(
-        code,
-        symbols,
-        body,
-        (base, end),
-        relocatable.then_some(references),
-    )
+    code_component(code, symbols, body, (base, end), references)
 }
 
-/// Append the entry branch of a hook into the component code. On a
-/// relocatable target the branch moves with its site and with the tail.
-fn push_hook(
-    component: &mut Component,
-    layout: &Layout,
-    base: u32,
-    hook: &Hook,
-    before: Vec<u8>,
-) -> Result<()> {
+/// Append the entry branch of a hook into the component code. The branch
+/// moves with its site and with the tail.
+fn push_hook(component: &mut Component, base: u32, hook: &Hook, before: Vec<u8>) -> Result<()> {
     let (address, name) = (hook.address, hook.spec.symbol);
     let target = base
         .checked_add(
@@ -617,21 +577,18 @@ fn push_hook(
     if hook.spec.link {
         instruction |= 0x01000000;
     }
-    let site = layout.relocatable.then_some(Anchor::Firmware(address));
-    if site.is_some() {
-        component.references.push(Reference {
-            patch: component.patches.len(),
-            offset: 0,
-            branch: true,
-            anchor: Anchor::Tail,
-        });
-    }
+    component.references.push(Reference {
+        patch: component.patches.len(),
+        offset: 0,
+        branch: true,
+        anchor: Anchor::Tail,
+    });
     component.patches.push(Patch {
         address,
         points: hook.spec.point.bit(),
         before,
         after: instruction.to_le_bytes().to_vec(),
-        site,
+        site: Some(Anchor::Firmware(address)),
     });
     Ok(())
 }
@@ -640,7 +597,6 @@ fn push_hook(
 fn add_patches(
     component: &mut Component,
     body: &FirmwareImage,
-    layout: &Layout,
     base: u32,
     instructions: (Point, &[InstructionPatch]),
     hooks: Vec<Hook>,
@@ -652,7 +608,7 @@ fn add_patches(
             before.len() == 4 && body.read(address, 4)? == before,
             "Private hook instruction differs at {address:#x}"
         );
-        push_hook(component, layout, base, hook, before)?;
+        push_hook(component, base, hook, before)?;
     }
     let (point, instructions) = instructions;
     for &(address, before, after) in instructions {
@@ -666,7 +622,7 @@ fn add_patches(
             points: point.bit(),
             before,
             after: hex::decode(after)?,
-            site: layout.relocatable.then_some(Anchor::Firmware(address)),
+            site: Some(Anchor::Firmware(address)),
         });
     }
     Ok(())

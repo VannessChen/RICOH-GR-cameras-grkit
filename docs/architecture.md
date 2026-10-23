@@ -187,5 +187,6 @@ All private code is in the reservation after the RTOS image. GRKit changes no by
 ## Testing
 
 - Rust tests pin the GRF bytes, the artwork, the generated headers, and the loader scripts.
-- Host C tests check the GRF parser, the effect catalog, the menu, Framing, and the picture code.
+- Host C tests check the GRF parser, the effect catalog, the menu, Framing, and the picture code. The menu, Framing, and picture tests run for each target, with the expectations of its family where the behavior differs.
 - `--ignored` tests build the runtime with an ARM toolchain and a local firmware. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+- The synthetic `--ignored` tests need no firmware. They build a target of each family on a pseudo-random image, as the release builds them, and resolve the relocation tables of INSTALL against that image.

@@ -3,7 +3,7 @@
    must add its header here. The build header includes the header of its
    family, runtime/targets/<family>.h. */
 
-/* A firmware address of a relocatable target. The installer finds the address
+/* A firmware address. The installer finds the address
    in the running build of the firmware version and moves each reference
    (crates/grkit-build/src/relocation.rs). The symbol fw_<address> has the
    address of the pinned build. In C the value is opaque, so the compiler keeps

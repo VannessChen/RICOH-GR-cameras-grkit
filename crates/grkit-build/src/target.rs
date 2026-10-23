@@ -72,7 +72,7 @@ pub struct Target {
     pub layout: Option<&'static Layout>,
     /// Native Image Control data, if the family has processing hooks.
     pub image_control: Option<&'static ImageControl>,
-    /// On a relocatable target, the installer data that no firmware code
+    /// The installer data that no firmware code
     /// loads directly: (address, the address that code loads). The address
     /// keeps its offset from the loaded one.
     pub relocation_bases: &'static [(u32, u32)],

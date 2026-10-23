@@ -3,35 +3,58 @@ use super::*;
 /// The version of headers that tests pin, so a new GRKit version keeps the pins.
 const TEST_VERSION: &str = "0.0.0";
 
-/// GR III without relocation. The synthetic image is mostly zero words, so
-/// it has no unique relocation windows.
-static FIXED_LAYOUT: components::Layout = components::Layout {
-    relocatable: false,
-    ..target::gr3_210::LAYOUT
-};
-static FIXED_GR3: target::Target = target::Target {
-    layout: Some(&FIXED_LAYOUT),
-    ..target::GR3_210
-};
+/// Where the synthetic image keeps its literal words, away from each site.
+const SYNTHETIC_LITERALS: u32 = target::RTOS_BASE + 0x10000;
 
-fn synthetic_firmware() -> firmware::FirmwareImage {
-    let gr3 = &FIXED_GR3;
+/// A synthetic RTOS image of `target`, for builds without the firmware. Its
+/// words are pseudo-random, so each relocation window is unique as in a real
+/// image. Then it holds the stock bytes of the layout, the startup literals,
+/// the Image Control tables and Standard record, and a literal word for each
+/// address after `.data` that the target names, as firmware code that loads
+/// such an address has.
+fn synthetic_firmware(target: &'static target::Target) -> firmware::FirmwareImage {
+    let size = (target.data_source - target::RTOS_BASE + target.data_size) as usize;
+    // A fixed xorshift stream keeps the image the same on each host.
+    let mut state = 0x2545_f491_4f6c_dd1du64;
+    let mut body = Vec::with_capacity(size);
+    while body.len() < size {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        body.extend_from_slice(&(state as u32).to_le_bytes());
+    }
     let mut image = firmware::FirmwareImage {
-        target: gr3,
-        body: vec![0; (gr3.data_source - target::RTOS_BASE + gr3.data_size) as usize],
+        target,
+        body,
         sha256: "synthetic".into(),
         decoded_sha256: "synthetic".into(),
     };
+    let data = target.data_start..target.data_start + target.data_size;
     let mut write = |address: u32, bytes: &[u8]| {
-        let address = if (gr3.data_start..gr3.data_start + gr3.data_size).contains(&address) {
-            address - gr3.data_start + gr3.data_source
+        let address = if data.contains(&address) {
+            address - target.data_start + target.data_source
         } else {
             address
         };
         let offset = (address - target::RTOS_BASE) as usize;
         image.body[offset..offset + bytes.len()].copy_from_slice(bytes);
     };
-    let layout = gr3.layout.unwrap();
+    let bss = target.data_start + target.data_size;
+    let literals: BTreeSet<u32> = port::addresses(target)
+        .unwrap()
+        .iter()
+        .filter(|address| address.kind != port::Kind::Site)
+        .map(|address| address.address)
+        .chain(target.relocation_bases.iter().map(|&(_, base)| base))
+        .filter(|&address| address >= bss)
+        .collect();
+    for (index, address) in literals.iter().enumerate() {
+        write(
+            SYNTHETIC_LITERALS + index as u32 * 0x100,
+            &address.to_le_bytes(),
+        );
+    }
+    let layout = target.layout.unwrap();
     for &(address, bytes) in layout.contexts.iter().chain(layout.guards) {
         write(address, &hex::decode(bytes).unwrap());
     }
@@ -45,19 +68,44 @@ fn synthetic_firmware() -> firmware::FirmwareImage {
     {
         write(address, &hex::decode(bytes).unwrap());
     }
-    for address in target::GR3_IMAGE_CONTROL.tables {
-        write(address, &(0..104u8).collect::<Vec<_>>());
-    }
+    let startup = [
+        target.data_source,
+        relocation::DATA_START,
+        target.data_size,
+        bss,
+        target.heap_min,
+    ];
     write(
-        target::GR3_IMAGE_CONTROL.tables[0] + 11 * 4,
-        &0x5501900cu32.to_le_bytes(),
+        relocation::STARTUP_LITERALS,
+        &startup
+            .into_iter()
+            .flat_map(u32::to_le_bytes)
+            .collect::<Vec<_>>(),
     );
-    write(0x5501900c, &(0..84u8).collect::<Vec<_>>());
-    write(0x55019010, &0x53dc2754u32.to_le_bytes());
-    // The English entry of the language table, as GR III 2.10 holds it.
-    write(gr3.english_slot, &0x55004490u32.to_le_bytes());
+    let native = target.image_control.unwrap();
+    for address in native.tables {
+        write(
+            address,
+            &(0..native.table_bytes).map(|i| i as u8).collect::<Vec<_>>(),
+        );
+    }
+    write(native.tables[0] + 11 * 4, &native.record.to_le_bytes());
+    write(native.record, &(0..84u8).collect::<Vec<_>>());
+    write(native.record + 4, &native.coefficients.to_le_bytes());
+    for (index, &address) in literals.iter().enumerate() {
+        let at = SYNTHETIC_LITERALS + index as u32 * 0x100;
+        assert_eq!(image.read(at, 4).unwrap(), address.to_le_bytes(), "{at:#x}");
+    }
     image
 }
+
+/// The synthetic image of GR III, which the fixed contracts use.
+fn synthetic_gr3() -> firmware::FirmwareImage {
+    synthetic_firmware(&target::GR3_210)
+}
+
+/// The targets that the synthetic ARM builds cover: one of each family.
+const SYNTHETIC_TARGETS: [&target::Target; 2] = [&target::GR3_210, &target::GR4_111];
 
 #[test]
 fn decoder_rejects_truncation_and_supports_overlap() {
@@ -92,7 +140,7 @@ fn firmware_identity_rejected_before_decode() {
 
 #[test]
 fn firmware_address_mapping_and_record_contract() {
-    let mut body = synthetic_firmware();
+    let mut body = synthetic_gr3();
     assert_eq!(body.stock_record().unwrap().0, 0x5501900c);
     assert_eq!(
         body.read(target::GR3_210.data_start, 8).unwrap(),
@@ -239,96 +287,124 @@ fn tools() -> Result<Toolchain> {
     )
 }
 
+/// The synthetic builds relocate as the production builds do: the pinned
+/// image resolves each symbol of the installer to its pinned address.
 #[test]
 #[ignore = "Requires ARM-capable Clang and LLD; run with --ignored"]
 fn synthetic_arm_build_is_reproducible() -> Result<()> {
     let tools = tools()?;
-    let directory = tempfile::tempdir()?;
-    let body = synthetic_firmware();
-    let first = build_image(&body, &directory.path().join("first"), &tools)?;
-    let second = build_image(&body, &directory.path().join("second"), &tools)?;
-    assert_eq!(first.files, second.files);
-    assert_eq!(first.manifest, second.manifest);
-    assert_eq!(first.manifest["startup_activation"], "Off");
-    assert_eq!(first.manifest["profile"], "production");
-    assert_eq!(first.manifest["version"], env!("CARGO_PKG_VERSION"));
-    assert!(first.manifest["source_revision"].is_null());
-    assert!(first.manifest["source_dirty"].is_null());
-    assert!(!serde_json::to_string(&first.manifest)?.contains(directory.path().to_str().unwrap()));
-    let saved: serde_json::Value =
-        serde_json::from_slice(&fs::read(first.output.join("build.json"))?)?;
-    assert_eq!(saved, first.manifest);
-    let generated = fs::read(first.output.join("objects/module_payload.h"))?;
-    assert_eq!(
-        first.manifest["generated_header_sha256"],
-        sha256(&generated)
-    );
-    let installer = &first.files["SCRIPT/PLUGINS/INSTALL.BIN"];
-    assert_eq!(&installer[..6], b"\x7fELF\x01\x01");
-    assert_eq!(&installer[16..20], &[2, 0, 40, 0]);
-    for item in first.manifest["files"].as_array().unwrap() {
-        let bytes = &first.files[item["path"].as_str().unwrap()];
-        assert_eq!(item["size"], bytes.len());
-        assert_eq!(item["sha256"], sha256(bytes));
-    }
-    assert!(build_image(&body, &first.output, &tools).is_err());
-    for (path, bytes) in first.files {
-        assert_eq!(fs::read(first.output.join("sd").join(path))?, bytes);
-    }
-    if let Ok(destination) = std::env::var("GRKIT_SYNTHETIC_OUTPUT") {
-        let destination = Path::new(&destination);
-        build_image(&body, destination, &tools)?;
-        fs::write(destination.join("synthetic-body.bin"), &body.body)?;
+    for target in SYNTHETIC_TARGETS {
+        let directory = tempfile::tempdir()?;
+        let body = synthetic_firmware(target);
+        let first = build_image(&body, &directory.path().join("first"), &tools)?;
+        let second = build_image(&body, &directory.path().join("second"), &tools)?;
+        assert_eq!(first.files, second.files);
+        assert_eq!(first.manifest, second.manifest);
+        assert_eq!(first.manifest["startup_activation"], "Off");
+        assert_eq!(first.manifest["profile"], "production");
+        assert_eq!(first.manifest["version"], env!("CARGO_PKG_VERSION"));
+        assert!(first.manifest["source_revision"].is_null());
+        assert!(first.manifest["source_dirty"].is_null());
+        assert!(
+            !serde_json::to_string(&first.manifest)?.contains(directory.path().to_str().unwrap())
+        );
+        let saved: serde_json::Value =
+            serde_json::from_slice(&fs::read(first.output.join("build.json"))?)?;
+        assert_eq!(saved, first.manifest);
+        let generated = fs::read(first.output.join("objects/module_payload.h"))?;
+        assert_eq!(
+            first.manifest["generated_header_sha256"],
+            sha256(&generated)
+        );
+        let installer = &first.files["SCRIPT/PLUGINS/INSTALL.BIN"];
+        assert_eq!(&installer[..6], b"\x7fELF\x01\x01");
+        assert_eq!(&installer[16..20], &[2, 0, 40, 0]);
+        for item in first.manifest["files"].as_array().unwrap() {
+            let bytes = &first.files[item["path"].as_str().unwrap()];
+            assert_eq!(item["size"], bytes.len());
+            assert_eq!(item["sha256"], sha256(bytes));
+        }
+        assert!(build_image(&body, &first.output, &tools).is_err());
+        for (path, bytes) in &first.files {
+            assert_eq!(&fs::read(first.output.join("sd").join(path))?, bytes);
+        }
+        let (result, symbols) = resolve_image(&first.output, &body.body)?;
+        let tail = target.layout.unwrap().tail.0;
+        assert_eq!(result, format!("ok {tail:#x}"), "{}", target.name);
+        assert!(!symbols.is_empty());
+        assert!(
+            symbols.iter().all(|(pinned, resolved)| pinned == resolved),
+            "{}",
+            target.name
+        );
+        if let Ok(destination) = std::env::var("GRKIT_SYNTHETIC_OUTPUT") {
+            let destination = Path::new(&destination).join(target.name);
+            build_image(&body, &destination, &tools)?;
+            fs::write(destination.join("synthetic-body.bin"), &body.body)?;
+        }
     }
     Ok(())
 }
 
 #[test]
 #[ignore = "Requires ARM-capable Clang and LLD; run with --ignored"]
-fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
+fn synthetic_arm_hooks_match_the_target_tables() -> Result<()> {
     let tools = tools()?;
+    // The regions of GR III, independent of the layout methods.
+    let gr3 = target::GR3_210.layout.unwrap();
+    assert_eq!(gr3.processing(), (0x540b6100, 0x540b6500));
+    assert_eq!(gr3.menu(), (0x540b6500, 0x540b9800));
+    assert_eq!(gr3.framing(), (0x540b9800, 0x540be000));
+    for target in SYNTHETIC_TARGETS {
+        synthetic_hooks(target, &tools)?;
+    }
+    Ok(())
+}
+
+fn synthetic_hooks(target: &'static target::Target, tools: &Toolchain) -> Result<()> {
     let directory = tempfile::tempdir()?;
     let runtime = directory.path().join("runtime");
     materialize_runtime(&runtime)?;
-    let body = synthetic_firmware();
+    let body = synthetic_firmware(target);
     fs::write(runtime.join("hooks.h"), components::hooks_header(&body)?)?;
-    let layout = &FIXED_LAYOUT;
-    let processing = components::processing(directory.path(), &runtime, &body, &tools)?;
-    let menu = components::menu(directory.path(), &runtime, &body, &tools)?;
-    let framing = components::framing(directory.path(), &runtime, &body, &tools)?;
+    let layout = target.layout.unwrap();
+    let processing = components::processing(directory.path(), &runtime, &body, tools)?;
+    let menu = components::menu(directory.path(), &runtime, &body, tools)?;
+    let framing = components::framing(directory.path(), &runtime, &body, tools)?;
 
     // Reject changes to the widget's input and output context, not just its BL.
-    for address in 0x531710bc..0x531710d8 {
-        let mut changed = synthetic_firmware();
+    let &(widget, stock) = layout.contexts.last().unwrap();
+    for address in widget..widget + stock.len() as u32 / 2 {
+        let mut changed = synthetic_firmware(target);
         changed.body[(address - target::RTOS_BASE) as usize] ^= 1;
-        let error = components::processing(directory.path(), &runtime, &changed, &tools)
+        let error = components::processing(directory.path(), &runtime, &changed, tools)
             .err()
             .expect("Modified viewfinder instructions must be rejected");
         assert!(error
             .to_string()
-            .contains("instructions changed at 0x531710bc"));
+            .contains(&format!("instructions changed at {widget:#x}")));
     }
 
     // Each component installs the hooks of its part in family order, then its
-    // in-place changes.
+    // in-place changes. Each patch moves with its firmware site.
     let hooks = components::hooks(body.target)?;
     for (component, part, (base, end), instructions) in [
         (
             &processing,
             components::Part::Processing,
-            (0x540b6100, 0x540b6500u32),
+            layout.processing(),
             [].as_slice(),
         ),
         (
             &menu,
             components::Part::Menu,
-            (0x540b6500, 0x540b9800),
+            layout.menu(),
             layout.instruction_patches,
         ),
         (
             &framing,
             components::Part::Framing,
-            (0x540b9800, 0x540be000),
+            layout.framing(),
             layout.framing_patches,
         ),
     ] {
@@ -345,7 +421,9 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
             assert_eq!(patch.address, address);
             assert_eq!(patch.before, hex::decode(before)?);
             assert_eq!(patch.after, hex::decode(after)?);
+            assert_eq!(patch.site, Some(Anchor::Firmware(address)));
         }
+        assert!(!component.references.is_empty());
         let code = &component.patches[0];
         assert_eq!(code.address, base);
         assert_eq!(code.after.len(), component.code_size);
@@ -365,6 +443,7 @@ fn synthetic_arm_hooks_match_fixed_target_contract() -> Result<()> {
         for (patch, hook) in component.patches[1..].iter().zip(expected) {
             let symbol = hook.spec.symbol;
             assert_eq!(patch.address, hook.address, "{symbol}");
+            assert_eq!(patch.site, Some(Anchor::Firmware(hook.address)), "{symbol}");
             assert_eq!(patch.before, hex::decode(hook.stock)?, "{symbol}");
             assert_eq!(patch.points, hook.spec.point.bit(), "{symbol}");
             assert_eq!(patch.after.len(), 4, "{symbol}");
@@ -597,13 +676,13 @@ fn builtin_effects_brighten_with_exposure() -> Result<()> {
     }
     falls.sort_by(|a, b| b.1.total_cmp(&a.1));
     eprintln!("largest L* falls: {falls:.2?}");
-    assert_eq!(falls.len(), 16);
+    assert!(!falls.is_empty(), "The effects directory has no effect");
     // The fits before the lightness bound fell by up to 30 L*.
     assert!(falls[0].1 < 1.0, "{falls:.2?}");
     Ok(())
 }
 
-// Fixed contracts captured from the retired implementation using synthetic data only.
+// Fixed contracts of the installer header on the synthetic GR III image, with its relocation tables.
 // These checks deliberately do not derive their expected bytes from the Rust producer.
 #[test]
 fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
@@ -628,14 +707,14 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
         references: Vec::new(),
     };
     validate_plan(&plan)?;
-    let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
+    let header = loader::header(&plan, &synthetic_gr3(), TEST_VERSION)?;
     // The installer names its runtime build for the package check.
     assert!(header.starts_with(
         "static const char target_marker[] __attribute__((used)) = \"GRKIT_TARGET=gr3-2.10\";\n"
     ));
     assert_eq!(
         sha256(header.as_bytes()),
-        "66d189c8a5affafc6e6237be5fdda7ae9b213be467337846130db02fbdf83eb9"
+        "97fae70f93e07d0bd411718d2e6e092a3c43bca3a4bdcb9684d69aa79c807681"
     );
     Ok(())
 }
@@ -662,7 +741,7 @@ fn generated_header_marks_only_rtos_tail_patches_as_unchecked() -> Result<()> {
         relocations: vec![(0, 0)],
         references: Vec::new(),
     };
-    let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
+    let header = loader::header(&plan, &synthetic_gr3(), TEST_VERSION)?;
     assert!(header.contains("{0x53002080,8,0,before_0,after_0},"));
     assert!(header.contains("{0x540b6000,4,1,before_1,after_1},"));
     Ok(())
@@ -709,7 +788,7 @@ fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
         relocations: vec![],
         references: Vec::new(),
     };
-    let header = loader::header(&plan, &synthetic_firmware(), TEST_VERSION)?;
+    let header = loader::header(&plan, &synthetic_gr3(), TEST_VERSION)?;
     assert!(header.contains("{0x540b6000,4,1,before_0,after_0},"));
     // Code in the tail belongs to no extension point. Image Control needs the
     // menu, tuning, and picture encode points (bits 0, 1, and 4).

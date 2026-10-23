@@ -48,7 +48,6 @@ pub const LAYOUT: Layout = Layout {
     instruction_patches: INSTRUCTION_PATCHES,
     framing_patches: FRAMING_PATCHES,
     guards: GUARDS,
-    relocatable: true,
 };
 
 const SITES: &[Site] = &[

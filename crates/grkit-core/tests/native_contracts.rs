@@ -1,4 +1,6 @@
-//! Compare the portable decoder with the actual installer parser and C ABI.
+//! Host contracts of the native C code: the installer parser and the C ABI
+//! against the Rust tables, and the behavior of the menu, Framing, picture,
+//! catalog, directory, relocation, and selection code.
 
 use grkit_core::{
     effects, menu_text, modules::Selection, packaging, runtime, selective::Selective,
@@ -539,7 +541,6 @@ fn native_menu_contract_preserves_events_icons_and_empty_catalog() {
         return;
     };
     let temporary = tempfile::tempdir().unwrap();
-    let executable = temporary.path().join("menu_contract");
     // The harness reads the label table that the installer copies.
     let table = grkit_core::menu_text::table("0.0.0").unwrap();
     let bytes: Vec<String> = table.iter().map(u8::to_string).collect();
@@ -551,15 +552,19 @@ fn native_menu_contract_preserves_events_icons_and_empty_catalog() {
         ),
     )
     .unwrap();
-    compile_with(
-        GR3_TARGET,
-        &compiler,
-        &root().join("tests/runtime/menu_contract.c"),
-        &executable,
-        &[],
-        Some(temporary.path()),
-    );
-    checked(&mut Command::new(&executable));
+    // The harness gives the behavior of each target where it differs.
+    for (index, target) in targets().iter().enumerate() {
+        let executable = temporary.path().join(format!("menu_contract_{index}"));
+        compile_with(
+            target,
+            &compiler,
+            &root().join("tests/runtime/menu_contract.c"),
+            &executable,
+            &[],
+            Some(temporary.path()),
+        );
+        checked(&mut Command::new(&executable));
+    }
 }
 
 #[test]
@@ -616,14 +621,17 @@ fn native_framing_contract_preserves_canvas_bounds_and_settings() {
         return;
     };
     let temporary = tempfile::tempdir().unwrap();
-    let executable = temporary.path().join("framing_contract");
-    compile(
-        &compiler,
-        &root().join("tests/runtime/framing_contract.c"),
-        &executable,
-        &[],
-    );
-    checked(&mut Command::new(&executable));
+    for (index, target) in targets().iter().enumerate() {
+        let executable = temporary.path().join(format!("framing_contract_{index}"));
+        compile_for(
+            target,
+            &compiler,
+            &root().join("tests/runtime/framing_contract.c"),
+            &executable,
+            &[],
+        );
+        checked(&mut Command::new(&executable));
+    }
 }
 
 #[test]
@@ -670,8 +678,9 @@ fn native_picture_contract_applies_post_matrix_and_stamp() {
     }
 }
 
-/// The host contracts above run the GR III branches of the menu and Framing
-/// code. This check makes every PR compile the code of each target.
+/// The menu, Framing, and picture contracts above run for each target. This
+/// check also compiles the code of each target as it is, without the test
+/// replacements of the harnesses.
 #[test]
 fn runtime_c_sources_compile_for_each_target() {
     let Some(compiler) = compiler() else {

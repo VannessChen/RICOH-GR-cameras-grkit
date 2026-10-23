@@ -67,11 +67,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
     ];
     let mut stock_record = None;
     if modules {
-        let english = u32::from_le_bytes(body.read(target.english_slot, 4)?.try_into()?);
-        constants.extend([
-            ("ENGLISH_SLOT", target.english_slot),
-            ("ORIGINAL_ENGLISH", english),
-        ]);
+        constants.push(("ENGLISH_SLOT", target.english_slot));
         if let Some(native) = image_control {
             let (record_address, record) = body.stock_record()?;
             stock_record = Some(record);
@@ -90,8 +86,9 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         };
         constants.push((name, target.pixel_base_slot));
     }
-    // A relocatable target finds these addresses in the running image.
-    let relocatable = target.layout.is_some_and(|layout| layout.relocatable);
+    // The installer relocates a runtime with modules: it finds these
+    // addresses in the running image.
+    let relocatable = modules;
     let mut addresses = Vec::new();
     if relocatable {
         constants.retain(|&(name, value)| {
@@ -179,18 +176,11 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         array(&mut result, "menu_text", &text, true);
     }
     if let Some(native) = image_control {
-        let tail: Vec<_> = native
-            .record_tail
-            .into_iter()
-            .flat_map(u32::to_le_bytes)
-            .collect();
-        array(&mut result, "initialized_tail", &tail, true);
         let mut tables = Vec::new();
         for address in native.tables {
             tables.extend_from_slice(body.read(address, native.table_bytes as usize)?);
         }
         array(&mut result, "stock_tables", &tables, true);
-        words(&mut result, "table_addresses", native.tables);
     }
     words(
         &mut result,
@@ -205,27 +195,6 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         let fixed = patch.site.is_none();
         array(&mut result, &format!("before_{i}"), &patch.before, fixed);
         array(&mut result, &format!("after_{i}"), &patch.after, false);
-    }
-    // On a relocatable target, the relocation checks the startup literals,
-    // and the installer checks the other guards (`relocation_tables`).
-    if let Some(layout) = target
-        .layout
-        .filter(|layout| !layout.guards.is_empty() && !layout.relocatable)
-    {
-        let mut entries = String::new();
-        for (i, &(address, expected)) in layout.guards.iter().enumerate() {
-            let bytes = hex::decode(expected)?;
-            ensure!(
-                body.read(address, bytes.len())? == bytes,
-                "Firmware guard differs at {address:#x}"
-            );
-            array(&mut result, &format!("guard_{i}"), &bytes, true);
-            writeln!(entries, "{{{address:#x},{},guard_{i}}},", bytes.len())?;
-        }
-        writeln!(result, "#define GUARD_COUNT {}U", layout.guards.len())?;
-        result.push_str("static const struct guard guards[] = {\n");
-        result.push_str(&entries);
-        result.push_str("};\n");
     }
     // Kind 1 marks a patch after the decoded RTOS image. The installer does
     // not require its stock bytes, because a restart keeps earlier GRKit code.
@@ -325,7 +294,7 @@ fn relocation_tables(
 ) -> Result<()> {
     const NONE: u32 = 0xffff;
     let target = body.target;
-    let layout = target.layout.context("A relocatable target has a layout")?;
+    let layout = target.layout.context("A relocated target has a layout")?;
     let mut planner = Planner::new(body)?;
     let tail = planner.tail(layout.tail.0);
     // The hooks that replace a branch: the private code calls its target.
@@ -406,8 +375,9 @@ fn relocation_tables(
             initialized.push(planner.content(address)? as u32);
         }
     }
-    // A guard other than the startup literals is a MOVW and MOVT pair whose
-    // address must not lie after the image, where the private code goes.
+    // The relocation checks the startup literals. Each other guard is a MOVW
+    // and MOVT pair whose address must not lie after the image, where the
+    // private code goes.
     let mut guards = Vec::new();
     for &(address, expected) in layout.guards {
         if address == relocation::STARTUP_LITERALS {
@@ -422,7 +392,7 @@ fn relocation_tables(
         let movt = u32::from_le_bytes(bytes[4..].try_into()?);
         ensure!(
             movw & 0x0ff0_0000 == 0x0300_0000 && movt & 0x0ff0_0000 == 0x0340_0000,
-            "A relocatable guard is a MOVW and MOVT pair"
+            "A guard is a MOVW and MOVT pair"
         );
         guards.push(planner.code(address)? as u32);
     }

@@ -55,6 +55,11 @@ static uint32_t invalidations, invalidated;
 
 static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
 volatile u32 *framing_header(void) { return header; }
+/* The last Framing ratio of the target: 4:3 on GR III, XPan on GR IV. */
+#define LAST_RATIO (FRAMING_RATIO_COUNT - 1)
+/* The capture aspect id of each ratio: 3:2, then 16:9 for XPan and 16:9,
+   and 4:3. */
+static const u32 capture_ids[] = {0, 2, 2, 1};
 
 static void reset(void)
 {
@@ -63,7 +68,7 @@ static void reset(void)
     memset(canvas_memory, 0, sizeof(canvas_memory));
     memset(bitmap_memory, 0, sizeof(bitmap_memory));
     for (u32 i=0; i<sizeof(pixels)/sizeof(pixels[0]); ++i) pixels[i]=SENTINEL;
-    WORD(TEST_OWNER, 0x15c)=TEST_CANVAS;
+    WORD(TEST_OWNER, LIVEVIEW_CANVAS)=TEST_CANVAS;
     WORD(TEST_OWNER, 4)=TEST_CANVAS;
     WORD(TEST_CANVAS, 0x28)=720;
     WORD(TEST_CANVAS, 0x2c)=480;
@@ -188,7 +193,7 @@ int main(void)
 {
     /* Fixed rectangles are independent expected output, not a second renderer. */
     const u32 rectangles[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480}};
-    for (u32 ratio=0; ratio<4; ++ratio) {
+    for (u32 ratio=0; ratio<FRAMING_RATIO_COUNT; ++ratio) {
         reset();
         header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
         framing_prepare(TEST_CANVAS);
@@ -221,11 +226,13 @@ int main(void)
     assert(BYTE(TEST_CANVAS,0xa0)==0);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
-    /* Badge replacement erases old characters even before a native full clear. */
+    /* Badge replacement erases old characters even before a native full clear.
+       A target paints only the ratios that it offers. */
     reset();
     const u32 transitions[]={1,2,3,1,3,2};
-    for(u32 i=0; i<sizeof(transitions)/sizeof(transitions[0]); ++i) {
+    for(u32 i=0, draws=0; i<sizeof(transitions)/sizeof(transitions[0]); ++i) {
         u32 ratio=transitions[i];
+        if(ratio>LAST_RATIO) continue;
         header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
         BYTE(TEST_CANVAS,0xa0)=0;
         framing_prepare(TEST_CANVAS);
@@ -233,7 +240,7 @@ int main(void)
         framing_paint(TEST_CANVAS,TEST_BITMAP);
         for(u32 y=46; y<68; ++y) for(u32 x=204; x<270; ++x)
             assert(pixels[1+y*TEST_STRIDE+x]==expected_badge(ratio,x,y,SENTINEL));
-        assert(header[GRKIT_HOST_FRAME_DRAWS/4]==i+1);
+        assert(header[GRKIT_HOST_FRAME_DRAWS/4]==++draws);
     }
     /* The ADJ preview canvas shows the highlighted ratio's mask without a badge. */
     reset();
@@ -270,7 +277,7 @@ int main(void)
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
     /* Guides stay inside the photo area of each ratio, below the badge. */
-    for (u32 ratio=0; ratio<4; ++ratio) for (u32 style=1; style<=GUIDES_STYLE_MAX; ++style) {
+    for (u32 ratio=0; ratio<FRAMING_RATIO_COUNT; ++ratio) for (u32 style=1; style<=GUIDES_STYLE_MAX; ++style) {
         reset();
         header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
         header[GRKIT_HOST_GUIDE/4]=style;
@@ -324,11 +331,11 @@ int main(void)
        native settings. The mask stays in each display. */
     for (u32 mode=0; mode<4; ++mode) {
         reset();
-        header[GRKIT_HOST_FRAME_RATIO/4]=2;
+        header[GRKIT_HOST_FRAME_RATIO/4]=LAST_RATIO;
         header[GRKIT_HOST_GUIDE/4]=1;
         display_mode=mode;
         framing_paint(TEST_CANVAS,TEST_BITMAP);
-        assert_guides(2,mode<2,mode==0);
+        assert_guides(LAST_RATIO,mode<2,mode==0);
     }
     /* Unknown styles draw nothing. */
     reset();
@@ -358,10 +365,9 @@ int main(void)
     assert_untouched();
     /* Native 3:2 requests record the Framing ratio; other native ratios pass. */
     {
-        const u32 ids[]={0,2,2,1};
-        for(u32 ratio=0; ratio<4; ++ratio) {
+        for(u32 ratio=0; ratio<FRAMING_RATIO_COUNT; ++ratio) {
             header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
-            assert(framing_capture_request(0)==ids[ratio]);
+            assert(framing_capture_request(0)==capture_ids[ratio]);
             assert(framing_capture_request(3)==3);
             assert(framing_capture_request(1)==1);
         }
@@ -394,25 +400,25 @@ int main(void)
     assert(capture_requests==1 && capture_aspect==2);
     framing_bind(TEST_OWNER);
     assert(capture_requests==1);
-    header[GRKIT_HOST_FRAME_RATIO/4]=3;
-    framing_bind(TEST_OWNER);
-    assert(capture_requests==2 && capture_aspect==1);
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
     framing_bind(TEST_OWNER);
-    assert(capture_requests==3 && capture_aspect==0);
-    header[GRKIT_HOST_FRAME_RATIO/4]=2;
+    assert(capture_requests==2 && capture_aspect==0);
+    header[GRKIT_HOST_FRAME_RATIO/4]=LAST_RATIO;
+    framing_bind(TEST_OWNER);
+    assert(capture_requests==3 && capture_aspect==capture_ids[LAST_RATIO]);
+    header[GRKIT_HOST_FRAME_RATIO/4]=1;
     native_aspect=3; capture_aspect=3;
     framing_bind(TEST_OWNER);
     assert(capture_requests==3 && capture_aspect==3);
     native_aspect=0; capture_aspect=0;
-    BYTE(TEST_OWNER,0x2d2)=1;
+    BYTE(TEST_OWNER,LIVEVIEW_MOVIE)=1;
     framing_bind(TEST_OWNER);
     assert(capture_requests==3);
-    BYTE(TEST_OWNER,0x2d2)=0;
+    BYTE(TEST_OWNER,LIVEVIEW_MOVIE)=0;
     framing_bind(TEST_OWNER);
     assert(capture_requests==4 && capture_aspect==2);
     reset(); WORD(TEST_OWNER,4)=TEST_CANVAS+4; assert_rejected();
-    reset(); BYTE(TEST_OWNER,0x2d2)=1; assert_rejected();
+    reset(); BYTE(TEST_OWNER,LIVEVIEW_MOVIE)=1; assert_rejected();
     reset(); BYTE(TEST_CANVAS,0x9e)=0; assert_rejected();
     reset(); WORD(TEST_CANVAS,0x20)=1; assert_rejected();
     reset(); WORD(TEST_CANVAS,0x24)=1; assert_rejected();
@@ -429,6 +435,19 @@ int main(void)
     reset(); WORD(TEST_BITMAP,8)=TEST_PIXELS+1; assert_rejected();
     reset(); WORD(TEST_BITMAP,4)=TEST_STRIDE*480*4-1; assert_rejected();
     reset(); native_aspect=3; assert_rejected();
+#ifdef FRAMING_XPAN_NATIVE
+    /* GR IV: XPan also crops native FRAMING_XPAN_NATIVE photos, so its mask
+       shows there. Other layers do not show in that live view. */
+    reset(); native_aspect=FRAMING_XPAN_NATIVE;
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert(header[GRKIT_HOST_FRAME_DRAWS/4]==1 && pixels[1]==0x80000000);
+    reset(); native_aspect=FRAMING_XPAN_NATIVE;
+    header[GRKIT_HOST_FRAME_RATIO/4]=0; header[GRKIT_HOST_GUIDE/4]=1;
+    assert_rejected();
+#else
+    /* GR III: the live view shows the layers only in native 3:2. */
+    reset(); native_aspect=2; assert_rejected();
+#endif
     reset(); header[GRKIT_HOST_FRAME_RATIO/4]=4;
     framing_paint(TEST_CANVAS,TEST_BITMAP); assert_untouched();
     reset(); framing_paint(TEST_CANVAS+4,TEST_BITMAP); assert_untouched();

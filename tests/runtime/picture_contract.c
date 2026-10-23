@@ -382,6 +382,9 @@ int main(void)
 #ifdef FRAMING_XPAN_NATIVE
             , 25, 26, 27, 28, 29, 30
 #endif
+#ifdef NATIVE_MONOCHROME_TYPES_HIGH
+            , 31, 32
+#endif
         };
         static const uint8_t color[] = {11, 12, 17, 22
 #ifdef FRAMING_XPAN_NATIVE

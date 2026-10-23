@@ -6,14 +6,11 @@ typedef unsigned int u32;
 /* kind 1: a reservation after the decoded RTOS image. BOOT does not reload
    it, so it can keep the previous session's code after a restart. */
 struct patch { u32 address, size, kind; const u8 *before; u8 *after; };
-/* Stock bytes that statically patched firmware changes. */
-struct guard { u32 address, size; const u8 *bytes; };
 #include "relocation.h"
 #include "module_payload.h"
 #include "grf.h"
-#ifndef TABLE_ADDRESS
-/* The native type tables. A relocatable target resolves them. */
-#define TABLE_ADDRESS(i) table_addresses[i]
+#if !defined(GRKIT_NO_MODULES) && !defined(GRKIT_RELOCATE)
+#error "The installer relocates each runtime with modules"
 #endif
 
 static long syscall6(u32 number, u32 a, u32 b, u32 c, u32 d, u32 e, u32 f)
@@ -399,26 +396,16 @@ static int install(void)
             if (ptr < icon_bases[j] + chunk_count(j) * ICON_STRIDE && icon_bases[j] < ptr + bytes) return 11;
         icon_bases[i] = ptr;
     }
-#ifdef GUARD_COUNT
-    /* Patched firmware can extend the RTOS image into the private tail
-       regions. GRKit then refuses to load instead of overwriting that code. */
-    for (u32 i = 0; i < GUARD_COUNT; ++i)
-        if (!equal(at(guards[i].address), guards[i].bytes, guards[i].size)) return 45;
-#endif
     /* The tail after the RTOS image has no stock bytes to check. On a camera it
        holds the noise of uninitialized DRAM after power-on, or the code of an
        earlier GRKit session, so its content cannot show that it is free. The
-       guards above detect a firmware that extends the image into it. */
+       guards of the relocation detect a firmware that extends the image into
+       it. */
 #ifndef GRKIT_NO_MODULES
-#ifdef GRKIT_RELOCATE
     /* The .data values of the running image are those at its copy source. */
 #define INITIAL(address) ((address) - RELOCATION_DATA_START + relocation.data_source)
     if (word(ENGLISH_SLOT) != word(INITIAL(ENGLISH_SLOT))) return 12;
-#else
-    if (word(ENGLISH_SLOT) != ORIGINAL_ENGLISH) return 12;
-#endif
 #ifndef GRKIT_NO_IMAGE_CONTROL
-#ifdef GRKIT_RELOCATE
     /* The record is unchanged since startup and has the pinned layout. */
     if (!equal(at(STOCK_RECORD), (const u8 *)at(INITIAL(STOCK_RECORD)), 68)) return 13;
     for (u32 i = 0; i < 68; i += 4)
@@ -427,13 +414,6 @@ static int install(void)
         if (word(STOCK_RECORD + 68 + i * 4) == relocated[initialized_symbols[i]]) continue;
         return equal(at(STOCK_RECORD + 68), (const u8 *)at(INITIAL(STOCK_RECORD + 68)), 16) ? 14 : 13;
     }
-#else
-    if (!equal(at(STOCK_RECORD), stock_record, 68)) return 13;
-    /* Firmware fills four pointers at +0x44 after the image copy. Records copied
-       before that would miss them, so an image-copy tail means not ready yet. */
-    if (!equal(at(STOCK_RECORD + 68), initialized_tail, 16))
-        return equal(at(STOCK_RECORD + 68), stock_record + 68, 16) ? 14 : 13;
-#endif
 #endif
     /* No firmware code refers to the RTOS tail, so earlier GRKit code there is
        overwritten. Every other patch must still find its stock bytes. */
@@ -442,7 +422,6 @@ static int install(void)
         if (!patches[i].kind && applies(i) && !equal(at(patches[i].address), patches[i].before, patches[i].size)) return 16;
 #ifndef GRKIT_NO_MODULES
 #ifndef GRKIT_NO_IMAGE_CONTROL
-#ifdef GRKIT_RELOCATE
     /* Each table is unchanged since startup and has the pinned layout, and
        entry 11 of the first one is the Standard record. */
     for (u32 i = 0; i < 3; ++i) {
@@ -452,10 +431,6 @@ static int install(void)
                 relocation_mask(get32(stock_tables + i * TABLE_BYTES + j))) return 17;
     }
     if (word(TABLE_ADDRESS(0) + 11 * 4) != STOCK_RECORD) return 17;
-#else
-    for (u32 i = 0; i < 3; ++i)
-        if (!equal(at(TABLE_ADDRESS(i)), stock_tables + i * TABLE_BYTES, TABLE_BYTES)) return 17;
-#endif
     /* Reject stale native types; never attempt an in-place settings repair. */
     u32 domain = word(SETTINGS_DOMAIN);
     if (!heap(domain, 0x51c)) return 39;

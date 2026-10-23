@@ -890,7 +890,6 @@ impl Port {
             "instruction_patches: INSTRUCTION_PATCHES,",
             "framing_patches: FRAMING_PATCHES,",
             "guards: GUARDS,",
-            "relocatable: true,",
         ] {
             push(out, 4, field, "");
         }
