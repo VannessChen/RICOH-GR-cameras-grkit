@@ -1,3 +1,16 @@
+## 1.2.1 (2026-10-24)
+
+### Fixes
+
+- Packages add the Ektachrome E100, Eterna 500T, Instax, Double-X 5222, and HP5 Plus 400 effects, and no longer include Portra 160, EXR 200T, and FP-100C.
+- Framing offers XPan, 2.35:1, 16:9, 4:3, 5:4, and 1:1 on every camera, and uses the camera's own aspect ratio where it has one.
+- GR IV Monochrome firmware 1.10 is supported as experimental, with the GR IV package.
+- One GR IV package installs on firmware 1.11 and 1.20, and the 1.20 firmware that GR IV 30th Anniversary Edition cameras have from the factory is supported as experimental.
+- The live view builds the curves of an effect only when they change, Framing does less work to draw the area outside the photo, and GRKit saves menu selections to the card only after they stop changing, so the camera uses less power.
+- The shooting screen shows GRKit for a few seconds when GRKit has loaded.
+- Menu icons, effect icons, and the Framing label use Roboto Condensed, which looks like the camera's own text.
+- Vision3 500T now looks like the film printed on photo paper and scanned, as CineStill 800T is, and the motion picture print version is removed (Eterna 500T gives that look; delete `SCRIPT/PLUGINS/EFFECTS/1A3DC043.GRF` from the card if the menu shows Vision3 500T twice).
+
 ## 1.2.0 (2026-10-22)
 
 ### Features
