@@ -26,8 +26,15 @@ static u32 framing_badge_value(volatile u32 *h) {
    so the loops write only the bars: the rows above and below the photo area,
    and the columns at its sides. */
 #define FRAMING_MASK_COLOR 0x80000000U
-static void mask_span(volatile u32 *row,u32 from,u32 to) {
-    for(;from<to;++from) row[from]=FRAMING_MASK_COLOR;
+/* Four pixels for each loop test, which the compiler joins into one NEON
+   store. The native clear in the same Canvas::Draw also uses NEON stores. */
+__attribute__((noinline)) static void mask_span(volatile u32 *row,u32 from,u32 to) {
+    u32 *pixel=(u32 *)row+from,*end=(u32 *)row+to;
+    for(;pixel+4<=end;pixel+=4) {
+        pixel[0]=FRAMING_MASK_COLOR; pixel[1]=FRAMING_MASK_COLOR;
+        pixel[2]=FRAMING_MASK_COLOR; pixel[3]=FRAMING_MASK_COLOR;
+    }
+    for(;pixel<end;++pixel) *pixel=FRAMING_MASK_COLOR;
 }
 static void framing_mask(const Surface *s,u32 value) {
     u32 y;
