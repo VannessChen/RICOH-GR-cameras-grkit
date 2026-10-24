@@ -72,10 +72,12 @@ enum Command {
         #[command(subcommand)]
         command: EffectsCommand,
     },
-    /// Package a verified local runtime and effects.
+    /// Package verified local runtimes and effects.
     Package {
-        #[arg(long)]
-        build: PathBuf,
+        /// The runtime build of each firmware build of the camera, in release
+        /// order (`grkit cameras`). Repeat it for a camera with several builds.
+        #[arg(long, required = true)]
+        build: Vec<PathBuf>,
         /// Compiled effects. Without effects, the installer does not install Image Control.
         #[arg(long)]
         effects: Option<PathBuf>,
@@ -403,7 +405,10 @@ fn run(command: Command) -> Result<Value> {
             guide,
             out,
         } => {
-            let runtime = storage::load_build(&build)?;
+            let runtimes = build
+                .iter()
+                .map(|build| storage::load_build(build))
+                .collect::<Result<Vec<_>>>()?;
             let effects = match effects {
                 Some(directory) => storage::read_effects(&directory)?,
                 None => packaging::EffectSet::default(),
@@ -416,7 +421,7 @@ fn run(command: Command) -> Result<Value> {
             let language = packaging::Language::parse(&language)?;
             let pdf = storage::read_bounded(&guide, packaging::MAX_FILE_SIZE)?;
             let package = packaging::assemble(
-                &runtime,
+                &runtimes,
                 &effects,
                 plugins,
                 camera,
@@ -462,22 +467,18 @@ fn run(command: Command) -> Result<Value> {
                 .iter()
                 .map(|target| {
                     json!({"target": target.name, "zip": target.download.zip,
-                        "zip_sha256": target.download.zip_sha256, "file": target.download.file})
+                        "zip_sha256": target.download.zip_sha256, "file": target.download.file,
+                        "official": target.download.source == grkit_build::target::Source::Ricoh})
                 })
                 .collect();
+            // Each camera has one package with the runtime of each of its builds.
             let mut packages = Vec::new();
             for camera in grkit_core::camera::CAMERAS {
-                for (index, target) in camera.targets().into_iter().enumerate() {
+                let targets = camera.targets();
+                for target in &targets {
                     grkit_build::target::find(target)?;
-                    // The first build of a camera has the camera's package. A later
-                    // build adds the first firmware version that runs it.
-                    let name = if index == 0 {
-                        camera.id.to_string()
-                    } else {
-                        format!("{}-{}", camera.id, camera.firmware_for(target)[0])
-                    };
-                    packages.push(json!({"camera": camera.id, "target": target, "name": name}));
                 }
+                packages.push(json!({"camera": camera.id, "targets": targets, "name": camera.id}));
             }
             Ok(json!({"runtimes": runtimes, "packages": packages}))
         }
@@ -486,7 +487,7 @@ fn run(command: Command) -> Result<Value> {
             let bytes = storage::read_bounded(&archive, 64 * 1024 * 1024)?;
             let contents = packaging::verify_package(&bytes)?;
             Ok(
-                json!({"valid": true, "camera": contents.camera.id, "target": contents.target,
+                json!({"valid": true, "camera": contents.camera.id, "targets": contents.targets,
                 "effects": contents.effect_ids.len(),
                 "plugins": contents.plugins.names(), "language": contents.language.code()}),
             )

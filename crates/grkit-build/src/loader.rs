@@ -142,6 +142,24 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
     if relocatable {
         relocation_tables(&mut result, plan, body, &addresses)?;
     }
+    // `--known` installs only on a build that the runtime names.
+    writeln!(
+        result,
+        "#define RTOS_IDENTITY {:#x}U",
+        target::RTOS_IDENTITY
+    )?;
+    writeln!(
+        result,
+        "#define RTOS_IDENTITY_COUNT {}U",
+        target.identities.len()
+    )?;
+    if !target.identities.is_empty() {
+        words(
+            &mut result,
+            "rtos_identities",
+            target.identities.iter().copied(),
+        );
+    }
     for (name, suffix) in [
         ("EFFECTS_PATH", "EFFECTS"),
         ("PLAN_PATH", "MODULE.BIN"),

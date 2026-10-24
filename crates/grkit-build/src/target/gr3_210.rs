@@ -1,7 +1,7 @@
 //! GR III 2.10, which GR IIIx 1.60 also runs, and the RTOS builds that move
 //! by less than the relocation radius (GR III 2.20, GR IIIx 1.70).
 
-use super::{gr3, Download, ImageControl, Target};
+use super::{gr3, Download, ImageControl, Source, Target};
 use crate::components::{InstructionPatch, Layout, Site};
 
 pub const TARGET: Target = Target {
@@ -14,7 +14,9 @@ pub const TARGET: Target = Target {
         zip: "gr3_v210.zip",
         zip_sha256: "e895b439e4b3b96ac04f50072f02a63061ec7de5dcc1b070890baa09bc659470",
         file: "fwdc239b.bin",
+        source: Source::Ricoh,
     },
+    identities: &[],
     data_start: 0x55000000,
     data_source: 0x5407b540,
     data_size: 0x3a080,

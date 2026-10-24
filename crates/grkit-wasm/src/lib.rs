@@ -114,11 +114,28 @@ pub fn guess_input(bytes: &[u8], base_gamma: &[u16]) -> Result<&'static str> {
     Ok(fit::guess_input(&base_gamma, &Cube::read(bytes)?).name())
 }
 
-/// Collects one runtime build and a set of compiled effects, then assembles the package.
-pub struct Builder {
+/// One runtime build of a package: its `build.json`, the paths that it lists,
+/// and the files that arrived.
+struct Build {
     manifest: Vec<u8>,
     paths: Vec<String>,
-    runtime: Files,
+    files: Files,
+}
+
+impl Build {
+    fn new(manifest: &[u8]) -> Result<Self> {
+        Ok(Self {
+            manifest: manifest.to_vec(),
+            paths: packaging::manifest_paths(manifest)?,
+            files: Files::new(),
+        })
+    }
+}
+
+/// Collects the runtime build of each firmware build of the camera and a set of
+/// compiled effects, then assembles the package.
+pub struct Builder {
+    builds: Vec<Build>,
     effects: EffectSet,
     plugins: Selection,
     camera: &'static Camera,
@@ -127,12 +144,11 @@ pub struct Builder {
 }
 
 impl Builder {
-    /// Starts a package from the runtime's `build.json`.
+    /// Starts a package from the `build.json` of the camera's first runtime
+    /// build, which is build 0.
     pub fn new(manifest: &[u8]) -> Result<Self> {
         Ok(Self {
-            manifest: manifest.to_vec(),
-            paths: packaging::manifest_paths(manifest)?,
-            runtime: Files::new(),
+            builds: vec![Build::new(manifest)?],
             effects: EffectSet::default(),
             plugins: Selection::ALL,
             camera: &camera::GR3,
@@ -141,22 +157,41 @@ impl Builder {
         })
     }
 
-    /// The runtime files to fetch, as paths under the build's `sd/` directory.
-    pub fn runtime_paths(&self) -> &[String] {
-        &self.paths
+    /// Adds the next runtime build of the camera, in release order, by its
+    /// `build.json`, and returns its number.
+    pub fn add_build(&mut self, manifest: &[u8]) -> Result<usize> {
+        self.builds.push(Build::new(manifest)?);
+        Ok(self.builds.len() - 1)
     }
 
-    /// Adds one runtime file. `build` checks its size and SHA-256 against the manifest.
-    pub fn add_runtime_file(&mut self, path: &str, bytes: &[u8]) -> Result<()> {
+    fn build_mut(&mut self, build: usize) -> Result<&mut Build> {
+        self.builds
+            .get_mut(build)
+            .with_context(|| format!("No runtime build {build}"))
+    }
+
+    /// The runtime files of a build to fetch, as paths under its `sd/` directory.
+    pub fn runtime_paths(&self, build: usize) -> Result<&[String]> {
+        Ok(&self
+            .builds
+            .get(build)
+            .with_context(|| format!("No runtime build {build}"))?
+            .paths)
+    }
+
+    /// Adds one runtime file of a build. `build` checks its size and SHA-256
+    /// against the manifest.
+    pub fn add_runtime_file(&mut self, build: usize, path: &str, bytes: &[u8]) -> Result<()> {
+        let build = self.build_mut(build)?;
         ensure!(
-            self.paths.iter().any(|known| known == path),
+            build.paths.iter().any(|known| known == path),
             "Not a runtime file of this build: {path}"
         );
         ensure!(
-            !self.runtime.contains_key(path),
+            !build.files.contains_key(path),
             "Duplicate runtime file: {path}"
         );
-        self.runtime.insert(path.to_owned(), bytes.to_vec());
+        build.files.insert(path.to_owned(), bytes.to_vec());
         Ok(())
     }
 
@@ -195,11 +230,16 @@ impl Builder {
         self.guide = Some(pdf.to_vec());
     }
 
-    /// Verifies the runtime against its manifest and returns the verified package ZIP.
+    /// Verifies each runtime build against its manifest and returns the verified
+    /// package ZIP.
     pub fn build(&self) -> Result<Vec<u8>> {
-        let runtime = packaging::load_runtime(&self.manifest, &self.runtime)?;
+        let runtimes = self
+            .builds
+            .iter()
+            .map(|build| packaging::load_runtime(&build.manifest, &build.files))
+            .collect::<Result<Vec<_>>>()?;
         let package = packaging::assemble(
-            &runtime,
+            &runtimes,
             &self.effects,
             self.plugins,
             self.camera,
@@ -215,7 +255,8 @@ impl Builder {
     }
 }
 
-/// Builds a GRKit SD package from a runtime build and compiled effects.
+/// Builds a GRKit SD package from the runtime build of each firmware build of
+/// the camera and compiled effects.
 ///
 /// Each failing call throws an `Error` whose message has the full cause chain.
 #[wasm_bindgen]
@@ -223,22 +264,40 @@ pub struct Package(Builder);
 
 #[wasm_bindgen]
 impl Package {
-    /// Starts a package from the runtime's `build.json` bytes.
+    /// Starts a package from the `build.json` bytes of the camera's first
+    /// runtime build, which is build 0.
     #[wasm_bindgen(constructor)]
     pub fn new(manifest: &[u8]) -> Result<Package, JsError> {
         Builder::new(manifest).map(Package).map_err(js_error)
     }
 
-    /// The runtime files to fetch, as paths under the build's `sd/` directory.
-    #[wasm_bindgen(js_name = runtimePaths)]
-    pub fn runtime_paths(&self) -> Vec<String> {
-        self.0.runtime_paths().to_vec()
+    /// Adds the next runtime build of the camera, in release order, and returns
+    /// its number.
+    #[wasm_bindgen(js_name = addBuild)]
+    pub fn add_build(&mut self, manifest: &[u8]) -> Result<usize, JsError> {
+        self.0.add_build(manifest).map_err(js_error)
     }
 
-    /// Adds one runtime file. `build()` checks its size and SHA-256.
+    /// The runtime files of a build to fetch, as paths under its `sd/` directory.
+    #[wasm_bindgen(js_name = runtimePaths)]
+    pub fn runtime_paths(&self, build: usize) -> Result<Vec<String>, JsError> {
+        self.0
+            .runtime_paths(build)
+            .map(<[String]>::to_vec)
+            .map_err(js_error)
+    }
+
+    /// Adds one runtime file of a build. `build()` checks its size and SHA-256.
     #[wasm_bindgen(js_name = addRuntimeFile)]
-    pub fn add_runtime_file(&mut self, path: &str, bytes: &[u8]) -> Result<(), JsError> {
-        self.0.add_runtime_file(path, bytes).map_err(js_error)
+    pub fn add_runtime_file(
+        &mut self,
+        build: usize,
+        path: &str,
+        bytes: &[u8],
+    ) -> Result<(), JsError> {
+        self.0
+            .add_runtime_file(build, path, bytes)
+            .map_err(js_error)
     }
 
     /// Adds one compiled `.GRF` effect and returns its effect ID.

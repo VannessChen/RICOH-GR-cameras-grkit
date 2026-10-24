@@ -125,7 +125,8 @@ impl FirmwareImage {
     }
 }
 
-/// Reads the official firmware of `target` and returns its RTOS image.
+/// Reads the firmware file of `target` and returns its RTOS image. The file of
+/// a `Source::Dump` target is the RTOS image.
 pub fn verify_firmware(path: &Path, target: &'static Target) -> Result<FirmwareImage> {
     let data = std::fs::read(path).with_context(|| format!("Read firmware {}", path.display()))?;
     let identity = sha256(&data);
@@ -134,6 +135,18 @@ pub fn verify_firmware(path: &Path, target: &'static Target) -> Result<FirmwareI
         "Firmware SHA-256 does not match {}",
         target.firmware
     );
+    if target.download.source == target::Source::Dump {
+        ensure!(
+            identity == target.decoded_sha256,
+            "Decoded firmware SHA-256 mismatch"
+        );
+        return Ok(FirmwareImage {
+            target,
+            body: data,
+            sha256: identity.clone(),
+            decoded_sha256: identity,
+        });
+    }
     let decoded = decode(&data)?;
     let decoded_identity = sha256(&decoded);
     ensure!(

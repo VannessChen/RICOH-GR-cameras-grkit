@@ -4,14 +4,6 @@ import type { ModuleKey } from './modules';
 
 export { PREVIEW_TARGET } from './generated/site';
 
-/** One runtime build of a camera: the package for the firmware versions that it runs. */
-export interface Build {
-  /** The firmware versions that run this build (`camera.rs` releases of the target). */
-  firmware: string;
-  /** The site target that holds its runtime. */
-  target: string;
-}
-
 export interface Camera {
   /** The entry on the site. Two entries can share one package camera. */
   key: string;
@@ -26,8 +18,11 @@ export interface Camera {
   support?: {
     /** All supported versions, as the camera entry shows them. */
     firmware: string;
-    /** One package for each build. With more than one, the user selects the firmware version. */
-    builds: readonly Build[];
+    /**
+     * The site targets of the runtime builds, in release order. The package holds the installer
+     * of each, and the camera selects the one for its build at each power-on.
+     */
+    targets: readonly string[];
     modeset: string;
     /** True until the runtime has been tested on a camera with one of the versions. */
     experimental: boolean;
@@ -39,33 +34,21 @@ export interface Camera {
   };
 }
 
-type Releases = Pick<NonNullable<Camera['support']>, 'firmware' | 'builds' | 'modeset' | 'experimental'>;
+type Releases = Pick<NonNullable<Camera['support']>, 'firmware' | 'targets' | 'modeset' | 'experimental'>;
 
 /**
- * The firmware versions of a camera (`camera.rs`), its runtime builds in release order, its ModeSet
- * file, and whether the entry is experimental: it is while no version has been tested on a camera.
+ * The firmware versions of a camera (`camera.rs`), each once, its runtime builds in release order,
+ * its ModeSet file, and whether the entry is experimental: it is while no version has been tested
+ * on a camera. Two builds of one version are two releases with that version.
  */
 export function releases(id: keyof typeof CAMERA_RELEASES): Releases {
   const camera = CAMERA_RELEASES[id];
-  const targets = [...new Set(camera.releases.map((item) => item.target))];
   return {
-    firmware: camera.releases.map((item) => item.firmware).join(' / '),
-    builds: targets.map((target) => ({
-      firmware: camera.releases
-        .filter((item) => item.target === target)
-        .map((item) => item.firmware)
-        .join(' / '),
-      target,
-    })),
+    firmware: [...new Set(camera.releases.map((item) => item.firmware))].join(' / '),
+    targets: [...new Set(camera.releases.map((item) => item.target))],
     modeset: camera.modeset,
     experimental: camera.releases.every((item) => item.experimental),
   };
-}
-
-/** The build of the selected target, or the only build of a camera with one. */
-export function selectedBuild(camera: Camera, target: string | undefined): Build | undefined {
-  const builds = camera.support?.builds ?? [];
-  return builds.length === 1 ? builds[0] : builds.find((build) => build.target === target);
 }
 
 // Each HDF model runs the firmware of its base camera, so it uses the same package.
@@ -84,8 +67,7 @@ export const CAMERAS: readonly Camera[] = [
     name: 'GR IIIx / GR IIIx HDF',
     support: { ...releases('gr3x'), modules: CAMERA_PLUGINS.gr3x },
   },
-  // GR IV 1.11 and 1.20 have a runtime each (`gr4-1.11`, `gr4-1.20`), so the user selects the
-  // firmware version.
+  // GR IV 1.11 and the two builds of 1.20 have a runtime each. The package holds all three.
   {
     key: 'gr4',
     id: 'gr4',
@@ -93,8 +75,8 @@ export const CAMERAS: readonly Camera[] = [
     support: { ...releases('gr4'), modules: CAMERA_PLUGINS.gr4 },
   },
   // GR IV Monochrome runs the GR IV firmware with its own version: it shows 1.11 as 1.00 and 1.20
-  // as 1.10. It uses the GR IV packages and ModeSet file. The effects are made for color sensors,
-  // so its packages have no Image Control.
+  // as 1.10. It uses the GR IV package and ModeSet file. The effects are made for color sensors,
+  // so its package has no Image Control.
   {
     key: 'gr4m',
     id: 'gr4',
@@ -102,10 +84,6 @@ export const CAMERAS: readonly Camera[] = [
     support: {
       ...releases('gr4'),
       firmware: '1.00 / 1.10',
-      builds: [
-        { firmware: '1.00', target: 'gr4-1.11' },
-        { firmware: '1.10', target: 'gr4-1.20' },
-      ],
       modules: CAMERA_PLUGINS.gr4.filter((key) => key !== 'imageControl'),
       excluded: ['imageControl'],
     },

@@ -19,19 +19,17 @@ function track(event: string, props: Props): void {
 }
 
 /**
- * The properties of a GRKit download: the camera, its runtime build, the effect count, the page
- * language, and
+ * The properties of a GRKit download: the camera, the effect count, the page language, and
  * `on` or `off` for each module that the site offers for the camera. A module is `on` only
  * when the package installs it, so Image Control without effects is `off`.
  */
 export function downloadProps(
   camera: Camera,
-  target: string,
   plan: ModulePlan,
   effectCount: number,
   language: Language,
 ): Props {
-  const props: Props = { camera: camera.key, target, effects: String(effectCount), language };
+  const props: Props = { camera: camera.key, effects: String(effectCount), language };
   for (const key of camera.support?.modules ?? ([] as readonly ModuleKey[])) {
     props[key] = plan.visible.includes(key) ? 'on' : 'off';
   }
@@ -41,12 +39,11 @@ export function downloadProps(
 /** Records a GRKit package that the page saved. */
 export function trackDownload(
   camera: Camera,
-  target: string,
   plan: ModulePlan,
   effectCount: number,
   language: Language,
 ): void {
-  track('Download', downloadProps(camera, target, plan, effectCount, language));
+  track('Download', downloadProps(camera, plan, effectCount, language));
 }
 
 /** Records a saved package that turns SD scripts off. */

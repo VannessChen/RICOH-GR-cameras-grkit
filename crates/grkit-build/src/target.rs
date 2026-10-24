@@ -20,14 +20,19 @@ pub mod gr3_210;
 pub mod gr4;
 pub mod gr4_111;
 pub mod gr4_120;
+pub mod gr4_120_0528;
 
 pub use gr3_210::{IMAGE_CONTROL as GR3_IMAGE_CONTROL, TARGET as GR3_210};
 pub use gr4_111::{IMAGE_CONTROL as GR4_IMAGE_CONTROL, TARGET as GR4_111};
 pub use gr4_120::{IMAGE_CONTROL as GR4_120_IMAGE_CONTROL, TARGET as GR4_120};
+pub use gr4_120_0528::TARGET as GR4_120_0528;
 
 pub const RTOS_BASE: u32 = 0x53000000;
+/// The RTOS word that names the firmware version and its build, such as
+/// `01 14 0a 0b` (little-endian 0x0b0a1401) for GR IV 1.20.
+pub const RTOS_IDENTITY: u32 = 0x53002038;
 
-pub const TARGETS: [&Target; 3] = [&GR3_210, &GR4_111, &GR4_120];
+pub const TARGETS: [&Target; 4] = [&GR3_210, &GR4_111, &GR4_120, &GR4_120_0528];
 
 /// The Rust source of each family and target module, for the build manifest.
 pub(crate) const SOURCES: &[(&str, &[u8])] = &[
@@ -36,15 +41,28 @@ pub(crate) const SOURCES: &[(&str, &[u8])] = &[
     ("gr4.rs", include_bytes!("target/gr4.rs")),
     ("gr4_111.rs", include_bytes!("target/gr4_111.rs")),
     ("gr4_120.rs", include_bytes!("target/gr4_120.rs")),
+    ("gr4_120_0528.rs", include_bytes!("target/gr4_120_0528.rs")),
 ];
 
-/// A firmware zip on the Ricoh download page.
+/// The zip that holds the firmware file of a target.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Download {
     pub zip: &'static str,
     pub zip_sha256: &'static str,
     /// The firmware file in the zip, which `grkit build` takes.
     pub file: &'static str,
+    pub source: Source,
+}
+
+/// Where the release gets the zip of a target.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Source {
+    /// The Ricoh download page. The private backup holds the same zip.
+    Ricoh,
+    /// Only the private backup. Ricoh does not publish the build, so `file` is
+    /// the RTOS image that the dump tool copied from a camera, and the SHA-256
+    /// values of the target are those of that image.
+    Dump,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -59,6 +77,12 @@ pub struct Target {
     /// The official download that holds the firmware file. The release builds
     /// the runtime from it.
     pub download: Download,
+    /// The `RTOS_IDENTITY` words of the builds that the runtime is for. When a
+    /// package has a runtime for each build of a camera, an installer installs
+    /// at once on a build that it names, and the others try it only when no
+    /// installer names the build (`runtime::runtime_files_for`). A camera with
+    /// one runtime needs none.
+    pub identities: &'static [u32],
     pub data_start: u32,
     pub data_source: u32,
     pub data_size: u32,

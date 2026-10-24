@@ -1,6 +1,6 @@
 import { Suspense, use, useCallback, useRef, useState } from 'react';
 import { trackDownload, trackScriptsOff } from './analytics';
-import { CAMERAS, MODESET_TOKEN, PREVIEW_TARGET, selectedBuild, type Camera } from './cameras';
+import { CAMERAS, MODESET_TOKEN, PREVIEW_TARGET, type Camera } from './cameras';
 import { loadCatalog, siteUrl, type ImportedEffect } from './catalog';
 import { EffectsSection } from './components/EffectsSection';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -33,8 +33,6 @@ const megabytes = (bytes: number) => (bytes / 1_000_000).toFixed(1);
 export function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [cameraKey, setCameraKey] = useState(CAMERAS[0]!.key);
-  // The firmware version of each camera entry with more than one runtime build, as its target.
-  const [targets, setTargets] = useState<Readonly<Record<string, string>>>({});
   const [selection, setSelection] = useState<Selection>(null);
   const [enabled, setEnabled] = useState<ReadonlySet<ModuleKey>>(ALL_MODULES);
   // Effects fitted from LUTs on this page. They are not stored, so a reload removes them.
@@ -48,25 +46,25 @@ export function App() {
   const t = STRINGS[language];
   const camera = CAMERAS.find((item) => item.key === cameraKey) ?? CAMERAS[0]!;
   const support = camera.support;
-  const runtime = selectedBuild(camera, targets[camera.key]);
+  const targets = support?.targets;
   const available = support?.modules ?? [];
   // Before the first change, every catalog effect is checked, so the count is not 0.
   const plan = planModules(enabled, selection?.size ?? 1, available, support?.excluded);
 
   function prefetch() {
-    if (runtime) prefetchPackage(runtime.target, camera.id, language);
+    if (targets) prefetchPackage(targets, camera.id, language);
   }
 
   // When the effects come into view, the package files start to download, so Download is quick
   // on a slow connection. A change of camera or language observes again for the new files.
   const prefetchInView = useCallback(
     (section: HTMLElement | null) => {
-      if (!section || !runtime) return;
+      if (!section || !targets) return;
       const observer = new IntersectionObserver(
         (entries) => {
           if (entries.some((entry) => entry.isIntersecting)) {
             observer.disconnect();
-            prefetchPackage(runtime.target, camera.id, language);
+            prefetchPackage(targets, camera.id, language);
           }
         },
         { rootMargin: '200px 0px' },
@@ -74,7 +72,7 @@ export function App() {
       observer.observe(section);
       return () => observer.disconnect();
     },
-    [runtime, camera.id, language],
+    [targets, camera.id, language],
   );
 
   function chooseLanguage(next: Language) {
@@ -90,11 +88,6 @@ export function App() {
 
   function chooseCamera(key: Camera['key']) {
     setCameraKey(key);
-    resetBuild();
-  }
-
-  function chooseFirmware(target: string) {
-    setTargets((current) => ({ ...current, [camera.key]: target }));
     resetBuild();
   }
 
@@ -144,15 +137,16 @@ export function App() {
   }
 
   async function download() {
-    if (!runtime || plan.visible.length === 0) {
+    if (!targets || plan.visible.length === 0) {
       return;
     }
     buildRun.current += 1;
     const run = buildRun.current;
     setBuild({ state: 'building', received: 0 });
     try {
-      // Imported effects do not depend on the target, so each package can take them.
-      const catalog = (await loadCatalog(runtime.target)).effects;
+      // The builds of a camera have the same effects, so the first build's catalog serves the
+      // package. Imported effects do not depend on the target.
+      const catalog = (await loadCatalog(targets[0]!)).effects;
       const checked = resolveSelection(
         selection,
         catalog.map((effect) => effect.id),
@@ -161,7 +155,7 @@ export function App() {
         ? [...catalog, ...imported].filter((effect) => checked.has(effect.id))
         : [];
       const blob = await buildPackage(
-        runtime.target,
+        targets,
         camera.id,
         effects,
         plan.omitted,
@@ -172,7 +166,7 @@ export function App() {
       );
       if (run === buildRun.current) {
         save(blob, 'GRKit.zip');
-        trackDownload(camera, runtime.target, plan, effects.length, language);
+        trackDownload(camera, plan, effects.length, language);
         setBuild({ state: 'ready' });
       }
     } catch (error) {
@@ -276,31 +270,6 @@ export function App() {
                 </label>
               ))}
             </div>
-            {support && support.builds.length > 1 && (
-              <div className="firmware-choice">
-                <span id="firmware-label" className="firmware-label">
-                  {t.firmwareChoice}
-                </span>
-                <div
-                  role="radiogroup"
-                  aria-labelledby="firmware-label"
-                  className="firmware-options"
-                >
-                  {support.builds.map((item) => (
-                    <label key={item.target} className="firmware-option">
-                      <input
-                        type="radio"
-                        name="firmware"
-                        checked={item.target === runtime?.target}
-                        onChange={() => chooseFirmware(item.target)}
-                      />
-                      <span>{item.firmware}</span>
-                    </label>
-                  ))}
-                </div>
-                <p className="note">{t.firmwareChoiceNote}</p>
-              </div>
-            )}
             {support?.experimental && (
               <p className="note warning">{t.experimentalNote(camera.name)}</p>
             )}
@@ -380,7 +349,7 @@ export function App() {
               <dt>{t.camera}</dt>
               <dd>{camera.name}</dd>
               <dt>{t.firmware}</dt>
-              <dd>{runtime?.firmware ?? '—'}</dd>
+              <dd>{support?.firmware ?? '—'}</dd>
               <dt>{t.effectCount}</dt>
               <dd>
                 {plan.includeEffects ? (
@@ -407,7 +376,7 @@ export function App() {
               <button
                 type="button"
                 className="download"
-                disabled={!runtime || plan.visible.length === 0 || build.state === 'building'}
+                disabled={!targets || plan.visible.length === 0 || build.state === 'building'}
                 aria-busy={build.state === 'building'}
                 onClick={download}
                 onPointerEnter={prefetch}
@@ -416,7 +385,6 @@ export function App() {
                 {t.download}
               </button>
               <div aria-live="polite">
-                {support && !runtime && <p className="status">{t.firmwareChoiceNeeded}</p>}
                 {plan.visible.length === 0 && <p className="status error">{t.noModules}</p>}
                 {build.state === 'building' && (
                   <p className="status">

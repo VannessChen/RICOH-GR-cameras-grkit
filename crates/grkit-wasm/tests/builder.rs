@@ -17,8 +17,8 @@ const PDF: &[u8] = b"%PDF-1.7\n% GRKit test guide\n";
 
 fn builder_with_runtime(files: &Files) -> Builder {
     let mut builder = Builder::new(&manifest(files)).unwrap();
-    for path in builder.runtime_paths().to_vec() {
-        builder.add_runtime_file(&path, &files[&path]).unwrap();
+    for path in builder.runtime_paths(0).unwrap().to_vec() {
+        builder.add_runtime_file(0, &path, &files[&path]).unwrap();
     }
     builder.set_guide(PDF);
     builder
@@ -33,7 +33,7 @@ fn builds_a_verified_package_from_a_published_runtime() {
     let files = runtime_files();
     let mut builder = builder_with_runtime(&files);
     let paths: Vec<_> = files.keys().cloned().collect();
-    assert_eq!(builder.runtime_paths(), paths.as_slice());
+    assert_eq!(builder.runtime_paths(0).unwrap(), paths.as_slice());
     assert_eq!(builder.add_effect(&effect("test-a")).unwrap(), "test-a");
     assert_eq!(builder.add_effect(&effect("test-b")).unwrap(), "test-b");
 
@@ -77,9 +77,9 @@ fn omitted_plugins_are_written_and_checked() {
 fn the_camera_selects_the_modeset_file() {
     let mut builder = builder_with_runtime(&runtime_files());
     assert!(error(builder.set_camera("gr2")).contains("Unknown camera"));
-    // GR IV needs its own runtime.
+    // GR IV needs its own runtimes.
     builder.set_camera("gr4").unwrap();
-    assert!(error(builder.build()).contains("GR IV runs the gr4-1.11 or gr4-1.20 runtime"));
+    assert!(error(builder.build()).contains("needs the runtime of each of its builds"));
     builder.set_camera("gr3x").unwrap();
     let package = builder.build().unwrap();
     let verified = packaging::verify_package(&package).unwrap();
@@ -96,8 +96,8 @@ fn the_camera_selects_the_modeset_file() {
 fn a_package_needs_the_guide_pdf() {
     let files = runtime_files();
     let mut builder = Builder::new(&manifest(&files)).unwrap();
-    for path in builder.runtime_paths().to_vec() {
-        builder.add_runtime_file(&path, &files[&path]).unwrap();
+    for path in builder.runtime_paths(0).unwrap().to_vec() {
+        builder.add_runtime_file(0, &path, &files[&path]).unwrap();
     }
     assert!(error(builder.build()).contains("Set the installation guide first"));
     builder.set_guide(b"not a PDF");
@@ -129,18 +129,18 @@ fn missing_or_changed_runtime_files_are_rejected() {
     let files = runtime_files();
     let mut missing = Builder::new(&manifest(&files)).unwrap();
     missing
-        .add_runtime_file("SCRIPT/STARTUP.TTL", &files["SCRIPT/STARTUP.TTL"])
+        .add_runtime_file(0, "SCRIPT/STARTUP.TTL", &files["SCRIPT/STARTUP.TTL"])
         .unwrap();
     assert!(error(missing.build()).contains("Runtime directory differs from its manifest"));
 
     let mut changed = Builder::new(&manifest(&files)).unwrap();
-    for path in changed.runtime_paths().to_vec() {
+    for path in changed.runtime_paths(0).unwrap().to_vec() {
         let bytes = if path == "SCRIPT/STARTUP.TTL" {
             b"changed".to_vec()
         } else {
             files[&path].clone()
         };
-        changed.add_runtime_file(&path, &bytes).unwrap();
+        changed.add_runtime_file(0, &path, &bytes).unwrap();
     }
     assert!(error(changed.build()).contains("Runtime hash or size mismatch: SCRIPT/STARTUP.TTL"));
 }
@@ -149,11 +149,13 @@ fn missing_or_changed_runtime_files_are_rejected() {
 fn unknown_and_duplicate_runtime_files_are_rejected() {
     let files = runtime_files();
     let mut builder = Builder::new(&manifest(&files)).unwrap();
-    assert!(error(builder.add_runtime_file("SCRIPT/EXTRA.SH", b"x"))
+    assert!(error(builder.add_runtime_file(0, "SCRIPT/EXTRA.SH", b"x"))
         .contains("Not a runtime file of this build"));
     let path = "SCRIPT/STARTUP.TTL";
-    builder.add_runtime_file(path, &files[path]).unwrap();
-    assert!(error(builder.add_runtime_file(path, &files[path])).contains("Duplicate runtime file"));
+    builder.add_runtime_file(0, path, &files[path]).unwrap();
+    assert!(
+        error(builder.add_runtime_file(0, path, &files[path])).contains("Duplicate runtime file")
+    );
 }
 
 #[test]
@@ -162,8 +164,8 @@ fn non_production_manifests_are_rejected() {
     let mut value: Value = serde_json::from_slice(&manifest(&files)).unwrap();
     value["profile"] = json!("diagnostic");
     let mut builder = Builder::new(&packaging::json_bytes(&value).unwrap()).unwrap();
-    for path in builder.runtime_paths().to_vec() {
-        builder.add_runtime_file(&path, &files[&path]).unwrap();
+    for path in builder.runtime_paths(0).unwrap().to_vec() {
+        builder.add_runtime_file(0, &path, &files[&path]).unwrap();
     }
     assert!(error(builder.build()).contains("Expected a production build for a supported target"));
     assert!(error(Builder::new(b"{}")).contains("Expected a manifest file list"));
@@ -182,4 +184,37 @@ fn duplicate_invalid_and_excess_effects_are_rejected() {
     }
     assert!(error(full.add_effect(&effect("test-extra"))).contains("at most 20 effects"));
     assert!(full.build().is_ok());
+}
+
+/// A GR IV package takes the runtime of each GR IV build, in release order.
+#[test]
+fn a_package_adds_each_build_of_the_camera() {
+    let camera = grkit_core::camera::find("gr4").unwrap();
+    let builds: Vec<(Vec<u8>, Files)> = camera
+        .targets()
+        .into_iter()
+        .map(|target| {
+            let files = testing::runtime_files(&testing::marked_installer(target), target);
+            (testing::manifest(target, &files), files)
+        })
+        .collect();
+    let mut builder = Builder::new(&builds[0].0).unwrap();
+    builder.set_camera("gr4").unwrap();
+    builder.set_guide(PDF);
+    for (manifest, _) in &builds[1..] {
+        builder.add_build(manifest).unwrap();
+    }
+    assert!(error(builder.runtime_paths(3)).contains("No runtime build 3"));
+    for (number, (_, files)) in builds.iter().enumerate() {
+        for path in builder.runtime_paths(number).unwrap().to_vec() {
+            builder
+                .add_runtime_file(number, &path, &files[&path])
+                .unwrap();
+        }
+    }
+    let package = builder.build().unwrap();
+    assert_eq!(
+        packaging::verify_package(&package).unwrap().targets,
+        ["gr4-1.11", "gr4-1.20", "gr4-1.20-0528"]
+    );
 }

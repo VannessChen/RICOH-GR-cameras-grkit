@@ -111,20 +111,22 @@ function listedPaths(build: Uint8Array): string[] {
 
 /**
  * Starts the downloads of a package for `camera` before the click on Download: the packager, the
- * runtime, and the guide. A later `buildPackage` uses them. Errors stay silent here, and the
- * build requests a failed file again.
+ * runtime of each build in `targets`, and the guide. A later `buildPackage` uses them. Errors stay
+ * silent here, and the build requests a failed file again.
  */
-export function prefetchPackage(target: string, camera: string, language: string): void {
+export function prefetchPackage(targets: readonly string[], camera: string, language: string): void {
   const ignore = () => {};
   loadWasm().catch(ignore);
   transfer(guideUrl(camera, language)).bytes.catch(ignore);
-  transfer(buildUrl(target))
-    .bytes.then((build) => {
-      for (const path of listedPaths(build)) {
-        transfer(runtimeUrl(target, path)).bytes.catch(ignore);
-      }
-    })
-    .catch(ignore);
+  for (const target of targets) {
+    transfer(buildUrl(target))
+      .bytes.then((build) => {
+        for (const path of listedPaths(build)) {
+          transfer(runtimeUrl(target, path)).bytes.catch(ignore);
+        }
+      })
+      .catch(ignore);
+  }
 }
 
 async function sha256(bytes: Uint8Array): Promise<string> {
@@ -133,14 +135,16 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 }
 
 /**
- * Builds GRKit.zip in the browser from the target's published runtime and the selected effects.
+ * Builds GRKit.zip in the browser from the published runtime of each build in `targets`, in
+ * release order, and the selected effects. The builds of a camera have the same effects, so the
+ * effects come from the first build.
  * `camera` selects the ModeSet file. `omitted` names the plugins that the package does not install.
  * `language` selects the installation guide, which the site publishes as `guides/<camera>/<language>.pdf`.
  * grkit-wasm checks each runtime file against `build.json` and each effect's format.
  * `onProgress` receives the number of bytes of the files of this package that have arrived.
  */
 export async function buildPackage(
-  target: string,
+  targets: readonly string[],
   camera: string,
   effects: readonly Effect[],
   omitted: readonly string[],
@@ -161,33 +165,38 @@ export async function buildPackage(
   try {
     // The packager, the runtime files, the guide, and the effects download at the same time.
     const ignore = () => {};
-    use(buildUrl(target))
-      .then((build) => {
-        for (const path of listedPaths(build)) use(runtimeUrl(target, path)).catch(ignore);
-      })
-      .catch(ignore);
+    for (const target of targets) {
+      use(buildUrl(target))
+        .then((build) => {
+          for (const path of listedPaths(build)) use(runtimeUrl(target, path)).catch(ignore);
+        })
+        .catch(ignore);
+    }
     const effectBytes = Promise.all(
       effects.map((effect) =>
-        effect.imported ? Promise.resolve(effect.imported.blob) : use(effectUrl(target, effect.file)),
+        effect.imported ? Promise.resolve(effect.imported.blob) : use(effectUrl(targets[0]!, effect.file)),
       ),
     );
     // The build awaits the effects later. Until then, a failure is not an unhandled rejection.
     effectBytes.catch(ignore);
-    const [{ Package }, build, guide] = await Promise.all([
+    const [{ Package }, builds, guide] = await Promise.all([
       loadWasm(),
-      use(buildUrl(target)),
+      Promise.all(targets.map((target) => use(buildUrl(target)))),
       use(guideUrl(camera, language)),
     ]);
     report();
-    const builder = new Package(build);
+    const builder = new Package(builds[0]!);
     try {
       builder.setCamera(camera);
       builder.setLanguage(language);
       builder.setGuide(guide);
-      const paths = builder.runtimePaths();
-      const files = await Promise.all(paths.map((path) => use(runtimeUrl(target, path))));
-      for (const [index, bytes] of files.entries()) {
-        builder.addRuntimeFile(paths[index]!, bytes);
+      for (const build of builds.slice(1)) builder.addBuild(build);
+      for (const [number, target] of targets.entries()) {
+        const paths = builder.runtimePaths(number);
+        const files = await Promise.all(paths.map((path) => use(runtimeUrl(target, path))));
+        for (const [index, bytes] of files.entries()) {
+          builder.addRuntimeFile(number, paths[index]!, bytes);
+        }
       }
       for (const [index, blob] of (await effectBytes).entries()) {
         const effect = effects[index]!;

@@ -252,6 +252,8 @@ pub struct Port {
     /// Whether the installer relocates the base target to the other build
     /// (`relocatable`).
     pub relocatable: bool,
+    /// The `RTOS_IDENTITY` word of the other build.
+    pub identity: Option<u32>,
 }
 
 /// Adds the sources of an address to the plan. A window of data can match a
@@ -408,12 +410,17 @@ pub fn port(base: &FirmwareImage, other: &[u8], radius: u32) -> Result<Port> {
     let mut addresses: Vec<Ported> = addresses;
     check_image_control(&mut addresses, other, &resolution.layout);
     let relocatable = relocatable(base, other, &addresses)?;
+    let identity = (crate::target::RTOS_IDENTITY - RTOS_BASE) as usize;
+    let identity = other
+        .get(identity..identity + 4)
+        .map(|word| u32::from_le_bytes(word.try_into().unwrap()));
     Ok(Port {
         base: target,
         radius,
         layout: resolution.layout,
         addresses,
         relocatable,
+        identity,
     })
 }
 
@@ -722,7 +729,7 @@ impl Port {
             out,
             0,
             &format!(
-                "use super::{{{}, Download, ImageControl, Target}};",
+                "use super::{{{}, Download, ImageControl, Source, Target}};",
                 base.family.name
             ),
             "",
@@ -785,7 +792,30 @@ impl Port {
             &format!("file: {:?},", base.download.file),
             &base_note("the firmware file in the zip"),
         );
+        push(
+            out,
+            8,
+            &format!("source: Source::{:?},", base.download.source),
+            &base_note("Ricoh, or Dump for an RTOS image of a camera"),
+        );
         push(out, 4, "},", "");
+        let identities: Vec<_> = base
+            .identities
+            .iter()
+            .map(|word| format!("{word:#010x}"))
+            .collect();
+        let identity = self
+            .identity
+            .map_or("none".to_string(), |word| format!("{word:#010x}"));
+        push(
+            out,
+            4,
+            &format!("identities: &[{}],", identities.join(", ")),
+            &format!(
+                "PORT: the identity of the new build is {identity} ({} in the base)",
+                base.name
+            ),
+        );
         push(out, 4, &format!("data_start: {:#x},", base.data_start), "");
         push(
             out,

@@ -25,6 +25,7 @@ export const CAMERA_RELEASES = {
     releases: [
       { firmware: '1.11', target: 'gr4-1.11', experimental: false },
       { firmware: '1.20', target: 'gr4-1.20', experimental: true },
+      { firmware: '1.20', target: 'gr4-1.20-0528', experimental: true },
     ],
   },
 } as const;

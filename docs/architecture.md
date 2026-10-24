@@ -50,11 +50,13 @@ Tests require each build of a family to have a site for each hook of the family 
 | --- | --- |
 | `gr3-2.10` | GR III 2.10 and 2.20, GR IIIx 1.60 and 1.70, and their HDF models |
 | `gr4-1.11` | GR IV 1.11, GR IV HDF, GR IV Monochrome |
-| `gr4-1.20` | GR IV 1.20 and GR IV HDF 1.20 |
+| `gr4-1.20` | GR IV 1.20 and GR IV HDF 1.20, GR IV Monochrome 1.10 |
+| `gr4-1.20-0528` | GR IV 1.20, the factory build of GR IV 30th Anniversary Edition cameras |
 
 GR IIIx 1.60 runs the RTOS code of GR III 2.10, so both cameras use one runtime. They differ only in the ModeSet file that enables SD scripts.
 GR III 2.20 and GR IIIx 1.70 change only the end screen. Their code moves by less than the relocation radius, so INSTALL [relocates](#relocation) the `gr3-2.10` runtime to them. `camera.rs` lists the releases of each camera and the runtime build of each release.
-GR IV 1.20 changes the code around several hooks and adds the monochrome Image Control types 31 and 32. It therefore has its own target (see [Porting](#porting)). Its hooks are those of 1.11. A package names its build in `INSTALL.BIN` (`GRKIT_TARGET=`), because the two GR IV builds have the same runtime file layout.
+GR IV 1.20 changes the code around several hooks and adds the monochrome Image Control types 31 and 32. It therefore has its own target (see [Porting](#porting)). Its hooks are those of 1.11.
+GR IV 30th Anniversary Edition cameras have an earlier 1.20 build from the factory, with code of both 1.11 and 1.20, so it has its own target. Ricoh does not publish it, so the target builds from a dump of a camera (`Source::Dump`).
 An HDF camera runs the firmware of its base camera and uses the package of that camera.
 GR IV has its own layout and all plugins.
 
@@ -64,6 +66,8 @@ At power-on, the loader script waits until Linux mounts the card. Then it runs t
 
 1. SCAN selects the effects and writes an allocation plan. The startup script allocates the arrays and stays resident, so the arrays stay allocated.
 2. INSTALL writes records and icons, publishes the code, and installs the hooks last. It writes `INSTALL.OK`, or `INSTALL.ERR` with a status.
+
+A camera has one package. When the camera has several targets, the package holds the installer of each, and `INSTALL.SH` selects one at each power-on: first by the identity word of the running build, then by [relocation](#relocation) for a build that no target names (`runtime::package_runtime_files`).
 
 INSTALL changes nothing on a firmware that it does not expect. Each firmware address must resolve in the running image (see [Relocation](#relocation)), and each hook site must hold its stock instruction.
 
@@ -158,7 +162,7 @@ A failure stops INSTALL with status 47 before it changes the firmware. `INSTALL.
 A new firmware version needs one of two changes:
 
 - If its code moves by less than the relocation radius, the existing target runs on it. Add the release to `camera.rs` with the existing target.
-- If its code moves farther, or code at a hook changed, it needs a new target in the family of the existing one.
+- If its code moves farther, or code at a hook changed, it needs a new target in the family of the existing one. The package of the camera then holds the installer of each target (see [Installation](#installation)).
 
 `grkit port` finds each address of an existing target in another build. It uses the windows of [Relocation](#relocation), within a larger radius. It takes the hook and patch sites of the target module, the `FIRMWARE()` addresses of the build header, and the data addresses of `Target`. It writes drafts of the build header and of the target module for the new build.
 The port cannot find an address whose code or data changed. It also does not check values that are not addresses, such as object offsets, text IDs, and enum values.
@@ -172,11 +176,11 @@ To add a target for a new firmware build:
 1. Run `grkit port --target <target> --firmware <its firmware> --to <new firmware> --out <directory>`. Use `--to-rtos` for an RTOS image, such as a GRDUMP capture.
 2. If the output gives `"relocatable": true`, add the release to the existing target instead. Test the existing target on the new firmware.
 3. Make `runtime/targets/<new target>.h` from `header.h` of the output. Resolve each `PORT` comment: port the address by hand, or check the offset that an expression adds. Check each value that is not an address.
-4. Save `target.rs` of the output as `crates/grkit-build/src/target/<module>.rs`. The module name is the target name with `_` for `-` and without `.`. Resolve each `PORT` comment. Give the name, the firmware, its SHA-256 values, its download, and the header definition of the new target. Port each address that has no port, and check each value that is not an address. Add the module to `crates/grkit-build/src/target.rs`, to `TARGETS`, and to `SOURCES`.
+4. Save `target.rs` of the output as `crates/grkit-build/src/target/<module>.rs`. The module name is the target name with `_` for `-` and without `.`. Resolve each `PORT` comment. Give the name, the firmware, its SHA-256 values, its download, its identity word, and the header definition of the new target. Port each address that has no port, and check each value that is not an address. Add the module to `crates/grkit-build/src/target.rs`, to `TARGETS`, and to `SOURCES`.
 5. If the code at a site changed, change the hook of the family so that it fits the code of each build. The runtime tests a definition that only the new build has with `#ifdef`. Add that definition to `BUILD_ONLY_DEFINITIONS`.
 6. Select the header in `runtime/firmware.h`. Add the release to `camera.rs` as experimental.
-7. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`, and add an entry for the target to `web/src/cameras.ts`.
-8. Add the firmware zip to the private firmware backup (`docs/releasing.md`). The release workflow builds each target of `grkit release-plan`, so it needs no change.
+7. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`. The site packages each target of a camera, so `web/src/cameras.ts` changes only for a new camera.
+8. Add the firmware zip, or the zip of the dump, to the private firmware backup (`docs/releasing.md`). The release workflow builds each target of `grkit release-plan`, so it needs no change.
 9. Run `grkit port` again with `--check <new target>`. No address may differ without a review.
 10. Run the tests, build the target from the official firmware, and test it on the new firmware. Set the release to not experimental only after a test on a camera.
 

@@ -19,16 +19,22 @@
 //!
 //! GR IV 1.11 is a different build with its own runtime. GR IV 1.20 moves and
 //! changes code beyond the relocation radius, so it has a runtime of its own,
-//! `gr4-1.20`, which has not been tested on a camera. Each has
-//! Image Control, Framing (XPan only, cropped from native 16:9), Guides, Date
-//! Stamp, and Grain. The 1.11 runtime has been tested on a GR IV camera, but
-//! not on a GR IV HDF camera.
+//! `gr4-1.20`, which has not been tested on a camera. GR IV 30th Anniversary
+//! Edition cameras have another 1.20 build from the factory, which mixes code
+//! of 1.11 and 1.20, so it has the runtime `gr4-1.20-0528`. Each has
+//! Image Control, Framing, Guides, Date Stamp, and Grain. The 1.11 runtime has
+//! been tested on a GR IV camera, but not on a GR IV HDF camera.
+//!
+//! A camera has one package. When the camera has several runtime builds, the
+//! package holds the installer of each, and the camera selects the installer
+//! of its build at each power-on (`runtime::package_runtime_files`).
 
 use anyhow::{bail, Result};
 
 use crate::modules;
 
-/// A firmware version that a camera runs, and the runtime build for it.
+/// A firmware version that a camera runs, and the runtime build for it. Two
+/// builds of one version are two releases with the same version.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Release {
     pub firmware: &'static str,
@@ -116,6 +122,12 @@ pub const GR4: Camera = Camera {
             target: "gr4-1.20",
             experimental: true,
         },
+        // The factory build of GR IV 30th Anniversary Edition cameras.
+        Release {
+            firmware: "1.20",
+            target: "gr4-1.20-0528",
+            experimental: true,
+        },
     ],
     modeset: "00078560.636",
     experimental: false,
@@ -140,6 +152,17 @@ impl Camera {
     /// Whether a runtime build runs on the camera.
     pub fn runs(&self, target: &str) -> bool {
         self.releases.iter().any(|release| release.target == target)
+    }
+
+    /// The firmware versions of the releases, oldest first, each once.
+    pub fn versions(&self) -> Vec<&'static str> {
+        let mut versions = Vec::new();
+        for release in self.releases {
+            if !versions.contains(&release.firmware) {
+                versions.push(release.firmware);
+            }
+        }
+        versions
     }
 
     /// The firmware versions that run a runtime build, oldest first.
@@ -213,8 +236,10 @@ mod tests {
         assert_eq!(GR3.firmware_for("gr3-2.10"), ["2.10", "2.20"]);
         assert_eq!(GR3X.firmware_for("gr3-2.10"), ["1.60", "1.70"]);
         assert!(GR3X.runs("gr3-2.10") && !GR3X.runs("gr4-1.11"));
-        assert_eq!(GR4.targets(), ["gr4-1.11", "gr4-1.20"]);
+        assert_eq!(GR4.targets(), ["gr4-1.11", "gr4-1.20", "gr4-1.20-0528"]);
         assert_eq!(GR4.firmware_for("gr4-1.20"), ["1.20"]);
+        assert_eq!(GR4.firmware_for("gr4-1.20-0528"), ["1.20"]);
+        assert_eq!(GR4.versions(), ["1.11", "1.20"]);
         // The releases that no camera test covers are experimental.
         let experimental: Vec<_> = CAMERAS
             .iter()
@@ -222,6 +247,6 @@ mod tests {
             .filter(|release| release.experimental)
             .map(|release| release.firmware)
             .collect();
-        assert_eq!(experimental, ["2.20", "1.70", "1.20"]);
+        assert_eq!(experimental, ["2.20", "1.70", "1.20", "1.20"]);
     }
 }

@@ -1,8 +1,8 @@
 # GRKit
 
 僅適用於 RICOH GR IV 與 GR IV HDF 韌體 1.11。
-每個韌體版本需要各自的套件。請使用與相機顯示的版本對應的套件。
-韌體 1.20（GR IV Monochrome 上為 1.10）的更新無法復原。更新後，請使用 1.20 對應的套件。
+一個套件適用於每個支援的韌體版本。每次開機時，GRKit 會識別相機的韌體。
+韌體 1.20（GR IV Monochrome 上為 1.10）的更新無法復原。更新後，同一個套件仍然可以使用。
 GR IV Monochrome 執行 GR IV 的韌體，但顯示自己的版本號：韌體 1.11 顯示為 1.00，韌體 1.20 顯示為 1.10。它的套件不含影像控制。GR IV Monochrome 使用 GR IV 的執行環境，但本身未經實機測試。
 
 ## 安裝
@@ -50,7 +50,7 @@ GR IV Monochrome 執行 GR IV 的韌體，但顯示自己的版本號：韌體 1
 2. 在 ADJ 模式中找 GRK。GRK 不在 MENU 選單中。
 3. 如果第 3 步中相機沒有顯示 Mode Set Command，重新執行第 3 步。
 4. 確認記憶卡根目錄中有 `SCRIPT` 資料夾。複製 `SD_ROOT` 中的全部內容，包括 `SCRIPT`。
-5. 如果記憶卡中有 `SCRIPT/PLUGINS/INSTALL.ERR`，表示 GRKit 沒有安裝成功。確認套件與相機的韌體版本對應。在相機選單中可以查看韌體版本。如果版本正確，請提交[裝置報告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，並附上 `INSTALL.ERR` 中的全部內容。
+5. 如果記憶卡中有 `SCRIPT/PLUGINS/INSTALL.ERR`，表示 GRKit 沒有安裝成功。確認相機顯示的是支援的韌體版本。在相機選單中可以查看韌體版本。如果版本受支援，請提交[裝置報告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，並附上 `INSTALL.ERR` 中的全部內容。
 6. GRKit 只能在 Ricoh 官方韌體上執行，不能在修改過的韌體上執行。
 
 ## 移除或復原

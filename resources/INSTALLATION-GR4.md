@@ -1,8 +1,8 @@
 # GRKit
 
 For RICOH GR IV and GR IV HDF firmware 1.11 only.
-Each firmware version needs its own package. Use a package for the version that your camera shows.
-The update to firmware 1.20 (1.10 on GR IV Monochrome) cannot be undone. After the update, use a package for 1.20.
+One package serves each supported firmware version. At each power-on, GRKit finds the firmware of the camera.
+The update to firmware 1.20 (1.10 on GR IV Monochrome) cannot be undone. After the update, the same package still works.
 GR IV Monochrome runs the GR IV firmware and shows its own version: 1.00 for firmware 1.11, and 1.10 for firmware 1.20. Its package has no Image Control. GR IV Monochrome uses the GR IV runtimes, but has not been tested on a camera itself.
 
 ## Install
@@ -50,7 +50,7 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 2. Look for GRK in ADJ. It is not in MENU.
 3. If the camera did not show Mode Set Command in step 3, do step 3 again.
 4. Make sure that the card root has the `SCRIPT` folder. Copy all the contents of `SD_ROOT`, including `SCRIPT`.
-5. If the card has `SCRIPT/PLUGINS/INSTALL.ERR`, GRKit did not install. Make sure that the package is for the firmware version of your camera. To see the firmware version, open the camera menu. If the version is correct, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR`.
+5. If the card has `SCRIPT/PLUGINS/INSTALL.ERR`, GRKit did not install. Make sure that the camera shows a supported firmware version. To see the firmware version, open the camera menu. If the version is supported, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR`.
 6. GRKit runs only on the official Ricoh firmware. It does not run on modified firmware.
 
 ## Remove or recover

@@ -1,7 +1,7 @@
 //! GR IV and GR IV HDF 1.20, with the plugins of 1.11. Its addresses come
 //! from 1.11 through the code that uses them; not tested on a camera.
 
-use super::{gr4, Download, ImageControl, Target};
+use super::{gr4, Download, ImageControl, Source, Target};
 use crate::components::{InstructionPatch, Layout, Site};
 
 pub const TARGET: Target = Target {
@@ -14,7 +14,9 @@ pub const TARGET: Target = Target {
         zip: "gr4_v120.zip",
         zip_sha256: "dcc1b6fb004f0d855bb46b30a529da894c7b717501276fec2d198b3d7eb76a59",
         file: "fwdc248b.bin",
+        source: Source::Ricoh,
     },
+    identities: &[0x0b0a1401],
     data_start: 0x55000000,
     data_source: 0x543b3100,
     data_size: 0x58500,

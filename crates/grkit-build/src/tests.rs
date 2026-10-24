@@ -594,6 +594,56 @@ fn gr4_relocation_resolves_other_builds() -> Result<()> {
     Ok(())
 }
 
+/// A GR IV package runs the installer of each GR IV build in turn
+/// (`runtime::package_runtime_files`). Each image names exactly one runtime
+/// with its identity word (`--known`), and each runtime resolves only its own
+/// image (`--try`), so the package installs the runtime of the build.
+#[test]
+#[ignore = "Requires local GRKIT_TEST_FIRMWARE_GR4, GRKIT_TEST_FIRMWARE_GR4_120, GRKIT_TEST_FIRMWARE_GR4_120_0528, and ARM toolchain"]
+fn gr4_installers_select_their_build() -> Result<()> {
+    let tools = tools()?;
+    let directory = tempfile::tempdir()?;
+    let mut builds = Vec::new();
+    for (variable, target) in [
+        ("GRKIT_TEST_FIRMWARE_GR4", &target::GR4_111),
+        ("GRKIT_TEST_FIRMWARE_GR4_120", &target::GR4_120),
+        ("GRKIT_TEST_FIRMWARE_GR4_120_0528", &target::GR4_120_0528),
+    ] {
+        let path = std::env::var(variable).with_context(|| format!("Set {variable}"))?;
+        let image = verify_firmware(Path::new(&path), target)?;
+        let built = build_image(&image, &directory.path().join(target.name), &tools)?;
+        builds.push((target, image, built));
+    }
+    let offset = (target::RTOS_IDENTITY - target::RTOS_BASE) as usize;
+    for (target, image, _) in &builds {
+        let identity = u32::from_le_bytes(image.body[offset..offset + 4].try_into()?);
+        let naming: Vec<_> = builds
+            .iter()
+            .filter(|(other, _, _)| other.identities.contains(&identity))
+            .map(|(other, _, _)| other.name)
+            .collect();
+        assert_eq!(naming, [target.name], "identity {identity:#010x}");
+    }
+    for (target, _, built) in &builds {
+        for (other, image, _) in &builds {
+            let (result, symbols) = resolve_image(&built.output, &image.body)?;
+            if target.name == other.name {
+                let tail = target.layout.unwrap().tail.0;
+                assert_eq!(result, format!("ok {tail:#x}"), "{}", target.name);
+                assert!(symbols.iter().all(|(pinned, resolved)| pinned == resolved));
+            } else {
+                assert!(
+                    result.starts_with("failed"),
+                    "{} on {}: {result}",
+                    target.name,
+                    other.name
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 #[test]
 #[ignore = "Requires local GRKIT_TEST_FIRMWARE and ARM toolchain"]
 fn gr3_relocation_resolves_its_builds() -> Result<()> {
@@ -712,9 +762,11 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     assert!(header.starts_with(
         "static const char target_marker[] __attribute__((used)) = \"GRKIT_TARGET=gr3-2.10\";\n"
     ));
+    // GR III has one runtime, so it names no build for `--known`.
+    assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
     assert_eq!(
         sha256(header.as_bytes()),
-        "7ea3c21594e01fce0053d5df9121780e50cb7382ad20074544d18384fe596967"
+        "ba236cb1ec3f99bdb171de215fc10a876acf6f8266df7d526c42221d026c6c93"
     );
     Ok(())
 }
@@ -950,10 +1002,13 @@ fn header_definitions(path: &str, own: bool) -> BTreeMap<String, String> {
 
 /// Definitions that only some builds of a family have, because the code of
 /// those builds differs. The runtime tests each with `#ifdef`.
-const BUILD_ONLY_DEFINITIONS: &[(&str, &[&str])] = &[(
-    "gr4-1.20",
-    &["NATIVE_ICON_LIMIT", "NATIVE_MONOCHROME_TYPES_HIGH"],
-)];
+const BUILD_ONLY_DEFINITIONS: &[(&str, &[&str])] = &[
+    (
+        "gr4-1.20",
+        &["NATIVE_ICON_LIMIT", "NATIVE_MONOCHROME_TYPES_HIGH"],
+    ),
+    ("gr4-1.20-0528", &["NATIVE_ICON_LIMIT"]),
+];
 
 /// The hooks of a build are those of its family (`Family::hooks`). Each build
 /// gives one site for each hook, and builds of a family have as many
@@ -1359,6 +1414,7 @@ fn port_drafts_the_module_of_each_target() -> Result<()> {
             },
             addresses,
             relocatable: true,
+            identity: None,
         };
         let module = format!("{}.rs", target.module());
         let (_, source) = target::SOURCES
@@ -1422,12 +1478,13 @@ fn move_value(word: u32) -> Option<(u32, u32)> {
 /// The Fn hint IDs of a build header are those that the native ADJ refresh of
 /// its firmware gives to FW_GUIDE_SET_CONTENT: the label in r1, the icon in r3.
 #[test]
-#[ignore = "Requires local GRKIT_TEST_FIRMWARE, GRKIT_TEST_FIRMWARE_GR4, and GRKIT_TEST_FIRMWARE_GR4_120"]
+#[ignore = "Requires local GRKIT_TEST_FIRMWARE, GRKIT_TEST_FIRMWARE_GR4, GRKIT_TEST_FIRMWARE_GR4_120, and GRKIT_TEST_FIRMWARE_GR4_120_0528"]
 fn fn_hint_ids_are_those_of_the_native_adj_refresh() -> Result<()> {
     for (variable, target) in [
         ("GRKIT_TEST_FIRMWARE", &target::GR3_210),
         ("GRKIT_TEST_FIRMWARE_GR4", &target::GR4_111),
         ("GRKIT_TEST_FIRMWARE_GR4_120", &target::GR4_120),
+        ("GRKIT_TEST_FIRMWARE_GR4_120_0528", &target::GR4_120_0528),
     ] {
         let path = std::env::var(variable).with_context(|| format!("Set {variable}"))?;
         let image = verify_firmware(Path::new(&path), target)?;

@@ -340,7 +340,9 @@ menu_icon_lookup:
     ldr pc, =HOOK_MENU_ICON_LOOKUP_RESUME
 /* GR IV icon draw: replaces the limit check of the icon ID in r7, `cmp r7, r2`
    with the native limit in r2, or `cmp r7, #NATIVE_ICON_LIMIT` when the
-   target defines it. A private ID passes the check. */
+   target defines it. A private ID passes the check: with an immediate limit,
+   the native branch after the check is `bhi` or `bhs`, and `cmn r7, #0`
+   clears C, so neither is taken. */
 .global menu_icon_limit
 .type menu_icon_limit, %function
 menu_icon_limit:
@@ -351,7 +353,7 @@ menu_icon_limit:
     pop {r0-r3, r12, lr}
 #ifdef NATIVE_ICON_LIMIT
     beq 1f
-    cmp r7, r7
+    cmn r7, #0
     ldr pc, =HOOK_MENU_ICON_LIMIT_RESUME
 1:  cmp r7, #NATIVE_ICON_LIMIT
 #else

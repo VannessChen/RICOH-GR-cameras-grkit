@@ -1,8 +1,8 @@
 # GRKit
 
 仅适用于 RICOH GR IV 和 GR IV HDF 固件 1.11。
-每个固件版本需要各自的包。请使用与相机显示的版本对应的包。
-固件 1.20（GR IV Monochrome 上为 1.10）的更新无法撤销。更新后，请使用 1.20 对应的包。
+一个包适用于每个受支持的固件版本。每次开机时，GRKit 会识别相机的固件。
+固件 1.20（GR IV Monochrome 上为 1.10）的更新无法撤销。更新后，同一个包仍然可以使用。
 GR IV Monochrome 运行 GR IV 的固件，但显示自己的版本号：固件 1.11 显示为 1.00，固件 1.20 显示为 1.10。它的包不含影像控制。GR IV Monochrome 使用 GR IV 的运行时，但本身未经真机测试。
 
 ## 安装
@@ -50,7 +50,7 @@ GR IV Monochrome 运行 GR IV 的固件，但显示自己的版本号：固件 1
 2. 在 ADJ 模式中找 GRK。GRK 不在 MENU 菜单中。
 3. 如果第 3 步中相机没有显示 Mode Set Command，重新执行第 3 步。
 4. 确认存储卡根目录中有 `SCRIPT` 文件夹。复制 `SD_ROOT` 中的全部内容，包括 `SCRIPT`。
-5. 如果存储卡中有 `SCRIPT/PLUGINS/INSTALL.ERR`，表示 GRKit 没有安装成功。确认包与相机的固件版本对应。在相机菜单中可以查看固件版本。如果版本正确，请提交[设备报告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，并附上 `INSTALL.ERR` 中的全部内容。
+5. 如果存储卡中有 `SCRIPT/PLUGINS/INSTALL.ERR`，表示 GRKit 没有安装成功。确认相机显示的是受支持的固件版本。在相机菜单中可以查看固件版本。如果版本受支持，请提交[设备报告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，并附上 `INSTALL.ERR` 中的全部内容。
 6. GRKit 只能在 Ricoh 官方固件上运行，不能在修改过的固件上运行。
 
 ## 移除或恢复

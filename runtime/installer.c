@@ -621,18 +621,68 @@ static int not_ready(int status)
 {
     return status == 12 || status == 14 || status == 26 || status == 39;
 }
+/* A package with a runtime for each build of a camera runs its installers in
+   turn (runtime::package_runtime_files). `--known` installs on a build that
+   the runtime names, and exits with 48 on another build. `--try` installs on a
+   build that the relocation resolves, and exits with 47 on another build.
+   On another build, both read the RTOS only and leave each file as it is:
+   after Linux deletes a file in the folder, the camera does not find the next
+   name that it looks up there, such as the next installer. `--install` is the
+   last attempt and always leaves its result. */
+enum install_mode { INSTALL_LAST, INSTALL_KNOWN, INSTALL_TRY };
+static int names_build(void)
+{
+#if RTOS_IDENTITY_COUNT
+    u32 identity = word(RTOS_IDENTITY);
+    for (u32 i = 0; i < RTOS_IDENTITY_COUNT; ++i)
+        if (identity == rtos_identities[i]) return 1;
+#endif
+    return 0;
+}
+static int relocation_found(void)
+{
+#ifdef GRKIT_RELOCATE
+    relocation.read = read_word;
+    relocation.window_at = window_at;
+    relocation.symbol_at = relocated;
+    return relocation_resolve(&relocation_tables, &relocation);
+#else
+    return 1;
+#endif
+}
+/* Whether the running build is not the one of `mode`. A failure to read the
+   RTOS is left to the install attempt, which reports it. */
+static int other_build(enum install_mode mode)
+{
+    long fd = syscall6(5, (u32)"/dev/mem", 0x101002, 0, 0, 0, 0), other = 0;
+    if (fd < 0) return 0;
+    long mapped = syscall6(192, 0, MAP_SIZE, 1, 1, fd, MAP_BASE >> 12);
+    if ((u32)mapped < 0xfffff001U) {
+        mapping = (volatile u8 *)mapped;
+        other = mode == INSTALL_KNOWN ? !names_build() : !relocation_found();
+        syscall6(91, (u32)mapping, MAP_SIZE, 0, 0, 0, 0);
+    }
+    syscall6(6, fd, 0, 0, 0, 0, 0);
+    return other;
+}
 __attribute__((used)) void start(u32 *stack)
 {
     u32 argc = stack[0]; char **argv = (char **)(stack + 1); int status = 40;
+    enum install_mode mode = INSTALL_LAST;
+    if (argc == 2 && text_equal(argv[1], "--known")) mode = INSTALL_KNOWN;
+    else if (argc == 2 && text_equal(argv[1], "--try")) mode = INSTALL_TRY;
+    int installing = argc == 2 && (mode != INSTALL_LAST || text_equal(argv[1], "--install"));
     if (argc == 2 && text_equal(argv[1], "--scan")) status = scan();
-    else if ((argc == 2 && text_equal(argv[1], "--install"))
+    else if (installing
 #ifdef MODULE_DIAGNOSTICS
              || (argc == 3 && text_equal(argv[1], "--select") && length(argv[2]) <= 31)
 #endif
     ) {
         long fd = -1;
+        int other = mode != INSTALL_LAST && other_build(mode);
+        if (other) status = mode == INSTALL_KNOWN ? 48 : 47;
         /* The lock admits one install attempt at a time and stays after a result. */
-        if (argc == 2 && !create(lock_path, 0)) status = 3;
+        else if (argc == 2 && !create(lock_path, 0)) status = 3;
         else if ((fd = syscall6(5, (u32)"/dev/mem", 0x101002, 0, 0, 0, 0)) < 0) status = 1;
         else {
             long mapped = syscall6(192, 0, MAP_SIZE, 3, 1, fd, MAP_BASE >> 12);
@@ -647,8 +697,9 @@ __attribute__((used)) void start(u32 *stack)
             }
             syscall6(6, fd, 0, 0, 0, 0, 0);
         }
-        /* The loader polls these files: retry after not-ready, stop after a result. */
-        if (argc == 2 && status != 3) {
+        /* The loader polls these files: retry after not-ready, stop after a result.
+           Another build leaves the next installer to run. */
+        if (argc == 2 && status != 3 && !other) {
             if (not_ready(status)) syscall6(10, (u32)lock_path, 0, 0, 0, 0, 0);
             else create(status ? failed_path : done_path, status);
         }

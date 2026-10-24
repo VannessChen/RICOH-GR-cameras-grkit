@@ -399,49 +399,6 @@ button {
   color: var(--warning);
 }
 
-.firmware-choice {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  align-items: center;
-  margin-top: 16px;
-}
-
-.firmware-label {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.firmware-options {
-  display: flex;
-  gap: 8px;
-}
-
-.firmware-option {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 12px;
-  border: 1px solid var(--ink);
-  font-family: var(--mono);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.firmware-option:has(input:checked) {
-  padding: 5px 11px;
-  border: 2px solid var(--accent);
-}
-
-.firmware-option input {
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.firmware-choice .note {
-  flex-basis: 100%;
-}
-
 /* Effect preview */
 
 .preview-row {

@@ -25,18 +25,19 @@ The site holds no firmware bytes: `grkit site` leaves out the generated header o
 4. Add the repository variable `SITE_URL` with the production URL of the site and no trailing slash, for example `https://<project>.pages.dev`. `Deploy` reads the `build.json` of a runtime under `SITE_URL/runtime/` to find the version that the site serves.
 5. Optional: add the repository variable `PLAUSIBLE_HOST` with the origin of a Plausible server, for example `https://plausible.example.com`. Release then adds Plausible analytics to the site for the domain `grkit.app`.
 6. Keep a private backup of the firmware, so that a release does not depend on the Ricoh download:
-   1. Download `gr3_v210.zip`, `gr4_v111.zip`, and `gr4_v120.zip` from Ricoh and accept the license. Do not change the zips.
+   1. Download `gr3_v210.zip`, `gr4_v111.zip`, and `gr4_v120.zip` from Ricoh and accept the license. Do not change the zips. Ricoh does not publish `gr4_v120_0528.zip`, a dump of a camera. Ask a maintainer for it.
    2. Create a private repository: `gh repo create <owner>/<backup-repo> --private`.
    3. Upload each zip as a release asset with the tag of its target:
       - `gh release create gr3-2.10 gr3_v210.zip --repo <owner>/<backup-repo> --notes "Private backup. Do not redistribute."`
       - `gh release create gr4-1.11 gr4_v111.zip --repo <owner>/<backup-repo> --notes "Private backup. Do not redistribute."`
       - `gh release create gr4-1.20 gr4_v120.zip --repo <owner>/<backup-repo> --notes "Private backup. Do not redistribute."`
+      - `gh release create gr4-1.20-0528 gr4_v120_0528.zip --repo <owner>/<backup-repo> --notes "Private backup. Do not redistribute."`
    4. Create a fine-grained token that can read only the Contents of that repository.
    5. In this repository, add the secret `FIRMWARE_BACKUP_TOKEN` with the token, and the variable `FIRMWARE_BACKUP_REPO` with `<owner>/<backup-repo>`.
    6. Start the `Release` workflow with an existing release tag and `firmware_source` set to `backup`. If the `build` job succeeds, the backup works.
 
 The backup must stay private. The Ricoh license permits a copy only to save and back up the software.
-With `firmware_source` set to `auto`, the build uses the backup of a zip only if the Ricoh download of that zip fails or its SHA-256 differs. Both sources must have the same SHA-256.
+With `firmware_source` set to `auto`, the build uses the backup of a zip only if the Ricoh download of that zip fails or its SHA-256 differs. Both sources must have the same SHA-256. A zip that Ricoh does not publish always comes from the backup.
 
 ## Record a change
 
@@ -66,7 +67,7 @@ Use `major` for a change that an earlier package cannot follow, for example a ne
 2. If the site does not serve the version within 15 minutes, `Deploy` fails and the release stays a draft. Examine the deployment in the Cloudflare dashboard. If it failed, retry it there, because a second `Deploy` run makes no new commit. Then start `Deploy` with the tag `vX.Y.Z`.
 3. The release holds these files. Install the package of each camera that you have, and test it.
    - `GRKit-X.Y.Z-site.tar.gz`: the site. Releases before 1.2.0 name it `site.tar.gz`, and `Deploy` and `Site` accept both names.
-   - `GRKit-X.Y.Z-gr3.zip`, `GRKit-X.Y.Z-gr3x.zip`, `GRKit-X.Y.Z-gr4.zip`, and `GRKit-X.Y.Z-gr4-1.20.zip`: the package of each camera, with the published runtime, each effect in `effects/`, each plugin, and the English guide. `gr4` is for GR IV firmware 1.11, and `gr4-1.20` is for firmware 1.20. The site makes the same package by default.
+   - `GRKit-X.Y.Z-gr3.zip`, `GRKit-X.Y.Z-gr3x.zip`, and `GRKit-X.Y.Z-gr4.zip`: the package of each camera, with the published runtime of each of its builds, each effect in `effects/`, each plugin, and the English guide. The site makes the same package by default.
    - `GRKit-X.Y.Z-dump.zip`: the firmware dump tool of `runtime/dump/` for each camera. The site footer links to it.
 4. If a test fails, start `Deploy` with the tag of the previous release. The site then serves that release again.
 

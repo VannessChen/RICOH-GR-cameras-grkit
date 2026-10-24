@@ -2,7 +2,7 @@
 //! has the private menu, Image Control, Framing (XPan only), Guides, Date
 //! Stamp, and Grain.
 
-use super::{gr4, Download, ImageControl, Target};
+use super::{gr4, Download, ImageControl, Source, Target};
 use crate::components::{InstructionPatch, Layout, Site};
 
 pub const TARGET: Target = Target {
@@ -15,7 +15,10 @@ pub const TARGET: Target = Target {
         zip: "gr4_v111.zip",
         zip_sha256: "ded47aa6385886e4b1f8f41f8551866ab0f1ecd0aef89934a43ef0e456539e8f",
         file: "fwdc248b.bin",
+        source: Source::Ricoh,
     },
+    // Build 7 (2025-12-01, the Ricoh download) and build 8 (2026-02-18).
+    identities: &[0x070a0b01, 0x080a0b01],
     data_start: 0x55000000,
     data_source: 0x5437b640,
     data_size: 0x57480,

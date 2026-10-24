@@ -141,9 +141,9 @@ fn marked_target(binary: &[u8]) -> Option<&str> {
     std::str::from_utf8(&binary[start..end]).ok()
 }
 
-/// The runtime build of a camera that a package's runtime files are: the
-/// build that the installer names, or else the only build of the camera whose
-/// templates the files match, preferring the first build of the camera.
+/// The runtime build of a camera with one build that a package's runtime files
+/// are: the build that the installer names, or else the build whose templates
+/// the files match.
 fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
     let targets = camera.targets();
     if let Some(name) = runtime
@@ -171,13 +171,47 @@ fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
     }
 }
 
-/// Checks the runtime files of a build for `target`.
-pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
+/// The runtime builds of a package for `camera`, from its installers
+/// (`runtime::package_runtime_files`): one for each build of the camera, in
+/// release order, each named by its marker. A camera with one build keeps the
+/// single installer of earlier packages.
+fn package_targets(runtime: &Files, camera: &Camera) -> Result<Vec<&'static str>> {
+    let targets = camera.targets();
+    if targets.len() == 1 {
+        return Ok(vec![runtime_target(runtime, camera)?]);
+    }
+    let binaries: Vec<&[u8]> = (0..targets.len())
+        .map(|index| {
+            runtime
+                .get(&runtime::installer_path(index))
+                .map(Vec::as_slice)
+                .with_context(|| {
+                    format!(
+                        "{} needs an installer for each of {}",
+                        camera.name,
+                        targets.join(", ")
+                    )
+                })
+        })
+        .collect::<Result<_>>()?;
+    for (binary, target) in binaries.iter().zip(&targets) {
+        let name =
+            marked_target(binary).context("Expected an installer that names its runtime build")?;
+        ensure!(
+            name == *target,
+            "The installer is the {name} runtime, not {target}"
+        );
+        check_installer(binary)?;
+    }
     ensure!(
-        files.len() == RUNTIME_PATHS.len() && RUNTIME_PATHS.iter().all(|p| files.contains_key(*p)),
-        "Expected the complete production runtime file set"
+        *runtime == runtime::package_runtime_files(&binaries, runtime::icon_stride(targets[0])?),
+        "Runtime scripts differ from the production templates"
     );
-    let binary = &files["SCRIPT/PLUGINS/INSTALL.BIN"];
+    Ok(targets)
+}
+
+/// Checks that an installer is a production ARM program.
+fn check_installer(binary: &[u8]) -> Result<()> {
     ensure!(
         binary.len() >= 52
             && binary[..6] == *b"\x7fELF\x01\x01"
@@ -185,6 +219,52 @@ pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
             && !binary.windows(8).any(|w| w == b"--select"),
         "Expected a production installer without diagnostic selection"
     );
+    Ok(())
+}
+
+/// The runtime files of a package with each runtime of `camera`, in release
+/// order (`runtime::package_runtime_files`).
+fn package_runtime(runtimes: &[VerifiedRuntime], camera: &Camera) -> Result<Files> {
+    let targets: Vec<&str> = runtimes.iter().map(VerifiedRuntime::target).collect();
+    ensure!(
+        targets == camera.targets(),
+        "A package for {} needs the runtime of each of its builds in release order: {}",
+        camera.name,
+        camera.targets().join(", ")
+    );
+    let binaries: Vec<&[u8]> = runtimes
+        .iter()
+        .map(|runtime| runtime.files()["SCRIPT/PLUGINS/INSTALL.BIN"].as_slice())
+        .collect();
+    let files = runtime::package_runtime_files(&binaries, runtime::icon_stride(targets[0])?);
+    // The builds of a camera share every file but the installer. The package
+    // has its own scripts that run the installers.
+    let own = [
+        "SCRIPT/PLUGINS/INSTALL.BIN",
+        "SCRIPT/PLUGINS/INSTALL.SH",
+        "SCRIPT/PLUGINS/SCAN.SH",
+    ];
+    for runtime in runtimes {
+        for (name, blob) in runtime.files() {
+            ensure!(
+                own.contains(&name.as_str()) || files.get(name) == Some(blob),
+                "The {} runtime has another {name} than {}",
+                runtime.target(),
+                targets[0]
+            );
+        }
+    }
+    Ok(files)
+}
+
+/// Checks the runtime files of a build for `target`.
+pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
+    ensure!(
+        files.len() == RUNTIME_PATHS.len() && RUNTIME_PATHS.iter().all(|p| files.contains_key(*p)),
+        "Expected the complete production runtime file set"
+    );
+    let binary = &files["SCRIPT/PLUGINS/INSTALL.BIN"];
+    check_installer(binary)?;
     ensure!(
         *files == runtime::runtime_files_for(binary, runtime::icon_stride(target)?),
         "Runtime scripts differ from the production templates"
@@ -448,8 +528,9 @@ pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])]
 pub struct Contents {
     /// The camera whose ModeSet file the package has.
     pub camera: &'static Camera,
-    /// The runtime build of the camera that the package has.
-    pub target: &'static str,
+    /// The runtime builds of the camera that the package has, in release order:
+    /// one for each build.
+    pub targets: Vec<&'static str>,
     pub effect_ids: Vec<String>,
     /// The plugins that the installer installs.
     pub plugins: Selection,
@@ -487,7 +568,13 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         bail!("Package must have the ModeSet file of exactly one camera");
     };
     let activation = runtime::activation_files(camera);
-    let mut mandatory: BTreeSet<String> = RUNTIME_PATHS
+    let installers = camera.targets().len();
+    let runtime_paths: Vec<String> = RUNTIME_PATHS
+        .iter()
+        .map(|name| (*name).to_owned())
+        .chain((1..installers).map(runtime::installer_path))
+        .collect();
+    let mut mandatory: BTreeSet<String> = runtime_paths
         .iter()
         .map(|name| format!("SD_ROOT/{name}"))
         .collect();
@@ -503,11 +590,11 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
             "Activation resources differ from the camera"
         );
     }
-    let runtime = RUNTIME_PATHS
+    let runtime = runtime_paths
         .iter()
-        .map(|name| ((*name).into(), contents[&format!("SD_ROOT/{name}")].clone()))
+        .map(|name| (name.clone(), contents[&format!("SD_ROOT/{name}")].clone()))
         .collect();
-    let target = runtime_target(&runtime, camera)?;
+    let targets = package_targets(&runtime, camera)?;
     let mut ids = BTreeSet::new();
     let mut plugins = Selection::ALL;
     let mut language = None;
@@ -559,7 +646,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
     );
     Ok(Contents {
         camera,
-        target,
+        targets,
         effect_ids: ids.into_iter().collect(),
         plugins,
         language: language.context("Package has no installation guide")?,
@@ -595,11 +682,7 @@ pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
     // camera names each release that GRKit supports. A guide serves each
     // package of the camera, so it names the releases of each runtime build.
     let base = if gr4 { &camera::GR4 } else { &camera::GR3 };
-    let releases: Vec<&str> = camera
-        .releases
-        .iter()
-        .map(|release| release.firmware)
-        .collect();
+    let releases = camera.versions();
     let guide = language.guide_template(gr4).replace(
         &language.camera_phrase(base, &[base.releases[0].firmware]),
         &language.camera_phrase(camera, &releases),
@@ -640,23 +723,17 @@ pub struct Package {
     pub contents: Contents,
 }
 
-/// Builds the package ZIP for one camera. `plugins` names the plugins that the
-/// installer installs.
+/// Builds the package ZIP for one camera from the runtime of each of its
+/// builds, in release order. `plugins` names the plugins that the installer
+/// installs.
 pub fn assemble(
-    runtime: &VerifiedRuntime,
+    runtimes: &[VerifiedRuntime],
     effects: &EffectSet,
     plugins: Selection,
     camera: &Camera,
     guide: &Guide,
 ) -> Result<Package> {
-    ensure!(
-        camera.runs(runtime.target()),
-        "{} runs the {} runtime, not this build",
-        camera.name,
-        camera.targets().join(" or ")
-    );
-    let mut contents: Files = runtime
-        .files()
+    let mut contents: Files = package_runtime(runtimes, camera)?
         .iter()
         .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob.clone()))
         .collect();

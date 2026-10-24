@@ -312,7 +312,7 @@ fn package_targets_the_selected_camera() {
     assert_eq!(packaged["language"], "en");
     let verified = success(&["verify", text(&zip)]);
     assert_eq!(verified["camera"], "gr3x");
-    assert_eq!(verified["target"], "gr3-2.10");
+    assert_eq!(verified["targets"], serde_json::json!(["gr3-2.10"]));
     // The language names the guide.
     let chinese = tmp.path().join("zh-Hans.zip");
     let packaged = success(&[
@@ -843,7 +843,7 @@ fn writes_an_identity_hald_without_overwriting() {
 }
 
 #[test]
-fn release_plan_builds_each_target_and_packages_each_camera_build() {
+fn release_plan_builds_each_target_and_packages_each_camera() {
     let plan = success(&["release-plan"]);
     let targets: Vec<_> = plan["runtimes"]
         .as_array()
@@ -851,17 +851,25 @@ fn release_plan_builds_each_target_and_packages_each_camera_build() {
         .iter()
         .map(|runtime| runtime["target"].as_str().unwrap())
         .collect();
-    assert_eq!(targets, ["gr3-2.10", "gr4-1.11", "gr4-1.20"]);
+    assert_eq!(
+        targets,
+        ["gr3-2.10", "gr4-1.11", "gr4-1.20", "gr4-1.20-0528"]
+    );
     assert_eq!(plan["runtimes"][2]["zip"], "gr4_v120.zip");
     assert_eq!(plan["runtimes"][2]["file"], "fwdc248b.bin");
-    // The package names are those of the release assets.
+    assert_eq!(plan["runtimes"][2]["official"], true);
+    // A build that Ricoh does not publish comes only from the private backup.
+    assert_eq!(plan["runtimes"][3]["zip"], "gr4_v120_0528.zip");
+    assert_eq!(plan["runtimes"][3]["file"], "RTOS.BIN");
+    assert_eq!(plan["runtimes"][3]["official"], false);
+    // Each camera has one package, with each of its builds. The names are
+    // those of the release assets.
     assert_eq!(
         plan["packages"],
         serde_json::json!([
-            {"camera": "gr3", "target": "gr3-2.10", "name": "gr3"},
-            {"camera": "gr3x", "target": "gr3-2.10", "name": "gr3x"},
-            {"camera": "gr4", "target": "gr4-1.11", "name": "gr4"},
-            {"camera": "gr4", "target": "gr4-1.20", "name": "gr4-1.20"},
+            {"camera": "gr3", "targets": ["gr3-2.10"], "name": "gr3"},
+            {"camera": "gr3x", "targets": ["gr3-2.10"], "name": "gr3x"},
+            {"camera": "gr4", "targets": ["gr4-1.11", "gr4-1.20", "gr4-1.20-0528"], "name": "gr4"},
         ])
     );
 }

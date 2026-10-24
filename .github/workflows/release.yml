@@ -159,15 +159,16 @@ jobs:
           firmware="$RUNNER_TEMP/firmware"
           mkdir "$firmware"
           trap 'rm -rf "$firmware"' EXIT
-          # fetch ZIP SHA256 TAG: download an official zip, or its backup, into $firmware.
+          # fetch ZIP SHA256 TAG OFFICIAL: download an official zip, or its backup, into $firmware.
+          # A zip that Ricoh does not publish (OFFICIAL false) comes only from the backup.
           fetch() {
             zip="$firmware/$1"
             sum="$2"
             check() { echo "$sum  $zip" | sha256sum --check --strict; }
-            if [ "$FIRMWARE_SOURCE" = backup ] \
+            if [ "$FIRMWARE_SOURCE" = backup ] || [ "$4" != true ] \
               || ! curl --fail --location --silent --show-error --retry 3 -o "$zip" "$FIRMWARE_BASE_URL/$1" \
               || ! check; then
-              if [ "$FIRMWARE_SOURCE" != backup ]; then
+              if [ "$FIRMWARE_SOURCE" != backup ] && [ "$4" = true ]; then
                 echo "::warning::The Ricoh download of $1 failed or changed. The build uses the private backup."
               fi
               if [ -z "$FIRMWARE_BACKUP_REPO" ] || [ -z "$BACKUP_TOKEN" ]; then
@@ -183,11 +184,11 @@ jobs:
           # `grkit release-plan` lists each runtime build with its firmware download
           # (`grkit_build::target`) and each camera package (`camera.rs`).
           target/release/grkit release-plan > "$RUNNER_TEMP/release-plan.json"
-          jq -r '.runtimes[] | [.target, .zip, .zip_sha256, .file] | @tsv' \
+          jq -r '.runtimes[] | [.target, .zip, .zip_sha256, .file, .official] | @tsv' \
             "$RUNNER_TEMP/release-plan.json" > "$RUNNER_TEMP/runtimes.tsv"
           # The loop reads the plan from descriptor 3, so no command in it reads the plan.
-          while IFS=$'\t' read -r target archive archive_sum file <&3; do
-            fetch "$archive" "$archive_sum" "$target"
+          while IFS=$'\t' read -r target archive archive_sum file official <&3; do
+            fetch "$archive" "$archive_sum" "$target" "$official"
             # Two GR IV zips hold a firmware file of the same name.
             mkdir "$firmware/$target"
             unzip -q "$firmware/$archive" "$file" -d "$firmware/$target"
@@ -217,11 +218,15 @@ jobs:
         run: |
           version="${TAG#v}"
           target/release/grkit effects build --source effects --out "$RUNNER_TEMP/effects"
-          # Each runtime build of a camera has its own package.
-          jq -r '.packages[] | [.camera, .target, .name] | @tsv' \
+          # Each camera has one package with the runtime of each of its builds.
+          jq -r '.packages[] | [.camera, .name, (.targets | join(" "))] | @tsv' \
             "$RUNNER_TEMP/release-plan.json" > "$RUNNER_TEMP/packages.tsv"
-          while IFS=$'\t' read -r camera target use <&3; do
-            target/release/grkit package --build "site/runtime/$target" --camera "$camera" \
+          while IFS=$'\t' read -r camera use targets <&3; do
+            builds=()
+            for target in $targets; do
+              builds+=(--build "site/runtime/$target")
+            done
+            target/release/grkit package "${builds[@]}" --camera "$camera" \
               --effects "$RUNNER_TEMP/effects" --guide "site/guides/$camera/en.pdf" \
               --out "GRKit-$version-$use.zip"
             target/release/grkit verify "GRKit-$version-$use.zip"

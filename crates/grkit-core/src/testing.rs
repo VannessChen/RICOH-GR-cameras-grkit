@@ -36,6 +36,25 @@ pub fn runtime(target: &str) -> packaging::VerifiedRuntime {
     packaging::load_runtime(&manifest, &files).unwrap()
 }
 
+/// The stand-in installer of `target`, which names its build like a built one.
+pub fn marked_installer(target: &str) -> Vec<u8> {
+    let mut binary = installer();
+    binary.extend_from_slice(format!("{}{target}\0", packaging::TARGET_MARKER).as_bytes());
+    binary
+}
+
+/// The verified runtime of `target` with `marked_installer(target)`.
+pub fn marked_runtime(target: &str) -> packaging::VerifiedRuntime {
+    let files = runtime_files(&marked_installer(target), target);
+    packaging::load_runtime(&manifest(target, &files), &files).unwrap()
+}
+
+/// The verified runtime of each build of `camera`, in release order, as its
+/// package needs them.
+pub fn camera_runtimes(camera: &crate::camera::Camera) -> Vec<packaging::VerifiedRuntime> {
+    camera.targets().into_iter().map(marked_runtime).collect()
+}
+
 /// The effect set of `effect(id)` for each of `ids`.
 pub fn effect_set(ids: &[&str]) -> packaging::EffectSet {
     let mut set = packaging::EffectSet::default();

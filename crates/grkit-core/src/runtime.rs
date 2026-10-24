@@ -588,18 +588,92 @@ pub fn runtime_files(binary: &[u8]) -> Files {
 
 /// The runtime files of a target with `icon_stride`-byte icon slots.
 pub fn runtime_files_for(binary: &[u8], icon_stride: usize) -> Files {
+    package_runtime_files(&[binary], icon_stride)
+}
+
+/// The most installers that a package holds: `INSTALL.BIN`, then
+/// `INSTALL2.BIN` to `INSTALL9.BIN`, so each name stays 8.3.
+pub const MAX_INSTALLERS: usize = 9;
+
+/// The path of installer `index` in the runtime files.
+pub fn installer_path(index: usize) -> String {
+    match index {
+        0 => "SCRIPT/PLUGINS/INSTALL.BIN".into(),
+        _ => format!("SCRIPT/PLUGINS/INSTALL{}.BIN", index + 1),
+    }
+}
+
+/// The runtime files of a package with the installer of each runtime build of
+/// a camera, in release order, for `icon_stride`-byte icon slots. The builds of
+/// a camera have the same scripts and plan, so the first installer scans.
+///
+/// With one installer, `INSTALL.SH` runs `--install`. With more, it runs each
+/// installer with `--known` first, which reads one word to find the build. If
+/// no installer names the build, it tries each one with `--try`, which runs the
+/// relocation, and the last one with `--install`, which writes `INSTALL.ERR`
+/// if it also fails. A known build thus installs without a relocation of
+/// another build, and an unknown build still gets each runtime.
+///
+/// After Linux deletes a file in the folder, the camera does not find the next
+/// new name that it looks up there, and it keeps that miss. So `SCAN.SH`, the
+/// first script of a power-on, looks up each installer before it scans.
+pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
+    assert!((1..=MAX_INSTALLERS).contains(&binaries.len()));
     let target = "C:\\SCRIPT\\PLUGINS\\PLUGINS.TTL";
     let startup = format!("filesearch '{target}'\r\nif result = 0 goto done\r\ninclude '{target}'\r\n:done\r\nend\r\n");
-    let wrapper = |mode: &str| {
-        format!("{LINUX_DIRECTORY}/INSTALL.BIN --{mode}\nstatus=$?\necho GR_MODULE_{}_EXIT_$status\nexit 0\n", mode.to_uppercase()).into_bytes()
+    let name = |index: usize| installer_path(index).rsplit('/').next().unwrap().to_owned();
+    // Each script body sets `status` to the exit status of the installer.
+    let wrapper = |body: String, mode: &str| {
+        format!(
+            "{body}echo GR_MODULE_{}_EXIT_$status\nexit 0\n",
+            mode.to_uppercase()
+        )
+        .into_bytes()
     };
-    Files::from([
+    let single = |mode: &str| format!("{LINUX_DIRECTORY}/{} --{mode}\nstatus=$?\n", name(0));
+    let names = |range: std::ops::Range<usize>| range.map(name).collect::<Vec<_>>().join(" ");
+    let (scan, install) = match binaries.len() {
+        1 => (single("scan"), single("install")),
+        count => (
+            format!(
+                "for installer in {}; do [ -e {LINUX_DIRECTORY}/$installer ]; done\n{}",
+                names(1..count),
+                single("scan")
+            ),
+            format!(
+                "for installer in {all}; do\n\
+                 \x20 {LINUX_DIRECTORY}/$installer --known\n\
+                 \x20 status=$?\n\
+                 \x20 case $status in 48) ;; *) break ;; esac\n\
+                 done\n\
+                 case $status in 48)\n\
+                 \x20 for installer in {tried}; do\n\
+                 \x20   {LINUX_DIRECTORY}/$installer --try\n\
+                 \x20   status=$?\n\
+                 \x20   case $status in 47) ;; *) break ;; esac\n\
+                 \x20 done\n\
+                 \x20 case $status in 47) {LINUX_DIRECTORY}/{last} --install; status=$? ;; esac\n\
+                 \x20 ;;\n\
+                 esac\n",
+                all = names(0..count),
+                tried = names(0..count - 1),
+                last = name(count - 1),
+            ),
+        ),
+    };
+    let mut files = Files::from([
         ("SCRIPT/STARTUP.TTL".into(), startup.into_bytes()),
         ("SCRIPT/PLUGINS/PLUGINS.TTL".into(), loader_for(icon_stride)),
-        ("SCRIPT/PLUGINS/INSTALL.BIN".into(), binary.to_vec()),
-        ("SCRIPT/PLUGINS/SCAN.SH".into(), wrapper("scan")),
-        ("SCRIPT/PLUGINS/INSTALL.SH".into(), wrapper("install")),
-    ])
+        ("SCRIPT/PLUGINS/SCAN.SH".into(), wrapper(scan, "scan")),
+        (
+            "SCRIPT/PLUGINS/INSTALL.SH".into(),
+            wrapper(install, "install"),
+        ),
+    ]);
+    for (index, binary) in binaries.iter().enumerate() {
+        files.insert(installer_path(index), binary.to_vec());
+    }
+    files
 }
 
 #[cfg(test)]

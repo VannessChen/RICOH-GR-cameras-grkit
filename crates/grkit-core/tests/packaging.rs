@@ -24,7 +24,7 @@ fn english() -> Guide<'static> {
 
 fn package() -> Vec<u8> {
     assemble(
-        &runtime(),
+        &[runtime()],
         &testing::effect_set(&["test-effect"]),
         Selection::ALL,
         &camera::GR3,
@@ -76,7 +76,7 @@ fn package_round_trip_is_deterministic_and_preserves_metadata() {
     assert_eq!(first, package());
     let verified = verify_package(&first).unwrap();
     assert_eq!(verified.effect_ids, ["test-effect"]);
-    assert_eq!(verified.target, json!("gr3-2.10"));
+    assert_eq!(verified.targets, ["gr3-2.10"]);
     let mut archive = ZipArchive::new(Cursor::new(first)).unwrap();
     for index in 0..archive.len() {
         let entry = archive.by_index(index).unwrap();
@@ -241,7 +241,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
             .unwrap();
     }
     let bytes = assemble(
-        &runtime(),
+        &[runtime()],
         &effects,
         Selection::ALL,
         &camera::GR3,
@@ -258,7 +258,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
         .unwrap_err();
     assert!(error.to_string().contains("at most 20 effects"), "{error}");
     let bytes = assemble(
-        &runtime(),
+        &[runtime()],
         &EffectSet::default(),
         Selection::ALL,
         &camera::GR3,
@@ -276,7 +276,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
 fn selected_plugins_are_packaged_and_verified() {
     let effects = testing::effect_set(&["test-effect"]);
     let plugins = Selection::from_names(["date-stamp", "image-control"]).unwrap();
-    let bytes = assemble(&runtime(), &effects, plugins, &camera::GR3, &english())
+    let bytes = assemble(&[runtime()], &effects, plugins, &camera::GR3, &english())
         .unwrap()
         .bytes;
     let files = unpack(&bytes);
@@ -290,7 +290,7 @@ fn selected_plugins_are_packaged_and_verified() {
     );
     // A package with every plugin has no file and keeps its earlier bytes.
     let plain = assemble(
-        &runtime(),
+        &[runtime()],
         &effects,
         Selection::ALL,
         &camera::GR3,
@@ -340,7 +340,7 @@ fn invalid_plugin_files_and_empty_menus_are_rejected() {
     // Image Control alone needs effects.
     let image_control = Selection::from_names(["image-control"]).unwrap();
     assert!(assemble(
-        &runtime(),
+        &[runtime()],
         &EffectSet::default(),
         image_control,
         &camera::GR3,
@@ -348,7 +348,7 @@ fn invalid_plugin_files_and_empty_menus_are_rejected() {
     )
     .is_err());
     let bytes = assemble(
-        &runtime(),
+        &[runtime()],
         &testing::effect_set(&["test-effect"]),
         image_control,
         &camera::GR3,
@@ -534,7 +534,7 @@ fn each_camera_gets_its_modeset_file_and_guide() {
     let effects = testing::effect_set(&["test-effect"]);
     let gr3 = unpack(&package());
     let bytes = assemble(
-        &runtime(),
+        &[runtime()],
         &effects,
         Selection::ALL,
         &camera::GR3X,
@@ -544,7 +544,7 @@ fn each_camera_gets_its_modeset_file_and_guide() {
     .bytes;
     let verified = verify_package(&bytes).unwrap();
     assert_eq!(verified.camera.id, "gr3x");
-    assert_eq!(verified.target, "gr3-2.10");
+    assert_eq!(verified.targets, ["gr3-2.10"]);
     let gr3x = unpack(&bytes);
     assert!(gr3x.contains_key("SD_ROOT/00078490.609"));
     assert!(!gr3x.contains_key("SD_ROOT/00078350.588"));
@@ -640,7 +640,7 @@ fn a_package_has_the_guide_of_its_language_only() {
     let effects = testing::effect_set(&["test-effect"]);
     for language in Language::ALL {
         let bytes = assemble(
-            &runtime(),
+            &[runtime()],
             &effects,
             Selection::ALL,
             &camera::GR3X,
@@ -698,7 +698,7 @@ fn a_package_has_exactly_one_pdf_guide() {
         pdf: b"# GRKit\n",
     };
     assert!(assemble(
-        &runtime(),
+        &[runtime()],
         &EffectSet::default(),
         Selection::ALL,
         &camera::GR3,
@@ -728,18 +728,14 @@ fn a_package_has_the_modeset_file_of_exactly_one_camera() {
     assert_eq!(camera::find("gr4").unwrap(), &camera::GR4);
 }
 
-fn gr4_runtime_fixture() -> Files {
-    testing::runtime_files(&testing::installer(), "gr4-1.11")
-}
-
-fn gr4_runtime() -> VerifiedRuntime {
-    testing::runtime("gr4-1.11")
+fn gr4_runtimes() -> Vec<VerifiedRuntime> {
+    testing::camera_runtimes(&camera::GR4)
 }
 
 #[test]
 fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     let bytes = assemble(
-        &gr4_runtime(),
+        &gr4_runtimes(),
         &EffectSet::default(),
         Selection::ALL,
         &camera::GR4,
@@ -749,7 +745,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     .bytes;
     let verified = verify_package(&bytes).unwrap();
     assert_eq!(verified.camera.id, "gr4");
-    assert_eq!(verified.target, "gr4-1.11");
+    assert_eq!(verified.targets, ["gr4-1.11", "gr4-1.20", "gr4-1.20-0528"]);
     let files = unpack(&bytes);
     assert!(files.contains_key("SD_ROOT/00078560.636"));
     assert_eq!(files["GRKit Installation Guide.pdf"], PDF);
@@ -762,7 +758,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     );
     // A GR III runtime does not run on GR IV.
     assert!(assemble(
-        &runtime(),
+        &[runtime()],
         &EffectSet::default(),
         Selection::ALL,
         &camera::GR4,
@@ -771,7 +767,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     .is_err());
     // GR IV has Image Control.
     let bytes = assemble(
-        &gr4_runtime(),
+        &gr4_runtimes(),
         &testing::effect_set(&["test-effect"]),
         Selection::ALL,
         &camera::GR4,
@@ -783,7 +779,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     // GR IV has Framing, so Framing alone without effects shows a menu.
     let framing = Selection::from_names(["framing"]).unwrap();
     assert!(assemble(
-        &gr4_runtime(),
+        &gr4_runtimes(),
         &EffectSet::default(),
         framing,
         &camera::GR4,
@@ -792,7 +788,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     .is_ok());
     let image_control = Selection::from_names(["image-control"]).unwrap();
     assert!(assemble(
-        &gr4_runtime(),
+        &gr4_runtimes(),
         &EffectSet::default(),
         image_control,
         &camera::GR4,
@@ -874,18 +870,14 @@ fn dump_packages_hold_the_tool_files_and_their_checksums() {
     assert!(assemble_dump(extra).is_err());
 }
 
-fn marked_gr4_runtime(target: &str) -> Files {
-    let mut binary = testing::installer();
-    binary.extend_from_slice(format!("{TARGET_MARKER}{target}\0").as_bytes());
-    testing::runtime_files(&binary, target)
-}
-
+/// A GR IV package has the installer of each GR IV build, in release order,
+/// and the script that selects one at each power-on. A GR III package keeps
+/// the single installer and script of earlier packages.
 #[test]
-fn the_installer_names_the_runtime_build_of_a_package() {
-    let package = |files: &Files, target: &str| {
-        let runtime = load_runtime(&testing::manifest(target, files), files)?;
+fn a_package_holds_the_installer_of_each_build_of_its_camera() {
+    let gr4 = |runtimes: &[VerifiedRuntime]| {
         assemble(
-            &runtime,
+            runtimes,
             &EffectSet::default(),
             Selection::ALL,
             &camera::GR4,
@@ -893,14 +885,87 @@ fn the_installer_names_the_runtime_build_of_a_package() {
         )
         .map(|package| package.bytes)
     };
-    let bytes = package(&marked_gr4_runtime("gr4-1.20"), "gr4-1.20").unwrap();
-    assert_eq!(verify_package(&bytes).unwrap().target, "gr4-1.20");
-    let bytes = package(&marked_gr4_runtime("gr4-1.11"), "gr4-1.11").unwrap();
-    assert_eq!(verify_package(&bytes).unwrap().target, "gr4-1.11");
+    let bytes = gr4(&gr4_runtimes()).unwrap();
+    assert_eq!(
+        verify_package(&bytes).unwrap().targets,
+        ["gr4-1.11", "gr4-1.20", "gr4-1.20-0528"]
+    );
+    let files = unpack(&bytes);
+    for (path, target) in [
+        ("SD_ROOT/SCRIPT/PLUGINS/INSTALL.BIN", "gr4-1.11"),
+        ("SD_ROOT/SCRIPT/PLUGINS/INSTALL2.BIN", "gr4-1.20"),
+        ("SD_ROOT/SCRIPT/PLUGINS/INSTALL3.BIN", "gr4-1.20-0528"),
+    ] {
+        assert_eq!(files[path], testing::marked_installer(target), "{path}");
+    }
+    let script = String::from_utf8(files["SD_ROOT/SCRIPT/PLUGINS/INSTALL.SH"].clone()).unwrap();
+    assert_eq!(
+        script,
+        "for installer in INSTALL.BIN INSTALL2.BIN INSTALL3.BIN; do\n\
+         \x20 /media/storage1/SCRIPT/PLUGINS/$installer --known\n\
+         \x20 status=$?\n\
+         \x20 case $status in 48) ;; *) break ;; esac\n\
+         done\n\
+         case $status in 48)\n\
+         \x20 for installer in INSTALL.BIN INSTALL2.BIN; do\n\
+         \x20   /media/storage1/SCRIPT/PLUGINS/$installer --try\n\
+         \x20   status=$?\n\
+         \x20   case $status in 47) ;; *) break ;; esac\n\
+         \x20 done\n\
+         \x20 case $status in 47) /media/storage1/SCRIPT/PLUGINS/INSTALL3.BIN --install; status=$? ;; esac\n\
+         \x20 ;;\n\
+         esac\n\
+         echo GR_MODULE_INSTALL_EXIT_$status\n\
+         exit 0\n"
+    );
+    // The first installer scans: the plan is the same for each build. First
+    // the script looks up the other installers.
+    assert_eq!(
+        String::from_utf8(files["SD_ROOT/SCRIPT/PLUGINS/SCAN.SH"].clone()).unwrap(),
+        "for installer in INSTALL2.BIN INSTALL3.BIN; do [ -e /media/storage1/SCRIPT/PLUGINS/$installer ]; done\n\
+         /media/storage1/SCRIPT/PLUGINS/INSTALL.BIN --scan\n\
+         status=$?\n\
+         echo GR_MODULE_SCAN_EXIT_$status\n\
+         exit 0\n"
+    );
+    let gr3 = unpack(&package());
+    assert_eq!(
+        gr3["SD_ROOT/SCRIPT/PLUGINS/SCAN.SH"],
+        b"/media/storage1/SCRIPT/PLUGINS/INSTALL.BIN --scan\nstatus=$?\necho GR_MODULE_SCAN_EXIT_$status\nexit 0\n"
+    );
+    assert_eq!(
+        gr3["SD_ROOT/SCRIPT/PLUGINS/INSTALL.SH"],
+        b"/media/storage1/SCRIPT/PLUGINS/INSTALL.BIN --install\nstatus=$?\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
+    );
+    assert!(!gr3.contains_key("SD_ROOT/SCRIPT/PLUGINS/INSTALL2.BIN"));
+
+    // Each build, in release order.
+    let mut runtimes = gr4_runtimes();
+    runtimes.swap(1, 2);
+    assert!(format!("{:#}", gr4(&runtimes).unwrap_err()).contains("in release order"));
+    assert!(gr4(&gr4_runtimes()[..1]).is_err());
+    // A GR III runtime does not run on GR IV.
+    assert!(gr4(&[runtime()]).is_err());
     // The installer and the build manifest must name the same build.
-    let error = package(&marked_gr4_runtime("gr4-1.20"), "gr4-1.11").unwrap_err();
+    let files = testing::runtime_files(&testing::marked_installer("gr4-1.20"), "gr4-1.20");
+    let error = load_runtime(&testing::manifest("gr4-1.11", &files), &files).unwrap_err();
     assert!(error.to_string().contains("is the gr4-1.20 runtime"));
-    // An installer from before the marker is the first GR IV build.
-    let bytes = package(&gr4_runtime_fixture(), "gr4-1.11").unwrap();
-    assert_eq!(verify_package(&bytes).unwrap().target, "gr4-1.11");
+
+    // A package whose installers are swapped or missing is refused.
+    let mut swapped = files_of(&bytes);
+    let first = swapped["SD_ROOT/SCRIPT/PLUGINS/INSTALL.BIN"].clone();
+    let second = swapped["SD_ROOT/SCRIPT/PLUGINS/INSTALL2.BIN"].clone();
+    swapped.insert("SD_ROOT/SCRIPT/PLUGINS/INSTALL.BIN".into(), second);
+    swapped.insert("SD_ROOT/SCRIPT/PLUGINS/INSTALL2.BIN".into(), first);
+    assert!(validate_contents(&with_sums(swapped)).is_err());
+    let mut missing = files_of(&bytes);
+    missing.remove("SD_ROOT/SCRIPT/PLUGINS/INSTALL3.BIN");
+    assert!(validate_contents(&with_sums(missing)).is_err());
+}
+
+/// The entries of a package without its checksums.
+fn files_of(bytes: &[u8]) -> Files {
+    let mut files = unpack(bytes);
+    files.remove("SHA256SUMS");
+    files
 }
