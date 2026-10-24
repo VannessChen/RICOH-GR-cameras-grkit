@@ -177,6 +177,14 @@ const CONTEXTS: &[(u32, &str)] = &[
     (0x536de1a8, "0e30d4e5"),
     (0x536e8694, "9b30d4e5"),
     (0x536e87c4, "891900eb"),
+    // Gamma stage frame, the end of its custom-curve path (table-build flag and
+    // GAMMA_BUILT), and its epilogue, which the curve cache relies on.
+    (
+        0x536e8660,
+        "0dc0a0e17c3705e3f0df2de9053445e304b04ce22cd04de20140a0e14c300be5003093e548100be530300be544000be5",
+    ),
+    (0x536e89cc, "44301be5034a83e20130a0e30a32c4e50030a0e3303284e5"),
+    (0x536e8780, "28d04be2f0af9de8"),
     // LiveViewController's Image Control widget: load native type, map, assign.
     (
         0x531710bc,

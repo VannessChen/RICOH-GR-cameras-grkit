@@ -30,6 +30,53 @@ owned_no:
 owned_done:
     pop {r0-r3, pc}
 
+// The custom-curve path of the native gamma stage composes the record curves
+// with the base curve (the first 512 bytes of the gamma object) on every
+// live-view frame, then flags the result (GAMMA_UPLOAD) for the table build.
+// For a private record the result depends only on the gamma object, the
+// record (only the installer writes its curves), the bypass byte of the packet
+// (+0x89), and the base curve. GRKIT_HOST_GAMMA_KEY keeps a hash of these
+// inputs for the last composition of a private record.
+// r0 = gamma object, r1 = record, r2 = packet. Return Z=1 when the object
+// still holds the composition of these inputs: the key matches and the native
+// path has not rebuilt the object since (GAMMA_BUILT is 0). Else store the key
+// of these inputs. Preserve all registers.
+.Lgamma_cached:
+    push {r0-r7, lr}
+    ldr r3, =0x01000193
+    ldrb r4, [r2, #0x89]
+    eor r4, r4, r1
+    mla r4, r4, r3, r0
+    add r5, r0, #0x200
+gamma_hash:
+    ldm r0!, {r1, r2, r6, r7}
+    mla r4, r4, r3, r1
+    mla r4, r4, r3, r2
+    mla r4, r4, r3, r6
+    mla r4, r4, r3, r7
+    cmp r0, r5
+    bne gamma_hash
+    // A key is never 0, which marks no composition.
+    orr r4, r4, #1
+    ldr r0, [sp]
+    add r0, r0, #(GAMMA_BUILT & ~0xff)
+    ldr r0, [r0, #(GAMMA_BUILT & 0xff)]
+    ldr r1, =GRKIT_HEADER_REFERENCE
+    ldr r2, [r1, #GRKIT_HOST_GAMMA_KEY]
+    str r4, [r1, #GRKIT_HOST_GAMMA_KEY]
+    cmp r0, #0
+    cmpeq r2, r4
+    pop {r0-r7, pc}
+
+// Forget the key: a native custom curve replaces the composition.
+.Lgamma_forget:
+    push {r0, r1}
+    ldr r0, =GRKIT_HEADER_REFERENCE
+    mov r1, #0
+    str r1, [r0, #GRKIT_HOST_GAMMA_KEY]
+    pop {r0, r1}
+    bx lr
+
 // Store r0, the record of a non-live-view build (0 for native processing),
 // in the shot ring under the shot settings pointer r7. The live view (context
 // kind 1) stores nothing. A reader in another task checks the key again after

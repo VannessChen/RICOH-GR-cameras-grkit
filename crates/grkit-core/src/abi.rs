@@ -159,7 +159,10 @@ fields!(HEADER_FIELDS {
     HOST_RETURN = 252, 4;
     /// The words of the plugins (grkit_core::plugins::Plugin::words), in plugin
     /// order, then zero words. GRKIT_PLUGIN_<PLUGIN>_<WORD> gives each offset.
-    HOST_PLUGIN_AREA = 256, HOST_HEADER_SIZE - 256;
+    HOST_PLUGIN_AREA = 256, HOST_GAMMA_KEY - 256;
+    /// Key of the inputs of the last private curve composition in the gamma
+    /// stage, or 0 (runtime/processing.h).
+    HOST_GAMMA_KEY = HOST_HEADER_SIZE - 4, 4;
 });
 
 pub const RECORD_SIZE: usize = 0x1100;
@@ -543,7 +546,7 @@ mod tests {
         for (index, word) in words.iter().enumerate() {
             assert_eq!(word.offset, HOST_PLUGIN_AREA + 4 * index, "{}", word.name);
         }
-        assert!(HOST_PLUGIN_AREA + 4 * words.len() <= HOST_HEADER_SIZE);
+        assert!(HOST_PLUGIN_AREA + 4 * words.len() <= HOST_GAMMA_KEY);
     }
 
     #[test]

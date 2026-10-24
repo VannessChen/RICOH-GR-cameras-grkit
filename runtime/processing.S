@@ -106,6 +106,8 @@ module_gamma_flag:
     pop {r0-r2, lr}
     ldr pc, =HOOK_MODULE_GAMMA_FLAG_RESUME
 
+// Replaces the BL to the curve getter at 0x536e87c4 (r4 = packet). r1..r3
+// receive the R, G, and B curves. The gamma object is at [fp, #-0x44].
 module_gamma_curves:
     push {r0, r5, r12, lr}
     ldr r0, [r4, #8]
@@ -117,8 +119,20 @@ module_gamma_curves:
     str r5, [r2]
     add r5, r5, #0x200
     str r5, [r3]
-    pop {r0, r5, r12, pc}
+    mov r1, r0
+    ldr r0, [fp, #-0x44]
+    mov r2, r4
+    .word 0xeb000000 | (((.Lgamma_cached - . - 8) >> 2) & 0x00ffffff)
+    popne {r0, r5, r12, pc}
+    // The object holds these curves: no table build, and return from the
+    // gamma stage as its epilogue does.
+    add r0, r0, #(GAMMA_UPLOAD & ~0xff)
+    mov r1, #0
+    strb r1, [r0, #(GAMMA_UPLOAD & 0xff)]
+    sub sp, fp, #40
+    ldm sp, {r4-r11, sp, pc}
 curves_stock:
+    .word 0xeb000000 | (((.Lgamma_forget - . - 8) >> 2) & 0x00ffffff)
     pop {r0, r5, r12, lr}
     ldr pc, =HOOK_MODULE_GAMMA_CURVES_TARGET
 .ltorg

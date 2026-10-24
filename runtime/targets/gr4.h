@@ -168,6 +168,9 @@
 /* Picture processing. GAMMA_BUILT: the word of the gamma object that is 1
    after the native curves are built. */
 #define GAMMA_BUILT 0x382c
+/* GAMMA_UPLOAD: the byte of the gamma object that makes the table build use
+   the composed curves. */
+#define GAMMA_UPLOAD 0x380a
 /* DigitalFilterProcess plan: the grain stage flag that the stage gate sets. */
 #define GRAIN_GATE_FLAG 0x25
 
