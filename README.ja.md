@@ -92,6 +92,7 @@ GRKit を実機でテストした場合は、Device report の Issue を作成�
 ## ドキュメント（英語）
 
 - [アーキテクチャ](docs/architecture.md)
+- [モジュールの作り方](docs/modules.md)と[モジュールリファレンス](docs/module-reference.md)
 - [リリース手順](docs/releasing.md)
 - [エフェクト](effects/README.md)
 - [ウェブサイト](web/README.md)
@@ -101,7 +102,7 @@ GRKit を実機でテストした場合は、Device report の Issue を作成�
 コードは [MIT ライセンス](LICENSE)で提供されています。各パッケージには、含まれるファイルのライセンスを記載した `LICENSES.md` が入っています。
 
 - エフェクトのライセンスは CC BY-SA 4.0 または MIT です。各エフェクトのライセンスは [effects/NOTICE.md](effects/NOTICE.md) に記載されています。
-- アイコンの文字には、[Inter](https://github.com/rsms/inter) 書体を [SIL Open Font License 1.1](crates/grkit-core/assets/Inter-LICENSE.txt) のもとで使用しています。
+- メニューアイコンとライブビューの文字には、[Roboto Condensed](https://github.com/googlefonts/roboto-classic) 書体を [SIL Open Font License 1.1](crates/grkit-core/assets/RobotoCondensed-LICENSE.txt) のもとで使用しています。
 - エフェクトのフィッティング手法は、[gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) から [MIT ライセンス](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)のもとで移植したものです。
 
 RICOH および GR は、Ricoh Company, Ltd. の商標です。フィルム名は、それぞれの所有者の商標です。GRKit は独立したプロジェクトであり、Ricoh やフィルムメーカーとは提携しておらず、承認や支援も受けていません。

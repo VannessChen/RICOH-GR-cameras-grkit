@@ -92,6 +92,7 @@ grkit verify dist/GRKit.zip
 ## 文档（英文）
 
 - [架构](docs/architecture.md)
+- [编写模块](docs/modules.md)和[模块参考](docs/module-reference.md)
 - [发布流程](docs/releasing.md)
 - [效果](effects/README.md)
 - [网站](web/README.md)
@@ -101,7 +102,7 @@ grkit verify dist/GRKit.zip
 代码采用 [MIT 许可证](LICENSE)。每个安装包都包含 `LICENSES.md`，列出包内文件的许可。
 
 - 效果采用 CC BY-SA 4.0 或 MIT 许可。[effects/NOTICE.md](effects/NOTICE.md) 列出每个效果的许可。
-- 图标文字使用 [Inter](https://github.com/rsms/inter) 字体，采用 [SIL Open Font License 1.1](crates/grkit-core/assets/Inter-LICENSE.txt)。
+- 菜单图标和取景画面中的文字使用 [Roboto Condensed](https://github.com/googlefonts/roboto-classic) 字体，采用 [SIL Open Font License 1.1](crates/grkit-core/assets/RobotoCondensed-LICENSE.txt)。
 - 效果拟合方法移植自 [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods)，采用 [MIT 许可证](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)。
 
 RICOH 和 GR 是 Ricoh Company, Ltd. 的商标。胶片名称是其所有者的商标。GRKit 是独立项目，与 Ricoh 及任何胶片厂商无关，也未获得它们的认可或支持。

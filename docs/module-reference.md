@@ -1,9 +1,6 @@
 # Module reference
 
-This document describes the module interface of GRKit: the manifest, the settings, the registrations, the services, the binary rules, the limits, and the errors.
-The interface is experimental in GRKit 1.x. A minor release can change it, and its changelog then says so.
-[modules.md](modules.md) shows how to write, test, build, and install a module.
-[Modules](architecture.md#modules) in the architecture describes how the installer links modules.
+This document describes the module interface of GRKit. The interface is experimental in GRKit 1.x: a minor release can change it, and its changelog then says so. [modules.md](modules.md) shows how to write, test, build, and install a module.
 
 The sources of each contract:
 
@@ -26,7 +23,7 @@ The sources of each contract:
 | `test.c` | with C sources | the host test of `grkit module test` |
 | tiles | with a choice page | the 40 x 40 PNG files that `tiles` names |
 
-`grkit module build` writes the module file, `<ID>.GRM`. The installer loads the modules of the package from `SCRIPT/GRKIT/MODULES` and the modules that a person adds from `GRKIT/MODULES`. A file in `GRKIT/MODULES` replaces the package module with the same name.
+The installer loads the modules of the package from `SCRIPT/GRKIT/MODULES` and the modules that a person adds from `GRKIT/MODULES`. A file in `GRKIT/MODULES` replaces the package module with the same name.
 
 ## module.toml
 
@@ -112,27 +109,15 @@ A module with a page has one text file for each menu language: `text/en.toml`, `
 | `settings.<KEY>.label` | string | The label of a row of the native settings page. |
 | `settings.<KEY>.values` | array of strings | The text of each value of that row. The row of the page setting can omit it and use `rows`. |
 
-The root row shows `<title><separator><summary>`, with the separator of the menu language.
-
-Each text has at most 64 UTF-16 units. The text of the root row, with its title and separator, has the same limit.
-
-For a page of a used setting, the build takes the number of values from `rows` in `text/en.toml`. The installer then checks that number against the setting.
+The root row shows `<title><separator><summary>`. Each text, and the text of the root row, has at most 64 UTF-16 units. For a page of a used setting, the build takes the number of values from `rows` in `text/en.toml`, and the installer checks it against the setting.
 
 ## Tiles
 
-A tile is a 40 x 40 PNG file. The build stores it as RGBA, 6400 bytes. The installer copies the tiles into the icon slots after the effect icons.
-
-- Tile n shows value n of the page setting, on its row and on the root row.
-- Tile 0 is also the module tile.
-- A choice page needs at least one tile for each value.
+A tile is a 40 x 40 PNG file. Tile n shows value n of the page setting, on its row and on the root row, and tile 0 is also the module tile. A choice page needs at least one tile for each value.
 
 ## Settings
 
-The core stores the value of each setting. A module reads and changes a value only through `setting_get` and `setting_set`.
-
-- A value is 0 to `values` - 1. It is 0 until the user or a module changes it.
-- `setting_set` with a value out of range does nothing.
-- Read a setting each time that you use it. Do not keep a copy, because the menu and other modules can change it.
+The core stores the value of each setting, 0 to `values` - 1, and 0 until the user or a module changes it. A module reads and changes a value only through `setting_get` and `setting_set`. Read a setting each time that you use it, because the menu and other modules can change it.
 
 ### Handles
 
@@ -146,26 +131,14 @@ A function names a setting by its handle, a `u32`.
 | `USED_<MODULE>_<KEY>` | `GRKIT_USED(n)` of the used setting `<MODULE>.<KEY>`, from the generated `grkit_module.h` |
 | `GRKIT_NO_SETTING` | an optional used setting that no loaded module has. `setting_get` returns 0. |
 
-A descriptor names a setting differently: n for setting n of the module, or `GRKIT_USE(n)` for used setting n. The build writes these references from the manifest.
+### Saved settings
 
-### Flags
-
-| Flag | Manifest key | Meaning |
-| --- | --- | --- |
-| `GRKIT_SETTING_SAVED` | `saved` | The resident loader saves the value in `GRKIT/STATE.TXT`, and INSTALL restores it at the next power-on. |
-| `GRKIT_SETTING_PUBLIC` | `public` | Other modules can name the setting in `uses`. |
-
-### State key
-
-The state key of a saved setting is its full name, `MODULE.KEY`. The state file stores a number that the core computes from that name. These rules follow:
+The state file keeps a saved setting under a number that the core computes from its full name, `MODULE.KEY`:
 
 - A new ID or a new key starts the setting at 0 again.
-- If a new version has fewer values, a saved value out of the range is not restored. The setting then starts at 0.
+- If a new version has fewer values, a saved value out of the range is not restored.
 - INSTALL restores a saved value only when its module loads. If the module is Off or missing, the file keeps the value.
-- The file has no line for the value 0.
 - The resident loader writes the file 2 to 4 s after the last change.
-
-If two saved settings of a card get the same number, only the first is saved.
 
 ### Used settings
 
@@ -177,7 +150,7 @@ A module names each setting that it uses in `uses`, as `MODULE.KEY`. A used sett
 
 ## Capabilities
 
-The core has three public settings of its own, the capabilities. A module uses a capability by its name in `uses`. The core applies the value, so the module code does not run in the hot path. INSTALL installs the firmware changes of a capability only when a loaded module uses it.
+The capabilities are public settings of the core. A module uses one by its name in `uses`. The core applies the value, so module code does not run in the hot path. INSTALL installs the firmware changes of a capability only when a loaded module uses it.
 
 | Name | Values | Meaning |
 | --- | --- | --- |
@@ -185,24 +158,12 @@ The core has three public settings of its own, the capabilities. A module uses a
 | `CORE.ASPECT` | 7: 0 native 3:2, 1 XPan 65:24, 2 16:9, 3 4:3, 4 2.35:1, 5 1:1, 6 5:4 | The aspect of still pictures. |
 | `CORE.GRAIN` | 4: 0 Off, 1 weak, 2 medium, 3 strong | The grain of recorded pictures, in the native grain stage. The live view and DNG files have no grain. |
 
-`CORE.TONE`:
-
-- A page of `CORE.TONE` gives only its title. The core gives the rows: the effect names, their icons, the live-view preview, and the Fn adjustments of each effect. The page shows only when effects are installed.
-- `setting_get` returns 0 for Off, or n + 1 for installed effect n of this start. `setting_set` selects an effect by that value. Film Look shows the effects in the order of their choices, which can change while the camera runs, so the value is not a row of the page. Keep no value across a restart.
-
-`CORE.ASPECT`:
-
-- Each camera offers some of the ratios. A choice page shows only the rows of the offered values, in the row order of the camera.
-- A ratio that the camera has natively sets the native aspect. The native viewfinder, photo, and DNG apply it.
-- The core crops the other ratios. A layer gets the crop in `Surface.area`, and the photo area of the crop in `Surface.box`.
-- `setting_get` returns the ratio that the camera applies. A change of the native aspect in the camera menu changes the value.
-- `setting_set` with a value that the camera does not offer does nothing.
-
-The resident loader saves each capability as `CORE.<KEY>`. INSTALL restores it only when a loaded module uses it.
+- `CORE.TONE`: a page gives only its title, and the core gives the rows: the effects, their icons, the preview, and the Fn adjustments. The value of an effect is valid only during one start, because the effects and their order can change. Keep no value across a restart.
+- `CORE.ASPECT`: a page shows only the ratios that the camera offers. A native ratio sets the native aspect, and the core crops the others. A layer gets the crop in `Surface.area` and `Surface.box`. `setting_set` with a ratio that the camera does not offer does nothing.
 
 ## Registrations
 
-A registration connects a part of the module to an extension point of the core. The manifest gives the registrations, and the build writes them into the descriptor. Each registration has a point and a structure.
+A registration connects a part of the module to an extension point of the core. The build writes the registrations of the manifest into the descriptor.
 
 | Point | Structure | Manifest |
 | --- | --- | --- |
@@ -212,31 +173,11 @@ A registration connects a part of the module to an extension point of the core. 
 
 ### Pages
 
-A page is a choice page in the GRKit menu: one row for each value of its setting.
+A page is a choice page in ADJ: one row for each value of its setting. OK on a row sets the value. The root shows a page only if it has two rows or more, in the order of the modules, which ADJ Order in MENU can change. The installer rejects a page whose number of rows is not the number of values of its setting.
 
-- OK on a row sets the value.
-- The root row shows the summary and the tile of the current value.
-- Row n shows tile n. With `off_row`, row 0 shows the Off icon.
-- The root shows a page only if it has two rows or more.
-- The installer rejects a page whose number of rows is not the number of values of its setting.
+A page of a setting of the module can also give 2 to 5 rows of a native settings page (`GRKIT_SETTING_ROWS`), as `modules/date` does. The first row is the page setting, and the others are settings of the module, with at most 8 values each. Fn in ADJ opens this page.
 
-The root lists the pages in the order of the modules. The official modules come first, then the others in the order of their file names. The ADJ Order row of the GRKit section of MENU can change the order. A page shows while its module is loaded. See [GRKit section of MENU](architecture.md#grkit-section-of-menu).
-
-**Page of `CORE.TONE`.** The core gives the rows. The page has only its title (`GRKIT_CHOICE_CORE_ROWS`).
-
-**Native settings page.** A page of a setting of the module can give 2 to 5 rows of a native settings page (`GRKIT_SETTING_ROWS`). Where the camera has such a page, Fn and the MENU row open it (see below). The rows obey these rules:
-
-- The first row is the page setting, also a used setting such as `CORE.ASPECT`. Its values are the rows of the page, and its value texts default to the row texts.
-- The other rows are settings of the module.
-- Each row has at most 8 values (`GRKIT_SETTING_ROW_VALUES`).
-- Each row has a label and a text for each value in each language.
-
-See `modules/date` for an example.
-
-**Fn and MENU.** Fn on the root row of a page, or on the page, opens its native settings page. Each module also has a row in the GRKit section at the end of the Customize tab of the native MENU. The row shows the page title and the label of the current value. Right on the row opens the native settings page with an Enable row before the rows of the page, or, for a page without settings rows, Enable and the row of the page setting (at most 64 values). So the GRKit section shows each row of a page, or the last 4 of a page with options. A page can have one settings row, the page setting, to give that row a label of its own; Fn then does not open the settings page. The row of a page of `CORE.TONE` shows the committed effect and opens Enable, Options, Film Stock, which selects the effect, and Parameters, the Fn adjustments of the effect. MENU on that page returns to the row. Rules:
-
-- GRKit adds at most 8 MENU rows, in the order of the modules, while the tab has room. A page with more than 8 values and no settings rows gets no row.
-- GRKit adds the rows before the first MENU after it loads. If MENU opened before GRKit loaded, the rows show from the next power-on.
+Each module also has a row in the GRKit section of MENU. It opens Enable, then the rows of the settings page, or the row of the page setting for a page without settings rows. See [GRKit section of MENU](architecture.md#grkit-section-of-menu).
 
 ### Layers
 
@@ -259,13 +200,7 @@ Layers paint in ascending `order`. A layer with the same order as another paints
 | 20 | Guides |
 | 30 | the Framing ratio label |
 
-| Flag | Manifest key | Effect |
-| --- | --- | --- |
-| `GRKIT_LAYER_FOLLOW_DISP` | `follow_disp` | off while DISP hides the native information |
-| `GRKIT_LAYER_FULL_DISP` | `full_disp` | on only while DISP shows the full information |
-| `GRKIT_LAYER_LIVE_ONLY` | `live_only` | not on the ADJ canvas |
-
-ADJ covers the live view, so the core paints the layers on its own ADJ canvas. While the page of a layer setting is open, the canvas shows the highlighted value.
+The manifest keys `follow_disp`, `full_disp`, and `live_only` set the flags `GRKIT_LAYER_FOLLOW_DISP`, `GRKIT_LAYER_FULL_DISP`, and `GRKIT_LAYER_LIVE_ONLY`. While the page of a layer setting is open in ADJ, the core paints the layer with the highlighted value on the ADJ canvas.
 
 ### Plane filters
 
@@ -322,9 +257,7 @@ A module calls the core only through these functions. The installer links each c
 
 `LABEL_TOP` is the top of a label in the second row of the native live-view text. `LABEL_LEFT` is the left edge that lines up with the native icons.
 
-The module also imports one data object, `grkit_self`, the context of the module (`GrkitContext`). The installer fills it at power-on. Use it only through `GRKIT_SETTING` and `GRKIT_USED`.
-
-`grkit_core::grm::EXPORTS` lists the exported functions. A new core service is an addition to that list and to `grkit.h`, and it raises the minor ABI version.
+A module also imports `grkit_self`, its context, which `GRKIT_SETTING` and `GRKIT_USED` use. `grkit_core::grm::EXPORTS` lists the exported functions. A new service is an addition to that list and to `grkit.h`, and it raises the minor ABI version.
 
 ## Events
 
@@ -335,13 +268,11 @@ A module subscribes to events with `[events]` in `module.toml` (`GrkitSubscriber
 | `GRKIT_EVENT_SYSTEM_READY` | once after each start, when the shooting screen first shows | 0 | 0 |
 | `GRKIT_EVENT_SETTING_CHANGED` | after a setting or a capability changes, in the GRKit menu or through `setting_set` | the handle | the new value |
 
-A handler must return at once. A `setting_set` in a handler sends no second event, so a handler cannot loop. A module with a `system_ready` subscriber makes the installer apply the patches of the shooting screen.
-
-The core calls the paint function of a layer while it draws the live view. It calls the apply function of a plane filter while it encodes a picture. These functions run in other tasks. In them, the timer and UI services refuse each call: they return 0 or do nothing.
+A handler must return at once. A `setting_set` in a handler sends no second event, so a handler cannot loop. Layers and plane filters run in other tasks, where the timer and UI services refuse each call.
 
 ## UI
 
-The UI services show the native message box of the camera, so a module looks like the native camera. A text is a `GrkitText`: one UTF-16 string for each menu language, as the texts of a page. The core shows it in the font of the menu language.
+The UI services show the native message box of the camera. A text is a `GrkitText`: one UTF-16 string for each menu language.
 
 - The box shows only while the GRKit page of ADJ is open. A call returns 1 when the box shows, else 0.
 - One box shows at a time. A toast closes when a new box opens. A message, a confirm, or a progress box takes each key until it closes.
@@ -355,38 +286,15 @@ The UI services show the native message box of the camera, so a module looks lik
 
 The UI services work only in an event handler, a timer callback, or a UI callback, which the core calls in the App task. In other code they return 0.
 
-A number picker is not a service yet. For a row in the native MENU, see MENU row under [Pages](#pages).
-
 ## ABI and compatibility
 
 **ABI version.** `GRKIT_ABI` is 1.0: the major version in the high 16 bits, the minor version in the low 16 bits. The build writes it into the file header and into the descriptor. The installer loads a module whose major version equals that of the core and whose minor version is not larger. A minor version only adds functions and registration types.
 
-**File format.** A module file is GRM version 1, with the magic `GRKM`. All numbers are little-endian. The file has a header, the code segment, the data segment, the relocations, and the imports.
+**File format.** A module file is GRM version 1 (`grkit_core::grm`): a header, the code, the data, the relocations, and the imports. The build compiles each source as Thumb code for ARMv7-A with `-Os`. The installer only moves absolute 32-bit words and fills the imports by name hash. The build rejects other relocation types and each undefined symbol that is not a service or `grkit_self`.
 
-**Code.** The build compiles each source as Thumb code for ARMv7-A, with `-Os`, `-ffreestanding`, `-fno-builtin`, `-mlong-calls`, and `-mno-movt`. The core is far from the module memory, so each call to the core loads its address from a literal word.
-
-**Relocations.** The installer moves only absolute 32-bit words (`R_ARM_ABS32`, and `R_ARM_TARGET1`, which the build treats the same). A PC-relative reference is valid only inside the code segment. The build rejects other relocation types, such as `MOVW` and `MOVT` pairs.
-
-**Imports.** Each import is a word that holds 0 in the file. The import entry gives the FNV-1a hash of the import name. The installer fills the word with the address of the core symbol that has the same hash. An import must name a whole function or object, without an offset.
-
-**Allowed imports.** A module imports only the functions of [Services](#services) and `grkit_self`. The build rejects any other undefined symbol, such as a compiler helper for a division (`__aeabi_uidiv`) or for an array clear (`__aeabi_memclr8`).
-
-**No firmware detail.** A module source includes only `grkit.h` and `grkit_module.h`. It names no firmware symbol and no firmware address. A feature that needs the firmware needs a new core service or capability. The same module file then runs on each camera.
-
-**Descriptor.** The module has no init function. The installer reads the constant descriptor `grkit_module` and registers its parts. It does not run module code at power-on.
+**Memory.** The code, with the constant data, goes after the RTOS image and is read-only. The data and BSS go into one script array that all modules share, and INSTALL clears the BSS. The installer runs no module code at power-on: it reads the constant descriptor `grkit_module`.
 
 **Stack.** Module code runs on the stacks of firmware tasks. The build rejects a function whose stack frame is larger than 1536 bytes. It does not check the total stack of nested calls.
-
-## Memory
-
-| Segment | Place | Access |
-| --- | --- | --- |
-| code: text and constant data | after the RTOS image, in an area that no firmware code uses | read and execute |
-| data: initialized writable data | in a script array of the resident loader | read and write |
-| BSS: zero-initialized data | after the data, in the same array | read and write. INSTALL sets it to 0. |
-
-The installer copies the code of each module after the code of the earlier modules. The code stays valid even if the resident script stops.
-One script array of 65536 words holds the data and BSS of all modules. The same array also holds the settings table, the context of each module, and the lists of module management and of the effects.
 
 ## Limits
 
@@ -419,15 +327,7 @@ One script array of 65536 words holds the data and BSS of all modules. The same 
 
 ## Report errors
 
-INSTALL writes `GRKIT/REPORT.TXT` at each power-on when its text changes. The report gives one line for each listed module:
-
-```text
-Modules (GRKIT\MODULES):
-FRAMING.GRM  loaded
-HELLO.GRM  not loaded: error 51, it needs another version of GRKit
-```
-
-The GRKit section of MENU shows the same number after the module name, such as `HELLO (51)`.
+`GRKIT/REPORT.TXT` gives one line for each listed module, such as `HELLO.GRM  not loaded: error 51, it needs another version of GRKit`. The GRKit section of MENU shows the same number after the module name, such as `HELLO (51)`.
 
 | Error | Report text | Cause |
 | --- | --- | --- |

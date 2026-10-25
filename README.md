@@ -94,6 +94,7 @@ If you test GRKit on a camera, open a device report issue with the result, as a 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Writing a module](docs/modules.md) and the [module reference](docs/module-reference.md)
 - [Release process](docs/releasing.md)
 - [Effects](effects/README.md)
 - [Web site](web/README.md)
@@ -103,7 +104,7 @@ If you test GRKit on a camera, open a device report issue with the result, as a 
 The code is licensed under the [MIT License](LICENSE). Each package contains `LICENSES.md`, which gives the licenses of its files.
 
 - The effects are licensed under CC BY-SA 4.0 or MIT. [effects/NOTICE.md](effects/NOTICE.md) gives the license of each effect.
-- The icon text uses the [Inter](https://github.com/rsms/inter) typeface under the [SIL Open Font License 1.1](crates/grkit-core/assets/Inter-LICENSE.txt).
+- The text of the menu icons and of the live view uses the [Roboto Condensed](https://github.com/googlefonts/roboto-classic) typeface under the [SIL Open Font License 1.1](crates/grkit-core/assets/RobotoCondensed-LICENSE.txt).
 - The effect fit is ported from [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) under the [MIT License](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt).
 
 RICOH and GR are trademarks of Ricoh Company, Ltd. Film names are trademarks of their owners. GRKit is an independent project. It is not affiliated with, endorsed by, or supported by Ricoh or by a film manufacturer.
