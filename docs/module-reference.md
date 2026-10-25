@@ -35,6 +35,7 @@ The manifest is TOML. An unknown key is an error.
 | --- | --- | --- | --- |
 | `id` | string | required | The module ID: 1 to 8 characters `A`-`Z`, `0`-`9`, or `_`. The file name is `<id>.GRM`, and each setting name starts with it. |
 | `version` | integer | required | The module version. The build writes it into the file header. GRKit does not read it. |
+| `order` | integer | 100 | The default place of the module in ADJ and in the GRKit section of MENU, 0 to 65535: a smaller order first, then by ID. The official modules use 10 (Film Look) to 50 (Grain). ADJ Order in MENU changes the place in ADJ. |
 | `sources` | array of strings | `[]` | The C source files, relative to the manifest. |
 | `tiles` | array of strings | `[]` | The tile files, relative to the manifest. Each is a 40 x 40 PNG. At most 64. |
 | `uses` | array of strings | `[]` | The settings of other modules or of the core that the module uses: `MODULE.KEY`, or `?MODULE.KEY` for an optional one. At most 8. See [Used settings](#used-settings). |
@@ -300,7 +301,7 @@ The UI services work only in an event handler, a timer callback, or a UI callbac
 
 | Limit | Value | Error when exceeded |
 | --- | --- | --- |
-| Module files that GRKit lists in both module folders | 8 | GRKit keeps the first files in the default root order. The report gives the number of the other files. |
+| Module files that GRKit lists in both module folders | 8 | GRKit keeps the first files in the default order. The report gives the number of the other files. |
 | Module ID | 1 to 8 characters `A`-`Z`, `0`-`9`, `_` | build error |
 | Code, data, or BSS of one module | 65536 bytes each | build error, or 50 |
 | Code of all modules | 1 MiB | 54 |

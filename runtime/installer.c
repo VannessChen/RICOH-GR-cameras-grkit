@@ -639,24 +639,43 @@ static void name_copy(char *to, const char *from, u32 n)
     for (u32 i = 0; i < n; ++i) to[i] = from[i];
     to[n] = 0;
 }
-/* The place of a module file in the root: the official modules in their
-   order (official_modules), then the others. */
-static u32 module_rank(const char *name)
+/* The order of each listed module, from the header of its file: its default
+   place in ADJ and in MENU. A file that is not a module sorts last. */
+static u32 module_order[MODULES_MAX];
+#define ORDER_UNKNOWN (GRM_MAX_ORDER + 1U)
+/* Whether a module of `order_a` in file `a` goes after one of `order_b` in
+   file `b`: by order, then by name. */
+static int module_after(u32 order_a, const char *a, u32 order_b, const char *b)
 {
-    u32 i = 0;
-    for (; i < OFFICIAL_MODULE_COUNT; ++i) if (text_equal(official_modules[i], name)) break;
-    return i;
+    return order_a != order_b ? order_a > order_b : compare((const u8 *)a, (const u8 *)b) > 0;
 }
-/* Whether module file `a` goes after module file `b`: by rank, then by name. */
-static int module_after(const char *a, const char *b)
+/* The order in the header of module file `name` in the package folder or in
+   GRKIT/MODULES (`source`). */
+static u32 module_file_order(const char *name, u32 source)
 {
-    u32 ra = module_rank(a), rb = module_rank(b);
-    return ra != rb ? ra > rb : compare((const u8 *)a, (const u8 *)b) > 0;
+#ifdef GRKIT_NO_MODULES
+    (void)name; (void)source;
+    return ORDER_UNKNOWN;
+#else
+    char path[sizeof(package_modules_path) + CATALOG_NAME_SIZE];
+    u8 header[GRM_HEADER];
+    u32 have = 0, order;
+    long got;
+    if (!join(path, sizeof(path), source ? modules_path : package_modules_path, name)) return ORDER_UNKNOWN;
+    long fd = syscall6(5, (u32)path, 0x8800, 0, 0, 0, 0);
+    if (fd < 0) return ORDER_UNKNOWN;
+    while (have < GRM_HEADER && (got = syscall6(3, fd, (u32)(header + have), GRM_HEADER - have, 0, 0, 0)) > 0)
+        have += (u32)got;
+    syscall6(6, fd, 0, 0, 0, 0, 0);
+    if (have < GRM_HEADER || grm_word(header) != GRM_MAGIC) return ORDER_UNKNOWN;
+    order = grm_word(header + GRM_ORDER);
+    return order <= GRM_MAX_ORDER ? order : ORDER_UNKNOWN;
+#endif
 }
-/* A module file is <ID>.GRM. Keep the names in root order, so SCAN and
-   INSTALL take the modules in the same order. */
+/* A module file is <ID>.GRM. Keep the names in their default order, so SCAN
+   and INSTALL take the modules in the same order. */
 /* The module files past MODULES_MAX, for REPORT.TXT. A full list keeps the
-   first files in root order, so the result does not depend on the
+   first files in the default order, so the result does not depend on the
    directory order. */
 static u32 module_overflow;
 /* The folder of each listed module: 0 for the package folder, 1 for
@@ -670,24 +689,35 @@ static void offer_module(const char *name, u32 n, void *context)
     char file[CATALOG_NAME_SIZE];
     name_copy(file, name, n);
     if (!source && !package_module(file)) return;
+    /* A file of GRKIT/MODULES replaces the package module of its name, with
+       its own order. */
     for (u32 k = 0; k < module_count; ++k)
         if (same_name(module_names[k], file)) {
-            if (source) { name_copy(module_names[k], name, n); module_source[k] = 1; }
-            return;
+            if (!source) return;
+            for (u32 j = k; j + 1 < module_count; ++j) {
+                name_copy(module_names[j], module_names[j + 1], length(module_names[j + 1]));
+                module_source[j] = module_source[j + 1];
+                module_order[j] = module_order[j + 1];
+            }
+            --module_count;
+            break;
         }
+    u32 order = module_file_order(file, source);
     if (module_count == MODULES_MAX) {
         ++module_overflow;
-        if (!module_after(module_names[MODULES_MAX - 1], file)) return;
+        if (!module_after(module_order[MODULES_MAX - 1], module_names[MODULES_MAX - 1], order, file)) return;
         --module_count;
     }
     u32 at = module_count++;
-    while (at && module_after(module_names[at - 1], file)) {
+    while (at && module_after(module_order[at - 1], module_names[at - 1], order, file)) {
         name_copy(module_names[at], module_names[at - 1], length(module_names[at - 1]));
         module_source[at] = module_source[at - 1];
+        module_order[at] = module_order[at - 1];
         --at;
     }
     name_copy(module_names[at], name, n);
     module_source[at] = source;
+    module_order[at] = order;
 }
 /* Read and check module i into `module`. Return 0 or a status. */
 static int read_module(u32 i)
@@ -732,30 +762,17 @@ static u32 manage_id(u32 i, const char *key)
     name[n] = 0;
     return grm_state_id(name);
 }
-/* Read the choices of the GRKit section and order the modules by them: a
-   module with a position before the others, then the others in root order. */
+/* Read the choices of the GRKit section. The list keeps the default order,
+   which the GRKit section of MENU shows. The core orders the GRKit root of
+   ADJ by the positions (runtime/manage.h: manage_key). */
 static void order_modules(void)
 {
-    u32 keys[MODULES_MAX], value;
+    u32 value;
     for (u32 i = 0; i < module_count; ++i) {
         module_off[i] = state_value(&saved_state, manage_id(i, "OFF"), &value) && value == 1;
         module_position[i] = state_value(&saved_state, manage_id(i, "POS"), &value) && value <= MANAGE_MODULES ? value : 0;
         module_rows[i] = state_value(&saved_state, manage_id(i, "ROWS"), &value) && value < 1U << MANAGE_OPTION_VALUES ? value : 0;
-        keys[i] = module_position[i] ? module_position[i] : MANAGE_DEFAULT_KEY + i;
     }
-    for (u32 i = 1; i < module_count; ++i)
-        for (u32 j = i; j && keys[j - 1] > keys[j]; --j) {
-            char name[CATALOG_NAME_SIZE];
-            u32 t;
-            name_copy(name, module_names[j], length(module_names[j]));
-            name_copy(module_names[j], module_names[j - 1], length(module_names[j - 1]));
-            name_copy(module_names[j - 1], name, length(name));
-            t = keys[j]; keys[j] = keys[j - 1]; keys[j - 1] = t;
-            t = module_off[j]; module_off[j] = module_off[j - 1]; module_off[j - 1] = t;
-            t = module_position[j]; module_position[j] = module_position[j - 1]; module_position[j - 1] = t;
-            t = module_rows[j]; module_rows[j] = module_rows[j - 1]; module_rows[j - 1] = t;
-            t = module_source[j]; module_source[j] = module_source[j - 1]; module_source[j - 1] = t;
-        }
 }
 /* Whether a setting of this start takes the saved value of `id`: a
    capability that a usable module uses, a saved setting of a usable module,

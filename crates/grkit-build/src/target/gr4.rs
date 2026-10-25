@@ -93,6 +93,13 @@ const HOOKS: &[HookSpec] = &[
     b("menu_settings_change", Menu, MenuPage),
     // The update of the camera information page, which About GRKit shows.
     b("menu_info_update", Menu, MenuPage),
+    // An options page shows checkboxes (`runtime/menu_settings.h`): the
+    // controller factory gives it a second SelectMenuController, the list of
+    // that controller gets checkbox rows, and its start does not hide their
+    // checkboxes as radio dots.
+    b("menu_check_factory", Menu, MenuPage),
+    bl("menu_check_lines", Menu, MenuPage),
+    bl("menu_check_dot", Menu, MenuPage),
     bl("menu_settings_kinds_r3_0", Menu, MenuPage),
     bl("menu_settings_kinds_r2", Menu, MenuPage),
     bl("menu_settings_kinds_r8", Menu, MenuPage),

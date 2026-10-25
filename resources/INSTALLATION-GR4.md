@@ -44,7 +44,7 @@ Press MENU to go back one level. GRKit keeps your settings after power-off.
 All the settings of GRKit are also in the **GRKit** section at the end of the Customize tab (C) of MENU:
 
 - Each module has a row. Its first setting, **Enable**, turns the module on or off at once. A module that is off leaves ADJ, while the Off value of a module, such as Off in Framing, keeps it in ADJ. Its other settings follow. Film Look has **Film Stock**, which selects the effect, and the **Parameters** of the selected effect.
-- Film Look, Framing, and Guides have an **Options** row after **Enable**. It lists the effects, ratios, or guide styles. Press OK on one to turn it on or off; a value that is off shows **(Off)**. ADJ shows only the values that are on.
+- Film Look, Framing, Guides, and Date Imprint have an **Options** row after **Enable**. It lists the effects, ratios, guide styles, or date styles. Each value has a checkbox. Press OK on one to check or clear it. ADJ shows only the values that are on.
 - **ADJ Order** sets the order of the modules in GRK. Select a module, then its new position. The new order applies at once.
 - **About GRKit** shows the GRKit version and the project address.
 

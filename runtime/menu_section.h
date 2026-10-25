@@ -95,7 +95,9 @@ static void menu_rows_install(volatile u32 *h) {
     }
     descriptor(services_word(h,SERVICES_MENU+MENU_ROWS_TITLE_AT),plugins);
     /* The module rows in the order of this start. */
-    for(i=0;i<manage_count(h);++i) slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_LISTED,manage_module(h,i));
+    /* The modules in their default order, which the ADJ Order row changes
+       only in ADJ. */
+    for(i=0;i<manage_count(h);++i) slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_LISTED,i);
     for(i=0;i*MANAGE_GROUP_ROWS<manage_count(h);++i) slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_ADJ,i);
     slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_GRKIT,0);
     state[MENU_ROWS_COUNT/4]=slots;

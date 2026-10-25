@@ -113,6 +113,11 @@
 #define SETTINGS_SUBMENU_KIND 11
 #define SETTINGS_PAGES {0x20000d9U,0x20000daU,0x20000dbU,0x20000b5U,0x20000b6U}
 #define ROW_TEXT_VIEW 0xf8
+/* The size of SelectMenuController, and the view type and the text view of
+   CheckBoxListLineView (runtime/menu_settings.h). */
+#define SELECT_MENU_SIZE 0x1e4U
+#define CHECK_LINE_TYPE 0x2aU
+#define CHECK_TEXT_VIEW 0xf0
 #define ROW_VALUE_VIEW 0xfc
 /* Rows of modules in the native MENU (runtime/menu_section.h). MENU builds its
    tabs at the first MENU of a start from the tab descriptors in the RAM

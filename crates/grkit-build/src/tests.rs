@@ -979,7 +979,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
     assert_eq!(
         sha256(header.as_bytes()),
-        "38889efa5621ada2f9660ae26c23f0ec4f45dc34615fb4cdd5a67d48fe5ad594"
+        "bd9971b2e1d3150825f650e290db6f6c3d83aa6989ca75ec094282a2c9459c3d"
     );
     Ok(())
 }
@@ -1076,9 +1076,6 @@ fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
         "static const char *const core_setting_names[] = {\"CORE.TONE\",\"CORE.ASPECT\",\"CORE.GRAIN\"};"
     ));
     assert!(header.contains("static const u32 core_setting_points[] = {0x12,0xc,0x20};"));
-    assert!(header.contains(
-        "static const char *const official_modules[] = {\"FILMLOOK.GRM\",\"FRAMING.GRM\",\"GUIDES.GRM\",\"DATE.GRM\",\"GRAIN.GRM\"};"
-    ));
     Ok(())
 }
 

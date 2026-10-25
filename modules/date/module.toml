@@ -2,6 +2,8 @@
 # exposes it.
 id = "DATE"
 version = 1
+# The default place in ADJ and in MENU: Film Look, Framing, Guides, Date, Grain.
+order = 40
 sources = ["stamp.c"]
 # Tile n shows style n. Tile 0 is the module tile, for Off at the root.
 tiles = [
@@ -33,6 +35,8 @@ public = true
 setting = "STYLE"
 off_row = true
 settings = ["STYLE", "LOOK"]
+# The Options row in MENU turns each style on or off in ADJ.
+options = true
 
 [[filters]]
 apply = "date_apply"

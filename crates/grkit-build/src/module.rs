@@ -212,6 +212,10 @@ fn convert(id: &str, version: u32, elf: &[u8], placeholders: &[(String, u32)]) -
 pub struct Manifest {
     pub id: String,
     pub version: u32,
+    /// The default place in the GRKit root of ADJ and in the GRKit section
+    /// of MENU: a smaller order first, then by ID (`grkit_core::grm`).
+    #[serde(default = "default_order")]
+    pub order: u32,
     /// The C sources, relative to the manifest. A module with only data,
     /// such as a page of a capability, has none.
     #[serde(default)]
@@ -232,6 +236,10 @@ pub struct Manifest {
     #[serde(default)]
     pub filters: Vec<FilterSpec>,
     pub events: Option<EventsSpec>,
+}
+
+fn default_order() -> u32 {
+    grkit_core::grm::DEFAULT_ORDER
 }
 
 /// The event subscriber of a module (`GrkitSubscriber`).
@@ -388,6 +396,11 @@ pub fn generate(directory: &Path) -> Result<(Manifest, String, String)> {
         grkit_core::grm::valid_id(&m.id),
         "Invalid module ID {:?}",
         m.id
+    );
+    ensure!(
+        m.order <= grkit_core::grm::MAX_ORDER,
+        "order must be 0 to {}",
+        grkit_core::grm::MAX_ORDER
     );
     // The C reference of a setting of a page or a layer (GRKIT_USE in
     // runtime/sdk/grkit.h): its own setting by key, or a used setting by its
@@ -855,14 +868,16 @@ pub fn build_manifest(
         );
     }
     let sources: Vec<&Path> = sources.iter().map(|p| p.as_path()).collect();
-    build_with(
+    let mut module = build_with(
         &manifest.id,
         manifest.version,
         &sources,
         &[sdk, objects],
         objects,
         tools,
-    )
+    )?;
+    module.order = manifest.order;
+    Ok(module)
 }
 
 /// Run the host test of the module in `directory`: its `test.c`, with the

@@ -12,6 +12,10 @@
 #define GRM_MAGIC 0x4d4b5247U
 #define GRM_FORMAT 1U
 #define GRM_HEADER 64U
+/* The header word of the order of the module (grkit_core::grm): its default
+   place in ADJ and in MENU, at most GRM_MAX_ORDER. */
+#define GRM_ORDER 56U
+#define GRM_MAX_ORDER 0xffffU
 #define GRM_DATA_LINK 0x10000000U
 #define GRM_DATA_LOCATION 0x80000000U
 #define GRM_MAX_SEGMENT 0x10000U

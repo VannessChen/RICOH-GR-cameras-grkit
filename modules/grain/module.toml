@@ -2,6 +2,8 @@
 # CORE.GRAIN in the native grain stage, so the module has only its page.
 id = "GRAIN"
 version = 1
+# The default place in ADJ and in MENU: Film Look, Framing, Guides, Date, Grain.
+order = 50
 sources = []
 # Tile n shows value n. Tile 0 is the module tile, for Off at the root.
 tiles = [

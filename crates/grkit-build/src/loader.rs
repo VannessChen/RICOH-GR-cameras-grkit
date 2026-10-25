@@ -257,17 +257,6 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
             "#define POINT_PICTURE_ENCODE {:#x}U",
             crate::components::Point::PictureEncode.bit()
         )?;
-        // The official module files in their root order.
-        let official: Vec<_> = grkit_core::modules::OFFICIAL
-            .iter()
-            .map(|module| serde_json::to_string(&format!("{}.GRM", module.id)))
-            .collect::<Result<_, _>>()?;
-        writeln!(
-            result,
-            "#define OFFICIAL_MODULE_COUNT {}U\nstatic const char *const official_modules[] = {{{}}};",
-            official.len(),
-            official.join(",")
-        )?;
         // The capabilities of the core in handle order: the setting name,
         // and the points whose patches apply it.
         let capabilities = &grkit_core::capabilities::CAPABILITIES;

@@ -10,6 +10,9 @@
 #if defined(SETTINGS_SUBMENU) != defined(HOOK_MENU_SETTINGS_CHANGE)
 #error "SETTINGS_SUBMENU and the menu_settings_* hooks go together"
 #endif
+#if defined(FW_CHECK_ITEM) != defined(HOOK_MENU_CHECK_FACTORY)
+#error "The checkbox options page needs its hooks and its firmware definitions together"
+#endif
 .syntax unified
 .arm
 .text
@@ -541,6 +544,26 @@ menu_settings_change:
 1:
     pop {r0-r3, r12, lr}
     bx lr
+
+#ifdef HOOK_MENU_CHECK_FACTORY
+/* The entry of the controller factory (r0 the factory, r1 the controller
+   ID): the checkbox page of an options page (menu_check_controller), else
+   the native factory. */
+.global menu_check_factory
+.type menu_check_factory, %function
+menu_check_factory:
+    push {r0-r3, r12, lr}
+    bl menu_check_controller
+    cmp r0, #0
+    beq 1f
+    add sp, sp, #4
+    pop {r1-r3, r12, lr}
+    bx lr
+1:
+    pop {r0-r3, r12, lr}
+    .inst HOOK_MENU_CHECK_FACTORY_STOCK
+    ldr pc, =HOOK_MENU_CHECK_FACTORY_RESUME
+#endif
 
 #ifdef HOOK_MENU_INFO_UPDATE
 /* The update of the camera information page (menu.c: menu_info_fill). The

@@ -126,6 +126,21 @@
 /* Row text setters: a value page row sets the string view at +0xf8, and a
    submenu row its value view at +0xfc. Each sets a text ID. */
 #define FW_ROW_TEXT FIRMWARE(0x5339e7a0)
+/* Options pages show checkboxes (runtime/menu_settings.h): the constructor of
+   SelectMenuController, the vtable and SetItem of CheckBoxListLineView, the
+   ScrollListView init, the radio dot of a SelectMenuLineView, and the checked
+   and unchecked images. Then the size of SelectMenuController, and the view
+   type and the text view of CheckBoxListLineView. */
+#define FW_SELECT_MENU_NEW FIRMWARE(0x531be784)
+#define CHECK_LINE_VTABLE FIRMWARE(0x53c0bb60)
+#define FW_CHECK_ITEM FIRMWARE(0x533a8938)
+#define FW_LIST_INIT FIRMWARE(0x53394610)
+#define FW_ROW_DOT FIRMWARE(0x5339e738)
+#define CHECK_IMAGE_ON 0x10fU
+#define CHECK_IMAGE_OFF 0x10eU
+#define SELECT_MENU_SIZE 0x1d4U
+#define CHECK_LINE_TYPE 0x2aU
+#define CHECK_TEXT_VIEW 0xf0
 #define ROW_TEXT_VIEW 0xf8
 #define FW_ROW_VALUE FIRMWARE(0x533a6ad0)
 #define ROW_VALUE_VIEW 0xfc

@@ -46,6 +46,7 @@ The new folder holds a working module. It has a setting `MODE` (Off, On), a choi
 ```toml
 id = "GUIDES"
 version = 1
+order = 30
 sources = ["guides.c"]
 # Tile n shows value n. Tile 0 is the module tile, for Off at the root.
 tiles = [
@@ -75,6 +76,7 @@ order = 20
 follow_disp = true
 ```
 
+- `order`: the default place in ADJ and in MENU, after Film Look (10) and Framing (20).
 - `[[settings]]`: the setting `GUIDES.STYLE` has 6 values. The state file keeps it (`saved`), and other modules can use it (`public`).
 - `[page]`: a choice page of `STYLE` in ADJ and in MENU, with one row for each value.
 - `[[layers]]`: the core calls `guides_paint` for each draw of the live view while `STYLE` is not 0.

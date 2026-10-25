@@ -1,9 +1,8 @@
 //! The official modules: the module folders in `modules/` that each release
 //! builds (`grkit module build`) and that the site offers.
 //!
-//! The list order is the default order of the GRKit root, which the installer
-//! uses for the official modules. Other modules follow them in the order of
-//! their IDs.
+//! The default order of the modules in ADJ and in MENU is the `order` of
+//! each manifest (`grkit_core::grm`), not this list.
 
 use std::fmt::Write;
 
@@ -21,7 +20,7 @@ pub struct Official {
     pub needs_effects: bool,
 }
 
-/// The official modules in the default root order.
+/// The official modules, in the order that the site shows them.
 pub const OFFICIAL: [Official; 5] = [
     Official {
         id: "FILMLOOK",

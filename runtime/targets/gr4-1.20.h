@@ -82,6 +82,17 @@
 #define SELECT_GUIDE_OK_TEXT 0x364
 #define SELECT_GUIDE_BACK_TEXT 0x365
 #define FW_ROW_TEXT FIRMWARE(0x5359e0ac)
+/* Options pages show checkboxes (runtime/menu_settings.h): the constructor of
+   SelectMenuController, the vtable and SetItem of CheckBoxListLineView, the
+   ScrollListView init, the radio dot of a SelectMenuLineView, and the checked
+   and unchecked images. */
+#define FW_SELECT_MENU_NEW FIRMWARE(0x531dcc88)
+#define CHECK_LINE_VTABLE FIRMWARE(0x53ecff88)
+#define FW_CHECK_ITEM FIRMWARE(0x535a8300)
+#define FW_LIST_INIT FIRMWARE(0x53593c14)
+#define FW_ROW_DOT FIRMWARE(0x5359e00c)
+#define CHECK_IMAGE_ON 0x111U
+#define CHECK_IMAGE_OFF 0x110U
 #define FW_ROW_VALUE FIRMWARE(0x535a64b4)
 /* The RAM table of the MENU tab descriptors, and the MENU row setters of
    the label and of the value text. */

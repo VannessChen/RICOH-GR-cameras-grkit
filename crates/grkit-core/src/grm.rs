@@ -36,6 +36,11 @@ pub const ABI_MINOR: u32 = 0;
 pub const MAX_SEGMENT: usize = 0x10000;
 /// The longest module ID, which is also the file name before `.GRM`.
 pub const ID_SIZE: usize = 8;
+/// The order of a module without `order` in its manifest. The official
+/// modules have smaller orders, so other modules follow them by default.
+pub const DEFAULT_ORDER: u32 = 100;
+/// The largest order.
+pub const MAX_ORDER: u32 = 65535;
 
 /// The services that the core exports to modules: the name that a module
 /// imports (`runtime/sdk/grkit.h`) and the C symbol of the core that
@@ -108,6 +113,10 @@ pub struct Import {
 pub struct Module {
     pub id: String,
     pub version: u32,
+    /// The default place of the module in the GRKit root of ADJ and in the
+    /// GRKit section of MENU: a smaller order first, then by ID. The
+    /// installer reads it from the header before it reads the rest.
+    pub order: u32,
     pub code: Vec<u8>,
     pub data: Vec<u8>,
     pub bss_size: u32,
@@ -241,7 +250,7 @@ impl Module {
         put(&mut out, self.data_relocations.len() as u32);
         put(&mut out, self.imports.len() as u32);
         put(&mut out, names.len() as u32);
-        put(&mut out, 0);
+        put(&mut out, self.order);
         put(&mut out, 0);
         debug_assert_eq!(out.len(), HEADER_SIZE);
         out.extend_from_slice(&self.code);
@@ -281,6 +290,7 @@ impl Module {
             (field(0)?, field(1)?, field(2)?, field(3)?, field(4)?);
         let (code_count, data_count, import_count, names_size) =
             (field(5)?, field(6)?, field(7)?, field(8)?);
+        let order = field(9)?;
         let mut at = HEADER_SIZE;
         let mut take = |length: usize| -> Result<&[u8]> {
             let part = bytes
@@ -323,6 +333,7 @@ impl Module {
         let module = Self {
             id,
             version,
+            order,
             code,
             data,
             bss_size,
@@ -347,12 +358,16 @@ pub fn template(id: &str) -> Result<crate::Files> {
         "Invalid module ID {id:?}: use 1 to 8 characters A-Z, 0-9, or _"
     );
     let mut files = crate::Files::new();
+    let order = DEFAULT_ORDER;
     let manifest = format!(
         r#"# {id}: a GRKit module (docs/architecture.md, Modules).
 # grkit module build --dir <this folder> makes {id}.GRM, and
 # grkit module test --dir <this folder> runs test.c on this computer.
 id = "{id}"
 version = 1
+# The default place in the GRKit root of ADJ and in the GRKit section of
+# MENU: a smaller order first, then by ID. The official modules use 10 to 50.
+order = {order}
 sources = ["module.c"]
 # Tile n shows value n of the page setting. Tile 0 is the module tile, which
 # the root shows at Off. Each tile is a 40 x 40 PNG.
@@ -466,6 +481,7 @@ mod tests {
         Module {
             id: "PROBE".into(),
             version: 1,
+            order: 30,
             code,
             data: vec![0; 8],
             bss_size: 8,

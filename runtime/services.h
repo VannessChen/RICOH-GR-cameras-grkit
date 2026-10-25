@@ -113,7 +113,14 @@
    each. The core calls no module code in these ranges. */
 #define SERVICES_SUSPENDED (SERVICES_MENU + MENU_ROWS_TAB + MENU_ROWS_TAB_SIZE)
 #define SERVICES_SUSPENDED_MAX 8U
-#define SERVICES_SIZE (SERVICES_SUSPENDED + 4U + 8U * SERVICES_SUSPENDED_MAX)
+/* The checkbox page of options pages (runtime/menu_settings.h): the second
+   SelectMenuController, or 0 before the first options page; the controller ID
+   of the open options page, or 0; and 1 while the controller is built. */
+#define SERVICES_CHECK (SERVICES_SUSPENDED + 4U + 8U * SERVICES_SUSPENDED_MAX)
+#define CHECK_PAGE 0U
+#define CHECK_ID 4U
+#define CHECK_BUILD 8U
+#define SERVICES_SIZE (SERVICES_CHECK + 12U)
 #define SERVICES_WORDS (SERVICES_SIZE / 4U)
 /* The events (GRKIT_EVENT_*). */
 #define SERVICE_EVENT_SYSTEM_READY 1U

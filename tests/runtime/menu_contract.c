@@ -1080,6 +1080,12 @@ int main(void)
         assert(settings_memory[2 + 7 * 3 + 1] == 1 && settings_memory[2 + 4 * 3 + 1] == 2 && settings_memory[2 + 10 * 3 + 1] == 3);
         assert(same(page[0].label(test_header), "Date Imprint") && same(page[1].label(test_header), "Guides"));
         assert(menu_settings_current(0, 0, 0) == 2);
+        /* The return from the value page labels the rows in the new order:
+           "Date Imprint", then "Guides". */
+        assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+        assert(test_header[GRKIT_HOST_SETTINGS / 4] == MANAGE_MODULE + 1);
+        assert(settings_block(test_header)[SETTINGS_LABELS / 4 + 2] == ((12 + 1) | 0x100));
+        assert(settings_block(test_header)[SETTINGS_LABELS / 4 + 4] == ((6 + 1) | 0x100));
         /* The order applies at once: the page of Date Imprint comes first in
            the root of ADJ, and no restart is due. */
         assert(root_row(test_header, 3) + 1 == root_row(test_header, 2) && root_module(test_header, root_row(test_header, 3)) == 3);
@@ -1115,6 +1121,10 @@ int main(void)
             assert(same(page[0].label(test_header), "Guides") && same(page[1].label(test_header), "Date Imprint"));
             assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
             assert(test_header[GRKIT_HOST_SETTINGS / 4] == MANAGE_MODULE + 1);
+            /* The return reads the rows of the page again: its three modules.
+               The six rows of this case are set again. */
+            assert(((volatile u8 *)block)[SUBMENU_KIND_ROWS] == 3);
+            ((volatile u8 *)block)[SUBMENU_KIND_ROWS] = SETTING_ROWS;
             assert(menu_text_override(view, row_texts[SETTINGS_ALIAS]) == ((u32)(block + SETTINGS_LABELS / 4 + 2) | 1U));
             assert(menu_text_override(view, row_texts[SETTING_ROWS - 1]) ==
                    ((u32)(block + SETTINGS_LABELS / 4 + SETTING_ROWS * 2) | 1U));
