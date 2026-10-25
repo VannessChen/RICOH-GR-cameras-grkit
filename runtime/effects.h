@@ -12,7 +12,7 @@
    (runtime/settings.h): CORE.EFFECT.<effect ID>, with Off in bit 0, and its
    position + 1, or 0 for the default place, above. The resident loader saves
    it as other settings, and SCAN reads it to select and order the effects
-   (runtime/installer.c). GRKit installs at most MAX_COUNT effects: those
+   (runtime/install_effects.h). GRKit installs at most MAX_COUNT effects: those
    that are On, in that order, then those that are Off while there is room.
 
    INSTALL writes the effect list (GRKIT_HOST_EFFECTS): EFFECTS_HEADER bytes,

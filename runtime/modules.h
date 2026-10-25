@@ -111,7 +111,7 @@ static const Module choice_module={choice_title,choice_summary,choice_rows,choic
     choice_checked,choice_apply,choice_committed,0,0,0};
 
 /* The rows of the native settings page of a module page. INSTALL writes
-   the setting handle of each row into the row (runtime/installer.c). Row 0
+   the setting handle of each row into the row (runtime/install_modules.h). Row 0
    is the page setting, which can be a used setting such as CORE.ASPECT: its
    values are the rows of the page. The other rows are settings of the
    module. */

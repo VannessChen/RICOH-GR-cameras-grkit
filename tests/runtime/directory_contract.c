@@ -131,8 +131,8 @@ static void small_reads_skip_long_names(void)
 }
 static void a_stale_listing_is_not_visited(void)
 {
-    static const char *const plugins[] = {"PLUGINS.TTL", "SCAN.SH", "._SCAN.SH", "INSTALL.BIN"};
-    stale.names = plugins; stale.count = sizeof(plugins) / sizeof(plugins[0]);
+    static const char *const scripts[] = {"PLUGINS.TTL", "SCAN.SH", "._SCAN.SH", "INSTALL.BIN"};
+    stale.names = scripts; stale.count = sizeof(scripts) / sizeof(scripts[0]);
     reset(effects, EFFECTS); stale_pending = 1;
     assert(list(4096) == 0);
     expect(listed, LISTED);

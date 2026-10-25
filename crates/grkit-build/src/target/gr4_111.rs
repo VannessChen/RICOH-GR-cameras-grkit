@@ -32,7 +32,7 @@ pub const TARGET: Target = Target {
     pixel_base_slot: 0x55082038,
     pixel_base_indirect: true,
     native_tone_page: Some(0x81),
-    layout: Some(&LAYOUT),
+    layout: &LAYOUT,
     image_control: Some(&IMAGE_CONTROL),
     // The settings domain follows the vtable of the capture property
     // singleton, and the icon drawer is +0x10 in the icon manager singleton.

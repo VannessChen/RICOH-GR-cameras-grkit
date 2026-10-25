@@ -16,7 +16,7 @@ use crate::{
 pub const RUNTIME_PATHS: [&str; 5] = [
     "SCRIPT/STARTUP.TTL",
     "SCRIPT/GRKIT/LOADER.TTL",
-    "SCRIPT/GRKIT/INSTALL.BIN",
+    runtime::CORE_FILE,
     "SCRIPT/GRKIT/SCAN.SH",
     "SCRIPT/GRKIT/INSTALL.SH",
 ];
@@ -124,10 +124,10 @@ pub fn read_manifest(blob: &[u8]) -> Result<Value> {
     Ok(result)
 }
 
-/// The prefix of the string that names the runtime build in `INSTALL.BIN`.
+/// The prefix of the string that names the runtime build in `CORE.BIN`.
 pub const TARGET_MARKER: &str = "GRKIT_TARGET=";
 
-/// The runtime build that `INSTALL.BIN` names, if it names one. Runtimes from
+/// The runtime build that `CORE.BIN` names, if it names one. Runtimes from
 /// before a camera had several builds do not.
 fn marked_target(binary: &[u8]) -> Option<&str> {
     let marker = TARGET_MARKER.as_bytes();
@@ -145,7 +145,7 @@ fn marked_target(binary: &[u8]) -> Option<&str> {
 fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
     let targets = camera.targets();
     if let Some(name) = runtime
-        .get("SCRIPT/GRKIT/INSTALL.BIN")
+        .get(runtime::CORE_FILE)
         .and_then(|binary| marked_target(binary))
     {
         let target = targets
@@ -169,10 +169,10 @@ fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
     }
 }
 
-/// The runtime builds of a package for `camera`, from its installers
+/// The runtime builds of a package for `camera`, from its core files
 /// (`runtime::package_runtime_files`): one for each build of the camera, in
-/// release order, each named by its marker. A camera with one build keeps the
-/// single installer of earlier packages.
+/// release order, each named by its marker. A camera with one build has one
+/// core file.
 fn package_targets(runtime: &Files, camera: &Camera) -> Result<Vec<&'static str>> {
     let targets = camera.targets();
     if targets.len() == 1 {
@@ -181,7 +181,7 @@ fn package_targets(runtime: &Files, camera: &Camera) -> Result<Vec<&'static str>
     let binaries: Vec<&[u8]> = (0..targets.len())
         .map(|index| {
             runtime
-                .get(&runtime::installer_path(index))
+                .get(&runtime::core_path_of(index, targets.len()))
                 .map(Vec::as_slice)
                 .with_context(|| {
                     format!(
@@ -232,13 +232,13 @@ fn package_runtime(runtimes: &[VerifiedRuntime], camera: &Camera) -> Result<File
     );
     let binaries: Vec<&[u8]> = runtimes
         .iter()
-        .map(|runtime| runtime.files()["SCRIPT/GRKIT/INSTALL.BIN"].as_slice())
+        .map(|runtime| runtime.files()[runtime::CORE_FILE].as_slice())
         .collect();
     let files = runtime::package_runtime_files(&binaries, runtime::icon_stride(targets[0])?);
-    // The builds of a camera share every file but the installer. The package
-    // has its own scripts that run the installers.
+    // The builds of a camera share every file but the core file. The package
+    // has its own scripts that run the core files.
     let own = [
-        "SCRIPT/GRKIT/INSTALL.BIN",
+        runtime::CORE_FILE,
         "SCRIPT/GRKIT/INSTALL.SH",
         "SCRIPT/GRKIT/SCAN.SH",
     ];
@@ -261,7 +261,7 @@ pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
         files.len() == RUNTIME_PATHS.len() && RUNTIME_PATHS.iter().all(|p| files.contains_key(*p)),
         "Expected the complete production runtime file set"
     );
-    let binary = &files["SCRIPT/GRKIT/INSTALL.BIN"];
+    let binary = &files[runtime::CORE_FILE];
     check_installer(binary)?;
     ensure!(
         *files == runtime::runtime_files_for(binary, runtime::icon_stride(target)?),
@@ -362,7 +362,7 @@ pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<VerifiedRuntime> {
 /// deletes effect files.
 pub const EFFECTS_FOLDER: &str = "SCRIPT/GRKIT/EFFECTS";
 
-/// The package list (`runtime/installer.c`): the file name of each effect and
+/// The package list (`runtime/install_library.h`): the file name of each effect and
 /// module of the package, one on each line. Each package has it, also
 /// without effects, so a merge copy of a new package over an old one gives
 /// the same result as a replace copy: the installer ignores the package files
@@ -590,11 +590,12 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         bail!("Package must have the ModeSet file of exactly one camera");
     };
     let activation = runtime::activation_files(camera);
-    let installers = camera.targets().len();
+    let cores = camera.targets().len();
     let runtime_paths: Vec<String> = RUNTIME_PATHS
         .iter()
+        .filter(|name| **name != runtime::CORE_FILE)
         .map(|name| (*name).to_owned())
-        .chain((1..installers).map(runtime::installer_path))
+        .chain((0..cores).map(|index| runtime::core_path_of(index, cores)))
         .collect();
     let mut mandatory: BTreeSet<String> = runtime_paths
         .iter()
@@ -788,6 +789,11 @@ pub fn assemble(
         contents.insert(format!("SD_ROOT/{EFFECTS_FOLDER}/{name}"), blob.clone());
     }
     let mut listed: Vec<String> = effects.files.keys().cloned().collect();
+    ensure!(
+        modules.len() <= runtime::MODULES_MAX,
+        "A package holds at most {} modules",
+        runtime::MODULES_MAX
+    );
     for bytes in modules {
         let id = crate::grm::Module::decode(bytes)?.id;
         let path = format!("SD_ROOT/{}/{id}.GRM", crate::grm::FOLDER);

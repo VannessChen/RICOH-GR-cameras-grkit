@@ -174,7 +174,7 @@ Turn the module off with its **Enable** row in the GRKit section of MENU. If the
 
 1. Put an empty file `GRKIT/PROFILE` on the card.
 2. Power on the camera, and do what you want to measure, such as keeping the live view open or taking photos.
-3. Power off the camera, and open `GRKIT/PROFILE.TXT`. Delete `GRKIT/PROFILE` to stop the profile.
+3. Power off the camera, and open `GRKIT/PROFILE.LOG`. Delete `GRKIT/PROFILE` to stop the profile.
 
 Every 10 seconds, the file gets a period with the number of live-view frames, then a line for each point that ran:
 

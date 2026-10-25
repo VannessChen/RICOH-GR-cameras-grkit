@@ -38,6 +38,9 @@ pub fn icon_stride(target: &str) -> Result<usize> {
 pub const ICONS_PER_CHUNK: usize = 40;
 /// The largest script array in words, which holds the modules.
 pub const MODULE_ARRAY_WORDS: usize = 65536;
+/// The most modules that GRKit lists at a start, from the package and from
+/// `GRKIT/MODULES` together. It lists the first ones in their default order.
+pub const MODULES_MAX: usize = 8;
 /// The most settings of all modules (`runtime/settings.h`).
 pub const MODULE_SETTINGS_MAX: usize = 160;
 /// The most values of a module setting.
@@ -53,10 +56,10 @@ pub const NATIVE_SETTING_ROWS: usize = 5;
 /// The most artwork tiles of all modules. The installer puts them in the
 /// icon chunks after the effect icons.
 pub const MODULE_TILES_MAX: usize = 64;
-/// Off, GRKit, and Version.
-/// The menu addresses the Version icon and the plugin tiles by offset, so the
-/// host icons come first in chunk 0, and they must fit in it. The effect icons
-/// follow them.
+/// Off, GRKit, Version, and Modules.
+/// The menu addresses the Version and Modules icons by their offset from the
+/// GRKit icon, so the host icons come first in chunk 0, and they must fit in
+/// it. The effect icons follow them.
 pub const HOST_ICON_COUNT: usize = 4;
 const _: () = assert!(HOST_ICON_COUNT <= ICONS_PER_CHUNK);
 /// Product limit for private Image Control effects. Each effect takes a
@@ -98,7 +101,7 @@ pub const STATE_MAX_BYTES: usize = 16384;
 /// one to two intervals after the last change.
 pub const STATE_POLL_MS: u32 = 2000;
 /// In the development profile (runtime/profile.h), the resident loader
-/// writes the counts of the core to `PROFILE.TXT` in the data folder after
+/// writes the counts of the core to `PROFILE.LOG` in the data folder after
 /// this many polls, and clears them.
 pub const PROFILE_POLLS: u32 = 5;
 
@@ -106,7 +109,7 @@ pub const PROFILE_POLLS: u32 = 5;
 /// (`capabilities::state_keys`) and the saved module settings.
 /// The file holds two lines for each key with a value other than 0: the key
 /// ID (`state_key_id`), then the value, both in decimal. A missing key and a
-/// plugin that is not installed restore 0.
+/// module that is not installed restore 0.
 /// The most digits of a number in the state file. The loader parses the digits
 /// itself, and 9 digits cannot overflow its 32-bit integers.
 pub const STATE_DIGITS: usize = 9;
@@ -218,12 +221,12 @@ pub fn loader() -> Vec<u8> {
 /// The loader for a target with `icon_stride`-byte icon slots.
 pub fn loader_for(icon_stride: usize) -> Vec<u8> {
     let path = core_path;
-    let (plan, done, failed) = (path("MODULE.BIN"), path("INSTALL.OK"), path("INSTALL.ERR"));
+    let (plan, done, failed) = (path("PLAN.BIN"), path("INSTALL.OK"), path("INSTALL.ERR"));
     // Wait for the host command tables of the RTOS before lcmd_resp.
     let mut lines: Vec<String> = vec!["mpause 2000".into(), "sendln 'lcmd_resp on'".into()];
     for name in [
-        "MODULE.BIN",
-        "MODULE.TMP",
+        "PLAN.BIN",
+        "PLAN.TMP",
         "INSTALL.OK",
         "INSTALL.ERR",
         "INSTALL.LCK",
@@ -249,7 +252,11 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         format!("fileopen fh '{plan}' 0"),
         "if fh < 0 goto reject".into(),
         "call readword".into(),
-        "if value != 827150919 goto reject_close".into(),
+        // The words of the plan header in order (`abi::PLAN_FIELDS`).
+        format!(
+            "if value != {} goto reject_close",
+            crate::abi::PLAN_MAGIC_VALUE
+        ),
         "call readword".into(),
         "count = value".into(),
         "if count < 0 goto reject_close".into(),
@@ -569,12 +576,12 @@ fn state_script() -> Vec<String> {
 
 /// The loader path of the profile file.
 fn profile_path() -> String {
-    format!("{DATA_FOLDER}\\PROFILE.TXT")
+    format!("{DATA_FOLDER}\\PROFILE.LOG")
 }
 
 /// The development profile of the resident loader (runtime/profile.h). The
 /// watch loop of the profile saves the state as the usual one does, and after
-/// each `PROFILE_POLLS` polls appends a period to `PROFILE.TXT`: a line with
+/// each `PROFILE_POLLS` polls appends a period to `PROFILE.LOG`: a line with
 /// its number and the live-view frames, then a line for each counter slot
 /// with calls: its name, the calls, the cycles, and the cycles of the largest
 /// call. The loader clears each slot that it writes. The module names come
@@ -742,37 +749,56 @@ pub fn runtime_files_for(binary: &[u8], icon_stride: usize) -> Files {
     package_runtime_files(&[binary], icon_stride)
 }
 
-/// The most installers that a package holds: `INSTALL.BIN`, then
-/// `INSTALL2.BIN` to `INSTALL9.BIN`, so each name stays 8.3.
-pub const MAX_INSTALLERS: usize = 9;
+/// The exit statuses of a core file that the package scripts test
+/// (`runtime/install_status.h`): the core does not relocate to the running
+/// build, or (`--known`) does not name it.
+pub const STATUS_RELOCATION: u32 = 47;
+pub const STATUS_OTHER_BUILD: u32 = 48;
 
-/// The path of installer `index` in the runtime files.
-pub fn installer_path(index: usize) -> String {
-    match index {
-        0 => format!("{PACKAGE_FOLDER}/INSTALL.BIN"),
-        _ => format!("{PACKAGE_FOLDER}/INSTALL{}.BIN", index + 1),
+/// The core file of a runtime build: the core of one firmware build and its
+/// installer, which SCAN.SH and INSTALL.SH run.
+pub const CORE_FILE: &str = "SCRIPT/GRKIT/CORE.BIN";
+
+/// The most core files that a package holds: `CORE1.BIN` to `CORE9.BIN`, so
+/// each name stays 8.3.
+pub const MAX_CORE_FILES: usize = 9;
+
+/// The path of core file `index` of `count` in a package: `CORE.BIN` for one
+/// build, else `CORE1.BIN` and on, in release order.
+pub fn core_path_of(index: usize, count: usize) -> String {
+    if count == 1 {
+        CORE_FILE.to_owned()
+    } else {
+        format!("{PACKAGE_FOLDER}/CORE{}.BIN", index + 1)
     }
 }
 
-/// The runtime files of a package with the installer of each runtime build of
+/// The runtime files of a package with the core file of each runtime build of
 /// a camera, in release order, for `icon_stride`-byte icon slots. The builds of
-/// a camera have the same scripts and plan, so the first installer scans.
+/// a camera have the same scripts and plan, so the first core file scans.
 ///
-/// With one installer, `INSTALL.SH` runs `--install`. With more, it runs each
-/// installer with `--known` first, which reads one word to find the build. If
-/// no installer names the build, it tries each one with `--try`, which runs the
-/// relocation, and the last one with `--install`, which writes `INSTALL.ERR`
-/// if it also fails. A known build thus installs without a relocation of
+/// With one core file, `INSTALL.SH` runs it with `--install`. With more, it
+/// runs each with `--known` first, which reads one word to find the build. If
+/// no core file names the build, it tries each one with `--try`, which runs
+/// the relocation, and the last one with `--install`, which writes
+/// `INSTALL.ERR` if it also fails. A known build thus installs without a relocation of
 /// another build, and an unknown build still gets each runtime.
 ///
 /// After Linux deletes a file in the folder, the camera does not find the next
 /// new name that it looks up there, and it keeps that miss. So `SCAN.SH`, the
-/// first script of a power-on, looks up each installer before it scans.
+/// first script of a power-on, looks up each core file before it scans.
 pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
-    assert!((1..=MAX_INSTALLERS).contains(&binaries.len()));
+    let count = binaries.len();
+    assert!((1..=MAX_CORE_FILES).contains(&count));
     let target = core_path("LOADER.TTL");
     let startup = format!("filesearch '{target}'\r\nif result = 0 goto done\r\ninclude '{target}'\r\n:done\r\nend\r\n");
-    let name = |index: usize| installer_path(index).rsplit('/').next().unwrap().to_owned();
+    let name = |index: usize| {
+        core_path_of(index, count)
+            .rsplit('/')
+            .next()
+            .unwrap()
+            .to_owned()
+    };
     // Each script body sets `status` to the exit status of the installer.
     let wrapper = |body: String, mode: &str| {
         format!(
@@ -783,32 +809,34 @@ pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
     };
     let single = |mode: &str| format!("{LINUX_DIRECTORY}/{} --{mode}\nstatus=$?\n", name(0));
     let names = |range: std::ops::Range<usize>| range.map(name).collect::<Vec<_>>().join(" ");
-    let (scan, install) = match binaries.len() {
+    let (scan, install) = match count {
         1 => (single("scan"), single("install")),
         count => (
             format!(
-                "for installer in {}; do [ -e {LINUX_DIRECTORY}/$installer ]; done\n{}",
+                "for core in {}; do [ -e {LINUX_DIRECTORY}/$core ]; done\n{}",
                 names(1..count),
                 single("scan")
             ),
             format!(
-                "for installer in {all}; do\n\
-                 \x20 {LINUX_DIRECTORY}/$installer --known\n\
+                "for core in {all}; do\n\
+                 \x20 {LINUX_DIRECTORY}/$core --known\n\
                  \x20 status=$?\n\
-                 \x20 case $status in 48) ;; *) break ;; esac\n\
+                 \x20 case $status in {other}) ;; *) break ;; esac\n\
                  done\n\
-                 case $status in 48)\n\
-                 \x20 for installer in {tried}; do\n\
-                 \x20   {LINUX_DIRECTORY}/$installer --try\n\
+                 case $status in {other})\n\
+                 \x20 for core in {tried}; do\n\
+                 \x20   {LINUX_DIRECTORY}/$core --try\n\
                  \x20   status=$?\n\
-                 \x20   case $status in 47) ;; *) break ;; esac\n\
+                 \x20   case $status in {relocation}) ;; *) break ;; esac\n\
                  \x20 done\n\
-                 \x20 case $status in 47) {LINUX_DIRECTORY}/{last} --install; status=$? ;; esac\n\
+                 \x20 case $status in {relocation}) {LINUX_DIRECTORY}/{last} --install; status=$? ;; esac\n\
                  \x20 ;;\n\
                  esac\n",
                 all = names(0..count),
                 tried = names(0..count - 1),
                 last = name(count - 1),
+                other = STATUS_OTHER_BUILD,
+                relocation = STATUS_RELOCATION,
             ),
         ),
     };
@@ -825,7 +853,7 @@ pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
         ),
     ]);
     for (index, binary) in binaries.iter().enumerate() {
-        files.insert(installer_path(index), binary.to_vec());
+        files.insert(core_path_of(index, count), binary.to_vec());
     }
     files
 }
@@ -976,7 +1004,7 @@ mod tests {
 
     #[test]
     fn adjustment_entries_fit_the_state_file() {
-        // Nine base-9 digits, and keys of at most nine digits that no plugin
+        // Nine base-9 digits, and keys of at most nine digits that no other
         // key uses.
         assert_eq!(PARAMETER_VALUE_MAX, 9u32.pow(PARAMETER_COUNT as u32) - 1);
         assert_eq!(
@@ -993,7 +1021,7 @@ mod tests {
             let id = state_key_id(&key.name);
             !(PARAMETER_KEY_BASE..=last).contains(&id)
         }));
-        // Each key and value line, with CR LF, for every effect, plugin key,
+        // Each key and value line, with CR LF, for every effect, capability key,
         // and module setting.
         let line = STATE_DIGITS + 2;
         assert!(
@@ -1099,11 +1127,11 @@ mod tests {
             .lines()
             .filter(|l| l.starts_with("fileopen"))
             .collect();
-        // The modules, and the profile file, which the loader appends to.
+        // The plan, and the profile file, which the loader appends to.
         assert!(
             opens
                 .iter()
-                .all(|l| l.contains("MODULE.BIN") || l.ends_with("PROFILE.TXT' 1")),
+                .all(|l| l.contains("PLAN.BIN") || l.ends_with("PROFILE.LOG' 1")),
             "{opens:?}"
         );
         assert!(!script.contains("SCRIPT\\PLUGINS"));

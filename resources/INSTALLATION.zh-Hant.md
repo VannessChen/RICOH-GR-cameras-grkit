@@ -75,9 +75,9 @@ GRKit 把效果保存在 `GRKIT/EFFECTS` 資料夾中。新的安裝包會加入
 
 ### GRKit 以安全模式啟動
 
-在安全模式下，GRKit 不載入任何模組，`GRKIT/REPORT.TXT` 會說明原因。`GRKIT` 資料夾中有名為 `SAFE` 的檔案時，GRKit 進入安全模式。刪除這個檔案，即可重新載入模組。
+在安全模式下，GRKit 不載入任何模組，`GRKIT/REPORT.TXT` 會說明原因。`GRKIT` 資料夾中有名為 `SAFE` 或 `SAFE.TXT` 的檔案時，GRKit 進入安全模式。刪除這個檔案，即可重新載入模組。
 
-如果加入一個模組後相機停止回應，在 MENU 自訂頁的 GRKit 小節中把這個模組的**啟用**設為關閉。如果相機在開啟 MENU 之前就停止回應，取出記憶卡，在電腦上從 `GRKIT/MODULES` 刪除這個模組，或在 `GRKIT` 資料夾中放一個名為 `SAFE` 的空檔案。
+如果加入一個模組後相機停止回應，在 MENU 自訂頁的 GRKit 小節中把這個模組的**啟用**設為關閉。如果相機在開啟 MENU 之前就停止回應，取出記憶卡，在電腦上從 `GRKIT/MODULES` 刪除這個模組，或在 `GRKIT` 資料夾中放一個名為 `SAFE` 或 `SAFE.TXT` 的空檔案。
 
 ## 移除或復原
 

@@ -10,7 +10,7 @@ The sources of each contract:
 | Host test harness | `runtime/sdk/grkit_test.h` |
 | Manifest and text | `crates/grkit-build/src/module.rs` |
 | File format | `crates/grkit-core/src/grm.rs` |
-| Installer checks | `runtime/module_link.h`, `runtime/installer.c` |
+| Installer checks | `runtime/module_link.h`, `runtime/install_plan.h`, `runtime/install_modules.h` |
 | Capabilities | `crates/grkit-core/src/capabilities.rs` |
 
 ## Module folder

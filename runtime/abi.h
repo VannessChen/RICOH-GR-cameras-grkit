@@ -10,6 +10,10 @@
 #define GRKIT_HOST_HEADER_SIZE 512
 #define GRKIT_MODULE_SLOTS 8
 #define GRKIT_MODULE_SETTINGS_MAX 160
+/* The most modules that GRKit lists, and the words of the largest script
+   array, which holds the module array. */
+#define GRKIT_MODULES_MAX 8U
+#define GRKIT_MODULE_ARRAY_WORDS 65536U
 /* Icon slots: the host icons, then the effect icons, then the module tiles, in
    chunks of GRKIT_ICONS_PER_CHUNK (GRKIT_HOST_ICON_CHUNKS).
    GRKIT_ICON_MODULE_TILE(n) is the icon ID of module tile n. */
@@ -101,7 +105,7 @@
 #define GRKIT_HOST_ICON_CHUNKS 156
 #define GRKIT_HOST_ICON_CHUNKS_WORDS 5
 /* Icon of the GRKit tile. */
-#define GRKIT_HOST_PLUGINS_ICON 176
+#define GRKIT_HOST_GRKIT_ICON 176
 /* Private toolbar cell, or 0. */
 #define GRKIT_HOST_TOOLBAR_WIDGET 180
 /* ADJ controller of the private toolbar cell. */
@@ -161,7 +165,7 @@
 #define GRKIT_HOST_MODULE_FILTER_COUNT 260
 /* Address of the profile table (GRKIT_PROFILE in the tail) while the
    development profile runs, else 0. INSTALL writes it when the card has
-   GRKIT/PROFILE. */
+   GRKIT/PROFILE or PROFILE.TXT. */
 #define GRKIT_HOST_PROFILE 264
 /* Two words for each module plane filter, in stage order: its apply function,
    and its setting handle in the low half with its stage in the high half. */
@@ -273,6 +277,46 @@
    highlight correction, which halves the stage's input. */
 #define GRKIT_HUE_LEVEL_CONTROL { 656, 656, 656, 586, 150, 650, 1150, 1650 }
 #define GRKIT_HUE_LEVEL_CONTROL_HALVED { 1312, 1312, 1312, 1172, 75, 325, 575, 825 }
+/* The plan that SCAN writes: this header, the GRF file of each installed
+   effect, then an entry of GRKIT_PLANNED_EFFECT_SIZE bytes for each listed
+   effect. */
+#define GRKIT_PLAN_HEADER_SIZE 40
+#define GRKIT_PLAN_MAGIC_VALUE 0x314d5247
+#define GRKIT_PLAN_SAFE 1U
+#define GRKIT_PLAN_PROFILE 2U
+/* GRKIT_PLAN_MAGIC_VALUE. */
+#define GRKIT_PLAN_MAGIC 0
+/* Number of installed effects. */
+#define GRKIT_PLAN_COUNT 4
+/* Words of the registry array: the private header and the records. */
+#define GRKIT_PLAN_HEADER_WORDS 8
+/* Number of icon chunk arrays. */
+#define GRKIT_PLAN_ICON_CHUNKS 12
+/* Bytes of the plan. */
+#define GRKIT_PLAN_SIZE 16
+/* Words of the module array, or 0 without modules. */
+#define GRKIT_PLAN_MODULE_WORDS 20
+/* Artwork tiles of the usable modules. */
+#define GRKIT_PLAN_MODULE_TILES 24
+/* GRKIT_PLAN_SAFE and GRKIT_PLAN_PROFILE. */
+#define GRKIT_PLAN_MODES 28
+/* Effect files past the listed ones. */
+#define GRKIT_PLAN_OVERFLOW 32
+/* Number of listed effects. */
+#define GRKIT_PLAN_LISTED 36
+#define GRKIT_PLANNED_EFFECT_SIZE 92
+/* The head of its GRF file, which holds its ID and name. */
+#define GRKIT_PLANNED_HEAD 0
+#define GRKIT_PLANNED_HEAD_WORDS 16
+/* Its file name with its NUL. */
+#define GRKIT_PLANNED_FILE 64
+#define GRKIT_PLANNED_FILE_WORDS 4
+/* Its status at this start (runtime/effects.h). */
+#define GRKIT_PLANNED_STATUS 80
+/* Its choice in the GRKit section of MENU. */
+#define GRKIT_PLANNED_CHOICE 84
+/* Its record, or EFFECTS_NO_RECORD. */
+#define GRKIT_PLANNED_RECORD 88
 /* The longest menu string, with its NUL: an Image Control summary is a prefix
    and a 16-character effect name. */
 #define GRKIT_SUMMARY_UNITS 32

@@ -72,12 +72,12 @@ A package holds only `SCRIPT`. `GRKIT` at the card root is the data folder: no p
 | --- | --- |
 | `SCRIPT/GRKIT` | the loader, the installers, and the package list `PACKAGE.TXT` |
 | `SCRIPT/GRKIT/MODULES` | the modules of the package, `<ID>.GRM` |
-| `SCRIPT/GRKIT/EFFECTS` | the effects of the package, `<ID>.GRF` |
+| `SCRIPT/GRKIT/EFFECTS` | the effects of the package, `.GRF` files |
 | `GRKIT/EFFECTS` | the effects library |
 | `GRKIT/MODULES` | the modules that a person adds |
 | `GRKIT/STATE.TXT` | the saved settings |
 | `GRKIT/REPORT.TXT` | the result of the last boot |
-| `GRKIT/SAFE`, `GRKIT/PROFILE` | empty files that start the safe mode or the development profile |
+| `GRKIT/SAFE`, `GRKIT/PROFILE` | files that start the safe mode or the development profile; each can also end in `.TXT` |
 
 A package module loads only if `PACKAGE.TXT` names it, so a merge copy gives the same result as a replace copy. A module in `GRKIT/MODULES` replaces the package module with the same name.
 
@@ -93,7 +93,7 @@ While `GRKIT/SAFE` exists, no module loads. INSTALL then applies only the menu p
 
 ### Development profile
 
-While `GRKIT/PROFILE` exists, the core counts the calls and the CPU cycles of its hook points and of each call of module code (`runtime/profile.h`). It reads the PMU cycle counter, which the firmware lets each task read and does not use. The counter is per core, so a call that moved to another core is not counted. Every 10 seconds, the resident loader appends the counts to `GRKIT/PROFILE.TXT` and clears them. Without the file, each point reads one header word, and the loader polls as usual.
+While `GRKIT/PROFILE` exists, the core counts the calls and the CPU cycles of its hook points and of each call of module code (`runtime/profile.h`). It reads the PMU cycle counter, which the firmware lets each task read and does not use. The counter is per core, so a call that moved to another core is not counted. Every 10 seconds, the resident loader appends the counts to `GRKIT/PROFILE.LOG` and clears them. Without the file, each point reads one header word, and the loader polls as usual.
 
 ### State
 

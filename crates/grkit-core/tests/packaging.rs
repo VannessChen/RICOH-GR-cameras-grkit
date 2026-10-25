@@ -291,7 +291,7 @@ fn selected_modules_are_packaged_and_verified() {
         verify_package(&bytes).unwrap().modules,
         ["DATE", "FILMLOOK"]
     );
-    // The plugin file of 1.x is not part of a package.
+    // The plugin list of GRKit 1.x is not part of a package.
     let mut files = unpack(&package());
     files.insert(
         "SD_ROOT/SCRIPT/GRKIT/PLUGINS.TXT".into(),
@@ -832,7 +832,7 @@ fn dump_packages_hold_the_tool_files_and_their_checksums() {
 /// and the script that selects one at each power-on. A GR III package keeps
 /// the single installer and script of earlier packages.
 #[test]
-fn a_package_holds_the_installer_of_each_build_of_its_camera() {
+fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
     let gr4 = |runtimes: &[VerifiedRuntime]| {
         assemble(
             runtimes,
@@ -850,38 +850,38 @@ fn a_package_holds_the_installer_of_each_build_of_its_camera() {
     );
     let files = unpack(&bytes);
     for (path, target) in [
-        ("SD_ROOT/SCRIPT/GRKIT/INSTALL.BIN", "gr4-1.11"),
-        ("SD_ROOT/SCRIPT/GRKIT/INSTALL2.BIN", "gr4-1.20"),
-        ("SD_ROOT/SCRIPT/GRKIT/INSTALL3.BIN", "gr4-1.20-0528"),
+        ("SD_ROOT/SCRIPT/GRKIT/CORE1.BIN", "gr4-1.11"),
+        ("SD_ROOT/SCRIPT/GRKIT/CORE2.BIN", "gr4-1.20"),
+        ("SD_ROOT/SCRIPT/GRKIT/CORE3.BIN", "gr4-1.20-0528"),
     ] {
         assert_eq!(files[path], testing::marked_installer(target), "{path}");
     }
     let script = String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"].clone()).unwrap();
     assert_eq!(
         script,
-        "for installer in INSTALL.BIN INSTALL2.BIN INSTALL3.BIN; do\n\
-         \x20 /media/storage1/SCRIPT/GRKIT/$installer --known\n\
+        "for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
+         \x20 /media/storage1/SCRIPT/GRKIT/$core --known\n\
          \x20 status=$?\n\
          \x20 case $status in 48) ;; *) break ;; esac\n\
          done\n\
          case $status in 48)\n\
-         \x20 for installer in INSTALL.BIN INSTALL2.BIN; do\n\
-         \x20   /media/storage1/SCRIPT/GRKIT/$installer --try\n\
+         \x20 for core in CORE1.BIN CORE2.BIN; do\n\
+         \x20   /media/storage1/SCRIPT/GRKIT/$core --try\n\
          \x20   status=$?\n\
          \x20   case $status in 47) ;; *) break ;; esac\n\
          \x20 done\n\
-         \x20 case $status in 47) /media/storage1/SCRIPT/GRKIT/INSTALL3.BIN --install; status=$? ;; esac\n\
+         \x20 case $status in 47) /media/storage1/SCRIPT/GRKIT/CORE3.BIN --install; status=$? ;; esac\n\
          \x20 ;;\n\
          esac\n\
          echo GR_MODULE_INSTALL_EXIT_$status\n\
          exit 0\n"
     );
-    // The first installer scans: the plan is the same for each build. First
-    // the script looks up the other installers.
+    // The first core file scans: the plan is the same for each build. First
+    // the script looks up the other core files.
     assert_eq!(
         String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"].clone()).unwrap(),
-        "for installer in INSTALL2.BIN INSTALL3.BIN; do [ -e /media/storage1/SCRIPT/GRKIT/$installer ]; done\n\
-         /media/storage1/SCRIPT/GRKIT/INSTALL.BIN --scan\n\
+        "for core in CORE2.BIN CORE3.BIN; do [ -e /media/storage1/SCRIPT/GRKIT/$core ]; done\n\
+         /media/storage1/SCRIPT/GRKIT/CORE1.BIN --scan\n\
          status=$?\n\
          echo GR_MODULE_SCAN_EXIT_$status\n\
          exit 0\n"
@@ -889,13 +889,14 @@ fn a_package_holds_the_installer_of_each_build_of_its_camera() {
     let gr3 = unpack(&package());
     assert_eq!(
         gr3["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"],
-        b"/media/storage1/SCRIPT/GRKIT/INSTALL.BIN --scan\nstatus=$?\necho GR_MODULE_SCAN_EXIT_$status\nexit 0\n"
+        b"/media/storage1/SCRIPT/GRKIT/CORE.BIN --scan\nstatus=$?\necho GR_MODULE_SCAN_EXIT_$status\nexit 0\n"
     );
     assert_eq!(
         gr3["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"],
-        b"/media/storage1/SCRIPT/GRKIT/INSTALL.BIN --install\nstatus=$?\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
+        b"/media/storage1/SCRIPT/GRKIT/CORE.BIN --install\nstatus=$?\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
     );
-    assert!(!gr3.contains_key("SD_ROOT/SCRIPT/GRKIT/INSTALL2.BIN"));
+    assert!(gr3.contains_key("SD_ROOT/SCRIPT/GRKIT/CORE.BIN"));
+    assert!(!gr3.contains_key("SD_ROOT/SCRIPT/GRKIT/CORE1.BIN"));
 
     // Each build, in release order.
     let mut runtimes = gr4_runtimes();
@@ -909,15 +910,15 @@ fn a_package_holds_the_installer_of_each_build_of_its_camera() {
     let error = load_runtime(&testing::manifest("gr4-1.11", &files), &files).unwrap_err();
     assert!(error.to_string().contains("is the gr4-1.20 runtime"));
 
-    // A package whose installers are swapped or missing is refused.
+    // A package whose core files are swapped or missing is refused.
     let mut swapped = files_of(&bytes);
-    let first = swapped["SD_ROOT/SCRIPT/GRKIT/INSTALL.BIN"].clone();
-    let second = swapped["SD_ROOT/SCRIPT/GRKIT/INSTALL2.BIN"].clone();
-    swapped.insert("SD_ROOT/SCRIPT/GRKIT/INSTALL.BIN".into(), second);
-    swapped.insert("SD_ROOT/SCRIPT/GRKIT/INSTALL2.BIN".into(), first);
+    let first = swapped["SD_ROOT/SCRIPT/GRKIT/CORE1.BIN"].clone();
+    let second = swapped["SD_ROOT/SCRIPT/GRKIT/CORE2.BIN"].clone();
+    swapped.insert("SD_ROOT/SCRIPT/GRKIT/CORE1.BIN".into(), second);
+    swapped.insert("SD_ROOT/SCRIPT/GRKIT/CORE2.BIN".into(), first);
     assert!(validate_contents(&with_sums(swapped)).is_err());
     let mut missing = files_of(&bytes);
-    missing.remove("SD_ROOT/SCRIPT/GRKIT/INSTALL3.BIN");
+    missing.remove("SD_ROOT/SCRIPT/GRKIT/CORE3.BIN");
     assert!(validate_contents(&with_sums(missing)).is_err());
 }
 
@@ -984,4 +985,21 @@ fn module_files_install_from_the_modules_folder() {
         &english(),
     )
     .is_err());
+    // GRKit lists at most MODULES_MAX modules, so a package holds no more.
+    let ids: Vec<String> = (0..=grkit_core::runtime::MODULES_MAX)
+        .map(|n| format!("MOD{n}"))
+        .collect();
+    let modules: Vec<_> = ids.iter().map(|id| testing::module(id)).collect();
+    let package = |modules: &[Vec<u8>]| {
+        assemble(
+            &[runtime()],
+            &EffectSet::default(),
+            modules,
+            &camera::GR3,
+            &english(),
+        )
+    };
+    assert!(package(&modules[..grkit_core::runtime::MODULES_MAX]).is_ok());
+    let error = package(&modules).unwrap_err();
+    assert!(error.to_string().contains("at most 8 modules"), "{error}");
 }

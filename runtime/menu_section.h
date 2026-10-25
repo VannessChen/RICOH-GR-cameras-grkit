@@ -89,12 +89,11 @@ static void menu_rows_install(volatile u32 *h) {
        gets the rows in its last section. */
     sections=BYTE(copy,MENU_TAB_SECTIONS);
     if(sections<MENU_TAB_MAX_SECTIONS) {
-        *(volatile u16 *)(copy+MENU_TAB_TITLES+2*sections)=MENU_ROW_LABEL_TEXT;
+        HALF(copy,MENU_TAB_TITLES+2*sections)=MENU_ROW_LABEL_TEXT;
         BYTE(copy,MENU_TAB_STARTS+sections)=(u8)rows;
         BYTE(copy,MENU_TAB_SECTIONS)=(u8)(sections+1);
     }
-    descriptor(services_word(h,SERVICES_MENU+MENU_ROWS_TITLE_AT),plugins);
-    /* The module rows in the order of this start. */
+    descriptor(services_word(h,SERVICES_MENU+MENU_ROWS_TITLE_AT),grkit_title);
     /* The modules in their default order, which the ADJ Order row changes
        only in ADJ. */
     for(i=0;i<manage_count(h);++i) slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_LISTED,i);

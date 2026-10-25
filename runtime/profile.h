@@ -1,10 +1,10 @@
 #ifndef GRKIT_PROFILE_H
 #define GRKIT_PROFILE_H
-/* The development profile. While the card has GRKIT/PROFILE, INSTALL sets
-   GRKIT_HOST_PROFILE to the profile table (runtime/abi.h: GRKIT_PROFILE), and
+/* The development profile. While the card has GRKIT/PROFILE or PROFILE.TXT,
+   INSTALL sets GRKIT_HOST_PROFILE to the profile table (runtime/abi.h: GRKIT_PROFILE), and
    the core counts the calls and the CPU cycles of its hook points and of each
    module. The resident loader writes the counts of each period to
-   GRKIT/PROFILE.TXT and clears them. Without the file, each point costs one
+   GRKIT/PROFILE.LOG and clears them. Without the file, each point costs one
    read of the header word.
 
    The cycle counter of the PMU is per core and runs only after it is enabled

@@ -17,7 +17,7 @@
    each value of its page that is off in ADJ (the options of the page,
    runtime/modules.h).
    The resident loader saves them as other settings, and SCAN reads them to
-   select and order the modules (runtime/installer.c).
+   select and order the modules (runtime/install_plan.h).
 
    INSTALL writes the module list (GRKIT_HOST_MANAGE): MANAGE_HEADER words,
    then MANAGE_STRIDE bytes for each listed module, in the order of the last

@@ -32,8 +32,13 @@ extern u32 menu_destroy_original(u32);
 #define MENU_OBJECT_WORD(a,o) WORD(a,o)
 #define MENU_OBJECT_BYTE(a,o) BYTE(a,o)
 #endif
+/* Memory access. A host test maps it to its own buffers. */
+#ifndef WORD
 #define WORD(a,o) (*(u32 *)((a)+(o)))
+#endif
+#ifndef BYTE
 #define BYTE(a,o) (*(u8 *)((a)+(o)))
+#endif
 /* The shared types of the core, before the services that it declares. */
 #include "core.h"
 #include "profile.h"
@@ -63,12 +68,12 @@ static u32 exit_return(u32 value,u32 in_grkit) {
 #else
 #define A32_ENTRY
 #endif
-static void plugin_touch(u32 controller);
+static void grkit_touch(u32 controller);
 static void render(u32 controller);
 static void render_step(u32 controller,u32 step);
 static void enter(u32 controller,u32 edge);
 static void ui_native_returned(volatile u32 *h);
-static const u16 plugins[] = {'G','R','K','i','t',0};
+static const u16 grkit_title[] = {'G','R','K','i','t',0};
 #ifndef MENU_TEXT
 /* The menu text at a camera address. Host tests map the address. */
 #define MENU_TEXT(address) ((const u16 *)(address))
@@ -263,7 +268,7 @@ static void toolbar(u32 controller) {
     if(!widget) {
         u32 parent=WORD(WORD(controller,ADJ_ICONS),4);
         u32 position=WORD(parent,0xc), end=WORD(parent,0x10), icon, offset;
-        u32 binding[3]={(u32)plugin_touch,0,controller};
+        u32 binding[3]={(u32)grkit_touch,0,controller};
         u32 callback[4]={(u32)binding,0,FW_ADJ_TOUCH_ENTER,FW_ADJ_TOUCH_LEAVE};
         /* Draw the native background before the shared selection frame. */
         while(position!=end && WORD(position,0)!=WORD(controller,ADJ_FRAME)) position+=4;
@@ -452,7 +457,7 @@ static void render_step(u32 controller,u32 step) {
        position of the full pages. The cursor needs the new size. */
     list_frame(view,total);
     list_cursor(view,cursor-start,n,step,kept);
-    descriptor(h+GRKIT_HOST_MENU_TITLE/4,h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? plugins : module->title(h));
+    descriptor(h+GRKIT_HOST_MENU_TITLE/4,h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? grkit_title : module->title(h));
     descriptor(h+GRKIT_HOST_MENU_DETAIL/4,h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? module->summary(h) : module->label(h,cursor));
     label(WORD(controller,ADJ_TITLE));
     /* The summary ends before the list at x=620; native labels use 400 pixels. */
@@ -490,7 +495,7 @@ static void enter(u32 controller,u32 edge) {
     CALL3(FW_LIST_SAVE)(view,(u32)(h+GRKIT_HOST_MENU_LIST/4),(u32)(h+GRKIT_HOST_MENU_LIST/4+1));
     render(controller);
 }
-static void plugin_touch(u32 controller) {
+static void grkit_touch(u32 controller) {
     if(!private_mode(controller) && ADJ_MOVIE(controller)!=1) enter(controller,3);
 }
 #ifdef PARAMETER_KINDS
@@ -908,11 +913,11 @@ static u32 icon_address(volatile u32 *h,u32 id) {
         if(chunk>=GRKIT_HOST_ICON_CHUNKS_WORDS || !h[GRKIT_HOST_ICON_CHUNKS/4+chunk]) return 0;
         return h[GRKIT_HOST_ICON_CHUNKS/4+chunk]+(slot-chunk*GRKIT_ICONS_PER_CHUNK)*GRKIT_ICON_STRIDE;
     }
-    if(id==GRKIT_ICON_GRKIT) return h[GRKIT_HOST_PLUGINS_ICON/4];
+    if(id==GRKIT_ICON_GRKIT) return h[GRKIT_HOST_GRKIT_ICON/4];
     /* The installer puts the Version icon after the GRKit icon. */
-    if(id==GRKIT_ICON_VERSION) return h[GRKIT_HOST_PLUGINS_ICON/4] ? h[GRKIT_HOST_PLUGINS_ICON/4]+GRKIT_ICON_STRIDE : 0;
+    if(id==GRKIT_ICON_VERSION) return h[GRKIT_HOST_GRKIT_ICON/4] ? h[GRKIT_HOST_GRKIT_ICON/4]+GRKIT_ICON_STRIDE : 0;
     /* The Modules icon follows the Version icon. */
-    if(id==GRKIT_ICON_MODULES) return h[GRKIT_HOST_PLUGINS_ICON/4] ? h[GRKIT_HOST_PLUGINS_ICON/4]+2*GRKIT_ICON_STRIDE : 0;
+    if(id==GRKIT_ICON_MODULES) return h[GRKIT_HOST_GRKIT_ICON/4] ? h[GRKIT_HOST_GRKIT_ICON/4]+2*GRKIT_ICON_STRIDE : 0;
     if(id==0x7fff) return h[GRKIT_HOST_OFF_ICON/4] ? h[GRKIT_HOST_OFF_ICON/4] : NATIVE_OFF_ICON();
     if(index>=h[GRKIT_HOST_COUNT/4]) return 0;
     return WORD(h[GRKIT_HOST_RECORDS/4]+index*GRKIT_RECORD_SIZE,GRKIT_RECORD_ICON);

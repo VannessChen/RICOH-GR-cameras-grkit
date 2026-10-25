@@ -349,28 +349,25 @@ fn build_image(
     let runtime = objects.join("runtime");
     materialize_runtime(&runtime)?;
     fs::write(runtime.join("hooks.h"), components::hooks_header(image)?)?;
-    // A target without a layout gets the loader and the installer only.
     let mut built: Vec<(&str, components::Component)> = Vec::new();
-    if image.target.layout.is_some() {
-        if image.target.family.processing_source.is_some() {
-            let component = components::processing(&objects, &runtime, image, tools)?;
-            built.push(("processing", component));
-        }
-        let mut menu = components::menu(&objects, &runtime, image, tools)?;
-        let menu_base = menu.patches[0].address;
-        let framing = components::framing(
-            &objects,
-            &runtime,
-            image,
-            tools,
-            menu_base + menu.code_size as u32,
-        )?;
-        // The menu can grow by the space that Framing leaves free at the end
-        // of the tail.
-        menu.limit = menu.code_size + (framing.limit - framing.code_size);
-        built.push(("menu", menu));
-        built.push(("framing", framing));
+    if image.target.family.processing_source.is_some() {
+        let component = components::processing(&objects, &runtime, image, tools)?;
+        built.push(("processing", component));
     }
+    let mut menu = components::menu(&objects, &runtime, image, tools)?;
+    let menu_base = menu.patches[0].address;
+    let framing = components::framing(
+        &objects,
+        &runtime,
+        image,
+        tools,
+        menu_base + menu.code_size as u32,
+    )?;
+    // The menu can grow by the space that Framing leaves free at the end of
+    // the tail.
+    menu.limit = menu.code_size + (framing.limit - framing.code_size);
+    built.push(("menu", menu));
+    built.push(("framing", framing));
     let components: Vec<_> = built.iter().map(|(_, component)| component).collect();
     // The installer publishes every code payload before any firmware change.
     let mut patches: Vec<_> = components.iter().map(|c| c.patches[0].clone()).collect();
@@ -400,10 +397,7 @@ fn build_image(
             })
         })
         .collect();
-    let exports = match image.target.layout {
-        Some(layout) => core_exports(layout, &components)?,
-        None => Vec::new(),
-    };
+    let exports = core_exports(image.target.layout, &components)?;
     let plan = PatchPlan {
         patches,
         relocations,
@@ -473,7 +467,7 @@ fn build_image(
             json!({"sha256": sha256(&component.patches[0].after), "size": component.code_size, "limit": component.limit})))
             .collect::<serde_json::Map<_, _>>(),
         // The firmware changes of each extension point, which a package
-        // without its plugins does not make.
+        // without its modules does not make.
         "points": components::Point::ALL.iter().map(|point| (point.name().to_owned(),
             json!(plan.patches.iter().filter(|patch| patch.points == point.bit()).count())))
             .collect::<serde_json::Map<_, _>>(),

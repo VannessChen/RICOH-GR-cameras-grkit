@@ -57,6 +57,57 @@
    their count, used settings and their count, tiles and their count
    (runtime/sdk/grkit.h). */
 #define GRM_DESCRIPTOR 40U
+/* The layout of each descriptor struct of runtime/sdk/grkit.h, as 32-bit ARM
+   code has it (tests/runtime/layout_contract.c checks each against the
+   struct). Word 0 of each is its size, which is at least GRM_<STRUCT>. */
+#define GRM_DESCRIPTOR_ABI_AT 4U
+#define GRM_DESCRIPTOR_REGISTRATIONS_AT 8U
+#define GRM_DESCRIPTOR_REGISTRATION_COUNT_AT 12U
+#define GRM_DESCRIPTOR_SETTINGS_AT 16U
+#define GRM_DESCRIPTOR_SETTING_COUNT_AT 20U
+#define GRM_DESCRIPTOR_USES_AT 24U
+#define GRM_DESCRIPTOR_USE_COUNT_AT 28U
+#define GRM_DESCRIPTOR_TILES_AT 32U
+#define GRM_DESCRIPTOR_TILE_COUNT_AT 36U
+/* GrkitRegistration (no size word). */
+#define GRM_REGISTRATION 8U
+#define GRM_REGISTRATION_IMPL_AT 4U
+/* GrkitSetting. */
+#define GRM_SETTING 16U
+#define GRM_SETTING_KEY_AT 4U
+#define GRM_SETTING_VALUES_AT 8U
+#define GRM_SETTING_FLAGS_AT 12U
+/* GrkitLayer. */
+#define GRM_LAYER 20U
+#define GRM_LAYER_FLAGS_AT 4U
+#define GRM_LAYER_PAINT_AT 8U
+#define GRM_LAYER_SETTING_AT 12U
+#define GRM_LAYER_ORDER_AT 16U
+/* GrkitPage. */
+#define GRM_PAGE 40U
+#define GRM_PAGE_KIND_AT 4U
+#define GRM_PAGE_SETTING_AT 8U
+#define GRM_PAGE_FLAGS_AT 12U
+#define GRM_PAGE_TITLE_AT 16U
+#define GRM_PAGE_SUMMARIES_AT 20U
+#define GRM_PAGE_LABELS_AT 24U
+#define GRM_PAGE_ROWS_AT 28U
+#define GRM_PAGE_SETTING_ROWS_AT 32U
+#define GRM_PAGE_SETTINGS_AT 36U
+/* GrkitSettingRow. */
+#define GRM_ROW 16U
+#define GRM_ROW_SETTING_AT 4U
+#define GRM_ROW_LABEL_AT 8U
+#define GRM_ROW_VALUES_AT 12U
+/* GrkitPlaneFilter. */
+#define GRM_FILTER 16U
+#define GRM_FILTER_STAGE_AT 4U
+#define GRM_FILTER_SETTING_AT 8U
+#define GRM_FILTER_APPLY_AT 12U
+/* GrkitSubscriber. */
+#define GRM_SUBSCRIBER 12U
+#define GRM_SUBSCRIBER_EVENTS_AT 4U
+#define GRM_SUBSCRIBER_HANDLE_AT 8U
 /* The most settings and used settings of one module, the longest setting key
    with its NUL, and the most values of a setting. */
 #define GRM_SETTINGS 16U
@@ -74,7 +125,7 @@
    setting n. */
 #define GRM_USED 0x80000000U
 
-/* Status codes of INSTALL for a module (with the codes of installer.c). */
+/* Status codes of INSTALL for a module (runtime/install_status.h). */
 #define GRM_BAD_FILE 50
 #define GRM_BAD_ABI 51
 #define GRM_MISSING_IMPORT 52
@@ -229,19 +280,19 @@ static int grm_settings(const struct grm_module *m, const u8 *code, u32 base,
                         char uses[][GRM_NAME + 1], u32 *use_count)
 {
     const u8 *d = code + m->descriptor;
-    u32 n = grm_word(d + 20), u = grm_word(d + 28);
+    u32 n = grm_word(d + GRM_DESCRIPTOR_SETTING_COUNT_AT), u = grm_word(d + GRM_DESCRIPTOR_USE_COUNT_AT);
     if (grm_word(d) < GRM_DESCRIPTOR || n > GRM_SETTINGS || u > GRM_USES) return GRM_BAD_DESCRIPTOR;
-    const u8 *list = n ? grm_code_at(m, code, base, grm_word(d + 16), n * 16) : d;
-    const u8 *names = u ? grm_code_at(m, code, base, grm_word(d + 24), u * 4) : d;
+    const u8 *list = n ? grm_code_at(m, code, base, grm_word(d + GRM_DESCRIPTOR_SETTINGS_AT), n * GRM_SETTING) : d;
+    const u8 *names = u ? grm_code_at(m, code, base, grm_word(d + GRM_DESCRIPTOR_USES_AT), u * 4) : d;
     if (!list || !names) return GRM_BAD_DESCRIPTOR;
     for (u32 i = 0; i < n; ++i) {
-        const u8 *e = list + i * 16;
+        const u8 *e = list + i * GRM_SETTING;
         struct grm_setting *s = settings + i;
-        s->values = grm_word(e + 8);
-        s->flags = grm_word(e + 12);
-        if (grm_word(e) < 16 || !s->values || s->values > GRM_SETTING_VALUES ||
+        s->values = grm_word(e + GRM_SETTING_VALUES_AT);
+        s->flags = grm_word(e + GRM_SETTING_FLAGS_AT);
+        if (grm_word(e) < GRM_SETTING || !s->values || s->values > GRM_SETTING_VALUES ||
             (s->flags & ~(GRM_SETTING_PUBLIC | GRM_SETTING_SAVED)) ||
-            !grm_string(m, code, base, grm_word(e + 4), s->key, GRM_KEY, 0)) return GRM_BAD_DESCRIPTOR;
+            !grm_string(m, code, base, grm_word(e + GRM_SETTING_KEY_AT), s->key, GRM_KEY, 0)) return GRM_BAD_DESCRIPTOR;
         for (u32 j = 0; j < i; ++j) {
             u32 k = 0;
             while (settings[j].key[k] && settings[j].key[k] == s->key[k]) ++k;
@@ -311,12 +362,12 @@ static int grm_texts(const struct grm_module *m, const u8 *code, u32 base, u32 a
 static int grm_tiles(const struct grm_module *m, const u8 *code, u32 base, const u8 **tiles, u32 *count)
 {
     const u8 *d = code + m->descriptor;
-    u32 n = grm_word(d + 36);
+    u32 n = grm_word(d + GRM_DESCRIPTOR_TILE_COUNT_AT);
     *count = n;
     *tiles = 0;
     if (!n) return 0;
     if (n > GRM_TILES) return GRM_BAD_DESCRIPTOR;
-    *tiles = grm_code_at(m, code, base, grm_word(d + 32), n * GRM_TILE_BYTES);
+    *tiles = grm_code_at(m, code, base, grm_word(d + GRM_DESCRIPTOR_TILES_AT), n * GRM_TILE_BYTES);
     return *tiles ? 0 : GRM_BAD_DESCRIPTOR;
 }
 
@@ -331,39 +382,41 @@ static int grm_registrations(const struct grm_module *m, const u8 *code, u32 bas
                              struct grm_filter *filters, u32 *filter_count, u32 max)
 {
     const u8 *d = code + m->descriptor, *tiles;
-    u32 abi = grm_word(d + 4), n = grm_word(d + 12), tile_count;
+    u32 abi = grm_word(d + GRM_DESCRIPTOR_ABI_AT), n = grm_word(d + GRM_DESCRIPTOR_REGISTRATION_COUNT_AT), tile_count;
     if (grm_word(d) < GRM_DESCRIPTOR) return GRM_BAD_DESCRIPTOR;
     if (abi >> 16 != GRM_ABI_MAJOR || (abi & 0xffff) > GRM_ABI_MINOR) return GRM_BAD_ABI;
     if (n > GRM_REGISTRATIONS || grm_tiles(m, code, base, &tiles, &tile_count)) return GRM_BAD_DESCRIPTOR;
-    const u8 *list = n ? grm_code_at(m, code, base, grm_word(d + 8), n * 8) : d;
+    const u8 *list = n ? grm_code_at(m, code, base, grm_word(d + GRM_DESCRIPTOR_REGISTRATIONS_AT), n * GRM_REGISTRATION) : d;
     if (!list) return GRM_BAD_DESCRIPTOR;
     for (u32 i = 0; i < n; ++i) {
-        u32 point = grm_word(list + i * 8), impl = grm_word(list + i * 8 + 4);
+        u32 point = grm_word(list + i * GRM_REGISTRATION), impl = grm_word(list + i * GRM_REGISTRATION + GRM_REGISTRATION_IMPL_AT);
         if (point == GRM_POINT_OVERLAY_LAYER) {
-            const u8 *layer = grm_code_at(m, code, base, impl, 20);
-            if (!layer || grm_word(layer) < 20) return GRM_BAD_DESCRIPTOR;
-            u32 flags = grm_word(layer + 4), paint = grm_word(layer + 8), setting = grm_word(layer + 12);
+            const u8 *layer = grm_code_at(m, code, base, impl, GRM_LAYER);
+            if (!layer || grm_word(layer) < GRM_LAYER) return GRM_BAD_DESCRIPTOR;
+            u32 flags = grm_word(layer + GRM_LAYER_FLAGS_AT), paint = grm_word(layer + GRM_LAYER_PAINT_AT);
+            u32 setting = grm_word(layer + GRM_LAYER_SETTING_AT);
             /* A Thumb function, or an ARM one at a word address. */
             if ((flags & ~(GRM_LAYER_FOLLOW_DISP | GRM_LAYER_FULL_DISP | GRM_LAYER_LIVE_ONLY)) ||
                 (flags & (GRM_LAYER_FOLLOW_DISP | GRM_LAYER_FULL_DISP)) == (GRM_LAYER_FOLLOW_DISP | GRM_LAYER_FULL_DISP) ||
                 (setting != GRM_NO_SETTING && !grm_setting_reference(setting, setting_count, use_count)) ||
-                grm_word(layer + 16) > GRM_MAX_LAYER_ORDER ||
+                grm_word(layer + GRM_LAYER_ORDER_AT) > GRM_MAX_LAYER_ORDER ||
                 !grm_code_at(m, code, base, paint & ~1U, 2) || (!(paint & 1) && (paint & 3)))
                 return GRM_BAD_DESCRIPTOR;
             if (*layer_count >= max) return GRM_NO_ROOM;
             struct grm_layer *l = layers + (*layer_count)++;
-            l->paint = paint; l->setting = setting; l->flags = flags; l->order = grm_word(layer + 16);
+            l->paint = paint; l->setting = setting; l->flags = flags; l->order = grm_word(layer + GRM_LAYER_ORDER_AT);
         } else if (point == GRM_POINT_MENU_PAGE) {
-            const u8 *page = grm_code_at(m, code, base, impl, 40);
-            if (!page || grm_word(page) < 40 || grm_word(page + 4) != GRM_PAGE_CHOICE) return GRM_BAD_DESCRIPTOR;
-            u32 setting = grm_word(page + 8), flags = grm_word(page + 12), rows = grm_word(page + 28);
+            const u8 *page = grm_code_at(m, code, base, impl, GRM_PAGE);
+            if (!page || grm_word(page) < GRM_PAGE || grm_word(page + GRM_PAGE_KIND_AT) != GRM_PAGE_CHOICE) return GRM_BAD_DESCRIPTOR;
+            u32 setting = grm_word(page + GRM_PAGE_SETTING_AT), flags = grm_word(page + GRM_PAGE_FLAGS_AT);
+            u32 rows = grm_word(page + GRM_PAGE_ROWS_AT);
             if (!grm_setting_reference(setting, setting_count, use_count) ||
                 (flags & ~(GRM_CHOICE_OFF_ROW | GRM_CHOICE_CORE_ROWS | GRM_CHOICE_OPTIONS))) return GRM_BAD_DESCRIPTOR;
             /* The core gives the rows of a page of a used capability: the
                page has only its title. The installer checks the setting. */
             if (flags & GRM_CHOICE_CORE_ROWS) {
-                if (!(setting & GRM_USED) || rows || grm_word(page + 32) ||
-                    !grm_texts(m, code, base, grm_word(page + 16), GRM_LANGUAGES)) return GRM_BAD_DESCRIPTOR;
+                if (!(setting & GRM_USED) || rows || grm_word(page + GRM_PAGE_SETTING_ROWS_AT) ||
+                    !grm_texts(m, code, base, grm_word(page + GRM_PAGE_TITLE_AT), GRM_LANGUAGES)) return GRM_BAD_DESCRIPTOR;
                 if (*page_count >= max) return GRM_NO_ROOM;
                 struct grm_page *p = pages + (*page_count)++;
                 p->address = impl; p->setting = setting; p->flags = flags; p->rows = 0;
@@ -373,27 +426,27 @@ static int grm_registrations(const struct grm_module *m, const u8 *code, u32 bas
                values of a used setting. */
             if (!(setting & GRM_USED) && rows != settings[setting].values) return GRM_BAD_DESCRIPTOR;
             if (!rows || rows > GRM_PAGE_ROWS || rows > tile_count ||
-                !grm_texts(m, code, base, grm_word(page + 16), GRM_LANGUAGES) ||
-                !grm_texts(m, code, base, grm_word(page + 20), rows * GRM_LANGUAGES) ||
-                !grm_texts(m, code, base, grm_word(page + 24), rows * GRM_LANGUAGES)) return GRM_BAD_DESCRIPTOR;
+                !grm_texts(m, code, base, grm_word(page + GRM_PAGE_TITLE_AT), GRM_LANGUAGES) ||
+                !grm_texts(m, code, base, grm_word(page + GRM_PAGE_SUMMARIES_AT), rows * GRM_LANGUAGES) ||
+                !grm_texts(m, code, base, grm_word(page + GRM_PAGE_LABELS_AT), rows * GRM_LANGUAGES)) return GRM_BAD_DESCRIPTOR;
             /* The rows of a native settings page: settings of the module, the
                first the page setting, each with its label and value texts. */
-            u32 setting_rows = grm_word(page + 32);
+            u32 setting_rows = grm_word(page + GRM_PAGE_SETTING_ROWS_AT);
             if (setting_rows) {
-                const u8 *list = grm_code_at(m, code, base, grm_word(page + 36), setting_rows * 16);
+                const u8 *list = grm_code_at(m, code, base, grm_word(page + GRM_PAGE_SETTINGS_AT), setting_rows * GRM_ROW);
                 if (setting_rows > GRM_SETTING_ROWS || !list || rows > GRM_SETTING_ROW_VALUES)
                     return GRM_BAD_DESCRIPTOR;
                 /* Row 0 is the page setting, also a used one, with a text for
                    each row of the page. The others are settings of the
                    module. */
                 for (u32 r = 0; r < setting_rows; ++r) {
-                    const u8 *row = list + r * 16;
-                    u32 own = grm_word(row + 4);
+                    const u8 *row = list + r * GRM_ROW;
+                    u32 own = grm_word(row + GRM_ROW_SETTING_AT);
                     u32 values = r ? (own < setting_count ? settings[own].values : 0) : rows;
-                    if (grm_word(row) < 16 || (r ? own >= setting_count : own != setting) ||
+                    if (grm_word(row) < GRM_ROW || (r ? own >= setting_count : own != setting) ||
                         !values || values > GRM_SETTING_ROW_VALUES ||
-                        !grm_texts(m, code, base, grm_word(row + 8), GRM_LANGUAGES) ||
-                        !grm_texts(m, code, base, grm_word(row + 12), values * GRM_LANGUAGES))
+                        !grm_texts(m, code, base, grm_word(row + GRM_ROW_LABEL_AT), GRM_LANGUAGES) ||
+                        !grm_texts(m, code, base, grm_word(row + GRM_ROW_VALUES_AT), values * GRM_LANGUAGES))
                         return GRM_BAD_DESCRIPTOR;
                 }
             }
@@ -401,9 +454,10 @@ static int grm_registrations(const struct grm_module *m, const u8 *code, u32 bas
             struct grm_page *p = pages + (*page_count)++;
             p->address = impl; p->setting = setting; p->flags = flags; p->rows = rows;
         } else if (point == GRM_POINT_PICTURE_PLANE) {
-            const u8 *filter = grm_code_at(m, code, base, impl, 16);
-            if (!filter || grm_word(filter) < 16) return GRM_BAD_DESCRIPTOR;
-            u32 stage = grm_word(filter + 4), setting = grm_word(filter + 8), apply = grm_word(filter + 12);
+            const u8 *filter = grm_code_at(m, code, base, impl, GRM_FILTER);
+            if (!filter || grm_word(filter) < GRM_FILTER) return GRM_BAD_DESCRIPTOR;
+            u32 stage = grm_word(filter + GRM_FILTER_STAGE_AT), setting = grm_word(filter + GRM_FILTER_SETTING_AT);
+            u32 apply = grm_word(filter + GRM_FILTER_APPLY_AT);
             if ((stage != GRM_STAGE_FRAME && stage != GRM_STAGE_MARK) ||
                 !grm_setting_reference(setting, setting_count, use_count) ||
                 !grm_code_at(m, code, base, apply & ~1U, 2) || (!(apply & 1) && (apply & 3)))
@@ -422,14 +476,14 @@ static int grm_registrations(const struct grm_module *m, const u8 *code, u32 bas
 static int grm_subscriber(const struct grm_module *m, const u8 *code, u32 base, struct grm_subscriber *out)
 {
     const u8 *d = code + m->descriptor;
-    u32 n = grm_word(d + 12), found = 0;
-    const u8 *list = n ? grm_code_at(m, code, base, grm_word(d + 8), n * 8) : d;
+    u32 n = grm_word(d + GRM_DESCRIPTOR_REGISTRATION_COUNT_AT), found = 0;
+    const u8 *list = n ? grm_code_at(m, code, base, grm_word(d + GRM_DESCRIPTOR_REGISTRATIONS_AT), n * GRM_REGISTRATION) : d;
     if (n > GRM_REGISTRATIONS || !list) return -1;
     for (u32 i = 0; i < n; ++i) {
-        if (grm_word(list + i * 8) != GRM_POINT_EVENT) continue;
-        const u8 *sub = grm_code_at(m, code, base, grm_word(list + i * 8 + 4), 12);
-        if (found || !sub || grm_word(sub) < 12) return -1;
-        u32 events = grm_word(sub + 4), handle = grm_word(sub + 8);
+        if (grm_word(list + i * GRM_REGISTRATION) != GRM_POINT_EVENT) continue;
+        const u8 *sub = grm_code_at(m, code, base, grm_word(list + i * GRM_REGISTRATION + GRM_REGISTRATION_IMPL_AT), GRM_SUBSCRIBER);
+        if (found || !sub || grm_word(sub) < GRM_SUBSCRIBER) return -1;
+        u32 events = grm_word(sub + GRM_SUBSCRIBER_EVENTS_AT), handle = grm_word(sub + GRM_SUBSCRIBER_HANDLE_AT);
         if (!events || (events & ~GRM_EVENTS) ||
             !grm_code_at(m, code, base, handle & ~1U, 2) || (!(handle & 1) && (handle & 3))) return -1;
         out->handle = handle; out->events = events;

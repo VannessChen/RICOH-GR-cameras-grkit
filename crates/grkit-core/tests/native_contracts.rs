@@ -1,8 +1,13 @@
 //! Host contracts of the native C code: the installer parser and the C ABI
 //! against the Rust tables, and the behavior of the menu, Framing, picture,
-//! catalog, directory, relocation, and selection code.
+//! catalog, directory, module plan, relocation, and selection code.
 
-use grkit_core::{effects, menu_text, packaging, runtime, selective::Selective};
+use grkit_core::{
+    effects,
+    grm::{self, Import, Module, Segment},
+    menu_text, packaging, runtime,
+    selective::Selective,
+};
 use serde_json::{json, Value};
 use std::{
     env,
@@ -615,6 +620,200 @@ fn native_state_contract_reads_the_pairs_of_the_loader() {
     checked(&mut Command::new(&executable));
 }
 
+/// The numeric `#define`s of a runtime header: name and value.
+fn defines(path: &str) -> std::collections::HashMap<String, u64> {
+    let text = fs::read_to_string(root().join(path)).unwrap();
+    text.lines()
+        .filter_map(|line| {
+            let mut words = line.strip_prefix("#define ")?.split_whitespace();
+            let (name, value) = (words.next()?, words.next()?.trim_end_matches('U'));
+            let value = match value.strip_prefix("0x") {
+                Some(hex) => u64::from_str_radix(hex, 16).ok()?,
+                None => value.parse().ok()?,
+            };
+            Some((name.to_owned(), value))
+        })
+        .collect()
+}
+
+/// The module format of the Rust writer (`grkit_core::grm`) and of the
+/// installer (`runtime/module_link.h`), and the page layout of the core
+/// (`runtime/modules.h`), which reads module pages as the installer does.
+#[test]
+fn the_module_format_constants_agree() {
+    let link = defines("runtime/module_link.h");
+    let core = defines("runtime/modules.h");
+    for (name, value) in [
+        ("GRM_MAGIC", u64::from(grm::MAGIC)),
+        ("GRM_FORMAT", grm::FORMAT_VERSION.into()),
+        ("GRM_HEADER", grm::HEADER_SIZE as u64),
+        ("GRM_DATA_LINK", grm::DATA_LINK.into()),
+        ("GRM_DATA_LOCATION", grm::DATA_LOCATION.into()),
+        ("GRM_MAX_SEGMENT", grm::MAX_SEGMENT as u64),
+        ("GRM_ABI_MAJOR", grm::ABI_MAJOR.into()),
+        ("GRM_ABI_MINOR", grm::ABI_MINOR.into()),
+        ("GRM_DESCRIPTOR", grm::DESCRIPTOR_SIZE.into()),
+        ("GRM_MAX_ORDER", grm::MAX_ORDER.into()),
+    ] {
+        assert_eq!(link[name], value, "{name}");
+    }
+    for (core_name, link_name) in [
+        ("PAGE_SETTING", "GRM_PAGE_SETTING_AT"),
+        ("PAGE_FLAGS", "GRM_PAGE_FLAGS_AT"),
+        ("PAGE_TITLE", "GRM_PAGE_TITLE_AT"),
+        ("PAGE_SUMMARIES", "GRM_PAGE_SUMMARIES_AT"),
+        ("PAGE_LABELS", "GRM_PAGE_LABELS_AT"),
+        ("PAGE_SETTING_ROWS", "GRM_PAGE_SETTING_ROWS_AT"),
+        ("PAGE_SETTING_LIST", "GRM_PAGE_SETTINGS_AT"),
+        ("ROW_SETTING", "GRM_ROW_SETTING_AT"),
+        ("ROW_LABEL", "GRM_ROW_LABEL_AT"),
+        ("ROW_VALUES", "GRM_ROW_VALUES_AT"),
+        ("ROW_SIZE", "GRM_ROW"),
+        ("CHOICE_OFF_ROW", "GRM_CHOICE_OFF_ROW"),
+        ("CHOICE_OPTIONS", "GRM_CHOICE_OPTIONS"),
+    ] {
+        assert_eq!(core[core_name], link[link_name], "{core_name}");
+    }
+}
+
+/// The SDK descriptor structs have the layout that the installer reads, on
+/// the 32-bit ARM of the camera (`tests/runtime/layout_contract.c`).
+#[test]
+fn the_sdk_descriptor_has_the_layout_that_the_installer_reads() {
+    let clang = env::var_os("GRKIT_CLANG").unwrap_or_else(|| "clang".into());
+    if Command::new(&clang).arg("--version").output().is_err() {
+        return;
+    }
+    checked(
+        Command::new(&clang)
+            .args(["--target=armv7a-none-eabi", "-std=c11", "-fsyntax-only"])
+            .arg("-I")
+            .arg(root().join("runtime"))
+            .arg("-I")
+            .arg(root().join("runtime/sdk"))
+            .arg(root().join("tests/runtime/layout_contract.c")),
+    );
+}
+
+/// A module file that the Rust writer encodes links in the installer as the
+/// writer means it: the header fields, the settings and used settings of the
+/// descriptor, each relocated word, and each import
+/// (`tests/runtime/grm_file_contract.c`).
+#[test]
+fn the_installer_links_a_module_that_rust_writes() {
+    let Some(compiler) = compiler() else {
+        return;
+    };
+    const CODE_BASE: u32 = 0x5400_0000;
+    const DATA_BASE: u32 = 0x5900_0000;
+    let mut code = vec![0u8; 112];
+    let mut put = |at: usize, value: u32| code[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    // A pointer into the data, a Thumb pointer into the code, and an import.
+    put(0, grm::DATA_LINK + 4);
+    put(4, 0x41);
+    // The descriptor at 16: one setting at 56, one used setting at 80.
+    put(16, grm::DESCRIPTOR_SIZE);
+    put(20, grm::ABI_MAJOR << 16 | grm::ABI_MINOR);
+    put(32, 56);
+    put(36, 1);
+    put(40, 80);
+    put(44, 1);
+    // The setting: MODE, 3 values, saved.
+    put(56, 16);
+    put(60, 72);
+    put(64, 3);
+    put(68, 2);
+    put(80, 84);
+    code[72..77].copy_from_slice(b"MODE\0");
+    code[84..97].copy_from_slice(b"?CORE.ASPECT\0");
+    let mut data = vec![0u8; 8];
+    data[0..4].copy_from_slice(&(grm::DATA_LINK + 8).to_le_bytes());
+    let module = Module {
+        id: "CROSS".into(),
+        version: 7,
+        order: 42,
+        code,
+        data,
+        bss_size: 12,
+        descriptor: 16,
+        code_relocations: vec![0, 4, 32, 40, 60, 80],
+        data_relocations: vec![0],
+        imports: vec![
+            Import {
+                name: "overlay_label".into(),
+                segment: Segment::Code,
+                offset: 8,
+            },
+            Import {
+                name: "divide".into(),
+                segment: Segment::Data,
+                offset: 4,
+            },
+        ],
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let file = temporary.path().join("CROSS.GRM");
+    fs::write(&file, module.encode().unwrap()).unwrap();
+    let executable = temporary.path().join("grm_file_contract");
+    compile(
+        &compiler,
+        &root().join("tests/runtime/grm_file_contract.c"),
+        &executable,
+        &[],
+    );
+    let output = checked(Command::new(&executable).arg(&file));
+    // The link that the writer means: a code or data link address moves to
+    // the base of its segment, and an import gets the value of its symbol.
+    let link = |bytes: &[u8], relocations: &[u32], segment: Segment| {
+        let mut words: Vec<u32> = bytes
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .collect();
+        for &offset in relocations {
+            let word = &mut words[offset as usize / 4];
+            *word = if *word >= grm::DATA_LINK {
+                DATA_BASE + (*word - grm::DATA_LINK)
+            } else {
+                CODE_BASE + *word
+            };
+        }
+        for import in module.imports.iter().filter(|i| i.segment == segment) {
+            words[import.offset as usize / 4] = match import.name.as_str() {
+                "overlay_label" => 0x1111_1111,
+                _ => 0x2222_2222,
+            };
+        }
+        words
+    };
+    let mut expected = format!(
+        "status 0\nid CROSS\nversion 7\norder 42\nabi {}\ncode 112\ndata 8\nbss 12\n\
+         descriptor 16\nsettings 1\nuses 1\nsetting MODE 3 2\nuse ?CORE.ASPECT\n",
+        grm::ABI_MAJOR << 16 | grm::ABI_MINOR
+    );
+    for word in link(&module.code, &module.code_relocations, Segment::Code) {
+        expected.push_str(&format!("c {word:08x}\n"));
+    }
+    for word in link(&module.data, &module.data_relocations, Segment::Data) {
+        expected.push_str(&format!("d {word:08x}\n"));
+    }
+    assert_eq!(String::from_utf8_lossy(&output.stdout), expected);
+}
+
+#[test]
+fn the_package_scripts_test_the_install_statuses_of_the_core() {
+    let header = fs::read_to_string(root().join("runtime/install_status.h")).unwrap();
+    for (name, value) in [
+        ("STATUS_RELOCATION", grkit_core::runtime::STATUS_RELOCATION),
+        (
+            "STATUS_OTHER_BUILD",
+            grkit_core::runtime::STATUS_OTHER_BUILD,
+        ),
+    ] {
+        let line = format!("    {name} = {value},");
+        assert!(header.lines().any(|l| l == line), "{line}");
+    }
+}
+
 #[test]
 fn native_module_link_contract_links_and_rejects_modules() {
     let Some(compiler) = compiler() else {
@@ -625,6 +824,22 @@ fn native_module_link_contract_links_and_rejects_modules() {
     compile(
         &compiler,
         &root().join("tests/runtime/module_link_contract.c"),
+        &executable,
+        &[],
+    );
+    checked(&mut Command::new(&executable));
+}
+
+#[test]
+fn native_install_contract_plans_and_links_the_modules_of_the_card() {
+    let Some(compiler) = compiler() else {
+        return;
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("install_contract");
+    compile(
+        &compiler,
+        &root().join("tests/runtime/install_contract.c"),
         &executable,
         &[],
     );
@@ -787,8 +1002,8 @@ fn modules_hold_no_firmware_detail() {
         &["#include \"grkit.h\"", "#include \"grkit_module.h\""][..],
     )];
     for (folder, includes) in folders {
-        for plugin in fs::read_dir(root().join(folder)).unwrap() {
-            for file in fs::read_dir(plugin.unwrap().path()).unwrap() {
+        for module in fs::read_dir(root().join(folder)).unwrap() {
+            for file in fs::read_dir(module.unwrap().path()).unwrap() {
                 let path = file.unwrap().path();
                 // test.c of a module is its host test (`grkit module test`).
                 if !matches!(path.extension().and_then(|e| e.to_str()), Some("c" | "h"))

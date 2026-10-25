@@ -8,6 +8,10 @@
 #define CATALOG_NAME_SIZE 13U
 /* The NUL-terminated effect ID in a GRF record. */
 #define CATALOG_ID 16U
+/* The effect name in a GRF record: at most CATALOG_EFFECT_NAME_MAX
+   characters, then NULs. */
+#define CATALOG_EFFECT_NAME 48U
+#define CATALOG_EFFECT_NAME_MAX 16U
 
 static int catalog_compare(const u8 *a, const u8 *b)
 { while (*a && *a==*b) {++a; ++b;} return (int)*a-(int)*b; }

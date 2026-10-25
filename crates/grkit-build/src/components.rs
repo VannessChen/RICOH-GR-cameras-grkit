@@ -69,9 +69,7 @@ pub struct Hook {
 /// Each hook of a target in installation order. The layout gives exactly one
 /// site for each hook of the family.
 pub fn hooks(target: &Target) -> Result<Vec<Hook>> {
-    let Some(layout) = target.layout else {
-        return Ok(Vec::new());
-    };
+    let layout = target.layout;
     let family = target.family;
     let hooks = family
         .hooks
@@ -246,13 +244,6 @@ fn code_component(
     })
 }
 
-/// The layout of the target of `body`.
-fn layout(body: &FirmwareImage) -> Result<&'static Layout> {
-    body.target
-        .layout
-        .with_context(|| format!("{} has no layout", body.target.name))
-}
-
 /// The hooks of the target of `body` whose code `part` holds.
 fn part_hooks(body: &FirmwareImage, part: Part) -> Result<Vec<Hook>> {
     Ok(hooks(body.target)?
@@ -267,7 +258,7 @@ pub fn processing(
     body: &FirmwareImage,
     tools: &Toolchain,
 ) -> Result<Component> {
-    let layout = layout(body)?;
+    let layout = body.target.layout;
     let assembly = body
         .target
         .family
@@ -324,7 +315,7 @@ pub fn menu(
     body: &FirmwareImage,
     tools: &Toolchain,
 ) -> Result<Component> {
-    let layout = layout(body)?;
+    let layout = body.target.layout;
     let (base, end) = layout.menu();
     let source = directory.join("module-menu.S");
     let object = directory.join("module-menu.o");
@@ -395,7 +386,7 @@ pub fn framing(
     tools: &Toolchain,
     menu_end: u32,
 ) -> Result<Component> {
-    let layout = layout(body)?;
+    let layout = body.target.layout;
     let (base, end) = layout.framing(menu_end);
     let object = directory.join("framing.o");
     let assembly_object = directory.join("framing-asm.o");

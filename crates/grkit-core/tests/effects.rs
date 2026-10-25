@@ -51,7 +51,7 @@ fn starter_definitions_match_existing_golden_bytes() {
 #[test]
 fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
     assert_eq!(
-        hex::encode(Sha256::digest(artwork::plugins_pixels())),
+        hex::encode(Sha256::digest(artwork::grkit_pixels())),
         "5d9423843d61423d1a3b7d8cbbe84a7885b729ab29aa5b92333d3b7d43b25e46"
     );
     assert_eq!(
@@ -70,7 +70,7 @@ fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
         }
     }
     for pixels in [
-        artwork::plugins_pixels(),
+        artwork::grkit_pixels(),
         artwork::version_pixels(),
         artwork::off_pixels(),
         artwork::render_tile("OFF", "film").unwrap(),

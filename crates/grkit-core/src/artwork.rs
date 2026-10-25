@@ -501,7 +501,7 @@ pub fn off_pixels() -> Vec<u8> {
 }
 
 /// The GRKit entry of the ADJ toolbar.
-pub fn plugins_pixels() -> Vec<u8> {
+pub fn grkit_pixels() -> Vec<u8> {
     let mut rgba = toolbar_background();
     text(&mut rgba, "GRK", LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
     rgba

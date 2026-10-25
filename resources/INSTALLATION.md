@@ -75,9 +75,9 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 
 ### GRKit starts in safe mode
 
-In safe mode, GRKit loads no module, and `GRKIT/REPORT.TXT` says why. Safe mode starts when the `GRKIT` folder has a file named `SAFE`. To load the modules again, delete the file.
+In safe mode, GRKit loads no module, and `GRKIT/REPORT.TXT` says why. Safe mode starts when the `GRKIT` folder has a file named `SAFE` or `SAFE.TXT`. To load the modules again, delete the file.
 
-If the camera stops after you added a module, set **Enable** of that module to Off in the GRKit section of the Customize tab of MENU. If the camera stops before you can open MENU, remove the card. On a computer, delete the module from `GRKIT/MODULES`, or put an empty file named `SAFE` in the `GRKIT` folder.
+If the camera stops after you added a module, set **Enable** of that module to Off in the GRKit section of the Customize tab of MENU. If the camera stops before you can open MENU, remove the card. On a computer, delete the module from `GRKIT/MODULES`, or put an empty file named `SAFE` or `SAFE.TXT` in the `GRKIT` folder.
 
 ## Remove or recover
 

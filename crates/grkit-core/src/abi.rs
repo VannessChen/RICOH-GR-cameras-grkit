@@ -116,7 +116,7 @@ fields!(HEADER_FIELDS {
     /// host icons come first in chunk 0, then the effect icons.
     HOST_ICON_CHUNKS = 156, 4 * runtime::ICON_CHUNK_SLOTS;
     /// Icon of the GRKit tile.
-    HOST_PLUGINS_ICON = 176, 4;
+    HOST_GRKIT_ICON = 176, 4;
     /// Private toolbar cell, or 0.
     HOST_TOOLBAR_WIDGET = 180, 4;
     /// ADJ controller of the private toolbar cell.
@@ -175,7 +175,7 @@ fields!(HEADER_FIELDS {
     HOST_MODULE_FILTER_COUNT = 260, 4;
     /// Address of the profile table (GRKIT_PROFILE in the tail) while the
     /// development profile runs, else 0. INSTALL writes it when the card has
-    /// GRKIT/PROFILE.
+    /// GRKIT/PROFILE or PROFILE.TXT.
     HOST_PROFILE = 264, 4;
     /// Two words for each module plane filter, in stage order: its apply
     /// function, and its setting handle in the low half with its stage in the
@@ -244,6 +244,56 @@ fields!(RECORD_FIELDS {
     /// matrices at +0x98, the highlight-correction set at +0x908, and its control fields
     /// at +0x920. Zero without hue sectors.
     RECORD_MULTIAXIAL = 0x740, 0x980;
+});
+
+/// The plan file that SCAN writes and INSTALL and the loader read
+/// (`PLAN.BIN`): this header, the GRF file of each installed effect
+/// (`GRKIT_GRF_MAX_SIZE` bytes each), then an entry for each listed effect.
+/// The loader reads the words up to `PLAN_MODULE_TILES` in order.
+pub const PLAN_HEADER_SIZE: usize = 40;
+/// The first word of the plan.
+pub const PLAN_MAGIC_VALUE: u32 = HOST_MAGIC_VALUE;
+/// The modes of `PLAN_MODES`.
+pub const PLAN_SAFE: u32 = 1;
+pub const PLAN_PROFILE: u32 = 2;
+
+fields!(PLAN_FIELDS {
+    /// GRKIT_PLAN_MAGIC_VALUE.
+    PLAN_MAGIC = 0, 4;
+    /// Number of installed effects.
+    PLAN_COUNT = 4, 4;
+    /// Words of the registry array: the private header and the records.
+    PLAN_HEADER_WORDS = 8, 4;
+    /// Number of icon chunk arrays.
+    PLAN_ICON_CHUNKS = 12, 4;
+    /// Bytes of the plan.
+    PLAN_SIZE = 16, 4;
+    /// Words of the module array, or 0 without modules.
+    PLAN_MODULE_WORDS = 20, 4;
+    /// Artwork tiles of the usable modules.
+    PLAN_MODULE_TILES = 24, 4;
+    /// GRKIT_PLAN_SAFE and GRKIT_PLAN_PROFILE.
+    PLAN_MODES = 28, 4;
+    /// Effect files past the listed ones.
+    PLAN_OVERFLOW = 32, 4;
+    /// Number of listed effects.
+    PLAN_LISTED = 36, 4;
+});
+
+/// A listed effect in the plan.
+pub const PLANNED_EFFECT_SIZE: usize = 92;
+
+fields!(PLANNED_FIELDS {
+    /// The head of its GRF file, which holds its ID and name.
+    PLANNED_HEAD = 0, 64;
+    /// Its file name with its NUL.
+    PLANNED_FILE = 64, 16;
+    /// Its status at this start (runtime/effects.h).
+    PLANNED_STATUS = 80, 4;
+    /// Its choice in the GRKit section of MENU.
+    PLANNED_CHOICE = 84, 4;
+    /// Its record, or EFFECTS_NO_RECORD.
+    PLANNED_RECORD = 88, 4;
 });
 
 /// Bytes of the date stamp core and halo masks at the start of the picture scratch.
@@ -444,6 +494,18 @@ pub fn header() -> String {
     .unwrap();
     comment(
         &mut out,
+        "The most modules that GRKit lists, and the words of the largest script \
+         array, which holds the module array.",
+    );
+    writeln!(out, "#define GRKIT_MODULES_MAX {}U", runtime::MODULES_MAX).unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_MODULE_ARRAY_WORDS {}U",
+        runtime::MODULE_ARRAY_WORDS
+    )
+    .unwrap();
+    comment(
+        &mut out,
         "Icon slots: the host icons, then the effect icons, then the module \
          tiles, in chunks of GRKIT_ICONS_PER_CHUNK (GRKIT_HOST_ICON_CHUNKS). \
          GRKIT_ICON_MODULE_TILE(n) is the icon ID of module tile n.",
@@ -555,6 +617,24 @@ pub fn header() -> String {
     writeln!(out, "#define GRKIT_RECORD_SIZE {RECORD_SIZE:#x}").unwrap();
     table(&mut out, RECORD_FIELDS, true);
     hue_tables(&mut out);
+    define(
+        &mut out,
+        "The plan that SCAN writes: this header, the GRF file of each installed \
+         effect, then an entry of GRKIT_PLANNED_EFFECT_SIZE bytes for each listed \
+         effect.",
+        "PLAN_HEADER_SIZE",
+        PLAN_HEADER_SIZE,
+    );
+    writeln!(out, "#define GRKIT_PLAN_MAGIC_VALUE {PLAN_MAGIC_VALUE:#x}").unwrap();
+    writeln!(out, "#define GRKIT_PLAN_SAFE {PLAN_SAFE}U").unwrap();
+    writeln!(out, "#define GRKIT_PLAN_PROFILE {PLAN_PROFILE}U").unwrap();
+    table(&mut out, PLAN_FIELDS, false);
+    writeln!(
+        out,
+        "#define GRKIT_PLANNED_EFFECT_SIZE {PLANNED_EFFECT_SIZE}"
+    )
+    .unwrap();
+    table(&mut out, PLANNED_FIELDS, false);
     define(
         &mut out,
         "The longest menu string, with its NUL: an Image Control summary is a \
@@ -742,5 +822,24 @@ mod tests {
     #[test]
     fn record_fields_do_not_overlap() {
         check(RECORD_FIELDS, RECORD_SIZE, false);
+    }
+
+    #[test]
+    fn the_plan_fields_cover_the_plan_header_and_entry() {
+        check(PLAN_FIELDS, PLAN_HEADER_SIZE, true);
+        check(PLANNED_FIELDS, PLANNED_EFFECT_SIZE, true);
+        // The loader reads the words up to PLAN_MODULE_TILES in this order.
+        assert_eq!(
+            [
+                PLAN_MAGIC,
+                PLAN_COUNT,
+                PLAN_HEADER_WORDS,
+                PLAN_ICON_CHUNKS,
+                PLAN_SIZE,
+                PLAN_MODULE_WORDS,
+                PLAN_MODULE_TILES
+            ],
+            [0, 4, 8, 12, 16, 20, 24]
+        );
     }
 }

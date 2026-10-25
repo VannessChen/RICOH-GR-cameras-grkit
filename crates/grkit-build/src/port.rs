@@ -77,9 +77,7 @@ pub struct Address {
 /// The sites of a target: its hooks, then the contexts, the patches, and the
 /// guards of its layout, each in table order.
 fn sites(target: &Target) -> Result<Vec<Address>> {
-    let layout = target
-        .layout
-        .with_context(|| format!("{} has no layout", target.name))?;
+    let layout = target.layout;
     let mut sites = Vec::new();
     let mut add =
         |name: String, symbol: Option<&'static str>, address: u32, stock: &str, rest: String| {
@@ -448,7 +446,7 @@ fn relocatable(base: &FirmwareImage, other: &[u8], addresses: &[Ported]) -> Resu
         }
     }
     let resolution = relocation::resolve(&planner.finish(), other, relocation::RADIUS)?;
-    let (tail, end) = target.layout.context("A port target has a layout")?.tail;
+    let (tail, end) = target.layout.tail;
     Ok(resolution.complete
         && relocation::DATA_START - resolution.layout.tail >= end - tail
         && symbols
@@ -706,7 +704,7 @@ impl Port {
     /// module has the items of the checked-in target modules (tests).
     pub fn draft_target(&self) -> Result<String> {
         let base = self.base;
-        let layout = base.layout.context("A port target has a layout")?;
+        let layout = base.layout;
         let out = &mut String::new();
         let base_note = |what: &str| format!("PORT: {what} ({} in the base)", base.name);
         push(
@@ -848,7 +846,7 @@ impl Port {
             .native_tone_page
             .map_or("None".to_string(), |page| format!("Some({page:#x})"));
         push(out, 4, &format!("native_tone_page: {page},"), "");
-        push(out, 4, "layout: Some(&LAYOUT),", "");
+        push(out, 4, "layout: &LAYOUT,", "");
         let image_control = match base.image_control {
             Some(_) => "image_control: Some(&IMAGE_CONTROL),",
             None => "image_control: None,",

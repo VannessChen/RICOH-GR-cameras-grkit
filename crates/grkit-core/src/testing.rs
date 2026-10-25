@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 use crate::{effects, packaging, runtime, Files};
 
-/// A stand-in for `INSTALL.BIN`: an ARM ELF32 header with nothing after it, which
+/// A stand-in for `CORE.BIN`: an ARM ELF32 header with nothing after it, which
 /// `packaging::validate_runtime` accepts.
 pub fn installer() -> Vec<u8> {
     let mut binary = vec![0; 52];
