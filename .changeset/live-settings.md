@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Enable, the ADJ order, and the options of each module apply at once, without a restart.
+Enable, ADJ Order, and the options apply at once, without a restart.

@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Each feature is now a module, which you can add by copying its file to `GRKIT/MODULES` and turn on or off with its Enable row in the GRKit section of MENU.
+Each feature of GRKit is now a module: you turn it on or off with its Enable row in the GRKit section of MENU, and you add one by copying its file to `GRKIT/MODULES`.
