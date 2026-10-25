@@ -848,10 +848,11 @@ static void plan_modules(void)
     order_modules();
     /* The module array: the settings table with the choices of the GRKit
        section of MENU and the kept values, the contexts, the module list,
-       the effect list, then the data of each module. The effects are listed
-       later (discover), so the modules leave room for each of them. */
+       the effect list, the services, then the data of each module. The
+       effects are listed later (discover), so the modules leave room for
+       each of them. plan_array counts the same parts. */
     u32 contexts = 0, data = 0, choices = MANAGE_PER_MODULE * module_count + EFFECTS_LISTED;
-    u32 list = MANAGE_WORDS(module_count) + EFFECT_LIST_WORDS(EFFECTS_LISTED);
+    u32 list = MANAGE_WORDS(module_count) + EFFECT_LIST_WORDS(EFFECTS_LISTED) + SERVICES_WORDS;
     for (u32 i = 0; i < module_count; ++i) {
         struct grm_setting settings[GRM_SETTINGS];
         u32 n = 0, uses = 0, tiles = 0;

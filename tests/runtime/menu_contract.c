@@ -82,26 +82,51 @@ static unsigned object_memory[0x1000];
 static unsigned stock_kinds[17 * 0x64 / 4];
 static unsigned *object_at(unsigned address);
 #define MENU_OBJECT_WORD(a,o) (*object_at((a)+(o)))
-/* The firmware view calls of the MENU pages: the function of each, in order.
-   A string view measures 0 wide. */
-static unsigned view_calls, view_functions[16];
-static unsigned view_record(unsigned fn, unsigned a, unsigned b, unsigned c)
+#define MENU_OBJECT_BYTE(a,o) (((unsigned char *)object_at(((a)+(o)) & ~3U))[((a)+(o)) & 3U])
+/* The firmware view calls of the MENU pages: the function and the arguments
+   of each, in order. A string view measures 0 wide. */
+static unsigned view_calls, view_functions[16], view_args[16][4];
+static unsigned view_call(unsigned fn, unsigned a, unsigned b, unsigned c, unsigned d);
+static unsigned view_record(unsigned fn, unsigned a, unsigned b, unsigned c, unsigned d)
 {
-    (void)a; (void)b; (void)c;
-    if (view_calls < 16) view_functions[view_calls] = fn;
+    if (view_calls < 16) {
+        view_functions[view_calls] = fn;
+        view_args[view_calls][0] = a; view_args[view_calls][1] = b;
+        view_args[view_calls][2] = c; view_args[view_calls][3] = d;
+    }
     ++view_calls;
-    return 0;
+    return view_call(fn, a, b, c, d);
 }
-static int view_called(unsigned fn)
+/* The index of the first call of `fn`, or -1. */
+static int view_index(unsigned fn)
 {
-    for (unsigned i = 0; i < view_calls && i < 16; ++i) if (view_functions[i] == fn) return 1;
-    return 0;
+    for (unsigned i = 0; i < view_calls && i < 16; ++i) if (view_functions[i] == fn) return (int)i;
+    return -1;
 }
-#define MENU_VIEW1(fn,a) view_record((fn), (a), 0, 0)
-#define MENU_VIEW2(fn,a,b) view_record((fn), (a), (b), 0)
-#define MENU_VIEW3(fn,a,b,c) view_record((fn), (a), (b), (c))
+static int view_called(unsigned fn) { return view_index(fn) >= 0; }
+#define MENU_VIEW1(fn,a) view_record((fn), (a), 0, 0, 0)
+#define MENU_VIEW2(fn,a,b) view_record((fn), (a), (b), 0, 0)
+#define MENU_VIEW3(fn,a,b,c) view_record((fn), (a), (b), (c), 0)
+#define MENU_VIEW4(fn,a,b,c,d) view_record((fn), (a), (b), (c), (d))
 #include "menu.c"
 _Static_assert(SERVICES_SIZE <= sizeof(services_memory), "The test maps the services block");
+/* The firmware side of the checkbox page (runtime/menu_settings.h): the
+   allocation gives TEST_CHECK_PAGE, and the SelectMenuController constructor
+   initializes its list of three rows, whose row kinds are at
+   TEST_CHECK_KINDS. */
+#define TEST_CHECK_PAGE (TEST_OBJECTS + 0x3000U)
+#define TEST_CHECK_KINDS (TEST_OBJECTS + 0x3800U)
+static unsigned view_call(unsigned fn, unsigned a, unsigned b, unsigned c, unsigned d)
+{
+    (void)b; (void)c; (void)d;
+#if defined(FW_CHECK_ITEM) && defined(FW_MENU_TABS)
+    if (fn == FW_ALLOCATE) return TEST_CHECK_PAGE;
+    if (fn == FW_SELECT_MENU_NEW) menu_check_lines(a + 0x100, TEST_CHECK_KINDS, 3, 50);
+#else
+    (void)fn; (void)a;
+#endif
+    return 0;
+}
 static unsigned *object_at(unsigned address)
 {
     if (address >= FW_SUBMENU_KINDS && address < FW_SUBMENU_KINDS + sizeof(stock_kinds))
@@ -1368,6 +1393,71 @@ int main(void)
         assert(same((const u16 *)(value_entry(h, 1) + MENU_VALUE_TEXT / 4), "Center"));
         menu_settings_controller(pages[1]);
         assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+#if defined(FW_CHECK_ITEM) && defined(FW_MENU_TABS)
+        /* The options page shows a checkbox on each option. The return to
+           the settings page keeps the checkbox page for it, so the cursor
+           finds its row. */
+        {
+            volatile u32 *check = services_word(h, SERVICES_CHECK);
+            const u32 rows = TEST_OBJECTS + 0x2000;
+            assert(check[CHECK_ID / 4] == pages[1]);
+            /* The factory gives the native controller to any other id. */
+            assert(menu_check_controller(0, pages[2]) == 0 && menu_check_controller(0, 0) == 0);
+            /* The first open builds the checkbox page once, with checkbox
+               rows; the next open reuses it. */
+            view_calls = 0;
+            assert(menu_check_controller(0, pages[1]) == TEST_CHECK_PAGE);
+            assert(view_index(FW_ALLOCATE) == 0 && view_args[0][0] == SELECT_MENU_SIZE);
+            assert(view_index(FW_SELECT_MENU_NEW) == 1 && view_index(FW_LIST_INIT) == 2);
+            for (u32 k = 0; k < 3; ++k) assert(MENU_OBJECT_BYTE(TEST_CHECK_KINDS, k) == CHECK_LINE_TYPE);
+            assert(check[CHECK_PAGE / 4] == TEST_CHECK_PAGE && !check[CHECK_BUILD / 4]);
+            view_calls = 0;
+            assert(menu_check_controller(0, pages[1]) == TEST_CHECK_PAGE && !view_calls);
+            /* A native list keeps its radio rows. */
+            MENU_OBJECT_BYTE(TEST_CHECK_KINDS, 0) = 0x15;
+            menu_check_lines(TEST_OBJECTS + 0x3400, TEST_CHECK_KINDS, 1, 50);
+            assert(MENU_OBJECT_BYTE(TEST_CHECK_KINDS, 0) == 0x15);
+            /* The radio dot shows on a native row, not on a checkbox row. */
+            object_memory[(0x2000) / 4] = CHECK_LINE_VTABLE;
+            object_memory[(0x2100) / 4] = 0;
+            view_calls = 0;
+            menu_check_dot(rows, 1);
+            assert(!view_calls);
+            menu_check_dot(rows + 0x100, 1);
+            assert(view_index(FW_ROW_DOT) == 0 && view_args[0][0] == rows + 0x100);
+            /* Each option row: the checkbox shows whether the option is on,
+               and the text is its label without "(Off)". Center is off. */
+            assert(menu_settings_controller(pages[1]) == pages[1]);
+            assert(menu_settings_apply(1, 0, 1) == 1 && settings_memory[2 + 11 * 3 + 1] == 1U << 2);
+            menu_settings_controller(pages[1]);
+            for (u32 k = 0; k < 2; ++k) {
+                const u32 row = rows + k * 0x100;
+                object_memory[(row - TEST_OBJECTS) / 4] = CHECK_LINE_VTABLE;
+                object_memory[(row - TEST_OBJECTS + CHECK_TEXT_VIEW) / 4] = view + 0x30 + k;
+                view_calls = 0;
+                assert(menu_settings_draw(row, k, 1) == 1);
+                int at = view_index(FW_CHECK_ITEM);
+                assert(at >= 0 && view_args[at][0] == row && view_args[at][3] == SETTINGS_TITLE_TEXT);
+                assert(view_args[at][1] == (k == 1 ? CHECK_IMAGE_OFF : CHECK_IMAGE_ON));
+                assert(view_args[at][2] == view_args[at][1]);
+                assert(menu_text_override(view + 0x30 + k, SETTINGS_TITLE_TEXT) ==
+                       ((u32)(value_entry(h, k) + MENU_VALUE_TEXT_AT / 4) | 1U));
+            }
+            assert(same((const u16 *)(value_entry(h, 1) + MENU_VALUE_TEXT / 4), "Center"));
+            /* A row past the values draws nothing. */
+            view_calls = 0;
+            assert(menu_settings_draw(rows, 9, 1) == 1 && !view_called(FW_CHECK_ITEM));
+            assert(menu_settings_apply(1, 0, 1) == 1 && !settings_memory[2 + 11 * 3 + 1]);
+            menu_settings_controller(pages[1]);
+            object_memory[0x2000 / 4] = object_memory[0x2100 / 4] = 0;
+            assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+            assert(check[CHECK_ID / 4] == pages[1]);
+            /* A page without options, and any page outside the settings
+               page, get the native controller. */
+            assert(menu_settings_controller(pages[2]) == pages[2] && !check[CHECK_ID / 4]);
+            assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+        }
+#endif
         /* The native rows reuse their views, so a view that showed an option
            shows the text of the page that reuses it: a row value of the
            settings page, and a value of the Style page. */

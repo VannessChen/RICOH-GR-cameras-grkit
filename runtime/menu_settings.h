@@ -124,7 +124,6 @@ static void settings_forget_all(volatile u32 *h);
    built once with checkbox rows (CheckBoxListLineView), so each native list
    keeps its radio rows. */
 static volatile u32 *check_word(volatile u32 *h,u32 at) { return services_word(h,SERVICES_CHECK+at); }
-/* A host test maps the row object (MENU_OBJECT_WORD). */
 static u32 check_row(u32 line) { return line && MENU_OBJECT_WORD(line,0)==CHECK_LINE_VTABLE; }
 /* The controller of `id` (menu.S: menu_check_factory): the checkbox page for
    the open options page, else 0 for the native one. */
@@ -135,10 +134,10 @@ A32_ENTRY u32 menu_check_controller(u32 factory,u32 id) {
     if(!h[GRKIT_HOST_SERVICES/4] || !id || id!=check_word(h,CHECK_ID)[0]) return 0;
     page=check_word(h,CHECK_PAGE)[0];
     if(page) return page;
-    page=CALL1(FW_ALLOCATE)(SELECT_MENU_SIZE);
+    page=MENU_VIEW1(FW_ALLOCATE,SELECT_MENU_SIZE);
     if(!page) return 0;
     check_word(h,CHECK_BUILD)[0]=1;
-    CALL1(FW_SELECT_MENU_NEW)(page);
+    MENU_VIEW1(FW_SELECT_MENU_NEW,page);
     check_word(h,CHECK_BUILD)[0]=0;
     check_word(h,CHECK_PAGE)[0]=page;
     return page;
@@ -149,14 +148,14 @@ A32_ENTRY void menu_check_lines(u32 list,u32 types,u32 count,u32 height) {
     volatile u32 *h=menu_header();
     u32 i;
     if(h[GRKIT_HOST_SERVICES/4] && check_word(h,CHECK_BUILD)[0])
-        for(i=0;i<count;++i) BYTE(types,i)=CHECK_LINE_TYPE;
-    CALL4(FW_LIST_INIT)(list,types,count,height);
+        for(i=0;i<count;++i) MENU_OBJECT_BYTE(types,i)=CHECK_LINE_TYPE;
+    MENU_VIEW4(FW_LIST_INIT,list,types,count,height);
 }
 /* The start shows the radio dot of the current value only: a checkbox row
    keeps its checkbox. */
 A32_ENTRY void menu_check_dot(u32 line,u32 shown) {
     if(check_row(line)) return;
-    CALL2(FW_ROW_DOT)(line,shown);
+    MENU_VIEW2(FW_ROW_DOT,line,shown);
 }
 #endif
 /* A controller change to `id`: returns the controller to change to. A MENU
@@ -380,7 +379,7 @@ static u32 settings_draw(volatile u32 *h,u32 row,u32 value,u32 setting) {
             at[MENU_VALUE_VIEW/4]=view;
             descriptor(at+MENU_VALUE_TEXT_AT/4,entry_text(h,value,option_label(h,value),0));
             MENU_VIEW3(FW_STRING_VIEW_RESET,view,0,0);
-            CALL4(FW_CHECK_ITEM)(row,image,image,SETTINGS_TITLE_TEXT);
+            MENU_VIEW4(FW_CHECK_ITEM,row,image,image,SETTINGS_TITLE_TEXT);
         }
         return 1;
     }

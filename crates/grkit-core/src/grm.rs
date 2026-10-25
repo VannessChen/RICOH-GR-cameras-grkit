@@ -140,10 +140,18 @@ pub fn valid_id(id: &str) -> bool {
 fn word(bytes: &[u8], offset: usize) -> Result<u32> {
     Ok(u32::from_le_bytes(
         bytes
-            .get(offset..offset + 4)
+            .get(offset..offset.checked_add(4).context("Truncated module file")?)
             .context("Truncated module file")?
             .try_into()?,
     ))
+}
+
+/// Whether `size` bytes at `offset` lie in `len` bytes, without an overflow
+/// on a 32-bit target.
+fn inside(offset: u32, size: usize, len: usize) -> bool {
+    (offset as usize)
+        .checked_add(size)
+        .is_some_and(|end| end <= len)
 }
 
 impl Module {
@@ -169,7 +177,7 @@ impl Module {
         }
         ensure!(
             self.descriptor.is_multiple_of(4)
-                && (self.descriptor + DESCRIPTOR_SIZE) as usize <= self.code.len(),
+                && inside(self.descriptor, DESCRIPTOR_SIZE as usize, self.code.len()),
             "The descriptor of {} is outside its code",
             self.id
         );
@@ -181,7 +189,7 @@ impl Module {
             let mut last = None;
             for &offset in relocations {
                 ensure!(
-                    offset % 4 == 0 && offset as usize + 4 <= bytes.len(),
+                    offset % 4 == 0 && inside(offset, 4, bytes.len()),
                     "Invalid {segment:?} relocation {offset:#x} in {}",
                     self.id
                 );
@@ -207,7 +215,7 @@ impl Module {
             };
             ensure!(
                 import.offset % 4 == 0
-                    && import.offset as usize + 4 <= bytes.len()
+                    && inside(import.offset, 4, bytes.len())
                     && word(bytes, import.offset as usize)? == 0,
                 "Invalid import {} in {}",
                 import.name,
@@ -526,5 +534,19 @@ mod tests {
         assert!(module.encode().is_err());
         let bytes = sample().encode().unwrap();
         assert!(Module::decode(&bytes[..bytes.len() - 1]).is_err());
+    }
+
+    /// Offsets near 2^32 must fail the bounds checks, not wrap past them.
+    #[test]
+    fn offsets_near_the_end_of_the_address_space_are_rejected() {
+        let mut module = sample();
+        module.descriptor = 0xffff_ffdc;
+        assert!(module.validate().is_err());
+        let mut module = sample();
+        module.code_relocations = vec![16, 0xffff_fffc];
+        assert!(module.validate().is_err());
+        let mut module = sample();
+        module.imports[0].offset = 0xffff_fffc;
+        assert!(module.validate().is_err());
     }
 }

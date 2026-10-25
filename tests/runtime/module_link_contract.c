@@ -204,6 +204,11 @@ int main(void)
     assert(registrations() == 0 && layers[0].flags == (GRM_LAYER_FULL_DISP | GRM_LAYER_LIVE_ONLY));
     reset(); code_words[LAYER + 3] = 2;
     assert(registrations() == GRM_BAD_DESCRIPTOR);
+    /* The core sorts layers by a 16-bit order. */
+    reset(); code_words[LAYER + 4] = GRM_MAX_LAYER_ORDER;
+    assert(registrations() == 0 && layers[0].order == GRM_MAX_LAYER_ORDER);
+    reset(); code_words[LAYER + 4] = GRM_MAX_LAYER_ORDER + 1;
+    assert(registrations() == GRM_BAD_DESCRIPTOR);
     reset(); code_words[LAYER + 3] = GRM_NO_SETTING;
     assert(registrations() == 0 && layers[0].setting == GRM_NO_SETTING);
     /* A layer of a used setting: the installer gives its handle. */
@@ -322,5 +327,11 @@ int main(void)
     assert(link(&failed) == GRM_BAD_FILE);
     reset(); relocations[0] = 6;
     assert(link(&failed) == GRM_BAD_FILE);
+    /* Offsets near 2^32 must not wrap past the bounds checks: a relocation
+       and the descriptor. */
+    reset(); relocations[relocation_count++] = 0xfffffffcU;
+    assert(link(&failed) == GRM_BAD_FILE);
+    reset(); build(); grm_put(file + 36, 0xffffffdcU);
+    assert(grm_parse(file, file_size, &m) == GRM_BAD_FILE);
     return 0;
 }

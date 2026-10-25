@@ -17,17 +17,20 @@ extern u32 menu_destroy_original(u32);
 #define CALL4(a) ((u32 (*)(u32,u32,u32,u32))(a))
 #define CALL5(a) ((u32 (*)(u32,u32,u32,u32,u32))(a))
 #define CALL3(a) ((u32 (*)(u32,u32,u32))(a))
-/* A firmware call on a view of a MENU page: a settings page, the GRKit
-   section, or About GRKit. A host test defines them to record the calls. */
+/* A firmware call on a view or a controller of a MENU page: a settings page,
+   an options page, the GRKit section, or About GRKit. A host test defines
+   them to record the calls. */
 #ifndef MENU_VIEW1
 #define MENU_VIEW1(fn,a) CALL1(fn)(a)
 #define MENU_VIEW2(fn,a,b) CALL2(fn)(a,b)
 #define MENU_VIEW3(fn,a,b,c) CALL3(fn)(a,b,c)
+#define MENU_VIEW4(fn,a,b,c,d) CALL4(fn)(a,b,c,d)
 #endif
 /* A word of a firmware object that a MENU page reads: a row, a controller,
    or the stock submenu entry. A host test maps the objects. */
 #ifndef MENU_OBJECT_WORD
 #define MENU_OBJECT_WORD(a,o) WORD(a,o)
+#define MENU_OBJECT_BYTE(a,o) BYTE(a,o)
 #endif
 #define WORD(a,o) (*(u32 *)((a)+(o)))
 #define BYTE(a,o) (*(u8 *)((a)+(o)))

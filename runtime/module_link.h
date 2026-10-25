@@ -35,6 +35,8 @@
 #define GRM_LAYER_FOLLOW_DISP 1U
 #define GRM_LAYER_FULL_DISP 2U
 #define GRM_LAYER_LIVE_ONLY 4U
+/* The largest layer order: the core sorts layers by order << 16. */
+#define GRM_MAX_LAYER_ORDER 0xffffU
 /* The menu languages, the tile size, the most tiles of one module, and the
    most rows of a choice page and UTF-16 units of one text. */
 #define GRM_LANGUAGES 4U
@@ -94,6 +96,9 @@ struct grm_symbol { u32 hash, value; };
 
 static u32 grm_word(const u8 *p) { return p[0] | p[1] << 8 | p[2] << 16 | (u32)p[3] << 24; }
 static void grm_put(u8 *p, u32 v) { for (u32 i = 0; i < 4; ++i) p[i] = (u8)(v >> (i * 8)); }
+/* Whether `bytes` bytes at `offset` lie in `size` bytes. A file can give any
+   offset, so the check must not wrap. */
+static int grm_inside(u32 offset, u32 bytes, u32 size) { return bytes <= size && offset <= size - bytes; }
 
 /* Read the header of a module file and check its layout. Return 0, or
    GRM_BAD_FILE or GRM_BAD_ABI. */
@@ -126,7 +131,7 @@ static int grm_parse(const u8 *file, u32 size, struct grm_module *m)
     u32 total = GRM_HEADER + m->code_size + m->data_size +
                 (m->code_relocations + m->data_relocations) * 4 + m->imports * 8 + names;
     if (total != size) return GRM_BAD_FILE;
-    if ((m->descriptor & 3) || m->descriptor + GRM_DESCRIPTOR > m->code_size) return GRM_BAD_FILE;
+    if ((m->descriptor & 3) || !grm_inside(m->descriptor, GRM_DESCRIPTOR, m->code_size)) return GRM_BAD_FILE;
     m->code = file + GRM_HEADER;
     m->data = m->code + m->code_size;
     m->relocations = m->data + m->data_size;
@@ -164,7 +169,7 @@ static int grm_link(const struct grm_module *m, u8 *code, u8 *data, u32 code_bas
         if (i == m->code_relocations) previous = 0;
         else if (i && offset <= previous) return GRM_BAD_FILE;
         previous = offset;
-        if ((offset & 3) || offset + 4 > size) return GRM_BAD_FILE;
+        if ((offset & 3) || !grm_inside(offset, 4, size)) return GRM_BAD_FILE;
         u8 *p = (in_code ? code : data) + offset;
         u32 value = grm_relocate(m, grm_word(p), code_base, data_base);
         if (value == 1) return GRM_BAD_FILE;
@@ -174,7 +179,7 @@ static int grm_link(const struct grm_module *m, u8 *code, u8 *data, u32 code_bas
         u32 hash = grm_word(m->import_entries + i * 8), location = grm_word(m->import_entries + i * 8 + 4);
         int in_data = (location & GRM_DATA_LOCATION) != 0;
         u32 offset = location & ~GRM_DATA_LOCATION;
-        if ((offset & 3) || offset + 4 > (in_data ? m->data_size : m->code_size)) return GRM_BAD_FILE;
+        if ((offset & 3) || !grm_inside(offset, 4, in_data ? m->data_size : m->code_size)) return GRM_BAD_FILE;
         u8 *p = (in_data ? data : code) + offset;
         if (grm_word(p)) return GRM_BAD_FILE;
         u32 j = 0;
@@ -342,6 +347,7 @@ static int grm_registrations(const struct grm_module *m, const u8 *code, u32 bas
             if ((flags & ~(GRM_LAYER_FOLLOW_DISP | GRM_LAYER_FULL_DISP | GRM_LAYER_LIVE_ONLY)) ||
                 (flags & (GRM_LAYER_FOLLOW_DISP | GRM_LAYER_FULL_DISP)) == (GRM_LAYER_FOLLOW_DISP | GRM_LAYER_FULL_DISP) ||
                 (setting != GRM_NO_SETTING && !grm_setting_reference(setting, setting_count, use_count)) ||
+                grm_word(layer + 16) > GRM_MAX_LAYER_ORDER ||
                 !grm_code_at(m, code, base, paint & ~1U, 2) || (!(paint & 1) && (paint & 3)))
                 return GRM_BAD_DESCRIPTOR;
             if (*layer_count >= max) return GRM_NO_ROOM;
