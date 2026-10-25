@@ -103,6 +103,14 @@ At each boot, INSTALL writes `GRKIT/REPORT.TXT` when its text changes. The repor
 
 In the safe mode, SCAN loads no module, so INSTALL applies only the patches of no extension point and the menu patches for module management. The safe mode starts while `GRKIT/SAFE` exists. It does not start by itself: a count of unfinished boots also counts each quick power-off, which is how many people use the camera.
 
+### Development profile
+
+While `GRKIT/PROFILE` exists, INSTALL sets `HOST_PROFILE` to the profile table at the end of the tail (`runtime/profile.h`). The table gives the code range and the name of each loaded module. Then it has a counter slot for each core point and for each module and kind. The core reads the cycle counter of the PMU at its hook points and around each call of module code. It adds each call to its slot.
+
+The counter is per core, and the first point on a core enables it there. A call that moved to another core reads a large difference, and it is not counted. The firmware lets each task read the counter and does not use it. Without the file, each point reads one header word.
+
+The resident loader has a second watch loop for the profile, so the usual poll reads no other word. After every fifth poll, the loop appends the slots with calls to `GRKIT/PROFILE.TXT` and clears them. The processing hooks of the live view have no point, because their region has no room for one.
+
 ### State
 
 `grkit_core::abi` defines the shared header, the effect records, and the picture scratch. It generates `runtime/abi.h`.

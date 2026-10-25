@@ -33,6 +33,7 @@ extern u32 menu_destroy_original(u32);
 #define BYTE(a,o) (*(u8 *)((a)+(o)))
 /* The shared types of the core, before the services that it declares. */
 #include "core.h"
+#include "profile.h"
 #define PAGE 6U
 /* GRKIT_HOST_RETURN: a native page (the parameter page or a settings page)
    is opening (1) or open (2). ADJ exited while GRKit was open (3), so the next
@@ -162,7 +163,9 @@ static u32 selected_icon(volatile u32 *h) {
 }
 /* Override only the native still-viewfinder icon result. Off retains stock UI. */
 A32_ENTRY u32 menu_viewfinder_icon_select(u32 native_icon,u32 movie) {
-    u32 icon=selected_icon(menu_header());
+    volatile u32 *h=menu_header();
+    u32 start=profile_begin(h), icon=selected_icon(h);
+    profile_end(h,start,GRKIT_PROFILE_MENU_ICON);
     return !movie && icon!=0x7fff ? icon : native_icon;
 }
 #ifndef MENU_FRAMING_REQUEST
@@ -893,8 +896,7 @@ u32 menu_playback_private(void) {
 _Static_assert(GRKIT_ICONS_PER_CHUNK==40 && (GRKIT_HOST_ICON_CHUNKS_WORDS*40)*1639U>>16==GRKIT_HOST_ICON_CHUNKS_WORDS*40/40,
                "The module tile chunk uses slot / 40");
 /* IDs stay in transient private widgets and never enter native settings. */
-A32_ENTRY u32 menu_icon(u32 id) {
-    volatile u32 *h=menu_header();
+static u32 icon_address(volatile u32 *h,u32 id) {
     u32 index=id-0x8000;
     /* Module tiles follow the effect icons in the chunks. slot * 1639 >> 16
        is slot / 40 for each slot of the chunks. */
@@ -911,4 +913,10 @@ A32_ENTRY u32 menu_icon(u32 id) {
     if(id==0x7fff) return h[GRKIT_HOST_OFF_ICON/4] ? h[GRKIT_HOST_OFF_ICON/4] : NATIVE_OFF_ICON();
     if(index>=h[GRKIT_HOST_COUNT/4]) return 0;
     return WORD(h[GRKIT_HOST_RECORDS/4]+index*GRKIT_RECORD_SIZE,GRKIT_RECORD_ICON);
+}
+A32_ENTRY u32 menu_icon(u32 id) {
+    volatile u32 *h=menu_header();
+    u32 start=profile_begin(h), icon=icon_address(h,id);
+    profile_end(h,start,GRKIT_PROFILE_MENU_ICON);
+    return icon;
 }

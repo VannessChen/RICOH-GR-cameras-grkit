@@ -344,6 +344,32 @@ To move the page of a module in the GRKit root of ADJ:
 
 Enable and the order apply at once. A module that is Off stops: its page leaves ADJ, and its code does not run. Its saved settings stay in the state file. A module that you add to `GRKIT/MODULES` loads at the next power-on; until then, the About GRKit row says to restart.
 
+## Measure the CPU use on the camera
+
+The development profile counts the calls and the CPU cycles of the GRKit core and of each module on the camera.
+
+1. Put an empty file `GRKIT/PROFILE` on the card.
+2. Power on the camera, and do what you want to measure: for example, keep the live view open, half-press the shutter button, or take photos.
+3. Power off the camera, and put the card into the computer.
+4. Open `GRKIT/PROFILE.TXT`.
+5. To stop the profile, delete `GRKIT/PROFILE`.
+
+While the profile runs, `REPORT.TXT` says so. The resident loader adds a period to `PROFILE.TXT` every 10 seconds, also after a new power-on:
+
+```text
+period <number> frames <live-view frames>
+<point> <calls> <cycles> <cycles of the largest call>
+<MODULE> <kind> <calls> <cycles> <cycles of the largest call>
+```
+
+Only a point that ran in the period has a line. The core points are `frame.bind`, `frame.prepare`, and `frame.paint` of the live view, `picture.post` and `picture.encode` of a picture, and `menu.icon`. `frame.paint` includes the module layers, and `picture.encode` includes the plane filters. A module line gives the kind of the call:
+
+- `paint`: a live-view layer.
+- `filter`: a plane filter.
+- `call`: an event handler, a timer callback, or a UI callback.
+
+The profile does not count the Image Control processing of each frame or the resident loader. While it runs, the loader writes the card every 10 seconds, so do not use it to measure battery life.
+
 ## If the camera stops at power-on
 
 A module can stop the camera. Turn the module off with its Enable row in the GRKit section of MENU. If the camera stops before MENU opens, remove the module from `GRKIT/MODULES`, or put an empty file `GRKIT/SAFE` on the card: GRKit then starts in the safe mode, in which no module loads.

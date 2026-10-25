@@ -178,6 +178,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         ("STATE_TMP_PATH", LINUX_DATA_DIRECTORY, "/STATE.TMP"),
         ("REPORT_PATH", LINUX_DATA_DIRECTORY, "/REPORT.TXT"),
         ("SAFE_PATH", LINUX_DATA_DIRECTORY, "/SAFE"),
+        ("PROFILE_PATH", LINUX_DATA_DIRECTORY, "/PROFILE"),
         ("LEGACY_STATE_PATH", LINUX_LEGACY_DIRECTORY, "/STATE.TXT"),
         (
             "LEGACY_STATE_TMP_PATH",

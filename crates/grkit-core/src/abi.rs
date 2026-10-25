@@ -173,10 +173,14 @@ fields!(HEADER_FIELDS {
     /// Number of module plane filters in GRKIT_HOST_MODULE_FILTERS. INSTALL
     /// writes it.
     HOST_MODULE_FILTER_COUNT = 260, 4;
+    /// Address of the profile table (GRKIT_PROFILE in the tail) while the
+    /// development profile runs, else 0. INSTALL writes it when the card has
+    /// GRKIT/PROFILE.
+    HOST_PROFILE = 264, 4;
     /// Two words for each module plane filter, in stage order: its apply
     /// function, and its setting handle in the low half with its stage in the
     /// high half.
-    HOST_MODULE_FILTERS = 264, HOST_MODULE_SETTINGS - 264;
+    HOST_MODULE_FILTERS = 268, HOST_MODULE_SETTINGS - 268;
     /// Address of the module settings table, or 0 (runtime/settings.h).
     /// INSTALL writes it.
     HOST_MODULE_SETTINGS = HOST_MODULE_PREVIEW - 4, 4;
@@ -257,9 +261,34 @@ pub const SHOT_RECORD: usize = 4;
 pub const PICTURE_SCRATCH: usize = PICTURE_MASKS + SHOT_ENTRY + SHOT_STRIDE * SHOT_ENTRIES;
 /// Bytes of the live-view labels after the menu text (`artwork::overlay_labels`).
 pub const LABELS_SIZE: usize = 16384;
-/// Everything after the records: the picture scratch, the menu text, then the
-/// live-view labels.
-pub const TAIL_SIZE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE + LABELS_SIZE;
+/// The profile table after the labels (runtime/profile.h): for each module
+/// slot its code start, its code end, and 8 ASCII bytes of its name, then a
+/// counter slot of calls, cycles, and the largest call for each core point
+/// and for each module and kind.
+pub const PROFILE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE + LABELS_SIZE;
+pub const PROFILE_MODULE_SIZE: usize = 16;
+pub const PROFILE_NAME_BYTES: usize = 8;
+pub const PROFILE_SLOTS: usize = MODULE_SLOTS * PROFILE_MODULE_SIZE;
+pub const PROFILE_SLOT_SIZE: usize = 12;
+/// The core points, in slot order: the name in the profile file, and the C
+/// name of the slot without the `GRKIT_PROFILE_` prefix.
+pub const PROFILE_POINTS: [(&str, &str); 6] = [
+    ("frame.bind", "FRAME_BIND"),
+    ("frame.prepare", "FRAME_PREPARE"),
+    ("frame.paint", "FRAME_PAINT"),
+    ("picture.post", "PICTURE_POST"),
+    ("picture.encode", "PICTURE_ENCODE"),
+    ("menu.icon", "MENU_ICON"),
+];
+/// The module kinds, in slot order: a layer paint, a plane filter, and an
+/// event handler, timer, or UI callback in the App task.
+pub const PROFILE_KINDS: [(&str, &str); 3] =
+    [("paint", "PAINT"), ("filter", "FILTER"), ("call", "CALL")];
+pub const PROFILE_SLOT_COUNT: usize = PROFILE_POINTS.len() + MODULE_SLOTS * PROFILE_KINDS.len();
+pub const PROFILE_SIZE: usize = PROFILE_SLOTS + PROFILE_SLOT_COUNT * PROFILE_SLOT_SIZE;
+/// Everything after the records: the picture scratch, the menu text, the
+/// live-view labels, then the profile table.
+pub const TAIL_SIZE: usize = PROFILE + PROFILE_SIZE;
 // The summaries of every record in every menu language end before the
 // parameter page title.
 const _: () = assert!(
@@ -588,6 +617,35 @@ pub fn header() -> String {
         "LABELS_SIZE",
         LABELS_SIZE,
     );
+    define(
+        &mut out,
+        "The profile table after the labels (runtime/profile.h). For each module \
+         slot at GRKIT_PROFILE_MODULE_SIZE n: its code start, its code end, and \
+         GRKIT_PROFILE_NAME_BYTES ASCII bytes of its name. At GRKIT_PROFILE_SLOTS, \
+         GRKIT_PROFILE_SLOT_COUNT slots of GRKIT_PROFILE_SLOT_SIZE bytes: calls, \
+         cycles, and the cycles of the largest call. The core points come first, \
+         then GRKIT_PROFILE_KINDS slots for each module slot.",
+        "PROFILE",
+        PROFILE,
+    );
+    for (name, value) in [
+        ("SIZE", PROFILE_SIZE),
+        ("MODULE_SIZE", PROFILE_MODULE_SIZE),
+        ("NAME_BYTES", PROFILE_NAME_BYTES),
+        ("SLOTS", PROFILE_SLOTS),
+        ("SLOT_SIZE", PROFILE_SLOT_SIZE),
+        ("SLOT_COUNT", PROFILE_SLOT_COUNT),
+        ("MODULE_BASE", PROFILE_POINTS.len()),
+        ("KINDS", PROFILE_KINDS.len()),
+    ] {
+        writeln!(out, "#define GRKIT_PROFILE_{name} {value}").unwrap();
+    }
+    for (slot, (_, name)) in PROFILE_POINTS.iter().enumerate() {
+        writeln!(out, "#define GRKIT_PROFILE_{name} {slot}").unwrap();
+    }
+    for (kind, (_, name)) in PROFILE_KINDS.iter().enumerate() {
+        writeln!(out, "#define GRKIT_PROFILE_{name} {kind}").unwrap();
+    }
     define(
         &mut out,
         "Everything after the records: the script array must hold it.",

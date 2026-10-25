@@ -11,6 +11,10 @@ pub use crate::abi::{
     HOST_HEADER_SIZE as HEADER_SIZE, HOST_RECORDS, HOST_STATE_CHANGES, PICTURE_SCRATCH,
     RECORD_CODE, RECORD_PARAMETERS, RECORD_SIZE, TAIL_SIZE,
 };
+use crate::abi::{
+    HOST_PROCESSING_CALLS, HOST_PROFILE, MODULE_SLOTS, PROFILE, PROFILE_KINDS, PROFILE_MODULE_SIZE,
+    PROFILE_POINTS, PROFILE_SLOTS, PROFILE_SLOT_SIZE,
+};
 use crate::capabilities::{self, StateFile};
 
 /// The icon slot of GR III: an 8-byte native descriptor, then 40 x 40 RGBA.
@@ -93,6 +97,10 @@ pub const STATE_MAX_BYTES: usize = 16384;
 /// state file when two reads in a row agree, so a change reaches the card
 /// one to two intervals after the last change.
 pub const STATE_POLL_MS: u32 = 2000;
+/// In the development profile (runtime/profile.h), the resident loader
+/// writes the counts of the core to `PROFILE.TXT` in the data folder after
+/// this many polls, and clears them.
+pub const PROFILE_POLLS: u32 = 5;
 
 /// A state file keeps the state keys of the capabilities
 /// (`capabilities::state_keys`) and the saved module settings.
@@ -309,6 +317,7 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         "goto install".into(),
     ]);
     lines.extend(state_script());
+    lines.extend(profile_script());
     lines.extend(
         [
             ":reject_close",
@@ -411,6 +420,10 @@ fn state_script() -> Vec<String> {
         "last = changes".into(),
         format!("filesearch '{}'", state_path(StateFile::Main, "TXT")),
         "if result = 0 saved = changes - 1".into(),
+        // The development profile has its own loop, so the usual poll
+        // reads no other word.
+        format!("profile = {}", word(HOST_PROFILE)),
+        "if profile <> 0 goto profile_watch".into(),
         ":watch".into(),
         format!("mpause {STATE_POLL_MS}"),
         format!("changes = {changes}"),
@@ -551,6 +564,137 @@ fn state_script() -> Vec<String> {
     }
     lines.push("return".into());
 
+    lines
+}
+
+/// The loader path of the profile file.
+fn profile_path() -> String {
+    format!("{DATA_FOLDER}\\PROFILE.TXT")
+}
+
+/// The development profile of the resident loader (runtime/profile.h). The
+/// watch loop of the profile saves the state as the usual one does, and after
+/// each `PROFILE_POLLS` polls appends a period to `PROFILE.TXT`: a line with
+/// its number and the live-view frames, then a line for each counter slot
+/// with calls: its name, the calls, the cycles, and the cycles of the largest
+/// call. The loader clears each slot that it writes. The module names come
+/// from the profile table, 8 ASCII bytes each.
+fn profile_script() -> Vec<String> {
+    let table = PROFILE / 4;
+    let path = profile_path();
+    let mut lines: Vec<String> = vec![
+        ":profile_watch".into(),
+        "ppolls = 0".into(),
+        "pperiod = 0".into(),
+        format!("pframes = registry[{}]", HOST_PROCESSING_CALLS / 4),
+    ];
+    // The module names: the bytes up to the first 0.
+    for module in 0..MODULE_SLOTS {
+        let base = table + module * PROFILE_MODULE_SIZE / 4 + 2;
+        let end = format!("profile_name{module}_end");
+        lines.push(format!("pname{module} = ''"));
+        for byte in 0..8 {
+            lines.extend([
+                format!(
+                    "pc = (tailarea[{}] >> {}) and 255",
+                    base + byte / 4,
+                    byte % 4 * 8
+                ),
+                format!("if pc = 0 goto {end}"),
+                "code2str ps pc".into(),
+                format!("strconcat pname{module} ps"),
+            ]);
+        }
+        lines.push(format!(":{end}"));
+    }
+    lines.extend([
+        // A new file, or the end of the file of an earlier start.
+        format!("filesearch '{path}'"),
+        "if result != 0 goto profile_append".into(),
+        format!("filecreate pfh '{path}'"),
+        "goto profile_opened".into(),
+        ":profile_append".into(),
+        format!("fileopen pfh '{path}' 1"),
+        ":profile_opened".into(),
+        "if pfh < 0 goto profile_poll".into(),
+        "filewriteln pfh 'GRKit profile: for each period, the live-view frames; for each point, calls, CPU cycles, and the cycles of the largest call'".into(),
+        "fileclose pfh".into(),
+        ":profile_poll".into(),
+        format!("mpause {STATE_POLL_MS}"),
+        "ppolls = ppolls + 1".into(),
+        format!("if ppolls >= {PROFILE_POLLS} call profile_write"),
+        format!("changes = registry[{}]", HOST_STATE_CHANGES / 4),
+        "if changes <> last goto profile_moved".into(),
+        "if changes = saved goto profile_poll".into(),
+        "stamp = changes".into(),
+    ]);
+    for file in StateFile::ALL {
+        lines.push(format!("call save_{}", label(file)));
+    }
+    lines.extend([
+        "goto profile_poll".into(),
+        ":profile_moved".into(),
+        "last = changes".into(),
+        "goto profile_poll".into(),
+        ":profile_write".into(),
+        "ppolls = 0".into(),
+        "pperiod = pperiod + 1".into(),
+        format!("pf = registry[{}]", HOST_PROCESSING_CALLS / 4),
+        "pframe = pf - pframes".into(),
+        "pframes = pf".into(),
+        format!("fileopen pfh '{path}' 1"),
+        "if pfh < 0 goto profile_write_end".into(),
+        "filewrite pfh 'period '".into(),
+        "int2str ps pperiod".into(),
+        "filewrite pfh ps".into(),
+        "filewrite pfh ' frames '".into(),
+        "int2str ps pframe".into(),
+        "filewriteln pfh ps".into(),
+    ]);
+    let mut slot_lines = |slot: usize, name: Vec<String>| {
+        let at = table + (PROFILE_SLOTS + slot * PROFILE_SLOT_SIZE) / 4;
+        let end = format!("profile_slot{slot}");
+        lines.extend([
+            format!("pc = tailarea[{at}]"),
+            format!("if pc = 0 goto {end}"),
+            format!("pcy = tailarea[{}]", at + 1),
+            format!("pmx = tailarea[{}]", at + 2),
+            format!("tailarea[{at}] = 0"),
+            format!("tailarea[{}] = 0", at + 1),
+            format!("tailarea[{}] = 0", at + 2),
+        ]);
+        lines.extend(name);
+        for (value, last) in [("pc", false), ("pcy", false), ("pmx", true)] {
+            lines.push(format!("int2str ps {value}"));
+            lines.push("filewrite pfh ps".into());
+            lines.push(if last {
+                "filewriteln pfh ''".into()
+            } else {
+                "filewrite pfh ' '".into()
+            });
+        }
+        lines.push(format!(":{end}"));
+    };
+    for (slot, (name, _)) in PROFILE_POINTS.iter().enumerate() {
+        slot_lines(slot, vec![format!("filewrite pfh '{name} '")]);
+    }
+    for module in 0..MODULE_SLOTS {
+        for (kind, (name, _)) in PROFILE_KINDS.iter().enumerate() {
+            let slot = PROFILE_POINTS.len() + module * PROFILE_KINDS.len() + kind;
+            slot_lines(
+                slot,
+                vec![
+                    format!("filewrite pfh pname{module}"),
+                    format!("filewrite pfh ' {name} '"),
+                ],
+            );
+        }
+    }
+    lines.extend([
+        "fileclose pfh".into(),
+        ":profile_write_end".into(),
+        "return".into(),
+    ]);
     lines
 }
 
@@ -955,7 +1099,13 @@ mod tests {
             .lines()
             .filter(|l| l.starts_with("fileopen"))
             .collect();
-        assert!(opens.iter().all(|l| l.contains("MODULE.BIN")), "{opens:?}");
+        // The modules, and the profile file, which the loader appends to.
+        assert!(
+            opens
+                .iter()
+                .all(|l| l.contains("MODULE.BIN") || l.ends_with("PROFILE.TXT' 1")),
+            "{opens:?}"
+        );
         assert!(!script.contains("SCRIPT\\PLUGINS"));
         let state = state_script();
         let start = at(&state, "saved = changes");

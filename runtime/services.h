@@ -1,5 +1,6 @@
 #ifndef GRKIT_SERVICES_H
 #define GRKIT_SERVICES_H
+#include "profile.h"
 /* The services of the core for modules (runtime/sdk/grkit.h): events, the
    timer, and the UI. Their state is a block of the module array, which
    INSTALL writes, and GRKIT_HOST_SERVICES holds its address. The includer
@@ -145,21 +146,30 @@ static __attribute__((unused)) u32 services_suspended(volatile u32 *h,u32 fn) {
 /* Call module code in the App task with one, two, or three arguments. Code
    of a stopped module does not run. */
 static __attribute__((unused)) void services_call1(volatile u32 *h,u32 fn,u32 a) {
+    u32 start;
     if(services_suspended(h,fn)) return;
     ++services_word(h,SERVICES_APP)[0];
+    start=profile_begin(h);
     ((void (*)(u32))fn)(a);
+    profile_end_module(h,start,fn,GRKIT_PROFILE_CALL);
     --services_word(h,SERVICES_APP)[0];
 }
 static __attribute__((unused)) void services_call2(volatile u32 *h,u32 fn,u32 a,u32 b) {
+    u32 start;
     if(services_suspended(h,fn)) return;
     ++services_word(h,SERVICES_APP)[0];
+    start=profile_begin(h);
     ((void (*)(u32,u32))fn)(a,b);
+    profile_end_module(h,start,fn,GRKIT_PROFILE_CALL);
     --services_word(h,SERVICES_APP)[0];
 }
 static __attribute__((unused)) void services_call3(volatile u32 *h,u32 fn,u32 a,u32 b,u32 c) {
+    u32 start;
     if(services_suspended(h,fn)) return;
     ++services_word(h,SERVICES_APP)[0];
+    start=profile_begin(h);
     ((void (*)(u32,u32,u32))fn)(a,b,c);
+    profile_end_module(h,start,fn,GRKIT_PROFILE_CALL);
     --services_word(h,SERVICES_APP)[0];
 }
 

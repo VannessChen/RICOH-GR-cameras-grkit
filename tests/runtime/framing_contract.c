@@ -74,6 +74,20 @@ static volatile uint32_t *mapped_settings(uint32_t address)
     return settings_memory;
 }
 #define MODULE_SETTINGS_MAP(address) mapped_settings(address)
+/* The profile table of the harness, and a cycle counter that advances 100
+   cycles at each read. */
+#define TEST_PROFILE 0x5d000000U
+static uint32_t profile_memory[GRKIT_PROFILE_SIZE / 4], profile_clock;
+static volatile uint32_t *mapped_profile(uint32_t address)
+{
+    assert(address >= TEST_PROFILE && address < TEST_PROFILE + sizeof(profile_memory) && (address & 3) == 0);
+    return profile_memory + (address - TEST_PROFILE) / 4;
+}
+#define PROFILE_MAP(address) mapped_profile(address)
+#define PROFILE_START() (profile_clock += 100)
+#define PROFILE_NOW() (profile_clock += 100)
+static uint32_t profile_core_id;
+#define PROFILE_CORE() profile_core_id
 /* Module layers: the harness maps each paint address to a function of the
    Framing (modules/framing) and Guides (modules/guides) modules. */
 #define TEST_MASK_PAINT 0x5e000011U
@@ -686,5 +700,49 @@ int main(void)
     WORD(TEST_OWNER,LIVEVIEW_CANVAS)=0;
     framing_bind(TEST_OWNER);
     assert(header[GRKIT_HOST_LOAD_CUE/4]==CUE_PENDING && invalidations==0);
+
+    /* Without the profile, no point reads the counter. */
+    assert(profile_clock==0);
+    /* The development profile counts each point, and each module layer in
+       the slot of the module whose code holds its paint function: Guides is
+       module 0, Framing (the mask and the label) module 1. */
+    reset();
+    header[GRKIT_HOST_FRAME_RATIO/4]=1;
+    GUIDE_STYLE=1;
+    profile_memory[0]=0x5e000000; profile_memory[1]=0x5e000010;
+    profile_memory[4]=0x5e000010; profile_memory[5]=0x5e000030;
+    header[GRKIT_HOST_PROFILE/4]=TEST_PROFILE;
+    framing_bind(TEST_OWNER);
+    framing_prepare(TEST_CANVAS);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    {
+        const uint32_t *slots=profile_memory+GRKIT_PROFILE_SLOTS/4;
+#define SLOT(n,w) slots[(n)*GRKIT_PROFILE_SLOT_SIZE/4+(w)]
+#define MODULE_SLOT(m,kind) (GRKIT_PROFILE_MODULE_BASE+(m)*GRKIT_PROFILE_KINDS+(kind))
+        assert(SLOT(GRKIT_PROFILE_FRAME_BIND,0)==1 && SLOT(GRKIT_PROFILE_FRAME_BIND,1)==100);
+        assert(SLOT(GRKIT_PROFILE_FRAME_PREPARE,0)==1 && SLOT(GRKIT_PROFILE_FRAME_PREPARE,2)==100);
+        /* The paint holds its three layers: 100 cycles each, and 100 of its own. */
+        assert(SLOT(GRKIT_PROFILE_FRAME_PAINT,0)==1 && SLOT(GRKIT_PROFILE_FRAME_PAINT,1)==700);
+        assert(SLOT(MODULE_SLOT(0,GRKIT_PROFILE_PAINT),0)==1 && SLOT(MODULE_SLOT(0,GRKIT_PROFILE_PAINT),1)==100);
+        assert(SLOT(MODULE_SLOT(1,GRKIT_PROFILE_PAINT),0)==2 && SLOT(MODULE_SLOT(1,GRKIT_PROFILE_PAINT),1)==200);
+        assert(SLOT(MODULE_SLOT(1,GRKIT_PROFILE_PAINT),2)==100);
+        /* A call of another core counter, and code outside each module, count nothing. */
+        profile_add(TEST_PROFILE,GRKIT_PROFILE_FRAME_BIND,PROFILE_DISCARD);
+        assert(SLOT(GRKIT_PROFILE_FRAME_BIND,0)==1);
+        {
+            u32 start=profile_begin(header);
+            profile_core_id=1;
+            profile_end(header,start,GRKIT_PROFILE_FRAME_BIND);
+            profile_core_id=0;
+            assert(SLOT(GRKIT_PROFILE_FRAME_BIND,0)==1);
+        }
+        profile_memory[1]=0x5e000000;
+        framing_paint(TEST_CANVAS,TEST_BITMAP);
+        assert(SLOT(MODULE_SLOT(0,GRKIT_PROFILE_PAINT),0)==1);
+        assert(SLOT(MODULE_SLOT(1,GRKIT_PROFILE_PAINT),0)==4);
+        assert(SLOT(GRKIT_PROFILE_FRAME_PAINT,0)==2);
+#undef SLOT
+#undef MODULE_SLOT
+    }
     return 0;
 }

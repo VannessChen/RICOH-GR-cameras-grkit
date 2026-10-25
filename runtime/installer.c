@@ -63,6 +63,7 @@ static const char lock_path[] = LOCK_PATH;
 static const char done_path[] = DONE_PATH;
 static const char failed_path[] = FAILED_PATH;
 static const char safe_path[] = SAFE_PATH;
+static const char profile_path[] = PROFILE_PATH;
 static const char state_path[] = STATE_PATH;
 static const char state_tmp_path[] = STATE_TMP_PATH;
 /* The folder of GRKit 1.2: INSTALL reads its state file when GRKIT has none,
@@ -621,6 +622,12 @@ static u32 kept_ids[GRKIT_MODULE_SETTINGS_MAX], kept_values[GRKIT_MODULE_SETTING
 /* Safe mode: 1 while the file GRKIT/SAFE exists. No module loads then
    (scan). */
 static u32 safe_mode;
+/* The development profile: 1 while the file GRKIT/PROFILE exists
+   (runtime/profile.h). */
+static u32 profile_mode;
+/* The modes in the plan: bit 0 the safe mode, bit 1 the profile. */
+#define PLAN_SAFE 1U
+#define PLAN_PROFILE 2U
 /* The capabilities that the loaded modules use (GRKIT_HOST_CAPABILITIES). */
 static u32 capabilities_used;
 static void read_state(void);
@@ -912,8 +919,9 @@ static int scan(void)
     if (fd < 0) return 36;
     /* Safe mode: GRKIT/SAFE exists. */
     {
-        u8 safe_text[4];
-        safe_mode = read_text(safe_path, safe_text, sizeof(safe_text)) >= 0;
+        u8 mode_text[4];
+        safe_mode = read_text(safe_path, mode_text, sizeof(mode_text)) >= 0;
+        profile_mode = read_text(profile_path, mode_text, sizeof(mode_text)) >= 0;
     }
     /* The modules first: the effects install only for a module that uses
        CORE.TONE. */
@@ -933,7 +941,7 @@ static int scan(void)
     put32(plan + 16, effects_at + listed_count * PLANNED_EFFECT);
     put32(plan + 20, module_words);
     put32(plan + 24, module_tiles);
-    put32(plan + 28, safe_mode);
+    put32(plan + 28, (safe_mode ? PLAN_SAFE : 0) | (profile_mode ? PLAN_PROFILE : 0));
     put32(plan + 32, overflow_count);
     put32(plan + 36, listed_count);
     for (u32 i = 0; i < count; ++i)
@@ -1058,12 +1066,13 @@ static int read_plan(void)
     syscall6(6, fd, 0, 0, 0, 0, 0);
     if (got < 0 || (have == sizeof(plan) && got) || have < PLAN_HEADER || get32(plan) != 0x314d5247) return 37;
     count = get32(plan + 4);
-    safe_mode = get32(plan + 28);
+    safe_mode = get32(plan + 28) & PLAN_SAFE;
+    profile_mode = (get32(plan + 28) & PLAN_PROFILE) != 0;
     overflow_count = get32(plan + 32);
     listed_count = get32(plan + 36);
     u32 effects_at = PLAN_HEADER + count * GRKIT_GRF_MAX_SIZE;
     if (count > MAX_COUNT || listed_count > EFFECTS_LISTED || have != effects_at + listed_count * PLANNED_EFFECT ||
-        get32(plan + 16) != have || safe_mode > 1) return 37;
+        get32(plan + 16) != have || get32(plan + 28) > (PLAN_SAFE | PLAN_PROFILE)) return 37;
     for (u32 i = 0; i < listed_count; ++i) {
         const u8 *entry = plan + effects_at + i * PLANNED_EFFECT;
         copy(listed[i], entry, LISTED_HEAD);
@@ -1650,6 +1659,23 @@ static int install(void)
 #else
     (void)module_array;
 #endif
+    /* The profile table: the code range and the name of each module that
+       loaded, and counters at 0 (the tail holds noise after power-on). */
+    if (profile_mode) {
+        u32 table = tail + GRKIT_PROFILE;
+        zero(at(table), GRKIT_PROFILE_SIZE);
+#ifndef GRKIT_NO_MODULES
+        for (u32 i = 0; i < module_count && i < GRKIT_MODULE_SLOTS; ++i) {
+            u32 entry = table + i * GRKIT_PROFILE_MODULE_SIZE, n = 0;
+            if (module_status[i]) continue;
+            store(entry, module_code_from[i]);
+            store(entry + 4, module_code_to[i]);
+            for (const char *p = module_names[i]; *p && *p != '.' && n < GRKIT_PROFILE_NAME_BYTES; ++p, ++n)
+                at(entry + 8 + n)[0] = (u8)(*p >= 'a' && *p <= 'z' ? *p - 32 : *p);
+        }
+#endif
+        store(base + GRKIT_HOST_PROFILE, table);
+    }
     /* The saved values, before the hooks start (plan_modules read them). */
     apply_state(base, module_count ? module_array : 0);
     for (u32 i = 0; i < CODE_RELOCATION_COUNT; ++i) {
@@ -1781,6 +1807,7 @@ static void write_report(int status)
     say("GRKit "); say(GRKIT_VERSION); say(" ("); say(target_marker + sizeof("GRKIT_TARGET=") - 1); say(")\r\n");
     if (status) { say("\r\nGRKit did not install: error "); say_number((u32)status); say(".\r\n"); }
     if (safe_mode) say("\r\nSafe mode: GRKIT\\SAFE exists, so no module loads. Delete it to load the modules.\r\n");
+    if (profile_mode) say("\r\nProfile: GRKIT\\PROFILE exists, so GRKit writes its CPU use to GRKIT\\PROFILE.TXT. Delete it to stop.\r\n");
     say("\r\nModules (the package, and GRKIT\\MODULES):\r\n");
     if (!module_count) say("none\r\n");
     for (u32 i = 0; i < module_count; ++i) {

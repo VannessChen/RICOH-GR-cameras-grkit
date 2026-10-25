@@ -1,6 +1,7 @@
 #include "firmware.h"
 #include "abi.h"
 #include "core.h"
+#include "profile.h"
 /* The core of picture.encode, and the post-curve matrix of tuning. The JPEG
    planes, the cache, and the shot ring are firmware and core details, so they
    stay here. Selective color of the effects and the plane filters of the
@@ -38,8 +39,7 @@ static u32 record_features(volatile u32 *h,u32 record) {
    Selective color changes only recorded pictures, so the live view of such an
    effect drops its chroma rows: the viewfinder shows the luma that the removed
    hues keep in the picture. */
-void picture_post(u32 object,u32 context,u32 settings) {
-    volatile u32 *h=framing_header();
+static void post_matrix(volatile u32 *h,u32 object,u32 context,u32 settings) {
     u32 record=WORD(context,8),features,i,j,k;
     int csp[9],post[9],sum;
     PICTURE_YCBCR_CALC(object,context);
@@ -59,6 +59,12 @@ void picture_post(u32 object,u32 context,u32 settings) {
     }
     if((features&GRKIT_FEATURE_SELECTIVE) && BYTE(settings,PICTURE_LIVE_CONTEXT)==1)
         for(i=3;i<9;++i) WORD(object,i*4)=0;
+}
+void picture_post(u32 object,u32 context,u32 settings) {
+    volatile u32 *h=framing_header();
+    u32 start=profile_begin(h);
+    post_matrix(h,object,context,settings);
+    profile_end(h,start,GRKIT_PROFILE_PICTURE_POST);
 }
 #endif
 /* ---- Recorded pictures: the encode host -----------------------------------
@@ -220,14 +226,12 @@ static u32 native_monochrome(u32 shot) {
 }
 /* Once per plane set. The second full-size image (descriptor 3) shares the
    main planes. */
-void picture_encode(u32 process,u32 message) {
-    volatile u32 *h=framing_header();
+static void encode_shot(volatile u32 *h,u32 message) {
     /* Configuration +0x34 holds the shot settings of the encoded pictures. */
     u32 config=WORD(message,8), record=shot_record(h,WORD(config,0x34));
     u32 done[4], selective, values[MODULE_FILTER_MAX], filters=module_filters(h), any, i, j;
     PictureSet set;
     Plane p;
-    (void)process;
     set.count=0;
     set.record=0;
     set.mono=0;
@@ -260,6 +264,18 @@ void picture_encode(u32 process,u32 message) {
     for(i=0;i<set.count;++i) flush(&set.planes[i]);
     if(selective) selective_encode(&set);
     /* The module filters follow the color of the effect, in stage order. */
-    for(i=0;i<filters;++i) if(values[i]) MODULE_APPLY(MODULE_FILTER(h,i)[0],&set,values[i]);
+    for(i=0;i<filters;++i) if(values[i]) {
+        u32 start=profile_begin(h);
+        MODULE_APPLY(MODULE_FILTER(h,i)[0],&set,values[i]);
+        profile_end_module(h,start,MODULE_FILTER(h,i)[0],GRKIT_PROFILE_FILTER);
+    }
     for(i=0;i<set.count;++i) flush(&set.planes[i]);
+}
+/* The encode of one shot, the module filters included. */
+void picture_encode(u32 process,u32 message) {
+    volatile u32 *h=framing_header();
+    u32 start=profile_begin(h);
+    (void)process;
+    encode_shot(h,message);
+    profile_end(h,start,GRKIT_PROFILE_PICTURE_ENCODE);
 }

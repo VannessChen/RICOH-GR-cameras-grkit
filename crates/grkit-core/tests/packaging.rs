@@ -365,11 +365,11 @@ fn runtime_layout_matches_target_capacity() {
     assert_eq!(runtime::MAX_COUNT, 40);
     assert_eq!(
         runtime::layout(0).unwrap(),
-        json!({"words": 128, "tail_words": 45602, "icon_words": [6408]})
+        json!({"words": 128, "tail_words": 45724, "icon_words": [6408]})
     );
     assert_eq!(
         runtime::layout(40).unwrap(),
-        json!({"words": 43648, "tail_words": 45602, "icon_words": [64080, 6408]})
+        json!({"words": 43648, "tail_words": 45724, "icon_words": [64080, 6408]})
     );
     assert!(runtime::layout(41).is_err());
 }
@@ -387,11 +387,12 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
             .collect();
         // The registry holds the header and the records. The tail holds the
         // picture scratch (the date stamp masks, then the shot ring), the menu
-        // text, then the live-view labels.
+        // text, the live-view labels, then the profile table (8 modules of 16
+        // bytes, 30 counter slots of 12 bytes).
         assert_eq!(words * 4, 512 + count * 0x1100, "count {count}");
         assert_eq!(
             layout["tail_words"].as_u64().unwrap() as usize * 4,
-            141376 + 72 + 24576 + 16384
+            141376 + 72 + 24576 + 16384 + 128 + 30 * 12
         );
         assert_eq!(
             icons.iter().sum::<usize>() * 4,

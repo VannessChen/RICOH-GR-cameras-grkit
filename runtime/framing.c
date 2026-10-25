@@ -8,6 +8,7 @@
 #endif
 #define OVERLAY_PIXELS(address) FRAMING_PIXELS(address)
 #include "core.h"
+#include "profile.h"
 
 #define FRAMING_SETTINGS() (((u32 (*)(void))FW_SETTINGS)())
 #ifndef FRAMING_NATIVE_ASPECT
@@ -180,7 +181,9 @@ static u32 layers_active(volatile u32 *h) {
 #define MODULE_PAINT(address,surface,value) ((void (*)(const Surface *,u32))(address))(surface,value)
 #endif
 static void module_paint(volatile u32 *h,u32 i,const Surface *surface,u32 value) {
+    u32 start=profile_begin(h);
     MODULE_PAINT(MODULE_LAYER(h,i)[0],surface,value);
+    profile_end_module(h,start,MODULE_LAYER(h,i)[0],GRKIT_PROFILE_PAINT);
 }
 /* Paint the module layers in their order. In the ADJ preview, the layers of
    the previewed setting paint its highlighted value, DISP does not hide
@@ -248,8 +251,7 @@ u32 framing_live_aspect(u32 property) {
 #define capture_sync(controller) ((void)(controller))
 #endif
 /* Only the native still-photo LCD canvas owns these transient references. */
-void framing_bind(u32 controller) {
-    volatile u32 *h=framing_header();
+static void bind_canvas(volatile u32 *h,u32 controller) {
     h[GRKIT_HOST_FRAME_OWNER/4]=controller;
     h[GRKIT_HOST_FRAME_CANVAS/4]=WORD(controller,LIVEVIEW_CANVAS);
     /* Shooting: id 2 geometry follows the Framing ratio again. */
@@ -264,6 +266,12 @@ void framing_bind(u32 controller) {
     /* The first shooting screen after INSTALL: the modules are ready. This
        hook runs in the App task. */
     if(h[GRKIT_HOST_FRAME_CANVAS/4]) services_ready(h);
+}
+void framing_bind(u32 controller) {
+    volatile u32 *h=framing_header();
+    u32 start=profile_begin(h);
+    bind_canvas(h,controller);
+    profile_end(h,start,GRKIT_PROFILE_FRAME_BIND);
 }
 void framing_leave(u32 controller) {
     volatile u32 *h=framing_header();
@@ -299,14 +307,19 @@ static u32 canvas_pixels(u32 canvas,u32 bitmap) {
    area: 3:2, XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
 static const u16 photo_boxes[7][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
                                     {0,87,720,393},{120,0,600,480},{60,0,660,480}};
-void framing_prepare(u32 canvas) {
-    volatile u32 *h=framing_header();
+static void prepare_canvas(volatile u32 *h,u32 canvas) {
     /* Canvas::Draw clears the full native bitmap before drawing its children.
        Use this path even for Off to remove the previous drawing on the next draw. */
     if((h[GRKIT_HOST_FRAME_CANVAS/4]==canvas &&
         (overlay_active(h) || h[GRKIT_HOST_FRAME_BITMAP/4])) ||
        (canvas && h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]==canvas))
         BYTE(canvas,0xa0)=1;
+}
+void framing_prepare(u32 canvas) {
+    volatile u32 *h=framing_header();
+    u32 start=profile_begin(h);
+    prepare_canvas(h,canvas);
+    profile_end(h,start,GRKIT_PROFILE_FRAME_PREPARE);
 }
 /* Module pages preview their highlighted value on the ADJ canvas, below the
    menu controls (runtime/modules.h: frame_preview). The page of CORE.ASPECT
@@ -324,8 +337,7 @@ static void preview_paint(volatile u32 *h,u32 canvas,u32 bitmap) {
     surface.data=data; surface.stride=HALF(bitmap,0x18); surface.area=area; surface.box=photo_boxes[area];
     module_layers_paint(h,&surface,1);
 }
-void framing_paint(u32 canvas,u32 bitmap) {
-    volatile u32 *h=framing_header();
+static void paint_canvas(volatile u32 *h,u32 canvas,u32 bitmap) {
     u32 owner=h[GRKIT_HOST_FRAME_OWNER/4],full,data,cue,area;
     Surface surface;
     if(canvas && canvas==h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]) { preview_paint(h,canvas,bitmap); return; }
@@ -352,4 +364,11 @@ void framing_paint(u32 canvas,u32 bitmap) {
         overlay_label(&surface,LABEL_GRKIT,360-label_width(LABEL_GRKIT)/2,LABEL_TOP);
     }
     ++h[GRKIT_HOST_FRAME_DRAWS/4];
+}
+/* The paint of a full draw, the module layers included. */
+void framing_paint(u32 canvas,u32 bitmap) {
+    volatile u32 *h=framing_header();
+    u32 start=profile_begin(h);
+    paint_canvas(h,canvas,bitmap);
+    profile_end(h,start,GRKIT_PROFILE_FRAME_PAINT);
 }

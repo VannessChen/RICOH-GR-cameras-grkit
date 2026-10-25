@@ -159,10 +159,14 @@
 /* Number of module plane filters in GRKIT_HOST_MODULE_FILTERS. INSTALL writes
    it. */
 #define GRKIT_HOST_MODULE_FILTER_COUNT 260
+/* Address of the profile table (GRKIT_PROFILE in the tail) while the
+   development profile runs, else 0. INSTALL writes it when the card has
+   GRKIT/PROFILE. */
+#define GRKIT_HOST_PROFILE 264
 /* Two words for each module plane filter, in stage order: its apply function,
    and its setting handle in the low half with its stage in the high half. */
-#define GRKIT_HOST_MODULE_FILTERS 264
-#define GRKIT_HOST_MODULE_FILTERS_WORDS 7
+#define GRKIT_HOST_MODULE_FILTERS 268
+#define GRKIT_HOST_MODULE_FILTERS_WORDS 6
 /* Address of the module settings table, or 0 (runtime/settings.h). INSTALL
    writes it. */
 #define GRKIT_HOST_MODULE_SETTINGS 292
@@ -304,8 +308,32 @@
    width, a u16 height, and the u32 offset of its pixels from the table start
    at 8 n. Each pixel is one byte of text coverage, row by row. */
 #define GRKIT_LABELS_SIZE 16384
+/* The profile table after the labels (runtime/profile.h). For each module slot
+   at GRKIT_PROFILE_MODULE_SIZE n: its code start, its code end, and
+   GRKIT_PROFILE_NAME_BYTES ASCII bytes of its name. At GRKIT_PROFILE_SLOTS,
+   GRKIT_PROFILE_SLOT_COUNT slots of GRKIT_PROFILE_SLOT_SIZE bytes: calls,
+   cycles, and the cycles of the largest call. The core points come first, then
+   GRKIT_PROFILE_KINDS slots for each module slot. */
+#define GRKIT_PROFILE 182408
+#define GRKIT_PROFILE_SIZE 488
+#define GRKIT_PROFILE_MODULE_SIZE 16
+#define GRKIT_PROFILE_NAME_BYTES 8
+#define GRKIT_PROFILE_SLOTS 128
+#define GRKIT_PROFILE_SLOT_SIZE 12
+#define GRKIT_PROFILE_SLOT_COUNT 30
+#define GRKIT_PROFILE_MODULE_BASE 6
+#define GRKIT_PROFILE_KINDS 3
+#define GRKIT_PROFILE_FRAME_BIND 0
+#define GRKIT_PROFILE_FRAME_PREPARE 1
+#define GRKIT_PROFILE_FRAME_PAINT 2
+#define GRKIT_PROFILE_PICTURE_POST 3
+#define GRKIT_PROFILE_PICTURE_ENCODE 4
+#define GRKIT_PROFILE_MENU_ICON 5
+#define GRKIT_PROFILE_PAINT 0
+#define GRKIT_PROFILE_FILTER 1
+#define GRKIT_PROFILE_CALL 2
 /* Everything after the records: the script array must hold it. */
-#define GRKIT_TAIL_SIZE 182408
+#define GRKIT_TAIL_SIZE 182896
 #define GRKIT_TEXT_SUMMARY 8192
 /* The parameter page title of a GRKit session, after the summaries: the page,
    its vtable, and the descriptor of the effect name. */
