@@ -411,17 +411,9 @@ fn state_script() -> Vec<String> {
             format!("last{i} = value{i}"),
         ]);
     }
-    // The boot counts as finished after BOOT_POLLS polls: the loader deletes
-    // the boot counter of the safe mode (runtime/installer.c).
     lines.extend([
-        "polls = 0".into(),
         ":watch".into(),
         format!("mpause {STATE_POLL_MS}"),
-        "polls = polls + 1".into(),
-        format!(
-            "if polls = {BOOT_POLLS} filedelete '{}'",
-            core_path("BOOT.TXT")
-        ),
         "call snapshot".into(),
         "stable = 1".into(),
     ]);
@@ -609,10 +601,6 @@ fn state_path(file: StateFile, extension: &str) -> String {
 fn core_path(name: &str) -> String {
     format!("C:\\SCRIPT\\GRKIT\\{name}")
 }
-
-/// The polls of the loader after which a boot counts as finished: about 20 s
-/// after INSTALL.
-pub const BOOT_POLLS: u32 = 10;
 
 /// The size of the largest file that the loader writes for `file`: each key
 /// at its largest value, and for the main file, an adjustment entry for each

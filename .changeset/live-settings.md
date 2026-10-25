@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Enable, the ADJ order, and the Enable and Order of each installed effect apply at once, without a restart.
+Enable, the ADJ order, and the options of each module apply at once, without a restart.

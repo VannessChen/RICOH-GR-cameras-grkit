@@ -955,7 +955,6 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     // The card layout: the package in SCRIPT/GRKIT, the data in GRKIT.
     for line in [
         "#define PLAN_PATH \"/media/storage1/SCRIPT/GRKIT/MODULE.BIN\"",
-        "#define BOOT_PATH \"/media/storage1/SCRIPT/GRKIT/BOOT.TXT\"",
         "#define INBOX_PATH \"/media/storage1/SCRIPT/GRKIT/EFFECTS\"",
         "#define PACKAGE_PATH \"/media/storage1/SCRIPT/GRKIT/PACKAGE.TXT\"",
         "#define IMPORTED_PATH \"/media/storage1/GRKIT/IMPORTED.TXT\"",
@@ -979,7 +978,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
     assert_eq!(
         sha256(header.as_bytes()),
-        "0b2d623d42bc81ff308eccae8d38b5bcdc60815b2016c5ce36d62c977fb3f28e"
+        "40400e89a0afcaffce6c2580641d3055c82f7edf59e89413a42ad6fc5d5bc455"
     );
     Ok(())
 }
@@ -1113,7 +1112,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/GRKIT/LOADER.TTL",
-            "eb90a10b9c1b28ec986b0fbe08fb5031d86caa893e576d2cb8c0cbbb0b3ff963",
+            "0c972fcab28337981e39987581e48d15df9b85abac73e72d710d2cacdc27621d",
         ),
         (
             "SCRIPT/GRKIT/INSTALL.BIN",

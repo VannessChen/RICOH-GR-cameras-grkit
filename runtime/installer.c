@@ -62,7 +62,6 @@ static const char plan_tmp[] = PLAN_TMP_PATH;
 static const char lock_path[] = LOCK_PATH;
 static const char done_path[] = DONE_PATH;
 static const char failed_path[] = FAILED_PATH;
-static const char boot_path[] = BOOT_PATH;
 static const char safe_path[] = SAFE_PATH;
 static const char state_path[] = STATE_PATH;
 static const char state_tmp_path[] = STATE_TMP_PATH;
@@ -619,13 +618,8 @@ static u32 module_contexts, module_data_words;
    a module that is Off. The settings table keeps them, so the next save of
    the loader keeps them too. */
 static u32 kept_ids[GRKIT_MODULE_SETTINGS_MAX], kept_values[GRKIT_MODULE_SETTINGS_MAX], kept_count;
-/* Safe mode: SAFE_FILE, the file GRKIT/SAFE exists; SAFE_BOOTS, the last
-   boots did not finish. No module loads then (scan). */
-#define SAFE_FILE 1U
-#define SAFE_BOOTS 2U
-/* A quick power-off also leaves a boot unfinished, so one or two of them in
-   a row do not start the safe mode. */
-#define SAFE_BOOT_LIMIT 3U
+/* Safe mode: 1 while the file GRKIT/SAFE exists. No module loads then
+   (scan). */
 static u32 safe_mode;
 /* The capabilities that the loaded modules use (GRKIT_HOST_CAPABILITIES). */
 static u32 capabilities_used;
@@ -916,17 +910,10 @@ static int scan(void)
     fd = syscall6(5, (u32)plan_tmp, 0xc1, 0600, 0, 0, 0);
     if (fd == -17) return 3;
     if (fd < 0) return 36;
-    /* Safe mode: GRKIT/SAFE exists, or the last SAFE_BOOT_LIMIT boots did
-       not finish. Each boot counts in BOOT.TXT, which the loader deletes when
-       the boot has finished (grkit_core::runtime::BOOT_POLLS). */
-    u8 boots_text[12];
-    u32 boots = state_boots(boots_text, read_text(boot_path, boots_text, sizeof(boots_text)));
-    safe_mode = read_text(safe_path, boots_text, sizeof(boots_text)) >= 0 ? SAFE_FILE
-              : boots >= SAFE_BOOT_LIMIT ? SAFE_BOOTS : 0;
+    /* Safe mode: GRKIT/SAFE exists. */
     {
-        char next[12]; u32 n = sizeof(next), value = boots + 1;
-        do { next[--n] = (char)('0' + value % 10); value /= 10; } while (value);
-        write_file(boot_path, (const u8 *)next + n, sizeof(next) - n);
+        u8 safe_text[4];
+        safe_mode = read_text(safe_path, safe_text, sizeof(safe_text)) >= 0;
     }
     /* The modules first: the effects install only for a module that uses
        CORE.TONE. */
@@ -1076,7 +1063,7 @@ static int read_plan(void)
     listed_count = get32(plan + 36);
     u32 effects_at = PLAN_HEADER + count * GRKIT_GRF_MAX_SIZE;
     if (count > MAX_COUNT || listed_count > EFFECTS_LISTED || have != effects_at + listed_count * PLANNED_EFFECT ||
-        get32(plan + 16) != have || safe_mode > SAFE_BOOTS) return 37;
+        get32(plan + 16) != have || safe_mode > 1) return 37;
     for (u32 i = 0; i < listed_count; ++i) {
         const u8 *entry = plan + effects_at + i * PLANNED_EFFECT;
         copy(listed[i], entry, LISTED_HEAD);
@@ -1793,11 +1780,7 @@ static void write_report(int status)
     report_length = 0;
     say("GRKit "); say(GRKIT_VERSION); say(" ("); say(target_marker + sizeof("GRKIT_TARGET=") - 1); say(")\r\n");
     if (status) { say("\r\nGRKit did not install: error "); say_number((u32)status); say(".\r\n"); }
-    if (safe_mode == SAFE_FILE) say("\r\nSafe mode: GRKIT\\SAFE exists, so no module loads. Delete it to load the modules.\r\n");
-    if (safe_mode == SAFE_BOOTS) {
-        say("\r\nSafe mode: the last "); say_number(SAFE_BOOT_LIMIT);
-        say(" starts did not finish, so no module loads. If the camera stopped, remove the module that you added last from GRKIT\\MODULES. Restart to load the modules again.\r\n");
-    }
+    if (safe_mode) say("\r\nSafe mode: GRKIT\\SAFE exists, so no module loads. Delete it to load the modules.\r\n");
     say("\r\nModules (the package, and GRKIT\\MODULES):\r\n");
     if (!module_count) say("none\r\n");
     for (u32 i = 0; i < module_count; ++i) {

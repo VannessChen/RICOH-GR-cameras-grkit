@@ -101,10 +101,7 @@ GRKit lists at most 64 effect files and installs at most 40 of them (see [Option
 
 At each boot, INSTALL writes `GRKIT/REPORT.TXT` when its text changes. The report gives the GRKit version and target, the result of each module, the installed effects, and the safe mode. It writes the file in place, because a rename does not replace a file.
 
-In the safe mode, SCAN loads no module, so INSTALL applies only the patches of no extension point and the menu patches for module management. The safe mode starts in two cases:
-
-- `GRKIT/SAFE` exists.
-- The last three boots did not finish. SCAN counts each boot in `SCRIPT/GRKIT/BOOT.TXT`, and the loader deletes the file about 20 s after INSTALL. A quick power-off also leaves a boot unfinished, so the limit is three.
+In the safe mode, SCAN loads no module, so INSTALL applies only the patches of no extension point and the menu patches for module management. The safe mode starts while `GRKIT/SAFE` exists. It does not start by itself: a count of unfinished boots also counts each quick power-off, which is how many people use the camera.
 
 ### State
 

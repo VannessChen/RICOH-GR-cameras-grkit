@@ -95,11 +95,5 @@ int main(void)
         state_translate(&state, from, to, 2, 990000000U);
         assert(state.pairs == 0);
     }
-
-    /* The boot counter. */
-    assert(state_boots((const u8 *)"", -2) == 0);
-    assert(state_boots((const u8 *)"2", 1) == 2);
-    assert(state_boots((const u8 *)"12\r\n", 4) == 12);
-    assert(state_boots((const u8 *)"99999999", 8) == 9999);
     return 0;
 }

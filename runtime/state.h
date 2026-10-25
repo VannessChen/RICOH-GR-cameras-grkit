@@ -72,14 +72,4 @@ static void state_translate(struct state *state, const u32 *from, const u32 *to,
     }
     state->pairs = kept;
 }
-
-/* The boot counter of the safe mode (BOOT.TXT): its decimal digits, at most
-   9999. A missing file is 0. */
-static u32 state_boots(const u8 *text, long n)
-{
-    u32 boots = 0;
-    for (long i = 0; i < n && boots < 1000; ++i)
-        if (text[i] >= '0' && text[i] <= '9') boots = boots * 10 + (u32)(text[i] - '0');
-    return boots;
-}
 #endif

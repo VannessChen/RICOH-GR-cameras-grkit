@@ -169,7 +169,6 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         ("LOCK_PATH", LINUX_DIRECTORY, "/INSTALL.LCK"),
         ("DONE_PATH", LINUX_DIRECTORY, "/INSTALL.OK"),
         ("FAILED_PATH", LINUX_DIRECTORY, "/INSTALL.ERR"),
-        ("BOOT_PATH", LINUX_DIRECTORY, "/BOOT.TXT"),
         ("INBOX_PATH", LINUX_DIRECTORY, "/EFFECTS"),
         ("PACKAGE_PATH", LINUX_DIRECTORY, "/PACKAGE.TXT"),
         ("DATA_PATH", LINUX_DATA_DIRECTORY, ""),

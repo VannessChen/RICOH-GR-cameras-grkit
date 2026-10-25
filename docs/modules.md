@@ -346,10 +346,7 @@ Enable and the order apply at once. A module that is Off stops: its page leaves 
 
 ## If the camera stops at power-on
 
-A module can stop the camera. GRKit then starts in the safe mode, in which no module loads.
-
-- After three starts in a row that did not finish, the safe mode starts by itself.
-- To start the safe mode yourself, put an empty file `GRKIT/SAFE` on the card.
+A module can stop the camera. Turn the module off with its Enable row in the GRKit section of MENU. If the camera stops before MENU opens, remove the module from `GRKIT/MODULES`, or put an empty file `GRKIT/SAFE` on the card: GRKit then starts in the safe mode, in which no module loads.
 
 In the safe mode, `REPORT.TXT` says why no module loads, and the GRKit section of MENU stays available.
 
