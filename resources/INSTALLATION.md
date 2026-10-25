@@ -24,7 +24,7 @@ After the installation, you can remove `00078350.588` and `DEVELOP.MOD` from the
 
 The package holds only the `SCRIPT` folder. GRKit keeps your settings, your effects, and the modules that you added in the `GRKIT` folder, so the update keeps them.
 
-GRKit 2 does not read the settings of GRKit 1. After an update from GRKit 1, delete the `SCRIPT/PLUGINS` folder.
+To keep the settings and the effects of GRKit 1.2, merge the files in step 2. Do not replace them. In Finder, hold Option and click Merge. At the first start, GRKit copies them into the `GRKIT` folder. After that start, you can delete the `SCRIPT/PLUGINS` folder.
 
 ## Use
 

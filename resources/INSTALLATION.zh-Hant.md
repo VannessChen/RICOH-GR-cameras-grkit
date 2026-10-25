@@ -24,7 +24,7 @@
 
 安裝包只包含 `SCRIPT` 資料夾。GRKit 把設定、效果和你加入的模組保存在 `GRKIT` 資料夾中，所以更新後它們仍在。
 
-GRKit 2 不讀取 GRKit 1 的設定。從 GRKit 1 更新後，刪除 `SCRIPT/PLUGINS` 資料夾。
+要保留 GRKit 1.2 的設定和效果，第 2 步請合併檔案，不要取代。在 Finder 中，按住 Option 鍵並點選「合併」。首次開機時，GRKit 把它們複製到 `GRKIT` 資料夾。之後可以刪除 `SCRIPT/PLUGINS` 資料夾。
 
 ## 使用
 

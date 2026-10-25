@@ -128,6 +128,36 @@ pub const PARAMETER_COUNT: usize = 9;
 pub const LINUX_DIRECTORY: &str = "/media/storage1/SCRIPT/GRKIT";
 /// `DATA_FOLDER` on Linux.
 pub const LINUX_DATA_DIRECTORY: &str = "/media/storage1/GRKIT";
+/// The folder of GRKit 1.2 and earlier on Linux: its state file and its
+/// effects. INSTALL reads them once, when `DATA_FOLDER` has no state file or
+/// no effects library.
+pub const LINUX_LEGACY_DIRECTORY: &str = "/media/storage1/SCRIPT/PLUGINS";
+
+/// The state keys of GRKit 1.2 and the keys that now hold the same values.
+/// The values keep their meaning, and the Fn adjustment entries keep their
+/// key IDs.
+pub const LEGACY_STATE_KEYS: [(&str, &str); 6] = [
+    ("image-control.effect", "CORE.TONE"),
+    ("framing.ratio", "CORE.ASPECT"),
+    ("guides.style", "GUIDES.STYLE"),
+    ("date-stamp.style", "DATE.STYLE"),
+    ("date-stamp.look", "DATE.LOOK"),
+    ("grain.level", "CORE.GRAIN"),
+];
+
+/// The ID of a GRKit 1.2 state key in its state file: the CRC-32 of its
+/// name, modulo 10^9.
+pub fn legacy_state_key_id(name: &str) -> u32 {
+    crc32fast::hash(name.as_bytes()) % 1_000_000_000
+}
+
+/// The pairs of (GRKit 1.2 key ID, current key ID) of `LEGACY_STATE_KEYS`.
+pub fn legacy_state_ids() -> Vec<(u32, u32)> {
+    LEGACY_STATE_KEYS
+        .iter()
+        .map(|(old, new)| (legacy_state_key_id(old), state_key_id(new)))
+        .collect()
+}
 
 pub fn layout(count: usize) -> Result<Value> {
     ensure!(count <= MAX_COUNT, "Expected 0..{MAX_COUNT} effects");
@@ -355,7 +385,10 @@ fn state_script() -> Vec<String> {
     // INSTALL has restored the saved values (runtime/installer.c), so the
     // values at the start are those of the file. The loader writes only after
     // the next change: a value that the camera could not restore, such as
-    // the effect of a missing file, keeps its entry until then.
+    // the effect of a missing file, keeps its entry until then. Without a
+    // state file in the data folder, as at the first start after an update
+    // from GRKit 1.2, INSTALL restored the old file, and the loader saves at
+    // the first poll.
     let mut lines: Vec<String> = vec![
         ":resident".into(),
         "stateok = 1".into(),
@@ -368,6 +401,8 @@ fn state_script() -> Vec<String> {
         "plast = pchanges".into(),
         "msaved = mchanges".into(),
         "mlast = mchanges".into(),
+        format!("filesearch '{}'", state_path(StateFile::Main, "TXT")),
+        "if result = 0 psaved = pchanges + 1".into(),
     ];
     for (i, _) in keys.clone() {
         lines.extend([
@@ -716,6 +751,37 @@ mod tests {
         assert!(keys[1..].iter().all(|key| key.word.is_some()));
     }
 
+    #[test]
+    fn legacy_state_keys_map_to_the_current_keys() {
+        let ids = legacy_state_ids();
+        let mut old: Vec<_> = ids.iter().map(|(old, _)| *old).collect();
+        old.sort_unstable();
+        old.dedup();
+        assert_eq!(old.len(), LEGACY_STATE_KEYS.len());
+        // An old key is neither an Fn adjustment entry nor 0.
+        assert!(old
+            .iter()
+            .all(|id| *id > 0 && !(PARAMETER_KEY_BASE..=PARAMETER_KEY_BASE + 32767).contains(id)));
+        // The key IDs in the state files of GRKit 1.2.
+        assert_eq!(
+            old,
+            [161811731, 495043802, 541741532, 684634731, 733922165, 957718554]
+        );
+        // Each target is a capability or a setting of an official module.
+        let capabilities: Vec<_> = capabilities::state_keys()
+            .iter()
+            .map(|key| state_key_id(&key.name))
+            .collect();
+        let modules = [
+            crate::grm::state_id("GUIDES", "STYLE"),
+            crate::grm::state_id("DATE", "STYLE"),
+            crate::grm::state_id("DATE", "LOOK"),
+        ];
+        for (_, new) in &ids {
+            assert!(capabilities.contains(new) || modules.contains(new));
+        }
+    }
+
     /// A runtime error ends the script and frees the arrays, so the resident
     /// part must not index outside the header or divide by a variable.
     #[test]
@@ -933,6 +999,17 @@ mod tests {
         let start = at(&state, "call snapshot");
         assert!(start < at(&state, ":watch"));
         assert_eq!(state[start + 1], "psaved = pchanges");
+    }
+
+    /// INSTALL restores the state of GRKit 1.2 when the data folder has no
+    /// state file, so the loader then saves at the first poll.
+    #[test]
+    fn the_loader_saves_at_once_without_a_state_file() {
+        let state = state_script();
+        let force = at(&state, "if result = 0 psaved = pchanges + 1");
+        assert_eq!(state[force - 1], "filesearch 'C:\\GRKIT\\STATE.TXT'");
+        assert!(at(&state, "psaved = pchanges") < force);
+        assert!(force < at(&state, ":watch"));
     }
 
     /// A key with the value 0 has no entry, because a missing key restores 0.

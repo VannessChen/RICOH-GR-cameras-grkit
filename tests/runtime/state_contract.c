@@ -81,6 +81,21 @@ int main(void)
         assert(has(1000 + STATE_PAIRS - 1) && !has(1000 + STATE_PAIRS));
     }
 
+    /* A GRKit 1.2 file: the known keys take the current keys, the Fn
+       adjustment entries stay, and other keys go. A later pair still wins. */
+    {
+        static const u32 from[] = {495043802U, 161811731U}, to[] = {11U, 22U};
+        parse("495043802\r\n32769\r\n161811731\r\n2\r\n777\r\n1\r\n"
+              "990000005\r\n40\r\n991000000\r\n3\r\n161811731\r\n4\r\n");
+        state_translate(&state, from, to, 2, 990000000U);
+        assert(state.pairs == 4);
+        assert(value_of(11) == 32769 && value_of(22) == 4 && value_of(990000005U) == 40);
+        assert(!has(495043802U) && !has(161811731U) && !has(777) && !has(991000000U));
+        state_parse(&state, (const u8 *)"", -2);
+        state_translate(&state, from, to, 2, 990000000U);
+        assert(state.pairs == 0);
+    }
+
     /* The boot counter. */
     assert(state_boots((const u8 *)"", -2) == 0);
     assert(state_boots((const u8 *)"2", 1) == 2);

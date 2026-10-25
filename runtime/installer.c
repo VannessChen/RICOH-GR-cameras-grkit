@@ -66,6 +66,11 @@ static const char boot_path[] = BOOT_PATH;
 static const char safe_path[] = SAFE_PATH;
 static const char state_path[] = STATE_PATH;
 static const char state_tmp_path[] = STATE_TMP_PATH;
+/* The folder of GRKit 1.2: INSTALL reads its state file when GRKIT has none,
+   and copies its effects when GRKIT has no effects library. */
+static const char legacy_state_path[] = LEGACY_STATE_PATH;
+static const char legacy_state_tmp_path[] = LEGACY_STATE_TMP_PATH;
+static const char legacy_effects_path[] = LEGACY_EFFECTS_PATH;
 static const char report_path[] = REPORT_PATH;
 static volatile u8 *at(u32 physical) { return mapping + physical - MAP_BASE; }
 static u32 get32(const u8 *p) { return p[0] | p[1] << 8 | p[2] << 16 | (u32)p[3] << 24; }
@@ -129,7 +134,8 @@ static u32 read_effect(const char *path, u8 *buffer)
     return (have==GRKIT_GRF_SIZE || have==GRKIT_GRF_MAX_SIZE) ? have : 0;
 }
 /* A path in the library: the folder, '/', an 8.3 name, and NUL. */
-#define EFFECT_PATH_SIZE ((sizeof(library_path) > sizeof(inbox_path) ? sizeof(library_path) : sizeof(inbox_path)) + CATALOG_NAME_SIZE)
+#define PATH_MAX_OF(a, b) (sizeof(a) > sizeof(b) ? sizeof(a) : sizeof(b))
+#define EFFECT_PATH_SIZE (PATH_MAX_OF(legacy_effects_path, PATH_MAX_OF(library_path, inbox_path)) + CATALOG_NAME_SIZE)
 /* Write `folder`/`name` into `path`. Return 0 if it does not fit in `size`
    bytes. */
 static int join(char *path, u32 size, const char *folder, const char *name)
@@ -235,12 +241,28 @@ static int package_module(const char *name)
 static char pending[NAMES_MAX][CATALOG_NAME_SIZE];
 static u32 pending_count;
 static u8 existing[GRKIT_GRF_MAX_SIZE];
-static char inbox[NAMES_MAX][CATALOG_NAME_SIZE];
-static u32 inbox_count;
-static void inbox_name(const char *name, u32 n, void *context)
+/* The names of the effect files to copy from one folder. */
+struct effect_names {
+    char name[NAMES_MAX][CATALOG_NAME_SIZE];
+    u32 count;
+};
+static struct effect_names copies;
+static void effect_name(const char *name, u32 n, void *context)
 {
-    (void)context;
-    if (catalog_name(name, n) && inbox_count < NAMES_MAX) catalog_copy_name(inbox[inbox_count++], name);
+    struct effect_names *list = context;
+    if (catalog_name(name, n) && list->count < NAMES_MAX) catalog_copy_name(list->name[list->count++], name);
+}
+/* List the effect files of `folder` in `copies`: 0, or nonzero when the
+   folder does not open or does not list. */
+static int list_effects(const char *folder)
+{
+    copies.count = 0;
+    long fd = syscall6(5, (u32)folder, 0xc000, 0, 0, 0, 0);
+    if (fd < 0) return 1;
+    static const struct directory_calls calls = {directory_read, directory_seek};
+    int status = directory_list(fd, directory_entries, sizeof(directory_entries), &calls, effect_name, &copies);
+    syscall6(6, fd, 0, 0, 0, 0, 0);
+    return status;
 }
 /* IMPORTED.TXT records the package that the library has: for each listed
    inbox file, its name and the FNV-1a hash of its bytes. */
@@ -271,6 +293,18 @@ static u32 fnv(const u8 *data, u32 size)
    its files, and a copy of the same package does not bring back an effect
    that a person deleted from the library. If the power fails during a copy,
    IMPORTED.TXT stays old, and a later power-on copies again. */
+static void copy_effects(const char *folder, int package)
+{
+    for (u32 i = 0; i < copies.count; ++i) {
+        char from[EFFECT_PATH_SIZE], to[EFFECT_PATH_SIZE];
+        if (!join(from, sizeof(from), folder, copies.name[i]) || !join(to, sizeof(to), library_path, copies.name[i])) continue;
+        u32 size = read_effect(from, temporary);
+        if (!size || !valid_profile(temporary, size)) continue;
+        if (read_effect(to, existing) == size && equal(existing, temporary, size)) continue;
+        if (!write_file(to, temporary, size) && package && package_effect(copies.name[i]) && pending_count < NAMES_MAX)
+            catalog_copy_name(pending[pending_count++], copies.name[i]);
+    }
+}
 static void collect(void)
 {
     pending_count = 0;
@@ -287,30 +321,25 @@ static void collect(void)
     }
     long had = read_text(imported_path, recorded, sizeof(recorded));
     if (!first && had == (long)n && equal(recorded, record, n)) return;
-    inbox_count = 0;
     if (first) {
         long fd = syscall6(5, (u32)inbox_path, 0xc000, 0, 0, 0, 0);
         if (fd < 0) return;
-        static const struct directory_calls calls = {directory_read, directory_seek};
-        int status = directory_list(fd, directory_entries, sizeof(directory_entries), &calls, inbox_name, 0);
         syscall6(6, fd, 0, 0, 0, 0, 0);
-        if (status) return;
-    } else {
-        for (u32 i = 0; i < package_effect_count; ++i) catalog_copy_name(inbox[inbox_count++], package_effects[i]);
     }
     long made = syscall6(39, (u32)data_path, 0755, 0, 0, 0, 0);
     if (made < 0 && made != -17) return;
     made = syscall6(39, (u32)library_path, 0755, 0, 0, 0, 0);
     if (made < 0 && made != -17) return;
-    for (u32 i = 0; i < inbox_count; ++i) {
-        char from[EFFECT_PATH_SIZE], to[EFFECT_PATH_SIZE];
-        if (!join(from, sizeof(from), inbox_path, inbox[i]) || !join(to, sizeof(to), library_path, inbox[i])) continue;
-        u32 size = read_effect(from, temporary);
-        if (!size || !valid_profile(temporary, size)) continue;
-        if (read_effect(to, existing) == size && equal(existing, temporary, size)) continue;
-        if (!write_file(to, temporary, size) && package_effect(inbox[i]) && pending_count < NAMES_MAX)
-            catalog_copy_name(pending[pending_count++], inbox[i]);
+    if (first) {
+        /* The effects of GRKit 1.2 come first, so a package effect with the
+           same name replaces an old one. */
+        if (!list_effects(legacy_effects_path)) copy_effects(legacy_effects_path, 0);
+        if (list_effects(inbox_path)) return;
+    } else {
+        copies.count = 0;
+        for (u32 i = 0; i < package_effect_count; ++i) catalog_copy_name(copies.name[copies.count++], package_effects[i]);
     }
+    copy_effects(inbox_path, 1);
     if (!pending_count) write_file(imported_path, record, n);
 }
 /* The number of effect files past EFFECTS_LISTED, for REPORT.TXT. */
@@ -1338,7 +1367,17 @@ static void read_state(void)
     static u8 text[STATE_TEXT_MAX];
     long n = read_text(state_path, text, sizeof(text));
     if (n < 0) n = read_text(state_tmp_path, text, sizeof(text));
+    if (n >= 0) {
+        state_parse(&saved_state, text, n);
+        return;
+    }
+    /* The first start after an update from GRKit 1.2: its values, under the
+       current keys. The loader saves them in GRKIT at once. */
+    static const u32 from[] = {LEGACY_STATE_FROM}, to[] = {LEGACY_STATE_TO};
+    n = read_text(legacy_state_path, text, sizeof(text));
+    if (n < 0) n = read_text(legacy_state_tmp_path, text, sizeof(text));
     state_parse(&saved_state, text, n);
+    state_translate(&saved_state, from, to, LEGACY_STATE_COUNT, PARAMETER_KEY_BASE);
 }
 /* Restore the values of the capabilities that loaded modules use, the saved
    module settings in `table` (0 without one), and the Fn adjustments of the

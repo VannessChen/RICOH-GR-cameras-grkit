@@ -961,6 +961,9 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
         "#define REPORT_PATH \"/media/storage1/GRKIT/REPORT.TXT\"",
         "#define SAFE_PATH \"/media/storage1/GRKIT/SAFE\"",
         "#define MODULES_PATH \"/media/storage1/GRKIT/MODULES\"",
+        "#define LEGACY_STATE_PATH \"/media/storage1/SCRIPT/PLUGINS/STATE.TXT\"",
+        "#define LEGACY_EFFECTS_PATH \"/media/storage1/SCRIPT/PLUGINS/EFFECTS\"",
+        "#define LEGACY_STATE_COUNT 6U",
     ] {
         assert!(header.lines().any(|l| l == line), "{line}");
     }
@@ -972,7 +975,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
     assert_eq!(
         sha256(header.as_bytes()),
-        "1b30c3fa0cb1ff561961fa2273842e9db3814bb998c3d5f135084840b08f1183"
+        "69859393d3f197271d7ae5c2d81f7ff43cf8085f2fbb5308373feb5e733ca180"
     );
     Ok(())
 }
@@ -1096,7 +1099,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/GRKIT/LOADER.TTL",
-            "95cfd207b529e7a5a01c7e8571e349abaab14533109dcdae7ada2f53e853603c",
+            "eb90a10b9c1b28ec986b0fbe08fb5031d86caa893e576d2cb8c0cbbb0b3ff963",
         ),
         (
             "SCRIPT/GRKIT/INSTALL.BIN",

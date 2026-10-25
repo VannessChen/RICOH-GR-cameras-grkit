@@ -55,6 +55,24 @@ static int state_value(const struct state *state, u32 key, u32 *value)
     return 0;
 }
 
+/* Turn the pairs of a GRKit 1.2 state file into current pairs: a key of
+   `from` takes the key at the same index of `to`, an Fn adjustment entry
+   (`parameter_base` to `parameter_base` + 32767) keeps its key, and other
+   pairs go. The values keep their meaning. */
+static void state_translate(struct state *state, const u32 *from, const u32 *to, u32 n, u32 parameter_base)
+{
+    u32 kept = 0;
+    for (u32 p = 0; p < state->pairs; ++p) {
+        u32 id = state->ids[p], k = 0;
+        while (k < n && from[k] != id) ++k;
+        if (k < n) id = to[k];
+        else if (id < parameter_base || id - parameter_base > 32767U) continue;
+        state->ids[kept] = id;
+        state->values[kept++] = state->values[p];
+    }
+    state->pairs = kept;
+}
+
 /* The boot counter of the safe mode (BOOT.TXT): its decimal digits, at most
    9999. A missing file is 0. */
 static u32 state_boots(const u8 *text, long n)

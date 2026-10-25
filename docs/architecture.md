@@ -93,7 +93,7 @@ A package holds only `SCRIPT`. `SCRIPT/STARTUP.TTL`, which the camera runs, incl
 
 `PACKAGE.TXT` lists the effect and module files of the package, and the other package files have the same names in each release. A package module loads only if the list names it, so a merge copy that leaves an old module behind gives the same result as a replace copy. A module in `GRKIT/MODULES` replaces the package module with the same name.
 
-When a package is new, SCAN copies its listed effects into the library, where each replaces the file with the same name. `GRKIT/IMPORTED.TXT` records the package that the library has, with a hash of each file. So a copy of the same package changes nothing, and an effect that a person deleted from the library stays deleted until a package with a different file brings it. The first boot without the library copies every valid inbox file. A listed effect that SCAN could not copy installs from the inbox. By default, the effects of the package come first, then the other effects of the library, each group in ID order.
+When a package is new, SCAN copies its listed effects into the library, where each replaces the file with the same name. `GRKIT/IMPORTED.TXT` records the package that the library has, with a hash of each file. So a copy of the same package changes nothing, and an effect that a person deleted from the library stays deleted until a package with a different file brings it. The first boot without the library copies every valid effect of `SCRIPT/PLUGINS/EFFECTS`, where GRKit 1.2 kept its effects, then every valid inbox file. A listed effect that SCAN could not copy installs from the inbox. By default, the effects of the package come first, then the other effects of the library, each group in ID order.
 
 GRKit lists at most 64 effect files and installs at most 40 of them (see [Effects page](#effects-page)). `REPORT.TXT` gives the status of each listed effect. Without a module that uses `CORE.TONE`, no effect installs. The installer deletes and renames no file in these folders. On the camera's Linux, a rename does not replace a file. On GR IV exFAT, a delete made later lookups fail.
 
@@ -112,6 +112,7 @@ In the safe mode, SCAN loads no module, so INSTALL applies only the patches of n
 
 The resident loader saves the values of the capabilities, the saved module settings, and the Fn adjustments in `GRKIT/STATE.TXT`. It writes only after a change, and only through the camera's own file system. It keeps a key with the value 0 out of the file.
 INSTALL restores the file before it installs the hooks (`runtime/state.h`), so the first frame already has the saved values. It restores a capability only when a loaded module uses it, and a module setting only when its module loads. A missing `STATE.TXT` reads `STATE.TMP`, which a save that a power cut stopped leaves.
+Without both, INSTALL reads the state file of GRKit 1.2 in `SCRIPT/PLUGINS` and maps its keys to the current keys (`runtime::LEGACY_STATE_KEYS`). The values and the Fn adjustment entries keep their meaning. The loader then saves at its first poll, so the next boot reads `GRKIT/STATE.TXT`.
 A script error frees the arrays that the hooks use, so the resident script checks each array index and divides only by constants.
 
 ## Modules

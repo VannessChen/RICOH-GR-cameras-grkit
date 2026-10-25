@@ -1,6 +1,7 @@
 # Module reference
 
-This document describes the module interface of GRKit 2.0: the manifest, the settings, the registrations, the services, the binary rules, the limits, and the errors.
+This document describes the module interface of GRKit: the manifest, the settings, the registrations, the services, the binary rules, the limits, and the errors.
+The interface is experimental in GRKit 1.x. A minor release can change it, and its changelog then says so.
 [modules.md](modules.md) shows how to write, test, build, and install a module.
 [Modules](architecture.md#modules) in the architecture describes how the installer links modules.
 
@@ -36,7 +37,7 @@ The manifest is TOML. An unknown key is an error.
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `id` | string | required | The module ID: 1 to 8 characters `A`-`Z`, `0`-`9`, or `_`. The file name is `<id>.GRM`, and each setting name starts with it. |
-| `version` | integer | required | The module version. The build writes it into the file header. GRKit 2.0 does not read it. |
+| `version` | integer | required | The module version. The build writes it into the file header. GRKit does not read it. |
 | `sources` | array of strings | `[]` | The C source files, relative to the manifest. |
 | `tiles` | array of strings | `[]` | The tile files, relative to the manifest. Each is a 40 x 40 PNG. At most 64. |
 | `uses` | array of strings | `[]` | The settings of other modules or of the core that the module uses: `MODULE.KEY`, or `?MODULE.KEY` for an optional one. At most 8. See [Used settings](#used-settings). |

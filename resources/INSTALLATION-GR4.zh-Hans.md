@@ -27,7 +27,7 @@ GR IV Monochrome 运行 GR IV 的固件，但显示自己的版本号：固件 1
 
 安装包只包含 `SCRIPT` 文件夹。GRKit 把设置、效果和你加入的模块保存在 `GRKIT` 文件夹中，所以更新后它们仍在。
 
-GRKit 2 不读取 GRKit 1 的设置。从 GRKit 1 更新后，删除 `SCRIPT/PLUGINS` 文件夹。
+要保留 GRKit 1.2 的设置和效果，第 2 步请合并文件，不要替换。在访达中，按住 Option 键并点击“合并”。首次开机时，GRKit 把它们复制到 `GRKIT` 文件夹。之后可以删除 `SCRIPT/PLUGINS` 文件夹。
 
 ## 使用
 

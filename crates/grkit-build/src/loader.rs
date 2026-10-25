@@ -8,7 +8,7 @@ use grkit_core::{
     artwork::{modules_pixels, off_pixels, plugins_pixels, version_pixels},
     runtime::{
         icon_stride, HOST_ICON_COUNT, ICONS_PER_CHUNK, LINUX_DATA_DIRECTORY, LINUX_DIRECTORY,
-        MAX_CHUNKS, MAX_COUNT,
+        LINUX_LEGACY_DIRECTORY, MAX_CHUNKS, MAX_COUNT,
     },
 };
 use std::fmt::Write;
@@ -179,6 +179,13 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         ("STATE_TMP_PATH", LINUX_DATA_DIRECTORY, "/STATE.TMP"),
         ("REPORT_PATH", LINUX_DATA_DIRECTORY, "/REPORT.TXT"),
         ("SAFE_PATH", LINUX_DATA_DIRECTORY, "/SAFE"),
+        ("LEGACY_STATE_PATH", LINUX_LEGACY_DIRECTORY, "/STATE.TXT"),
+        (
+            "LEGACY_STATE_TMP_PATH",
+            LINUX_LEGACY_DIRECTORY,
+            "/STATE.TMP",
+        ),
+        ("LEGACY_EFFECTS_PATH", LINUX_LEGACY_DIRECTORY, "/EFFECTS"),
     ];
     for (name, directory, suffix) in paths {
         writeln!(
@@ -197,6 +204,18 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
             .map(|key| grkit_core::runtime::state_key_id(&key.name).to_string())
             .collect::<Vec<_>>()
             .join(",")
+    )?;
+    // The state keys of GRKit 1.2 and the current keys of their values.
+    let legacy = grkit_core::runtime::legacy_state_ids();
+    let list = |ids: &mut dyn Iterator<Item = u32>| {
+        ids.map(|id| format!("{id}U")).collect::<Vec<_>>().join(",")
+    };
+    writeln!(
+        result,
+        "#define LEGACY_STATE_COUNT {}U\n#define LEGACY_STATE_FROM {}\n#define LEGACY_STATE_TO {}",
+        legacy.len(),
+        list(&mut legacy.iter().map(|(old, _)| *old)),
+        list(&mut legacy.iter().map(|(_, new)| *new))
     )?;
     writeln!(
         result,
