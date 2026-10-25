@@ -229,6 +229,10 @@ menu_native_page_event:
     moveq r2, #0
     streq r2, [r0, #GRKIT_HOST_ACTIVE]
     streq r2, [r0, #GRKIT_HOST_PREVIEW]
+    /* A change of the saved effect (GRKIT_STATE_CHANGED). */
+    ldreq r2, [r0, #GRKIT_HOST_STATE_CHANGES]
+    addeq r2, r2, #1
+    streq r2, [r0, #GRKIT_HOST_STATE_CHANGES]
     pop {r0, r2}
     mov r12, sp
     ldr pc, =HOOK_MENU_NATIVE_PAGE_EVENT_RESUME

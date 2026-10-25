@@ -20,11 +20,8 @@
 #endif
 extern volatile u32 *framing_header(void);
 
-static u32 owned(volatile u32 *h,u32 record) {
-    u32 i,base=h[GRKIT_HOST_RECORDS/4];
-    for(i=0;i<h[GRKIT_HOST_COUNT/4];++i) if(record==base+i*GRKIT_RECORD_SIZE) return 1;
-    return 0;
-}
+#include "tone.h"
+static u32 owned(volatile u32 *h,u32 record) { return record_index(h,record)<GRKIT_TEXT_RECORDS; }
 #ifdef FW_YCBCR_CALC
 /* Features of an owned record, or 0 for a native one. */
 static u32 record_features(volatile u32 *h,u32 record) {
@@ -44,14 +41,18 @@ static u32 record_features(volatile u32 *h,u32 record) {
 void picture_post(u32 object,u32 context,u32 settings) {
     volatile u32 *h=framing_header();
     u32 record=WORD(context,8),features,i,j,k;
-    int csp[9],sum;
+    int csp[9],post[9],sum;
     PICTURE_YCBCR_CALC(object,context);
     features=record_features(h,record);
     if(features&GRKIT_FEATURE_POST) {
-        for(i=0;i<9;++i) csp[i]=(int)(WORD(object,i*4)<<23)>>23;
+        /* The live view builds this matrix each frame: read each word once. */
+        for(i=0;i<9;++i) {
+            csp[i]=(int)(WORD(object,i*4)<<23)>>23;
+            post[i]=(s16)HALF(record,GRKIT_RECORD_POST+i*2);
+        }
         for(i=0;i<3;++i) for(j=0;j<3;++j) {
             sum=0;
-            for(k=0;k<3;++k) sum+=csp[i*3+k]*(s16)HALF(record,GRKIT_RECORD_POST+(k*3+j)*2);
+            for(k=0;k<3;++k) sum+=csp[i*3+k]*post[k*3+j];
             sum=(sum+4096)>>13;
             WORD(object,(i*3+j)*4)=(u32)(sum<-256 ? -256 : sum>255 ? 255 : sum);
         }

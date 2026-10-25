@@ -1450,5 +1450,49 @@ int main(void)
         *page_at(guides + PAGE_FLAGS) &= ~CHOICE_OPTIONS;
         settings_memory[0] = 3;
     }
+    /* Each change of a saved selection counts in GRKIT_HOST_STATE_CHANGES,
+       the one word that the resident loader polls. A store of the value that
+       the setting has counts nothing. */
+    {
+        volatile u32 *h = test_header;
+        const u32 grain = h[GRKIT_HOST_GRAIN / 4], style = GUIDE_STYLE;
+        u32 n = h[GRKIT_HOST_STATE_CHANGES / 4];
+        setting_store(h, GRKIT_CORE_GRAIN, grain == 2 ? 1 : 2);
+        assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
+        setting_store(h, GRKIT_CORE_GRAIN, setting_value(h, GRKIT_CORE_GRAIN));
+        assert(h[GRKIT_HOST_STATE_CHANGES / 4] == n);
+        setting_store(h, GRKIT_CORE_GRAIN, grain);
+        assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
+        tone_store(h, 1);
+        assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
+        tone_store(h, 0);
+        assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
+        setting_store(h, 0, style == 1 ? 2 : 1);
+        assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
+        setting_store(h, 0, setting_value(h, 0));
+        assert(h[GRKIT_HOST_STATE_CHANGES / 4] == n);
+        setting_store(h, 0, style);
+        assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
+    }
+    /* record_index finds a record by its address as the scan over the
+       records did: each record start, and no other address. */
+    {
+        volatile u32 *h = test_header;
+        const u32 count = h[GRKIT_HOST_COUNT / 4], records = h[GRKIT_HOST_RECORDS / 4];
+        h[GRKIT_HOST_COUNT / 4] = GRKIT_TEXT_RECORDS;
+        h[GRKIT_HOST_RECORDS / 4] = 0x59005000;
+        for (u32 at = 0x59005000 - 0x2000; at < 0x59005000 + (GRKIT_TEXT_RECORDS + 1) * GRKIT_RECORD_SIZE; at += 4) {
+            u32 expected = GRKIT_TEXT_RECORDS;
+            for (u32 i = 0; i < GRKIT_TEXT_RECORDS; ++i)
+                if (at == 0x59005000 + i * GRKIT_RECORD_SIZE) expected = i;
+            assert(record_index(h, at) == expected);
+        }
+        assert(record_index(h, 0) == GRKIT_TEXT_RECORDS);
+        h[GRKIT_HOST_COUNT / 4] = 3;
+        assert(record_index(h, 0x59005000 + 2 * GRKIT_RECORD_SIZE) == 2);
+        assert(record_index(h, 0x59005000 + 3 * GRKIT_RECORD_SIZE) == GRKIT_TEXT_RECORDS);
+        h[GRKIT_HOST_COUNT / 4] = count;
+        h[GRKIT_HOST_RECORDS / 4] = records;
+    }
     return 0;
 }

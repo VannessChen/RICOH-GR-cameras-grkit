@@ -6,22 +6,30 @@
 /* A byte of a plane. */
 #define BYTE(p,o) (GRKIT_BYTES((p)+(o))[0])
 
-/* Longest blurred line of a date stamp mask. The line copy lives on the stack,
-   because the code region is read-only. */
+/* Longest blurred line of a date stamp mask, and the largest blur radius
+   (look_halo). The line copy lives on the stack, because the code region is
+   read-only. */
 #define BLUR_WIDTH 640U
+#define BLUR_RADIUS 32U
 
-/* Spread a mask line in place: three box passes, radius r. */
+/* Spread a mask line in place: three box passes, radius r. A line of zeros
+   stays zero. The copy repeats the end values for r + 1 places on each side,
+   so the window needs no test at the ends. */
 static void blur_line(u8 *line,u32 step,u32 n,u32 r) {
-    u16 copy[BLUR_WIDTH];
-    u32 i,pass,sum,window=2*r+1,reciprocal=divide(65536+window/2,window);
+    u16 copy[BLUR_WIDTH+2*BLUR_RADIUS+2], *at=copy+BLUR_RADIUS+1;
+    u32 i,pass,sum,window=2*r+1,reciprocal;
+    for(i=0;i<n && !line[i*step];++i) {}
+    if(i==n || r>BLUR_RADIUS) return;
+    reciprocal=divide(65536+window/2,window);
     for(pass=0;pass<3;++pass) {
-        for(i=0;i<n;++i) copy[i]=line[i*step];
-        sum=copy[0]*(r+1);
-        for(i=1;i<=r;++i) sum+=copy[i<n ? i : n-1];
+        for(i=0;i<n;++i) at[i]=line[i*step];
+        for(i=1;i<=r+1;++i) { at[-(int)i]=at[0]; at[n-1+i]=at[n-1]; }
+        sum=at[0]*(r+1);
+        for(i=1;i<=r;++i) sum+=at[i];
         for(i=0;i<n;++i) {
             line[i*step]=(u8)((sum*reciprocal)>>16);
-            sum+=copy[i+r+1<n ? i+r+1 : n-1];
-            sum-=copy[i>=r ? i-r : 0];
+            sum+=at[i+r+1];
+            sum-=at[(int)i-(int)r];
         }
     }
 }
@@ -243,33 +251,54 @@ static u32 screen(u32 v,u32 l) { return v+((((255-v)*l)*257+32768)>>16); }
 #define DOTS_B 100
 /* Add the stamp light to one pixel pair that shares Cb and Cr. */
 static void light_pair(const Plane *p,u32 x,u32 y,const u32 *core,const u32 *halo,u32 mono,u32 chroma,u32 look) {
-    u32 i,yv[2],crow=chroma_row(p,y);
-    int cb=(int)BYTE(crow,x)-128, cr=(int)BYTE(crow,x+1)-128, sb=0, sr=0;
+    /* A picture byte store may alias the plane and the light, so the pair
+       reads them into locals first. A stamp lights thousands of pairs. */
+    volatile u8 *luma=GRKIT_BYTES(p->y+y*p->pitch+x), *crow=GRKIT_BYTES(chroma_row(p,y)+x);
+    const u32 k[2]={core[0],core[1]}, h[2]={halo[0],halo[1]};
+    u32 i,yv[2];
+    int cb=(int)crow[0]-128, cr=(int)crow[1]-128, sb=0, sr=0;
+    /* The chroma terms of the pair, for both pixels. */
+    int rc=(91881*cr)>>16, gc=(22554*cb+46802*cr)>>16, bc=(116130*cb)>>16;
     for(i=0;i<2;++i) {
-        u32 lr=core[i]+((halo[i]*180)>>8), lg=((core[i]*150)>>8)+((halo[i]*40)>>8), lb=(core[i]*40)>>8;
-        if(look==LOOK_DOTS) { lg=((core[i]*235)>>8)+((halo[i]*150)>>8); lb=((core[i]*100)>>8)+((halo[i]*20)>>8); }
-        u32 luma=BYTE(p->y,y*p->pitch+x+i), r, g, b;
+        u32 lr=k[i]+((h[i]*180)>>8), lg, lb, v=luma[i], r, g, b;
         if(lr>255) lr=255;
         /* White light: the red channel holds the full core and halo. */
-        if(mono) { yv[i]=screen(luma,lr); continue; }
-        r=screen(clamp255((int)luma+((91881*cr)>>16)),lr);
-        g=screen(clamp255((int)luma-((22554*cb+46802*cr)>>16)),lg);
-        b=screen(clamp255((int)luma+((116130*cb)>>16)),lb);
+        if(mono) { yv[i]=screen(v,lr); continue; }
+        if(look==LOOK_DOTS) { lg=((k[i]*235)>>8)+((h[i]*150)>>8); lb=((k[i]*100)>>8)+((h[i]*20)>>8); }
+        else { lg=((k[i]*150)>>8)+((h[i]*40)>>8); lb=(k[i]*40)>>8; }
+        r=screen(clamp255((int)v+rc),lr);
+        g=screen(clamp255((int)v-gc),lg);
+        b=screen(clamp255((int)v+bc),lb);
         if(look==LOOK_DOTS) {
-            u32 a=(core[i]*210)>>8;
+            u32 a=(k[i]*210)>>8;
             r=(r*(256-a)+DOTS_R*a)>>8; g=(g*(256-a)+DOTS_G*a)>>8; b=(b*(256-a)+DOTS_B*a)>>8;
         }
         yv[i]=(19595*r+38470*g+7471*b+32768)>>16;
         sb+=(int)(-11059*(int)r-21709*(int)g+32768*(int)b);
         sr+=(int)(32768*(int)r-27439*(int)g-5329*(int)b);
     }
-    BYTE(p->y,y*p->pitch+x)=(u8)yv[0];
-    BYTE(p->y,y*p->pitch+x+1)=(u8)yv[1];
+    luma[0]=(u8)yv[0];
+    luma[1]=(u8)yv[1];
     if(!mono && chroma) {
-        BYTE(crow,x)=(u8)clamp255(128+((sb+65536)>>17));
-        BYTE(crow,x+1)=(u8)clamp255(128+((sr+65536)>>17));
+        crow[0]=(u8)clamp255(128+((sb+65536)>>17));
+        crow[1]=(u8)clamp255(128+((sr+65536)>>17));
     }
 }
+/* The horizontal blend of one mask row for each of `cols` picture columns,
+   core then halo: column x samples cells x / f and the next one, with the
+   weight (x mod f) * step. */
+static void blend_row(u8 *out,const u8 *core,const u8 *halo,u32 mw,u32 f,u32 step,u32 cols) {
+    u32 x, cx=0, fx=0;
+    for(x=0;x<cols;++x) {
+        u32 at=cx<mw ? cx : mw-1, next=at+1<mw ? at+1 : at, tx=fx*step;
+        out[x]=(u8)((core[at]*(65536-tx)+core[next]*tx)>>16);
+        out[cols+x]=(u8)((halo[at]*(65536-tx)+halo[next]*tx)>>16);
+        if(++fx==f) { fx=0; ++cx; }
+    }
+}
+/* The scratch bytes of a stamp: the core and halo masks, then for a mask
+   that scales up (ss 1), the blends of two rows of each (blend_row). */
+static u32 stamp_bytes(u32 mw,u32 mh,u32 f,u32 ss) { return mw*mh*2+(ss==1 ? 4*mw*f : 0); }
 /* A rendered stamp mask and where it lies on its picture: one cell spans
    f / ss pixels, and cell (0,0) is at pixel (ox, oy). */
 typedef struct { const u8 *core,*halo; u32 mw,mh,f,ss; int ox,oy; u32 look; } Stamp;
@@ -280,9 +309,9 @@ typedef struct { const u8 *core,*halo; u32 mw,mh,f,ss; int ox,oy; u32 look; } St
    several pixels instead. Returns 1 and describes the mask in `out` when it drew. */
 static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 look,Stamp *out) {
     u32 width=p->right-p->left, height=p->bottom-p->top, size, f, ss=1, m, pad, cw, mw, mh, margin, rise;
-    u32 i, x, y, sx, sy, dx, dy, step, total;
+    u32 i, x, y, sy, dy, step, total;
     int caret;
-    u8 *core=scratch, *halo;
+    u8 *core=scratch, *halo, lit[BLUR_WIDTH];
     size=((width<height ? width : height)*look_size(look))>>16;
     if(size<look_least(look)) size=look_least(look);
     for(i=0;i<2;++i) {
@@ -294,9 +323,9 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 
         total=text_width(text,n,m,look);
         cw=total+1;
         mw=cw+2*pad; mh=m+2*pad;
-        if(mw<=BLUR_WIDTH && mw*mh*2<=GRKIT_PLANE_SCRATCH) break;
+        if(mw<=BLUR_WIDTH && stamp_bytes(mw,mh,f,ss)<=GRKIT_PLANE_SCRATCH) break;
     }
-    if(mw>BLUR_WIDTH || mh>BLUR_WIDTH || mw*mh*2>GRKIT_PLANE_SCRATCH) return 0;
+    if(mw>BLUR_WIDTH || mh>BLUR_WIDTH || stamp_bytes(mw,mh,f,ss)>GRKIT_PLANE_SCRATCH) return 0;
     look_margins(look,width<height ? width : height,size,&margin,&rise);
     if((((mw-pad)*f)>>(ss-1))+margin>width || (((mh-pad)*f)>>(ss-1))+rise>height) return 0;
     halo=core+mw*mh;
@@ -312,6 +341,14 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 
         if(look!=LOOK_DOTS) blur_line(core+x,mw,mh,1);
         blur_line(halo+x,mw,mh,look_halo(m,look));
     }
+    /* Whether each mask row has light, in the core or in the halo. A pixel
+       that samples only empty rows, or only empty cells, stays as it is. */
+    for(y=0;y<mh;++y) {
+        const u8 *c=core+y*mw, *h=halo+y*mw;
+        u32 any=0;
+        for(x=0;x<mw && !any;++x) any=c[x]|h[x];
+        lit[y]=(u8)(any!=0);
+    }
     if(ss==2) {
         /* Pixel origin of the mask, on an even column so CbCr pairs line up. */
         int ox=(int)p->right-(int)margin-(int)((mw-pad)>>1), oy=(int)p->bottom-(int)rise-(int)((mh-pad)>>1);
@@ -320,7 +357,7 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 
         for(y=0;2*y+1<mh;++y) {
             int py=oy+(int)y;
             u32 chroma=!p->half || !(py&1);
-            if(py<(int)p->top || py>=(int)p->bottom) continue;
+            if(py<(int)p->top || py>=(int)p->bottom || !(lit[2*y] | lit[2*y+1])) continue;
             for(x=0;2*x+3<mw;x+=2) {
                 u32 c[2],l[2],k,any=0;
                 for(k=0;k<2;++k) {
@@ -341,38 +378,43 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 
     /* Pixel origin of the mask, on an even column so CbCr pairs line up. */
     {
         int ox=(int)p->right-(int)margin-(int)((mw-pad)*f), oy=(int)p->bottom-(int)rise-(int)((mh-pad)*f);
+        u32 cols=mw*f;
+        /* The horizontal blends of the two mask rows that a picture row
+           samples, for each column: f picture rows sample the same pair, so
+           each row of the pair blends once (`top`, `bottom`). They follow the
+           masks in the scratch. */
+        u8 *top=halo+mw*mh, *bottom=top+2*cols;
+        u32 shown=0xffffffffU;
         ox&=~1;
         *out=(Stamp){core,halo,mw,mh,f,ss,ox,oy,look};
         step=divide(65536,f);
         for(y=0,sy=0,dy=0;y<mh*f;++y) {
             int py=oy+(int)y;
             u32 ty=dy*step, sy1=sy+1<mh ? sy+1 : sy, chroma=!p->half || !(py&1);
-            if(py>=(int)p->top && py<(int)p->bottom)
-                for(x=0,sx=0,dx=0;x<mw*f;x+=2) {
+            if(py>=(int)p->top && py<(int)p->bottom && (lit[sy] || lit[sy1])) {
+                if(shown!=sy) {
+                    blend_row(top,core+sy*mw,halo+sy*mw,mw,f,step,cols);
+                    blend_row(bottom,core+sy1*mw,halo+sy1*mw,mw,f,step,cols);
+                    shown=sy;
+                }
+                for(x=0;x<cols;x+=2) {
                     u32 c[2],l[2],k,any=0;
-                    for(k=0;k<2;++k) {
-                        u32 ux=x+k, cx=sx, fx=dx+k, cx1;
-                        if(fx>=f) { fx-=f; ++cx; }
-                        if(cx>=mw) cx=mw-1;
-                        cx1=cx+1<mw ? cx+1 : cx;
-                        {
-                            u32 tx=fx*step;
-                            u32 a=core[sy*mw+cx],b=core[sy*mw+cx1],cc=core[sy1*mw+cx],d=core[sy1*mw+cx1];
-                            u32 e=halo[sy*mw+cx],fh=halo[sy*mw+cx1],gg=halo[sy1*mw+cx],hh=halo[sy1*mw+cx1];
-                            c[k]=(((a*(65536-tx)+b*tx)>>16)*(65536-ty)+((cc*(65536-tx)+d*tx)>>16)*ty)>>16;
-                            /* The blur lowers the peak of thin strokes: an LED core saturates. */
-                            c[k]=(c[k]*320)>>8; if(c[k]>255) c[k]=255;
-                            l[k]=(((e*(65536-tx)+fh*tx)>>16)*(65536-ty)+((gg*(65536-tx)+hh*tx)>>16)*ty)>>16;
-                        }
+                    for(k=0;k<2 && x+k<cols;++k) {
+                        u32 ct=top[x+k], cb=bottom[x+k], ht=top[cols+x+k], hb=bottom[cols+x+k];
+                        if(!(ct|cb|ht|hb)) { c[k]=l[k]=0; continue; }
+                        c[k]=(ct*(65536-ty)+cb*ty)>>16;
+                        /* The blur lowers the peak of thin strokes: an LED core saturates. */
+                        c[k]=(c[k]*320)>>8; if(c[k]>255) c[k]=255;
+                        l[k]=(ht*(65536-ty)+hb*ty)>>16;
                         any|=c[k]|l[k];
-                        (void)ux;
                     }
+                    if(k<2) c[1]=l[1]=0;
                     {
                         int px=ox+(int)x;
                         if(any && px>=(int)p->left && px+1<(int)p->right) light_pair(p,(u32)px,(u32)py,c,l,mono,chroma,look);
                     }
-                    dx+=2; while(dx>=f) { dx-=f; ++sx; }
                 }
+            }
             if(++dy==f) { dy=0; ++sy; }
         }
     }

@@ -8,7 +8,7 @@ use crate::{camera::Camera, Files};
 
 pub use crate::abi::{
     HEADER_REFERENCE, HOST_ACTIVE, HOST_CAPABILITIES, HOST_COUNT, HOST_FRAME_RATIO,
-    HOST_HEADER_SIZE as HEADER_SIZE, HOST_PARAMETER_CHANGES, HOST_RECORDS, PICTURE_SCRATCH,
+    HOST_HEADER_SIZE as HEADER_SIZE, HOST_RECORDS, HOST_STATE_CHANGES, PICTURE_SCRATCH,
     RECORD_CODE, RECORD_PARAMETERS, RECORD_SIZE, TAIL_SIZE,
 };
 use crate::capabilities::{self, StateFile};
@@ -390,6 +390,15 @@ fn state_script() -> Vec<String> {
     // state file in the data folder, as at the first start after an update
     // from GRKit 1.2, INSTALL restored the old file, and the loader saves at
     // the first poll.
+    //
+    // The core counts each change of a saved selection in one header word
+    // (GRKIT_STATE_CHANGED), so each poll reads that word only: the
+    // interpreter spends thousands of instructions on each line, more with
+    // each variable of the script. The loader saves when two polls in a row
+    // read the same count and the file does not have it yet. A series of
+    // changes, such as Fn adjustments, then writes the card once after its
+    // last change.
+    let changes = word(HOST_STATE_CHANGES);
     let mut lines: Vec<String> = vec![
         ":resident".into(),
         "stateok = 1".into(),
@@ -397,46 +406,27 @@ fn state_script() -> Vec<String> {
         format!("if result = 0 foldercreate '{DATA_FOLDER}'"),
         format!("foldersearch '{DATA_FOLDER}'"),
         "if result = 0 stateok = 0".into(),
-        "call snapshot".into(),
-        "psaved = pchanges".into(),
-        "plast = pchanges".into(),
-        "msaved = mchanges".into(),
-        "mlast = mchanges".into(),
+        format!("changes = {changes}"),
+        "saved = changes".into(),
+        "last = changes".into(),
         format!("filesearch '{}'", state_path(StateFile::Main, "TXT")),
-        "if result = 0 psaved = pchanges + 1".into(),
-    ];
-    for (i, _) in keys.clone() {
-        lines.extend([
-            format!("saved{i} = value{i}"),
-            format!("last{i} = value{i}"),
-        ]);
-    }
-    lines.extend([
+        "if result = 0 saved = changes - 1".into(),
         ":watch".into(),
         format!("mpause {STATE_POLL_MS}"),
-        "call snapshot".into(),
-        "stable = 1".into(),
-    ]);
-    // Save only when two polls in a row read the same selections. A series of
-    // changes, such as Fn adjustments, then writes the card once after its
-    // last change.
-    for (i, _) in keys.clone() {
-        lines.extend([
-            format!("if value{i} <> last{i} stable = 0"),
-            format!("last{i} = value{i}"),
-        ]);
-    }
-    lines.extend([
-        "if pchanges <> plast stable = 0".into(),
-        "plast = pchanges".into(),
-        "if mchanges <> mlast stable = 0".into(),
-        "mlast = mchanges".into(),
-        "if stable = 0 goto watch".into(),
-    ]);
+        format!("changes = {changes}"),
+        "if changes <> last goto watch_moved".into(),
+        "if changes = saved goto watch".into(),
+        "stamp = changes".into(),
+    ];
     for file in StateFile::ALL {
         lines.push(format!("call save_{}", label(file)));
     }
-    lines.push("goto watch".into());
+    lines.extend([
+        "goto watch".into(),
+        ":watch_moved".into(),
+        "last = changes".into(),
+        "goto watch".into(),
+    ]);
 
     // Save each file after a change of one of its keys. `filerename` cannot
     // replace a file, and its result is 0 for success and failure, so each
@@ -451,17 +441,7 @@ fn state_script() -> Vec<String> {
         lines.extend([
             format!(":save_{name}"),
             format!("if stateok = 0 goto {end}"),
-            "changed = 0".into(),
-        ]);
-        for (i, _) in &own {
-            lines.push(format!("if value{i} <> saved{i} changed = 1"));
-        }
-        if main {
-            lines.push("if pchanges <> psaved changed = 1".into());
-            lines.push("if mchanges <> msaved changed = 1".into());
-        }
-        lines.extend([
-            format!("if changed = 0 goto {end}"),
+            "call snapshot".into(),
             format!("filedelete '{temporary}'"),
             format!("filecreate sfh '{temporary}'"),
             format!("if sfh < 0 goto {end}"),
@@ -544,13 +524,7 @@ fn state_script() -> Vec<String> {
             format!("filesearch '{state}'"),
             format!("if result = 0 goto {end}"),
         ]);
-        for (i, _) in &own {
-            lines.push(format!("saved{i} = value{i}"));
-        }
-        if main {
-            lines.extend(["psaved = pchanges".into(), "msaved = mchanges".into()]);
-        }
-        lines.extend([format!(":{end}"), "return".into()]);
+        lines.extend(["saved = stamp".into(), format!(":{end}"), "return".into()]);
     }
 
     // The current selections. The effect is the ImageTone code of the active
@@ -575,13 +549,6 @@ fn state_script() -> Vec<String> {
             lines.push(format!("value{i} = {}", word(offset)));
         }
     }
-    // The menu counts each adjustment change, and the core each change of a
-    // module setting.
-    lines.push(format!("pchanges = {}", word(HOST_PARAMETER_CHANGES)));
-    lines.extend([
-        "mchanges = 0".into(),
-        "if modulewords >= 2 mchanges = modulecode[1]".into(),
-    ]);
     lines.push("return".into());
 
     lines
@@ -821,10 +788,11 @@ mod tests {
         assert_eq!(script.matches("if pindex >= pcount goto").count(), 1);
     }
 
-    /// A series of changes writes the card once: the watch loop calls the
-    /// saves only when two polls in a row read the same selections. The start
-    /// sets each variable that the loop reads, because an unset variable is a
-    /// runtime error.
+    /// A series of changes writes the card once: each poll reads only the
+    /// change count of the core, and the watch loop calls the saves only when
+    /// two polls in a row read the same count and the file does not have it.
+    /// The start sets each variable that the loop reads, because an unset
+    /// variable is a runtime error.
     #[test]
     fn the_resident_script_saves_after_the_selections_settle() {
         let script = state_script();
@@ -834,27 +802,32 @@ mod tests {
                 .position(|l| l == line)
                 .unwrap_or_else(|| panic!("{line}"))
         };
-        let poll = at(&format!("mpause {STATE_POLL_MS}"));
-        let settle = at("if stable = 0 goto watch");
-        assert!(at(":watch") < poll && poll < at("stable = 1") && at("stable = 1") < settle);
-        for file in StateFile::ALL {
-            assert!(settle < at(&format!("call save_{}", label(file))));
-        }
+        let read = format!("changes = registry[{}]", HOST_STATE_CHANGES / 4);
         let (start, watch) = (at(":resident"), at(":watch"));
-        let mut read = vec!["plast".to_string()];
-        read.extend((0..capabilities::state_keys().len()).map(|i| format!("last{i}")));
-        for name in read {
-            let compare = script[poll..settle]
-                .iter()
-                .position(|l| l.contains(&format!("<> {name} ")))
-                .unwrap_or_else(|| panic!("{name}"));
-            assert!(script[poll..poll + compare]
-                .iter()
-                .all(|l| !l.starts_with(&format!("{name} ="))));
+        let poll = at(&format!("mpause {STATE_POLL_MS}"));
+        assert_eq!(script[poll + 1], read);
+        let moved = at("if changes <> last goto watch_moved");
+        let settled = at("if changes = saved goto watch");
+        assert!(watch < poll && poll < moved && moved < settled);
+        assert_eq!(script[settled + 1], "stamp = changes");
+        for file in StateFile::ALL {
+            assert!(settled < at(&format!("call save_{}", label(file))));
+        }
+        // An idle poll runs four lines: the pause, the read, two compares.
+        assert_eq!(settled - poll + 1, 4);
+        assert_eq!(script[at(":watch_moved") + 1], "last = changes");
+        for name in ["last", "saved"] {
             assert!(script[start..watch]
                 .iter()
                 .any(|l| l.starts_with(&format!("{name} ="))));
         }
+        assert!(script[start..watch].contains(&read));
+        // A save reads the selections, and records the count that it saved.
+        for file in StateFile::ALL {
+            let save = at(&format!(":save_{}", label(file)));
+            assert_eq!(script[save + 2], "call snapshot");
+        }
+        assert!(script.iter().any(|l| l == "saved = stamp"));
     }
 
     #[test]
@@ -985,9 +958,8 @@ mod tests {
         assert!(opens.iter().all(|l| l.contains("MODULE.BIN")), "{opens:?}");
         assert!(!script.contains("SCRIPT\\PLUGINS"));
         let state = state_script();
-        let start = at(&state, "call snapshot");
+        let start = at(&state, "saved = changes");
         assert!(start < at(&state, ":watch"));
-        assert_eq!(state[start + 1], "psaved = pchanges");
     }
 
     /// INSTALL restores the state of GRKit 1.2 when the data folder has no
@@ -995,9 +967,9 @@ mod tests {
     #[test]
     fn the_loader_saves_at_once_without_a_state_file() {
         let state = state_script();
-        let force = at(&state, "if result = 0 psaved = pchanges + 1");
+        let force = at(&state, "if result = 0 saved = changes - 1");
         assert_eq!(state[force - 1], "filesearch 'C:\\GRKIT\\STATE.TXT'");
-        assert!(at(&state, "psaved = pchanges") < force);
+        assert!(at(&state, "saved = changes") < force);
         assert!(force < at(&state, ":watch"));
     }
 

@@ -12,11 +12,29 @@
 #endif
 
 // Return Z=1 only for an owned record pointer in r0. Preserve all registers.
+// The live view asks several times a frame. The active record, a record
+// whenever it is not 0, is the usual answer, and a pointer outside the
+// records, such as a native one, needs no scan.
+.if GRKIT_RECORD_SIZE != 17 << 8
+.error "The record end is count x 17 x 256"
+.endif
 .Lowned_record:
     push {r0-r3, lr}
     ldr r1, =GRKIT_HEADER_REFERENCE
+    ldr r3, [r1, #GRKIT_HOST_ACTIVE]
+    cmp r3, #0
+    beq owned_scan
+    cmp r0, r3
+    beq owned_done
+owned_scan:
     ldr r2, [r1, #GRKIT_HOST_COUNT]
     ldr r1, [r1, #GRKIT_HOST_RECORDS]
+    cmp r0, r1
+    blo owned_no
+    add r3, r2, r2, lsl #4
+    add r3, r1, r3, lsl #8
+    cmp r0, r3
+    bhs owned_no
     cmp r2, #0
     beq owned_no
 owned_loop:
@@ -42,18 +60,23 @@ owned_done:
 // path has not rebuilt the object since (GAMMA_BUILT is 0). Else store the key
 // of these inputs. Preserve all registers.
 .Lgamma_cached:
-    push {r0-r7, lr}
+    push {r0-r11, lr}
     ldr r3, =0x01000193
     ldrb r4, [r2, #0x89]
     eor r4, r4, r1
     mla r4, r4, r3, r0
     add r5, r0, #0x200
+    // Eight words for each loop test: the live view hashes each frame.
 gamma_hash:
-    ldm r0!, {r1, r2, r6, r7}
+    ldm r0!, {r1, r2, r6, r7, r8, r9, r10, r11}
     mla r4, r4, r3, r1
     mla r4, r4, r3, r2
     mla r4, r4, r3, r6
     mla r4, r4, r3, r7
+    mla r4, r4, r3, r8
+    mla r4, r4, r3, r9
+    mla r4, r4, r3, r10
+    mla r4, r4, r3, r11
     cmp r0, r5
     bne gamma_hash
     // A key is never 0, which marks no composition.
@@ -66,7 +89,7 @@ gamma_hash:
     str r4, [r1, #GRKIT_HOST_GAMMA_KEY]
     cmp r0, #0
     cmpeq r2, r4
-    pop {r0-r7, pc}
+    pop {r0-r11, pc}
 
 // Forget the key: a native custom curve replaces the composition.
 .Lgamma_forget:

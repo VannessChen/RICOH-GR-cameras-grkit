@@ -165,13 +165,18 @@ fields!(HEADER_FIELDS {
     /// 2 away. 3: ADJ exited from GRKit, so the next ADJ opens GRKit. 4: MENU
     /// or OK on GRKit passed the event that closes ADJ to the native list.
     HOST_RETURN = 252, 4;
+    /// Number of changes of the saved selections: the effect, CORE.ASPECT,
+    /// CORE.GRAIN, the Fn adjustments, and the module settings
+    /// (GRKIT_STATE_CHANGED). The resident loader polls only this word and
+    /// saves the state file after it changes.
+    HOST_STATE_CHANGES = 256, 4;
     /// Number of module plane filters in GRKIT_HOST_MODULE_FILTERS. INSTALL
     /// writes it.
-    HOST_MODULE_FILTER_COUNT = 256, 4;
+    HOST_MODULE_FILTER_COUNT = 260, 4;
     /// Two words for each module plane filter, in stage order: its apply
     /// function, and its setting handle in the low half with its stage in the
     /// high half.
-    HOST_MODULE_FILTERS = 260, HOST_MODULE_SETTINGS - 260;
+    HOST_MODULE_FILTERS = 264, HOST_MODULE_SETTINGS - 264;
     /// Address of the module settings table, or 0 (runtime/settings.h).
     /// INSTALL writes it.
     HOST_MODULE_SETTINGS = HOST_MODULE_PREVIEW - 4, 4;
@@ -433,6 +438,12 @@ pub fn header() -> String {
     )
     .unwrap();
     writeln!(out, "#define GRKIT_ICON_MODULE_TILE(n) (0x7000U+(n))").unwrap();
+    // A change of a saved selection: the loader saves after the count changes.
+    writeln!(
+        out,
+        "#define GRKIT_STATE_CHANGED(h) (++(h)[GRKIT_HOST_STATE_CHANGES/4])"
+    )
+    .unwrap();
     writeln!(out, "#define GRKIT_HOST_MAGIC_VALUE {HOST_MAGIC_VALUE:#x}").unwrap();
     writeln!(out, "#define GRKIT_HOST_VERSION_VALUE {HOST_VERSION_VALUE}").unwrap();
     table(&mut out, HEADER_FIELDS, false);

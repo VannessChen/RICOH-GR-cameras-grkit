@@ -13,14 +13,24 @@
    (runtime/effects.h). The page gives only its title. The includer defines u32, u16, the header fields,
    and MENU_TEXT (runtime/menu.c), and includes runtime/effects.h first. */
 
+/* The index of record pointer `record`, or GRKIT_TEXT_RECORDS for a pointer
+   that is not a record, such as a native one. The records are
+   GRKIT_RECORD_SIZE = 17 x 256 bytes apart, and the runtime has no division:
+   for an offset of at most 40 records, (offset / 256 x 3856) >> 16 is
+   offset / GRKIT_RECORD_SIZE exactly, and the product checks the rest. The
+   live view asks this several times a frame. */
+_Static_assert(GRKIT_RECORD_SIZE==17U*256U && GRKIT_TEXT_RECORDS<4096U/17U,"record_index divides by 17 x 256");
+static __attribute__((unused)) u32 record_index(volatile u32 *h,u32 record) {
+    u32 offset=record-h[GRKIT_HOST_RECORDS/4], n=h[GRKIT_HOST_COUNT/4], index;
+    if(n>GRKIT_TEXT_RECORDS || offset>=n*GRKIT_RECORD_SIZE) return GRKIT_TEXT_RECORDS;
+    index=((offset>>8)*3856U)>>16;
+    return index*GRKIT_RECORD_SIZE==offset ? index : GRKIT_TEXT_RECORDS;
+}
 /* The value of CORE.TONE: the row of the active record, or 0 for Off or for a
    pointer that is not a record. */
 static __attribute__((unused)) u32 tone_value(volatile u32 *h) {
-    u32 i;
-    for(i=0;i<h[GRKIT_HOST_COUNT/4];++i)
-        if(h[GRKIT_HOST_ACTIVE/4]==h[GRKIT_HOST_RECORDS/4]+i*GRKIT_RECORD_SIZE)
-            return i+1;
-    return 0;
+    u32 i=record_index(h,h[GRKIT_HOST_ACTIVE/4]);
+    return i<GRKIT_TEXT_RECORDS ? i+1 : 0;
 }
 /* The number of values: Off and each effect. */
 static __attribute__((unused)) u32 tone_values(volatile u32 *h) {
@@ -36,6 +46,7 @@ static __attribute__((unused)) void tone_store(volatile u32 *h,u32 value) {
     h[GRKIT_HOST_ACTIVE/4]=tone_record(h,value);
     h[GRKIT_HOST_PREVIEW/4]=0;
     ++h[GRKIT_HOST_MENU_APPLIES/4];
+    GRKIT_STATE_CHANGED(h);
 }
 
 #endif

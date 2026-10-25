@@ -13,15 +13,37 @@ static const u32 mask_colors[2] = {0x80000000U, 0xff000000U};
 /* The frame lines: 2 white pixels inside each edge of the photo area. */
 #define FRAME_COLOR 0xffffffffU
 #define FRAME_WIDTH 2U
-/* Four pixels for each loop test, which the compiler joins into one NEON
-   store. The native clear in the same Canvas::Draw also uses NEON stores. */
+/* Fill pixels `from` to `to` of a row with `color`. A module is Thumb code
+   without NEON stores, so on the camera a loop of two STM of eight words
+   writes sixteen pixels for each test, then one STM of eight words may
+   follow. r7 can be the frame pointer of Thumb code, so the words go in r4
+   to r6 and r8 to r12. The rest, and a host test, use one store for each
+   pixel. */
 __attribute__((noinline)) static void mask_span(volatile u32 *row, u32 from, u32 to, u32 color)
 {
     u32 *pixel = (u32 *)row + from, *end = (u32 *)row + to;
-    for (; pixel + 4 <= end; pixel += 4) {
-        pixel[0] = color; pixel[1] = color;
-        pixel[2] = color; pixel[3] = color;
+#if defined(__arm__)
+    if (end - pixel >= 8) {
+        register u32 a __asm__("r4") = color, b __asm__("r5") = color, c __asm__("r6") = color;
+        register u32 d __asm__("r8") = color, e __asm__("r9") = color, f __asm__("r10") = color;
+        register u32 g __asm__("r11") = color, k __asm__("r12") = color;
+        u32 *last = end - 16;
+        __asm__ volatile("cmp %0, %1\n\t"
+                         "bhi 2f\n"
+                         "1:\n\t"
+                         "stmia %0!, {%3, %4, %5, %6, %7, %8, %9, %10}\n\t"
+                         "stmia %0!, {%3, %4, %5, %6, %7, %8, %9, %10}\n\t"
+                         "cmp %0, %1\n\t"
+                         "bls 1b\n"
+                         "2:\n\t"
+                         "cmp %0, %2\n\t"
+                         "it ls\n\t"
+                         "stmials %0!, {%3, %4, %5, %6, %7, %8, %9, %10}"
+                         : "+r"(pixel)
+                         : "r"(last), "r"(end - 8), "r"(a), "r"(b), "r"(c), "r"(d), "r"(e), "r"(f), "r"(g), "r"(k)
+                         : "memory", "cc");
     }
+#endif
     for (; pixel < end; ++pixel) *pixel = color;
 }
 
@@ -46,8 +68,9 @@ void framing_mask(const Surface *s, u32 value)
     for (u32 y = 0; y < 480; ++y) {
         volatile u32 *row = &SURFACE_PIXEL(s, 0, y);
         if (y < s->box[1] || y >= s->box[3]) { mask_span(row, 0, 720, color); continue; }
-        mask_span(row, 0, s->box[0], color);
-        mask_span(row, s->box[2], 720, color);
+        /* A crop as wide as the view, such as XPan, has no side bars. */
+        if (s->box[0]) mask_span(row, 0, s->box[0], color);
+        if (s->box[2] < 720) mask_span(row, s->box[2], 720, color);
     }
 }
 

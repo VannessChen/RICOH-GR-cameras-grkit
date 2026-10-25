@@ -155,12 +155,10 @@ static u32 after_adj_press(volatile u32 *h) {
 static u32 native_action_release(u32 action,u32 active) {
     return action==10 && active;
 }
+#include "tone.h"
 static u32 selected_icon(volatile u32 *h) {
-    u32 i;
-    for(i=0;i<h[GRKIT_HOST_COUNT/4];++i)
-        if(h[GRKIT_HOST_ACTIVE/4]==h[GRKIT_HOST_RECORDS/4]+i*GRKIT_RECORD_SIZE)
-            return 0x8000+i;
-    return 0x7fff;
+    u32 i=record_index(h,h[GRKIT_HOST_ACTIVE/4]);
+    return i<GRKIT_TEXT_RECORDS ? 0x8000+i : 0x7fff;
 }
 /* Override only the native still-viewfinder icon result. Off retains stock UI. */
 A32_ENTRY u32 menu_viewfinder_icon_select(u32 native_icon,u32 movie) {
@@ -521,6 +519,7 @@ A32_ENTRY u32 menu_parameter_set(u32 index,u32 value) {
     if(value<=8) {
         BYTE(record,GRKIT_RECORD_PARAMETERS+index)=(u8)(value>=4 ? value-4 : value+5);
         ++h[GRKIT_HOST_PARAMETER_CHANGES/4];
+        GRKIT_STATE_CHANGED(h);
     }
     return 1;
 }
@@ -791,8 +790,10 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
         /* OK or ADJ press on the native Image Control slot confirms a native value.
            Confirming the existing native type can omit its setter entirely. */
         if(kind==EV_CONFIRM && !after_menu_switch(h) &&
-           CALL2(FW_ADJ_SLOT_TYPE)(controller,BYTE(controller,ADJ_SLOT))==ADJ_IC_SLOT_TYPE)
+           CALL2(FW_ADJ_SLOT_TYPE)(controller,BYTE(controller,ADJ_SLOT))==ADJ_IC_SLOT_TYPE) {
             h[GRKIT_HOST_ACTIVE/4]=0;
+            GRKIT_STATE_CHANGED(h);
+        }
         if(ADJ_MOVIE(controller)!=1 &&
            ((kind==EV_RIGHT && BYTE(controller,ADJ_SLOT)==4) ||
             (kind==EV_LEFT && BYTE(controller,ADJ_SLOT)==0))) {

@@ -17,6 +17,7 @@
 #define GRKIT_ICONS_PER_CHUNK 40
 #define GRKIT_MODULE_TILES_MAX 64
 #define GRKIT_ICON_MODULE_TILE(n) (0x7000U+(n))
+#define GRKIT_STATE_CHANGED(h) (++(h)[GRKIT_HOST_STATE_CHANGES/4])
 #define GRKIT_HOST_MAGIC_VALUE 0x314d5247
 #define GRKIT_HOST_VERSION_VALUE 1
 /* Number of Image Control records. */
@@ -150,13 +151,18 @@
    away. 3: ADJ exited from GRKit, so the next ADJ opens GRKit. 4: MENU or OK
    on GRKit passed the event that closes ADJ to the native list. */
 #define GRKIT_HOST_RETURN 252
+/* Number of changes of the saved selections: the effect, CORE.ASPECT,
+   CORE.GRAIN, the Fn adjustments, and the module settings
+   (GRKIT_STATE_CHANGED). The resident loader polls only this word and saves
+   the state file after it changes. */
+#define GRKIT_HOST_STATE_CHANGES 256
 /* Number of module plane filters in GRKIT_HOST_MODULE_FILTERS. INSTALL writes
    it. */
-#define GRKIT_HOST_MODULE_FILTER_COUNT 256
+#define GRKIT_HOST_MODULE_FILTER_COUNT 260
 /* Two words for each module plane filter, in stage order: its apply function,
    and its setting handle in the low half with its stage in the high half. */
-#define GRKIT_HOST_MODULE_FILTERS 260
-#define GRKIT_HOST_MODULE_FILTERS_WORDS 8
+#define GRKIT_HOST_MODULE_FILTERS 264
+#define GRKIT_HOST_MODULE_FILTERS_WORDS 7
 /* Address of the module settings table, or 0 (runtime/settings.h). INSTALL
    writes it. */
 #define GRKIT_HOST_MODULE_SETTINGS 292

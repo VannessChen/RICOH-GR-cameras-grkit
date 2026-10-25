@@ -69,12 +69,24 @@ static void overlay_label(const Surface *s,u32 label,u32 left,u32 top) {
     width=label_field(table,label*8,2);
     height=label_field(table,label*8+2,2);
     if(!width || left+width>720 || top+height>480) return;
+    /* Each row holds its spans of drawn pixels (grkit_core::artwork::
+       overlay_labels): a count, then for each a u16 first column, a u16
+       length, and its pixels. The table does not change while GRKit runs,
+       so a plain pointer reads it. */
     pixels=table+label_field(table,label*8+4,4);
-    for(y=0;y<height;++y) {
-        row=OVERLAY_PIXELS(s->data+(top+y)*s->stride*4)+left;
-        for(x=0;x<width;++x) {
-            value=pixels[y*width+x];
-            if(value) row[x]=0xff000000U|value*0x010101U;
+    {
+        const u8 *at=(const u8 *)pixels;
+        for(y=0;y<height;++y) {
+            u32 spans=*at++;
+            row=OVERLAY_PIXELS(s->data+(top+y)*s->stride*4)+left;
+            while(spans--) {
+                u32 first=at[0]|(u32)at[1]<<8, length=at[2]|(u32)at[3]<<8;
+                volatile u32 *to=row+first;
+                at+=4;
+                if(first+length>width) return;
+                for(x=0;x<length;++x) { value=at[x]; to[x]=0xff000000U|value*0x010101U; }
+                at+=length;
+            }
         }
     }
 }

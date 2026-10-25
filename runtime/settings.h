@@ -100,13 +100,17 @@ static __attribute__((unused)) void setting_store(volatile u32 *h,u32 handle,u32
 #endif
         }
         else h[core_setting_words[CORE_SETTING(handle)]/4]=value;
-        if(old!=value) services_emit(h,SERVICE_EVENT_SETTING_CHANGED,handle,value);
+        if(old!=value) {
+            GRKIT_STATE_CHANGED(h);
+            services_emit(h,SERVICE_EVENT_SETTING_CHANGED,handle,value);
+        }
         return;
     }
     t=settings_table(h);
     if(!t || handle>=t[0] || value>=t[SETTINGS_ENTRY(handle)+2] || t[SETTINGS_ENTRY(handle)+1]==value) return;
     t[SETTINGS_ENTRY(handle)+1]=value;
     ++t[1];
+    GRKIT_STATE_CHANGED(h);
     services_emit(h,SERVICE_EVENT_SETTING_CHANGED,handle,value);
 }
 #endif

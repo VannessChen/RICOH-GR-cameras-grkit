@@ -534,10 +534,10 @@ fn overlay_labels_fit_their_area_and_outline_their_text() {
         value
     };
     for index in 0..artwork::OVERLAY_LABELS.len() {
-        let (width, height, offset) = (
-            field(index * 8, 2),
-            field(index * 8 + 2, 2),
-            field(index * 8 + 4, 4),
+        let (width, height, pixels) = artwork::overlay_label_pixels(&table, index);
+        assert_eq!(
+            (width, height),
+            (field(index * 8, 2), field(index * 8 + 2, 2))
         );
         assert_eq!(height, artwork::OVERLAY_LABEL_HEIGHT);
         // A Framing label at the left of the row ends before the centered
@@ -547,7 +547,6 @@ fn overlay_labels_fit_their_area_and_outline_their_text() {
             (30..=widest).contains(&width),
             "label {index} is {width} wide"
         );
-        let pixels = &table[offset..offset + width * height];
         // White text, its black outline, and transparent pixels.
         for value in [0, 1, 255] {
             assert!(pixels.contains(&value), "label {index} lacks {value}");

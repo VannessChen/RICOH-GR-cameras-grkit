@@ -192,9 +192,18 @@ static u32 table_field(u32 at,u32 bytes)
    canvas where the label is transparent, else an opaque gray. */
 static u32 expected_label(u32 label,u32 left,u32 top,u32 x,u32 y,u32 background)
 {
-    u32 width=table_field(label*8,2), height=table_field(label*8+2,2);
+    u32 width=table_field(label*8,2), height=table_field(label*8+2,2), at=table_field(label*8+4,4), value=0;
     if(x<left || x>=left+width || y<top || y>=top+height) return background;
-    u32 value=overlay_labels[table_field(label*8+4,4)+(y-top)*width+(x-left)];
+    /* The rows hold spans of drawn pixels: a count, then for each a u16 first
+       column, a u16 length, and its pixels. */
+    for(u32 row=0; row<=y-top; ++row) {
+        u32 spans=overlay_labels[at++];
+        for(u32 i=0; i<spans; ++i) {
+            u32 first=table_field(at,2), length=table_field(at+2,2);
+            if(row==y-top && x-left>=first && x-left<first+length) value=overlay_labels[at+4+x-left-first];
+            at+=4+length;
+        }
+    }
     return value ? 0xff000000U|value*0x010101U : background;
 }
 static u32 expected_badge(u32 ratio,u32 x,u32 y,u32 background)

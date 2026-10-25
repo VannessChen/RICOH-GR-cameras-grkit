@@ -652,9 +652,12 @@ fn overlay_label(label: &str) -> (usize, Vec<u8>) {
 
 /// The label table that the installer copies after the menu text
 /// (`GRKIT_LABELS` in `runtime/abi.h`): for label n, a u16 width, a u16
-/// height, and the u32 offset of its pixels at 8 n, then the pixels of each
-/// label (`overlay_label`). The live view draws them as its own text: white
-/// with a black outline, without a background.
+/// height, and the u32 offset of its rows at 8 n, then the rows of each
+/// label (`overlay_label`). Each row holds only its drawn pixels: a u8 span
+/// count, then for each span a u16 first column, a u16 length, and its
+/// pixels. A full redraw of the live view paints the labels, so it skips
+/// the transparent pixels without a test for each. The live view draws them
+/// as its own text: white with a black outline, without a background.
 pub fn overlay_labels() -> Vec<u8> {
     let mut table = vec![0; OVERLAY_LABELS.len() * 8];
     for (index, label) in OVERLAY_LABELS.iter().enumerate() {
@@ -664,9 +667,57 @@ pub fn overlay_labels() -> Vec<u8> {
         table[index * 8 + 2..index * 8 + 4]
             .copy_from_slice(&(OVERLAY_LABEL_HEIGHT as u16).to_le_bytes());
         table[index * 8 + 4..index * 8 + 8].copy_from_slice(&offset.to_le_bytes());
-        table.extend(pixels);
+        for row in pixels.chunks(width) {
+            let mut spans = Vec::new();
+            let mut x = 0;
+            while x < width {
+                if row[x] == 0 {
+                    x += 1;
+                    continue;
+                }
+                let first = x;
+                while x < width && row[x] != 0 {
+                    x += 1;
+                }
+                spans.push((first, x - first));
+            }
+            table.push(u8::try_from(spans.len()).expect("a label row has at most 255 spans"));
+            for (first, length) in spans {
+                table.extend((first as u16).to_le_bytes());
+                table.extend((length as u16).to_le_bytes());
+                table.extend(&row[first..first + length]);
+            }
+        }
     }
     // Word alignment for the next copy.
     table.resize(table.len().next_multiple_of(4), 0);
     table
+}
+
+/// Label `index` of a label table (`overlay_labels`): its width, its height,
+/// and each of its pixels, 0 where it is transparent.
+pub fn overlay_label_pixels(table: &[u8], index: usize) -> (usize, usize, Vec<u8>) {
+    let field = |at: usize, bytes: usize| {
+        (0..bytes).fold(0usize, |value, i| {
+            value | usize::from(table[at + i]) << (8 * i)
+        })
+    };
+    let (width, height, mut at) = (
+        field(index * 8, 2),
+        field(index * 8 + 2, 2),
+        field(index * 8 + 4, 4),
+    );
+    let mut pixels = vec![0; width * height];
+    for y in 0..height {
+        let spans = usize::from(table[at]);
+        at += 1;
+        for _ in 0..spans {
+            let (first, length) = (field(at, 2), field(at + 2, 2));
+            at += 4;
+            pixels[y * width + first..y * width + first + length]
+                .copy_from_slice(&table[at..at + length]);
+            at += length;
+        }
+    }
+    (width, height, pixels)
 }
