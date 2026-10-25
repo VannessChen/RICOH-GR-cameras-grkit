@@ -2,63 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { ALL_MODULES, planModules, type ModuleKey } from './modules';
 
 describe('planModules', () => {
-  it('omits nothing by default', () => {
+  it('adds every module by default', () => {
     expect(planModules(ALL_MODULES, 2)).toEqual({
       includeEffects: true,
-      omitted: [],
+      modules: ['IMGCTL', 'FRAMING', 'GUIDES', 'DATE', 'GRAIN'],
       visible: ['imageControl', 'framing', 'guides', 'dateStamp', 'grain'],
     });
   });
 
-  it('turns Image Control off by omitting it and leaving the effects out', () => {
+  it('turns Image Control off by leaving out its module and the effects', () => {
     const enabled = new Set<ModuleKey>(['framing', 'dateStamp']);
     expect(planModules(enabled, 2)).toEqual({
       includeEffects: false,
-      omitted: ['image-control', 'guides', 'grain'],
+      modules: ['FRAMING', 'DATE'],
       visible: ['framing', 'dateStamp'],
     });
   });
 
-  it('shows Image Control only with effects', () => {
-    expect(planModules(new Set<ModuleKey>(['imageControl']), 0).visible).toEqual([]);
-    expect(planModules(new Set<ModuleKey>(['imageControl']), 1).visible).toEqual(['imageControl']);
+  it('adds Image Control only with effects', () => {
+    expect(planModules(new Set<ModuleKey>(['imageControl']), 0)).toEqual({
+      includeEffects: true,
+      modules: [],
+      visible: [],
+    });
+    expect(planModules(new Set<ModuleKey>(['imageControl']), 1).modules).toEqual(['IMGCTL']);
   });
 
-  it('omits every other plugin when only Image Control is on', () => {
-    expect(planModules(new Set<ModuleKey>(['imageControl']), 1).omitted).toEqual([
-      'framing',
-      'guides',
-      'date-stamp',
-      'grain',
-    ]);
-  });
-
-  it('always omits the excluded plugins, without their effects', () => {
+  it('plans only the modules that the site offers for the camera', () => {
     const offered: ModuleKey[] = ['framing', 'guides', 'dateStamp', 'grain'];
-    expect(planModules(ALL_MODULES, 2, offered, ['imageControl'])).toEqual({
+    expect(planModules(ALL_MODULES, 2, offered)).toEqual({
       includeEffects: false,
-      omitted: ['image-control'],
+      modules: ['FRAMING', 'GUIDES', 'DATE', 'GRAIN'],
       visible: ['framing', 'guides', 'dateStamp', 'grain'],
-    });
-    expect(planModules(new Set<ModuleKey>(['guides']), 2, offered, ['imageControl']).omitted).toEqual([
-      'image-control',
-      'framing',
-      'date-stamp',
-      'grain',
-    ]);
-  });
-
-  it('plans only the plugins that the camera has', () => {
-    const partial: ModuleKey[] = ['guides', 'dateStamp'];
-    expect(planModules(ALL_MODULES, 2, partial)).toEqual({
-      includeEffects: false,
-      omitted: [],
-      visible: ['guides', 'dateStamp'],
-    });
-    expect(planModules(new Set<ModuleKey>(['imageControl', 'framing', 'guides']), 2, partial)).toEqual({
-      includeEffects: false,
-      omitted: ['date-stamp'],
-      visible: ['guides'],
     });
   });
 });

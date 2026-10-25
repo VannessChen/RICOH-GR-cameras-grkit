@@ -1,0 +1,9 @@
+title = "日付入れ撮影"
+rows = ["オフ", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"]
+
+[settings.STYLE]
+label = "日付のスタイル"
+
+[settings.LOOK]
+label = "日付の書体"
+values = ["クラシック", "GR1s", "GR II"]

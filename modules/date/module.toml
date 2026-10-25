@@ -1,0 +1,40 @@
+# Date Imprint: the local time on each recorded picture, as a film data back
+# exposes it.
+id = "DATE"
+version = 1
+sources = ["stamp.c"]
+# Tile n shows style n. Tile 0 is the module tile, for Off at the root.
+tiles = [
+    "tiles/0-module.png",
+    "tiles/1-yy-m-d.png",
+    "tiles/2-yy-m-d-time.png",
+    "tiles/3-m-d-yy.png",
+    "tiles/4-d-m-yy.png",
+    "tiles/5-d-m-yy-time.png",
+]
+
+# 0 Off, 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY, 5 D M 'YY H:MM.
+[[settings]]
+key = "STYLE"
+values = 6
+saved = true
+public = true
+
+# The digits: 0 classic seven-segment, 1 GR1s dot matrix, 2 GR II.
+[[settings]]
+key = "LOOK"
+values = 3
+saved = true
+public = true
+
+# Where the camera has a native settings page, it shows the style and the
+# look.
+[page]
+setting = "STYLE"
+off_row = true
+settings = ["STYLE", "LOOK"]
+
+[[filters]]
+apply = "date_apply"
+setting = "STYLE"
+stage = "mark"

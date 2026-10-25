@@ -92,10 +92,8 @@ gamma_hash:
     beq shot_done
     ldr r1, =GRKIT_HEADER_REFERENCE
     str r0, [r1, #GRKIT_HOST_STILL]
-    ldr r2, [r1, #GRKIT_HOST_COUNT]
-    ldr r3, [r1, #GRKIT_HOST_RECORDS]
-    mov r12, #GRKIT_RECORD_SIZE
-    mla r3, r2, r12, r3
+    // The shot ring is in the picture scratch, at the start of the tail.
+    ldr r3, [r1, #GRKIT_HOST_TAIL]
     add r3, r3, #(GRKIT_SHOT_RING & ~0xff)
     add r3, r3, #(GRKIT_SHOT_RING & 0xff)
     ldr r2, [r3]

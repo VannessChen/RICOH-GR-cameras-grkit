@@ -10,7 +10,7 @@ describe('resolveSelection', () => {
   });
 
   it('checks at most the package limit by default', () => {
-    expect(resolveSelection(null, ids(25)).size).toBe(MAX_EFFECTS);
+    expect(resolveSelection(null, ids(MAX_EFFECTS + 5)).size).toBe(MAX_EFFECTS);
   });
 
   it('keeps the choice of the user, also an empty one', () => {

@@ -53,7 +53,7 @@ const en = {
   uploadNote: 'DNG only. Your photo stays in this browser.',
   previewNote: 'The preview is approximate. Color and exposure can differ from the camera.',
   libraryNote:
-    'Effects stay on the card after an update. To remove one, delete its file from GRKIT/EFFECTS. GRKIT/EFFECTS.TXT lists the files.',
+    'Effects stay on the card after an update. To remove one, delete its file from GRKIT/EFFECTS. GRKIT/REPORT.TXT lists the installed effects.',
   compare: 'Compare',
   original: 'Base development',
   preview: 'Preview',
@@ -119,6 +119,12 @@ const en = {
   close: 'Close',
   removeEffect: 'Remove',
   removeOf: (name: string) => `Remove ${name}`,
+  /** A link that downloads one module or effect file. */
+  file: 'File',
+  fileOf: (name: string) => `Download the file of ${name}`,
+  /** How to add one file to a card that has GRKit. */
+  fileNote:
+    'To add one module or effect to a card that has GRKit, download its file. Copy a module to GRKIT/MODULES, or an effect to GRKIT/EFFECTS.',
   haldSummary: 'Importing a Lightroom preset?',
   haldNote:
     'Download the HALD image and open it in the editor. Apply the preset with grain, sharpening, and vignette off. Export it at full size as a 16-bit TIFF or PNG in sRGB, then import the export with Standard input.',
@@ -166,7 +172,7 @@ const en = {
   updateNote: [
     'To update GRKit, copy the contents of ',
     '`SD_ROOT',
-    ' of the new package to the card root, over the old files. Your settings and effects stay in ',
+    ' of the new package to the card root, over the old files. Your settings, effects, and added modules stay in ',
     '`GRKIT',
     '.',
   ] as RichText,
@@ -243,7 +249,7 @@ const zhHans: Strings = {
   retryPreview: '重试预览',
   uploadNote: '仅支持 DNG。照片只在本浏览器中处理。',
   previewNote: '预览为近似效果，颜色和曝光可能与机内成片不同。',
-  libraryNote: '更新后效果仍保留在存储卡上。要移除一个效果，从 GRKIT/EFFECTS 删除它的文件。GRKIT/EFFECTS.TXT 列出这些文件。',
+  libraryNote: '更新后效果仍保留在存储卡上。要移除一个效果，从 GRKIT/EFFECTS 删除它的文件。GRKIT/REPORT.TXT 列出已安装的效果。',
   compare: '对比',
   original: '基础显影',
   preview: '预览',
@@ -305,6 +311,9 @@ const zhHans: Strings = {
   close: '关闭',
   removeEffect: '移除',
   removeOf: (name) => `移除 ${name}`,
+  file: '文件',
+  fileOf: (name) => `下载 ${name} 的文件`,
+  fileNote: '要给已有 GRKit 的存储卡加入一个模块或效果，下载它的文件。把模块复制到 GRKIT/MODULES，或把效果复制到 GRKIT/EFFECTS。',
   haldSummary: '要导入 Lightroom 预设？',
   haldNote:
     '下载 HALD 图像并在软件中打开，关闭颗粒、锐化和暗角后应用预设。以原尺寸导出为 sRGB 的 16 位 TIFF 或 PNG，再选择 Standard 输入导入。',
@@ -347,7 +356,7 @@ const zhHans: Strings = {
     ['正常开机。GRKit 在开机几秒后才加载，之后在 ADJ 模式中选择第 6 个功能 GRK。'],
     ['可选：从存储卡根目录删除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
   ],
-  updateNote: ['要更新 GRKit，把新安装包中 ', '`SD_ROOT', ' 的内容复制到存储卡根目录，覆盖旧文件。设置和效果保存在 ', '`GRKIT', ' 中，不会丢失。'] as RichText,
+  updateNote: ['要更新 GRKit，把新安装包中 ', '`SD_ROOT', ' 的内容复制到存储卡根目录，覆盖旧文件。设置、效果和你加入的模块保存在 ', '`GRKIT', ' 中，不会丢失。'] as RichText,
   remove: '移除 GRKit',
   removeSteps: [
     ['关闭相机。从存储卡删除 ', '`SCRIPT', ' 和 ', '`GRKIT', ' 文件夹。', '`GRKIT', ' 保存 GRKit 的设置。'],
@@ -415,7 +424,7 @@ const zhHant: Strings = {
   retryPreview: '重試預覽',
   uploadNote: '僅支援 DNG。照片只在此瀏覽器中處理。',
   previewNote: '預覽為近似效果，顏色與曝光可能與機內成片不同。',
-  libraryNote: '更新後效果仍保留在記憶卡上。要移除一個效果，從 GRKIT/EFFECTS 刪除它的檔案。GRKIT/EFFECTS.TXT 列出這些檔案。',
+  libraryNote: '更新後效果仍保留在記憶卡上。要移除一個效果，從 GRKIT/EFFECTS 刪除它的檔案。GRKIT/REPORT.TXT 列出已安裝的效果。',
   compare: '對比',
   original: '基礎顯影',
   preview: '預覽',
@@ -477,6 +486,9 @@ const zhHant: Strings = {
   close: '關閉',
   removeEffect: '移除',
   removeOf: (name) => `移除 ${name}`,
+  file: '檔案',
+  fileOf: (name) => `下載 ${name} 的檔案`,
+  fileNote: '要為已有 GRKit 的記憶卡加入一個模組或效果，下載它的檔案。把模組複製到 GRKIT/MODULES，或把效果複製到 GRKIT/EFFECTS。',
   haldSummary: '要匯入 Lightroom 預設？',
   haldNote:
     '下載 HALD 影像並在軟體中開啟，關閉顆粒、銳利化和暗角後套用預設。以原尺寸匯出為 sRGB 的 16 位元 TIFF 或 PNG，再選擇 Standard 輸入匯入。',
@@ -519,7 +531,7 @@ const zhHant: Strings = {
     ['正常開機。GRKit 在開機幾秒後才載入，之後在 ADJ 模式中選擇第 6 個功能 GRK。'],
     ['選用：從記憶卡根目錄刪除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
   ],
-  updateNote: ['要更新 GRKit，把新安裝包中 ', '`SD_ROOT', ' 的內容複製到記憶卡根目錄，覆蓋舊檔案。設定和效果保存在 ', '`GRKIT', ' 中，不會遺失。'] as RichText,
+  updateNote: ['要更新 GRKit，把新安裝包中 ', '`SD_ROOT', ' 的內容複製到記憶卡根目錄，覆蓋舊檔案。設定、效果和你加入的模組保存在 ', '`GRKIT', ' 中，不會遺失。'] as RichText,
   remove: '移除 GRKit',
   removeSteps: [
     ['關閉相機。從記憶卡刪除 ', '`SCRIPT', ' 和 ', '`GRKIT', ' 資料夾。', '`GRKIT', ' 保存 GRKit 的設定。'],
@@ -588,7 +600,7 @@ const ja: Strings = {
   uploadNote: 'DNG のみ。写真はこのブラウザー内だけで処理されます。',
   previewNote: 'プレビューは目安です。色や露出はカメラで撮った写真と異なる場合があります。',
   libraryNote:
-    'エフェクトはアップデート後もカードに残ります。削除するには、GRKIT/EFFECTS からそのファイルを削除します。GRKIT/EFFECTS.TXT にファイルの一覧があります。',
+    'エフェクトはアップデート後もカードに残ります。削除するには、GRKIT/EFFECTS からそのファイルを削除します。GRKIT/REPORT.TXT にインストールされたエフェクトの一覧があります。',
   compare: '比較',
   original: '基本現像',
   preview: 'プレビュー',
@@ -651,6 +663,10 @@ const ja: Strings = {
   close: '閉じる',
   removeEffect: '削除',
   removeOf: (name) => `${name} を削除`,
+  file: 'ファイル',
+  fileOf: (name) => `${name} のファイルをダウンロード`,
+  fileNote:
+    'GRKit が入ったカードにモジュールやエフェクトを 1 つ追加するには、そのファイルをダウンロードします。モジュールは GRKIT/MODULES に、エフェクトは GRKIT/EFFECTS にコピーします。',
   haldSummary: 'Lightroom のプリセットを読み込む場合',
   haldNote:
     'HALD 画像をダウンロードしてソフトで開き、粒子、シャープ、周辺光量補正をオフにしてプリセットを適用します。原寸の sRGB 16 ビット TIFF または PNG で書き出し、Standard 入力で読み込みます。',
@@ -697,7 +713,7 @@ const ja: Strings = {
   updateNote: [
     'GRKit をアップデートするには、新しいパッケージの ',
     '`SD_ROOT',
-    ' の中身をカードのルートにコピーし、古いファイルを上書きします。設定とエフェクトは ',
+    ' の中身をカードのルートにコピーし、古いファイルを上書きします。設定、エフェクト、追加したモジュールは ',
     '`GRKIT',
     ' に残ります。',
   ] as RichText,

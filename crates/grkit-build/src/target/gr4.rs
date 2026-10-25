@@ -104,6 +104,18 @@ const HOOKS: &[HookSpec] = &[
     b("menu_settings_draw_1", Menu, MenuPage),
     b("menu_settings_apply_1", Menu, MenuPage),
     b("menu_settings_current_1", Menu, MenuPage),
+    b("menu_settings_count_2", Menu, MenuPage),
+    b("menu_settings_draw_2", Menu, MenuPage),
+    b("menu_settings_apply_2", Menu, MenuPage),
+    b("menu_settings_current_2", Menu, MenuPage),
+    b("menu_settings_count_3", Menu, MenuPage),
+    b("menu_settings_draw_3", Menu, MenuPage),
+    b("menu_settings_apply_3", Menu, MenuPage),
+    b("menu_settings_current_3", Menu, MenuPage),
+    b("menu_settings_count_4", Menu, MenuPage),
+    b("menu_settings_draw_4", Menu, MenuPage),
+    b("menu_settings_apply_4", Menu, MenuPage),
+    b("menu_settings_current_4", Menu, MenuPage),
     // Framing and Guides, as on GR III. GR IV has a live-view mode for each
     // capture aspect, so instead of the GR III patches the capture aspect
     // getter BLs of the live-view mode function and of the live-view mode

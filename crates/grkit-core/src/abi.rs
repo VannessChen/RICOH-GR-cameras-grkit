@@ -4,7 +4,7 @@
 
 use std::fmt::Write;
 
-use crate::{effects, hue, menu_text, plugins, runtime};
+use crate::{capabilities, effects, hue, menu_text, runtime};
 
 /// A byte range of the private header or of a record.
 pub struct Field {
@@ -28,7 +28,7 @@ macro_rules! fields {
     };
 }
 
-/// The core fields of the header, then the plugin words.
+/// The fields of the header.
 pub const HOST_HEADER_SIZE: usize = 512;
 /// The placeholder for the header address in ARM code. The installer replaces
 /// each literal word with this value by the address of the `registry` array.
@@ -36,6 +36,8 @@ pub const HEADER_REFERENCE: u32 = 0x58012340;
 /// `GRM1`.
 pub const HOST_MAGIC_VALUE: u32 = 0x314d5247;
 pub const HOST_VERSION_VALUE: u32 = 1;
+/// The most module layers, and the most module pages, that the header holds.
+pub const MODULE_SLOTS: usize = 8;
 
 fields!(HEADER_FIELDS {
     /// Number of Image Control records.
@@ -60,22 +62,27 @@ fields!(HEADER_FIELDS {
     HOST_MENU_LEVEL = 36, 4;
     /// Highlighted row of the private menu.
     HOST_MENU_CURSOR = 40, 4;
-    /// Native ADJ slot when the private menu opened. A diagnostic.
-    HOST_MENU_SLOT = 44, 4;
-    /// Guide style previewed on the ADJ canvas while GRKIT_HOST_FRAME_PREVIEW is set.
-    HOST_GUIDE_PREVIEW = 48, 4;
-    /// Date stamp style: 0 Off, 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY.
-    HOST_STAMP = 52, 4;
-    /// Installed plugins: bit n is plugin n of grkit_core::plugins::PLUGINS and
-    /// module n of the menu. A plugin that needs effects is set only with effects.
-    HOST_PLUGINS = 56, 4;
+    /// Address of the tail, an array of its own: the picture scratch, the
+    /// menu text, then the live-view labels. INSTALL writes it.
+    HOST_TAIL = 44, 4;
+    /// Grain level, the capability CORE.GRAIN: 0 Off, 1 weak, 2 medium, 3
+    /// strong. The native grain stage of recorded pictures uses it instead of
+    /// the native grain settings.
+    HOST_GRAIN = 48, 4;
+    /// Address of the module list of the Modules page (runtime/manage.h), or
+    /// 0 without a listed module. INSTALL writes it.
+    HOST_MANAGE = 52, 4;
+    /// Address of the state of the core services (runtime/services.h): the
+    /// event subscribers, the timers, and the UI. INSTALL writes it, with
+    /// the module array.
+    HOST_SERVICES = 56, 4;
     /// Nonzero while the menu rebuilds the native list. The list callback and the
     /// native Image Control preview ignore the changes.
     HOST_MENU_REBUILDING = 60, 4;
     /// Native list position, saved when the private menu opens.
     HOST_MENU_LIST = 64, 8;
-    /// The module + 1 whose native settings page the menu opened from its root
-    /// row (Module.settings, runtime/plugin.h), or 0. While it is set, the
+    /// The module + 1 whose native settings page the menu opened (Module.settings,
+    /// runtime/core.h), or 0. While it is set, the
     /// hooks of the borrowed native page show the settings of that module. A
     /// change to a controller outside the page clears it.
     HOST_SETTINGS = 72, 4;
@@ -126,9 +133,10 @@ fields!(HEADER_FIELDS {
     HOST_FRAME_FILE = 196, 4;
     /// Record of the last live-view build: an owned record, or 0 for native processing.
     HOST_LIVE_RECORD = 200, 4;
-    /// Committed composition guide style: 0 Off, 1 thirds, 2 center, 3 golden
-    /// ratio, 4 diagonals.
-    HOST_GUIDE = 204, 4;
+    /// The capabilities in use: bit n is set when a loaded module uses
+    /// capability n (GRKIT_CORE_SETTING_BASE + n). INSTALL writes it, and the
+    /// resident loader restores only the values of these capabilities.
+    HOST_CAPABILITIES = 204, 4;
     /// Framing ratio: 0 native, then the Framing rows.
     HOST_FRAME_RATIO = 208, 4;
     /// ADJ Framing page preview: 0 none, else the highlighted ratio + 1.
@@ -137,9 +145,9 @@ fields!(HEADER_FIELDS {
     HOST_FRAME_DRAWS = 216, 4;
     /// ADJ canvas of the preview. It stays set until a full draw erases the mask.
     HOST_FRAME_PREVIEW_CANVAS = 220, 4;
-    /// Icon of the first plugin tile. The tiles of each plugin follow in plugin
-    /// order (grkit_core::plugins::tiles).
-    HOST_TILE_ICON = 224, 4;
+    /// Address of the effect list of the Effects page (runtime/effects.h), or
+    /// 0 without a listed effect. INSTALL writes it.
+    HOST_EFFECTS = 224, 4;
     /// Live view controller that Framing draws on, or 0.
     HOST_FRAME_OWNER = 228, 4;
     /// Canvas of that controller.
@@ -157,9 +165,34 @@ fields!(HEADER_FIELDS {
     /// 2 away. 3: ADJ exited from GRKit, so the next ADJ opens GRKit. 4: MENU
     /// or OK on GRKit passed the event that closes ADJ to the native list.
     HOST_RETURN = 252, 4;
-    /// The words of the plugins (grkit_core::plugins::Plugin::words), in plugin
-    /// order, then zero words. GRKIT_PLUGIN_<PLUGIN>_<WORD> gives each offset.
-    HOST_PLUGIN_AREA = 256, HOST_GAMMA_KEY - 256;
+    /// Number of module plane filters in GRKIT_HOST_MODULE_FILTERS. INSTALL
+    /// writes it.
+    HOST_MODULE_FILTER_COUNT = 256, 4;
+    /// Two words for each module plane filter, in stage order: its apply
+    /// function, and its setting handle in the low half with its stage in the
+    /// high half.
+    HOST_MODULE_FILTERS = 260, HOST_MODULE_SETTINGS - 260;
+    /// Address of the module settings table, or 0 (runtime/settings.h).
+    /// INSTALL writes it.
+    HOST_MODULE_SETTINGS = HOST_MODULE_PREVIEW - 4, 4;
+    /// The ADJ preview of a module page: its setting handle plus 1 (0 for
+    /// none), then the highlighted value. Module layers of that setting paint
+    /// the highlighted value on the ADJ canvas.
+    HOST_MODULE_PREVIEW = HOST_MODULE_PAGE_COUNT - 8, 8;
+    /// Number of module pages in GRKIT_HOST_MODULE_PAGES. INSTALL writes it.
+    HOST_MODULE_PAGE_COUNT = HOST_MODULE_PAGES - 4, 4;
+    /// Three words for each module page (runtime/sdk/grkit.h), in load order:
+    /// the address of its GrkitPage, its setting handle, and the global index
+    /// of its tile 0 (GRKIT_ICON_MODULE_TILE).
+    HOST_MODULE_PAGES = HOST_MODULE_CHOICE - 12 * MODULE_SLOTS, 12 * MODULE_SLOTS;
+    /// The module page that the generic page callbacks of the menu serve.
+    HOST_MODULE_CHOICE = HOST_MODULE_LAYER_COUNT - 4, 4;
+    /// Number of module layers in GRKIT_HOST_MODULE_LAYERS. INSTALL writes it.
+    HOST_MODULE_LAYER_COUNT = HOST_MODULE_LAYERS - 4, 4;
+    /// Three words for each module layer, in painting order: its paint
+    /// function, its setting handle (GRKIT_NO_SETTING paints with the value
+    /// 1), and its flags in the low half with its order in the high half.
+    HOST_MODULE_LAYERS = HOST_GAMMA_KEY - 12 * MODULE_SLOTS, 12 * MODULE_SLOTS;
     /// Key of the inputs of the last private curve composition in the gamma
     /// stage, or 0 (runtime/processing.h).
     HOST_GAMMA_KEY = HOST_HEADER_SIZE - 4, 4;
@@ -368,12 +401,103 @@ pub fn header() -> String {
     );
     writeln!(out, "#define GRKIT_HEADER_REFERENCE {HEADER_REFERENCE:#x}").unwrap();
     writeln!(out, "#define GRKIT_HOST_HEADER_SIZE {HOST_HEADER_SIZE}").unwrap();
+    writeln!(out, "#define GRKIT_MODULE_SLOTS {MODULE_SLOTS}").unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_MODULE_SETTINGS_MAX {}",
+        runtime::MODULE_SETTINGS_MAX
+    )
+    .unwrap();
+    comment(
+        &mut out,
+        "Icon slots: the host icons, then the effect icons, then the module \
+         tiles, in chunks of GRKIT_ICONS_PER_CHUNK (GRKIT_HOST_ICON_CHUNKS). \
+         GRKIT_ICON_MODULE_TILE(n) is the icon ID of module tile n.",
+    );
+    writeln!(
+        out,
+        "#define GRKIT_HOST_ICON_COUNT {}",
+        runtime::HOST_ICON_COUNT
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_ICONS_PER_CHUNK {}",
+        runtime::ICONS_PER_CHUNK
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_MODULE_TILES_MAX {}",
+        runtime::MODULE_TILES_MAX
+    )
+    .unwrap();
+    writeln!(out, "#define GRKIT_ICON_MODULE_TILE(n) (0x7000U+(n))").unwrap();
     writeln!(out, "#define GRKIT_HOST_MAGIC_VALUE {HOST_MAGIC_VALUE:#x}").unwrap();
     writeln!(out, "#define GRKIT_HOST_VERSION_VALUE {HOST_VERSION_VALUE}").unwrap();
     table(&mut out, HEADER_FIELDS, false);
-    for word in plugins::words() {
-        define(&mut out, word.doc, &word.name, word.offset);
+    out.push('\n');
+
+    comment(
+        &mut out,
+        "The capabilities of the core (grkit_core::capabilities): the handle of \
+         each CORE setting, and for each handle in order, its header word and its \
+         number of values. CORE.TONE has neither: its value is the active record, \
+         and the effects give its number of values (runtime/tone.h).",
+    );
+    writeln!(
+        out,
+        "#define GRKIT_CORE_SETTING_BASE {:#x}U",
+        capabilities::HANDLE_BASE
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_CORE_SETTING_COUNT {}U",
+        capabilities::CAPABILITIES.len()
+    )
+    .unwrap();
+    for (i, capability) in capabilities::CAPABILITIES.iter().enumerate() {
+        writeln!(
+            out,
+            "#define GRKIT_CORE_{} {:#x}U",
+            capability.key,
+            capabilities::HANDLE_BASE as usize + i
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "#define GRKIT_CORE_{}_VALUES {}U",
+            capability.key, capability.values
+        )
+        .unwrap();
     }
+    let list = |values: Vec<String>| values.join(",");
+    writeln!(
+        out,
+        "#define GRKIT_CORE_SETTING_WORDS {}",
+        list(
+            capabilities::CAPABILITIES
+                .iter()
+                .map(|c| match c.state {
+                    capabilities::State::Word(word) => word.to_string(),
+                    capabilities::State::Effect => "0".into(),
+                })
+                .collect()
+        )
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_CORE_SETTING_VALUES {}",
+        list(
+            capabilities::CAPABILITIES
+                .iter()
+                .map(|c| c.values.to_string())
+                .collect()
+        )
+    )
+    .unwrap();
     out.push('\n');
 
     comment(
@@ -479,9 +603,7 @@ pub fn header() -> String {
     )
     .unwrap();
     writeln!(out, "#define GRKIT_TEXT_RECORDS {}", runtime::MAX_COUNT).unwrap();
-    out.push_str(
-        "#define GRKIT_TEXT(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE+GRKIT_PICTURE_SCRATCH)\n",
-    );
+    out.push_str("#define GRKIT_TEXT(h) ((h)[GRKIT_HOST_TAIL/4]+GRKIT_PICTURE_SCRATCH)\n");
     out.push_str("#define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)\n");
     writeln!(
         out,
@@ -538,15 +660,6 @@ mod tests {
             .iter()
             .all(|field| field.offset % 4 == 0 && field.size % 4 == 0));
         check(HEADER_FIELDS, HOST_HEADER_SIZE, true);
-    }
-
-    #[test]
-    fn plugin_words_fit_the_header() {
-        let words = plugins::words();
-        for (index, word) in words.iter().enumerate() {
-            assert_eq!(word.offset, HOST_PLUGIN_AREA + 4 * index, "{}", word.name);
-        }
-        assert!(HOST_PLUGIN_AREA + 4 * words.len() <= HOST_GAMMA_KEY);
     }
 
     #[test]

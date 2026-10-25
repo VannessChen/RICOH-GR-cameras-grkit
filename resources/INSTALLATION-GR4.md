@@ -25,7 +25,9 @@ After the installation, you can remove `00078560.636` and `DEVELOP.MOD` from the
 2. Copy the contents of `SD_ROOT` of the new package to the root of the SD card. Replace or merge the existing files.
 3. Turn the camera on normally.
 
-GRKit keeps your settings and effects in the `GRKIT` folder, so the update keeps them. You do not need to delete `SCRIPT` first. If you update from GRKit 1.2 or earlier and replace the `SCRIPT` folder, for example with the default Replace of macOS Finder, the earlier settings and the effects that the new package does not have are lost, because GRKit 1.2 kept them in `SCRIPT`.
+The package holds only the `SCRIPT` folder. GRKit keeps your settings, your effects, and the modules that you added in the `GRKIT` folder, so the update keeps them.
+
+GRKit 2 does not read the settings of GRKit 1. After an update from GRKit 1, delete the `SCRIPT/PLUGINS` folder.
 
 ## Use
 
@@ -36,12 +38,13 @@ Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-
 - **Guides:** select a guide style. The lines show only in the viewfinder.
 - **Date Imprint:** press OK to open its settings. In **Date Style**, select a date style. In **Date Look**, select the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.
+- **Modules:** a row for each module on the card. Press OK on a module to open its settings. **Load** turns the module on or off, and **Position** sets its row in GRK. A module that did not load shows its file name and an error number. A change applies at the next power-on.
 
 Highlight the last row, GRK, to see the GRKit version.
 
 Press MENU to go back one level. GRKit keeps your settings after power-off.
 
-GRKit keeps the effects in the `GRKIT/EFFECTS` folder of the card. A new package adds its effects and replaces their earlier versions. It does not remove other effects. To remove an effect, turn the camera off and delete its file from `GRKIT/EFFECTS`. A later package adds it again only when its file in the package changes. `GRKIT/EFFECTS.TXT` lists the file of each effect. GRKit installs at most 20 effects: first those of the last package, then the others.
+GRKit keeps the effects in the `GRKIT/EFFECTS` folder. A new package adds its effects there and replaces their earlier versions. It does not remove other effects. To add an effect, copy its file into `GRKIT/EFFECTS`. To remove one, turn the camera off and delete its file. A later package adds it again only when its file in the package changes. To add a module, copy its file into `GRKIT/MODULES`. The last row of Image Control, **Effects**, lists each effect file. Press OK on an effect to open its settings. **Load** turns the effect on or off, and **Order** moves it up or down in Image Control. GRKit installs the first 40 effects that are on. A change applies at the next power-on. `GRKIT/REPORT.TXT` lists the modules and the effects of the last power-on, and the reason when a module did not load.
 
 ## Troubleshooting
 
@@ -60,8 +63,15 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 2. Look for GRK in ADJ. It is not in MENU.
 3. If the camera did not show Mode Set Command in step 3, do step 3 again.
 4. Make sure that the card root has the `SCRIPT` folder. Copy all the contents of `SD_ROOT`, including `SCRIPT`.
-5. If the card has `SCRIPT/PLUGINS/INSTALL.ERR`, GRKit did not install. Make sure that the camera shows a supported firmware version. To see the firmware version, open the camera menu. If the version is supported, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR`.
+5. If the card has `SCRIPT/GRKIT/INSTALL.ERR`, GRKit did not install. Make sure that the camera shows a supported firmware version. To see the firmware version, open the camera menu. If the version is supported, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR` and `GRKIT/REPORT.TXT`.
 6. GRKit runs only on the official Ricoh firmware. It does not run on modified firmware.
+
+### GRKit starts in safe mode
+
+In safe mode, GRKit loads no module, and `GRKIT/REPORT.TXT` says why. Safe mode starts in two cases:
+
+- The last three power-ons did not finish. A power-off in the first 20 seconds also counts. After a power-on of 20 seconds or more, the next power-on loads the modules again. If the camera stopped after you added a module, set **Load** of that module to Off in **Modules**, or delete the module from `GRKIT/MODULES`.
+- The `GRKIT` folder has a file named `SAFE`. To load the modules again, delete the file.
 
 ## Remove or recover
 

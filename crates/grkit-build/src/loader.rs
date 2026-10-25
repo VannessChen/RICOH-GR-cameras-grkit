@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{ensure, Context, Result};
 use grkit_core::{
-    artwork::{off_pixels, plugins_pixels, version_pixels},
+    artwork::{modules_pixels, off_pixels, plugins_pixels, version_pixels},
     runtime::{
         icon_stride, HOST_ICON_COUNT, ICONS_PER_CHUNK, LINUX_DATA_DIRECTORY, LINUX_DIRECTORY,
         MAX_CHUNKS, MAX_COUNT,
@@ -161,20 +161,24 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
             target.identities.iter().copied(),
         );
     }
-    // The effects folder of the package is the inbox of the effects library.
+    // The card layout (grkit_core::runtime): the package in SCRIPT/GRKIT, and
+    // the data of the person in GRKIT.
     let paths = [
-        ("INBOX_PATH", LINUX_DIRECTORY, "/EFFECTS"),
         ("PLAN_PATH", LINUX_DIRECTORY, "/MODULE.BIN"),
         ("PLAN_TMP_PATH", LINUX_DIRECTORY, "/MODULE.TMP"),
         ("LOCK_PATH", LINUX_DIRECTORY, "/INSTALL.LCK"),
         ("DONE_PATH", LINUX_DIRECTORY, "/INSTALL.OK"),
         ("FAILED_PATH", LINUX_DIRECTORY, "/INSTALL.ERR"),
-        ("PLUGINS_PATH", LINUX_DIRECTORY, "/PLUGINS.TXT"),
+        ("BOOT_PATH", LINUX_DIRECTORY, "/BOOT.TXT"),
+        ("INBOX_PATH", LINUX_DIRECTORY, "/EFFECTS"),
         ("PACKAGE_PATH", LINUX_DIRECTORY, "/PACKAGE.TXT"),
         ("DATA_PATH", LINUX_DATA_DIRECTORY, ""),
-        ("LIBRARY_PATH", LINUX_DATA_DIRECTORY, "/EFFECTS"),
-        ("INDEX_PATH", LINUX_DATA_DIRECTORY, "/EFFECTS.TXT"),
         ("IMPORTED_PATH", LINUX_DATA_DIRECTORY, "/IMPORTED.TXT"),
+        ("LIBRARY_PATH", LINUX_DATA_DIRECTORY, "/EFFECTS"),
+        ("STATE_PATH", LINUX_DATA_DIRECTORY, "/STATE.TXT"),
+        ("STATE_TMP_PATH", LINUX_DATA_DIRECTORY, "/STATE.TMP"),
+        ("REPORT_PATH", LINUX_DATA_DIRECTORY, "/REPORT.TXT"),
+        ("SAFE_PATH", LINUX_DATA_DIRECTORY, "/SAFE"),
     ];
     for (name, directory, suffix) in paths {
         writeln!(
@@ -183,19 +187,107 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
             serde_json::to_string(&format!("{directory}{suffix}"))?
         )?;
     }
+    // The state keys of the capabilities, in handle order, and the keys of
+    // the Fn adjustments (grkit_core::runtime).
+    writeln!(
+        result,
+        "#define CORE_STATE_IDS {}",
+        grkit_core::capabilities::state_keys()
+            .iter()
+            .map(|key| grkit_core::runtime::state_key_id(&key.name).to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    )?;
+    writeln!(
+        result,
+        "#define PARAMETER_KEY_BASE {}U\n#define PARAMETER_VALUE_MAX {}U",
+        grkit_core::runtime::PARAMETER_KEY_BASE,
+        grkit_core::runtime::PARAMETER_VALUE_MAX
+    )?;
+    writeln!(
+        result,
+        "#define STATE_TEXT_MAX {}U",
+        grkit_core::runtime::STATE_MAX_BYTES
+    )?;
+    writeln!(
+        result,
+        "#define GRKIT_VERSION {}",
+        serde_json::to_string(version)?
+    )?;
     if modules {
+        // Modules (runtime/module_link.h): their folder, the end of the area
+        // that holds their code, and the services of the core.
+        writeln!(
+            result,
+            "#define MODULES_PATH {}\n#define PACKAGE_MODULES_PATH {}",
+            serde_json::to_string(&format!("{LINUX_DATA_DIRECTORY}/MODULES"))?,
+            serde_json::to_string(&format!("{LINUX_DIRECTORY}/MODULES"))?
+        )?;
+        writeln!(
+            result,
+            "#define POINT_VIEWFINDER_OVERLAY {:#x}U",
+            crate::components::Point::ViewfinderOverlay.bit()
+        )?;
+        writeln!(
+            result,
+            "#define POINT_MENU_PAGE {:#x}U",
+            crate::components::Point::MenuPage.bit()
+        )?;
+        writeln!(
+            result,
+            "#define POINT_PICTURE_ENCODE {:#x}U",
+            crate::components::Point::PictureEncode.bit()
+        )?;
+        // The official module files in their root order.
+        let official: Vec<_> = grkit_core::modules::OFFICIAL
+            .iter()
+            .map(|module| serde_json::to_string(&format!("{}.GRM", module.id)))
+            .collect::<Result<_, _>>()?;
+        writeln!(
+            result,
+            "#define OFFICIAL_MODULE_COUNT {}U\nstatic const char *const official_modules[] = {{{}}};",
+            official.len(),
+            official.join(",")
+        )?;
+        // The capabilities of the core in handle order: the setting name,
+        // and the points whose patches apply it.
+        let capabilities = &grkit_core::capabilities::CAPABILITIES;
+        let names: Vec<_> = capabilities
+            .iter()
+            .map(|capability| serde_json::to_string(&capability.name()))
+            .collect::<Result<_, _>>()?;
+        writeln!(
+            result,
+            "static const char *const core_setting_names[] = {{{}}};",
+            names.join(",")
+        )?;
+        words(
+            &mut result,
+            "core_setting_points",
+            capabilities
+                .iter()
+                .map(grkit_core::capabilities::Capability::point_mask),
+        );
+        writeln!(
+            result,
+            "#define RTOS_EXECUTABLE_END {:#x}U",
+            crate::components::RTOS_EXECUTABLE_END
+        )?;
+        writeln!(result, "#define CORE_EXPORT_COUNT {}U", plan.exports.len())?;
+        words(
+            &mut result,
+            "core_exports",
+            plan.exports
+                .iter()
+                .flat_map(|&(hash, offset)| [hash, offset]),
+        );
         if let Some(record) = stock_record {
             array(&mut result, "stock_record", record, true);
         }
         array(&mut result, "off_pixels", &off_pixels(), true);
         array(&mut result, "plugins_pixels", &plugins_pixels(), true);
         array(&mut result, "version_pixels", &version_pixels(), true);
-        array(
-            &mut result,
-            "module_pixels",
-            &grkit_core::plugins::tiles().concat(),
-            true,
-        );
+        array(&mut result, "modules_pixels", &modules_pixels(), true);
         // The installer copies the menu text table after the picture scratch.
         let text = grkit_core::menu_text::table(version)?;
         writeln!(result, "#define MENU_TEXT_BYTES {}U", text.len())?;
@@ -229,14 +321,6 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
     // Kind 1 marks a patch after the decoded RTOS image. The installer does
     // not require its stock bytes, because a restart keeps earlier GRKit code.
     let image_end = target::RTOS_BASE + body.body.len() as u32;
-    // The points of each plugin, in plugin order.
-    words(
-        &mut result,
-        "plugin_points",
-        grkit_core::plugins::PLUGINS
-            .iter()
-            .map(grkit_core::plugins::Plugin::point_mask),
-    );
     result.push_str("static struct patch patches[] = {\n");
     for (i, patch) in plan.patches.iter().enumerate() {
         writeln!(
@@ -327,6 +411,13 @@ fn relocation_tables(
     let layout = target.layout.context("A relocated target has a layout")?;
     let mut planner = Planner::new(body)?;
     let tail = planner.tail(layout.tail.0);
+    // Modules go after the tail, and the core exports are in it.
+    writeln!(result, "#define TAIL_SYMBOL {tail}U")?;
+    writeln!(
+        result,
+        "#define TAIL_BYTES {:#x}U",
+        layout.tail.1 - layout.tail.0
+    )?;
     // The hooks that replace a branch: the private code calls its target.
     let mut targets = std::collections::BTreeMap::new();
     for patch in &plan.patches {

@@ -9,9 +9,9 @@ use anyhow::{bail, ensure, Context, Result};
 use std::{collections::BTreeMap, fs, path::Path};
 
 /// The RTOS maps its tail read-only and executable up to here.
-const RTOS_EXECUTABLE_END: u32 = 0x55000000;
+pub const RTOS_EXECUTABLE_END: u32 = 0x55000000;
 
-pub use grkit_core::plugins::Point;
+pub use grkit_core::capabilities::Point;
 
 /// The code component that holds the code of a hook and installs it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,7 +112,9 @@ pub fn hooks(target: &Target) -> Result<Vec<Hook>> {
 /// unused. Framing extends to the end of the tail.
 const PROCESSING_START: u32 = 0x100;
 const MENU_START: u32 = 0x500;
-const FRAMING_START: u32 = 0x3800;
+// The menu region holds the menu host and its pages; Framing holds the
+// overlay core and the picture code to the end of the tail.
+const FRAMING_START: u32 = 0x5400;
 
 /// Where a target's components live and where they hook the firmware.
 #[derive(Debug, PartialEq, Eq)]

@@ -21,9 +21,9 @@ GRKit adds a sixth entry, GRK, to the ADJ menu. It has five modules:
 - **Date Imprint**: an orange date on the photo, like a film camera's data back.
 - **Grain**: film grain on the photo, in three strengths.
 
-The last row shows the GRKit version.
+The Modules row turns each module on or off and sets its place in the menu. The last row shows the GRKit version.
 
-You select the modules when you make a package. The menu shows only those modules.
+You select the modules when you make a package. The menu shows only those modules. To write a module, see [Writing a module](docs/modules.md).
 
 ## Supported cameras
 
@@ -76,13 +76,15 @@ You need Rust 1.92 or later, Clang and LLD with ARM support, and the official fi
 cargo install --path crates/grkit-cli --locked
 grkit effects build --source effects --out build/effects
 grkit build --target gr3-2.10 --firmware firmware/fwdc239b.bin --out build/runtime
+for module in modules/*/; do grkit module build --dir "$module" --out "build/modules/$(basename "$module").GRM"; done
 sh .github/scripts/install-guide-tools.sh build/guide-tools
 sh .github/scripts/build-guides.sh grkit build/guide-tools build/guides
-grkit package --build build/runtime --effects build/effects --guide build/guides/gr3/en.pdf --out dist/GRKit.zip
+grkit package --build build/runtime --effects build/effects $(for m in build/modules/*.GRM; do printf -- '--module %s ' "$m"; done) \
+  --guide build/guides/gr3/en.pdf --out dist/GRKit.zip
 grkit verify dist/GRKit.zip
 ```
 
-`install-guide-tools.sh` downloads Typst and the fonts, on Linux x86_64 or macOS arm64. For other cameras, fewer plugins, and other guide languages, see [Build packages](CONTRIBUTING.md#build-packages).
+`install-guide-tools.sh` downloads Typst and the fonts, on Linux x86_64 or macOS arm64. For other cameras, fewer modules, and other guide languages, see [Build packages](CONTRIBUTING.md#build-packages).
 
 ## Contributing
 

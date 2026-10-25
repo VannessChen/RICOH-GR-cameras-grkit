@@ -116,6 +116,18 @@ const HOOKS: &[HookSpec] = &[
     b("menu_settings_draw_1", Menu, MenuPage),
     b("menu_settings_apply_1", Menu, MenuPage),
     b("menu_settings_current_1", Menu, MenuPage),
+    b("menu_settings_count_2", Menu, MenuPage),
+    b("menu_settings_draw_2", Menu, MenuPage),
+    b("menu_settings_apply_2", Menu, MenuPage),
+    b("menu_settings_current_2", Menu, MenuPage),
+    b("menu_settings_count_3", Menu, MenuPage),
+    b("menu_settings_draw_3", Menu, MenuPage),
+    b("menu_settings_apply_3", Menu, MenuPage),
+    b("menu_settings_current_3", Menu, MenuPage),
+    b("menu_settings_count_4", Menu, MenuPage),
+    b("menu_settings_draw_4", Menu, MenuPage),
+    b("menu_settings_apply_4", Menu, MenuPage),
+    b("menu_settings_current_4", Menu, MenuPage),
     // Framing and Guides: LiveViewController update, exit, and destroy, then
     // Canvas::Draw entry and its child-draw BL.
     b("framing_update", Framing, ViewfinderOverlay),

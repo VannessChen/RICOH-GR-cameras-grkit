@@ -10,18 +10,19 @@ This document describes how the parts fit together. The source code and its comm
  developer computer / browser            camera
  ────────────────────────────            ──────────────────────────────────────────
  grkit build    ──► runtime build        Linux:  loader script ──► INSTALL
- grkit effects  ──► GRF effects                     │  checks firmware, writes code,
- grkit package  ──► GRKit.zip  ── SD card ──►       │  records, icons, and hooks
- site (wasm)    ──► GRKit.zip                       ▼
-                                         RTOS:   hooks ──► menu, Image Control,
-                                                 Framing, picture encode
+ grkit module   ──► GRM modules                     │  checks firmware, links modules,
+ grkit effects  ──► GRF effects                     │  writes records, icons, hooks
+ grkit package  ──► GRKit.zip  ── SD card ──►       ▼
+ site (wasm)    ──► GRKit.zip                RTOS:   hooks ──► core ──► modules
 ```
+
+The core is per target. It owns the firmware hooks, the state of each capability, and the hot paths. A module is the same file on each camera. It gives data, such as settings, pages, text, and tiles, and callbacks that the core calls, such as layers and plane filters. A module reaches the firmware only through services and capabilities of the core.
 
 There are three execution domains:
 
 - Rust tools run on the developer computer or, through WebAssembly, in the browser.
 - The installer runs in the camera's Linux, started by an SD script.
-- The hooks and plugins run in the camera's RTOS.
+- The hooks, the core, and the modules run in the camera's RTOS.
 
 | Path | Contents |
 | --- | --- |
@@ -29,7 +30,8 @@ There are three execution domains:
 | `crates/grkit-build` | Firmware checks, patch generation, Clang and LLD invocation. |
 | `crates/grkit-cli` | The `grkit` command and its filesystem rules. |
 | `crates/grkit-wasm` | Package assembly in the browser, with the same checks as the CLI. |
-| `runtime/` | Native C and assembly: installer, hooks, menu host, plugins. |
+| `runtime/` | Native C and assembly: installer, hooks, and the core: the menu host and the hosts of the extension points. `runtime/sdk/` is the module SDK. |
+| `modules/` | The official modules (`grkit_core::modules::OFFICIAL`). |
 | `resources/` | Installation guides (Markdown, compiled to PDF by the release). |
 | `effects/` | Built-in effect definitions. See [effects/README.md](../effects/README.md). |
 | `web/` | The static site: package builder and effect preview. See [web/README.md](../web/README.md). |
@@ -58,71 +60,148 @@ GR III 2.20 and GR IIIx 1.70 change only the end screen. Their code moves by les
 GR IV 1.20 changes the code around several hooks and adds the monochrome Image Control types 31 and 32. It therefore has its own target (see [Porting](#porting)). Its hooks are those of 1.11.
 GR IV 30th Anniversary Edition cameras have an earlier 1.20 build from the factory, with code of both 1.11 and 1.20, so it has its own target. Ricoh does not publish it, so the target builds from a dump of a camera (`Source::Dump`).
 An HDF camera runs the firmware of its base camera and uses the package of that camera.
-GR IV has its own layout and all plugins.
+GR IV has its own layout and all extension points.
 
 ## Installation
 
 At power-on, the loader script waits until Linux mounts the card. Then it runs two steps:
 
-1. SCAN moves the effects of the package into the effects library, selects the effects, and writes an allocation plan that holds them. The startup script allocates the arrays and stays resident, so the arrays stay allocated.
-2. INSTALL writes the records of the planned effects and the icons, publishes the code, and installs the hooks last. It writes `INSTALL.OK`, or `INSTALL.ERR` with a status.
+1. SCAN lists the modules and the effects, and writes an allocation plan that holds them. The loader allocates the arrays and stays resident, so the arrays stay allocated.
+2. INSTALL links the modules, writes the records of the planned effects and the icons, restores the saved state, and installs the hooks last. It writes `INSTALL.OK`, or `INSTALL.ERR` with a status, and then `GRKIT/REPORT.TXT`.
 
 A camera has one package. When the camera has several targets, the package holds the installer of each, and `INSTALL.SH` selects one at each power-on: first by the identity word of the running build, then by [relocation](#relocation) for a build that no target names (`runtime::package_runtime_files`).
 
 INSTALL changes nothing on a firmware that it does not expect. Each firmware address must resolve in the running image (see [Relocation](#relocation)), and each hook site must hold its stock instruction.
 
-Each hook belongs to one extension point. INSTALL installs only the points of the selected plugins, so a plugin that is not selected changes no firmware.
-`SCRIPT/PLUGINS/PLUGINS.TXT` selects the plugins.
-Each package has `PLUGINS.TXT` and `PACKAGE.TXT`, also when it selects every plugin or has no effects, and the other package files have the same names in each release. A copy of a new package over an old one, by replace or by merge, therefore leaves the files of the new package in `SCRIPT`, and the data folder keeps the settings and the effects. An update needs no delete step.
+Each hook belongs to one extension point. INSTALL installs only the points that the loaded modules need, so a feature without its module changes no firmware.
+### Card layout
 
-The effects library is `GRKIT/EFFECTS`, in the data folder. The package brings its effects in `SCRIPT/PLUGINS/EFFECTS`, the inbox, and lists their files in `SCRIPT/PLUGINS/PACKAGE.TXT`. When a package is new, SCAN copies its listed effects into the library, where each replaces the file with the same name. `GRKIT/IMPORTED.TXT` records the package that the library has, with a hash of each file. So a copy of the same package changes nothing, and an effect that a person deleted from the library stays deleted until a package with a different file brings it. The first power-on with the library copies every valid inbox file, because releases before the library kept the effects there. The installer deletes and renames no file in these folders: on the camera's Linux a rename does not replace a file, and on GR IV exFAT a delete made later lookups fail. Without Image Control in the selection, no effect installs.
-GRKit installs the effects of the library, at most 20. The effects of the last package come first, and each package has the list. The other effects fill the remaining places in ID order. A listed effect that SCAN could not copy installs from the inbox. INSTALL takes the effects from the plan that SCAN wrote, so both steps install the same effects. SCAN writes `GRKIT/EFFECTS.TXT`, the list of the installed effects and their files, when the list changes.
+A package holds only `SCRIPT`. `SCRIPT/STARTUP.TTL`, which the camera runs, includes the loader in the package folder `SCRIPT/GRKIT`. `GRKIT` at the card root is the data folder: no package holds it, so a copy of a new package, by replace or by merge, keeps it. INSTALL and the loader create it.
+
+| Path | Contents |
+| --- | --- |
+| `SCRIPT/GRKIT/LOADER.TTL` | the loader script |
+| `SCRIPT/GRKIT` | the installers, their shell scripts, the package list `PACKAGE.TXT`, and the files of the current boot |
+| `SCRIPT/GRKIT/MODULES` | the modules of the package, `<ID>.GRM` |
+| `SCRIPT/GRKIT/EFFECTS` | the inbox: the effects of the package, `<ID>.GRF` |
+| `GRKIT/EFFECTS` | the effects library |
+| `GRKIT/MODULES` | the modules that a person adds |
+| `GRKIT/STATE.TXT` | the saved settings |
+| `GRKIT/REPORT.TXT` | the result of the last boot |
+| `GRKIT/IMPORTED.TXT` | the package that the library has |
+| `GRKIT/SAFE` | an empty file that turns on the safe mode |
+
+`PACKAGE.TXT` lists the effect and module files of the package, and the other package files have the same names in each release. A package module loads only if the list names it, so a merge copy that leaves an old module behind gives the same result as a replace copy. A module in `GRKIT/MODULES` replaces the package module with the same name.
+
+When a package is new, SCAN copies its listed effects into the library, where each replaces the file with the same name. `GRKIT/IMPORTED.TXT` records the package that the library has, with a hash of each file. So a copy of the same package changes nothing, and an effect that a person deleted from the library stays deleted until a package with a different file brings it. The first boot without the library copies every valid inbox file. A listed effect that SCAN could not copy installs from the inbox. By default, the effects of the package come first, then the other effects of the library, each group in ID order.
+
+GRKit lists at most 64 effect files and installs at most 40 of them (see [Effects page](#effects-page)). `REPORT.TXT` gives the status of each listed effect. Without a module that uses `CORE.TONE`, no effect installs. The installer deletes and renames no file in these folders. On the camera's Linux, a rename does not replace a file. On GR IV exFAT, a delete made later lookups fail.
+
+### Report and safe mode
+
+At each boot, INSTALL writes `GRKIT/REPORT.TXT` when its text changes. The report gives the GRKit version and target, the result of each module, the installed effects, and the safe mode. It writes the file in place, because a rename does not replace a file.
+
+In the safe mode, SCAN loads no module, so INSTALL applies only the patches of no extension point and the menu patches for the Modules page. The safe mode starts in two cases:
+
+- `GRKIT/SAFE` exists.
+- The last three boots did not finish. SCAN counts each boot in `SCRIPT/GRKIT/BOOT.TXT`, and the loader deletes the file about 20 s after INSTALL. A quick power-off also leaves a boot unfinished, so the limit is three.
+
+### State
 
 `grkit_core::abi` defines the shared header, the effect records, and the picture scratch. It generates `runtime/abi.h`.
 
-The resident loader saves the plugin selections and the Fn adjustments in `GRKIT/STATE.TXT`. It writes only after a change, and only through the camera's own file system.
-`GRKIT` is the data folder of GRKit, outside `SCRIPT`. No package holds it, so a copy of a new package never replaces the settings. The loader creates it.
-Each plugin names its state file (`plugins::StateFile`). The loader restores the files in a fixed order and keeps a key with the value 0 out of the file.
-Releases before the data folder kept the state in `SCRIPT/PLUGINS`. The loader reads those files when the data folder has none, saves the values in the data folder at once, and then deletes the old files.
+The resident loader saves the values of the capabilities, the saved module settings, and the Fn adjustments in `GRKIT/STATE.TXT`. It writes only after a change, and only through the camera's own file system. It keeps a key with the value 0 out of the file.
+INSTALL restores the file before it installs the hooks (`runtime/state.h`), so the first frame already has the saved values. It restores a capability only when a loaded module uses it, and a module setting only when its module loads. A missing `STATE.TXT` reads `STATE.TMP`, which a save that a power cut stopped leaves.
 A script error frees the arrays that the hooks use, so the resident script checks each array index and divides only by constants.
 
-## Plugins
+## Modules
 
-The core is in `runtime/`: hooks, installer, menu host, and the hosts of the extension points. Each feature is a plugin in `runtime/plugins/<id>/`, linked statically into the core.
-A plugin includes only `runtime/plugin.h`, and a test checks that no plugin names a firmware symbol or address.
+Each feature is a module in its own file, `GRKIT/MODULES/<ID>.GRM`. The same file runs on each camera, because a module calls the firmware only through services that the core exports. A test checks that no module source names a firmware symbol or address.
 
-| Plugin | Extension points |
+| Module | Folder | Contents |
+| --- | --- | --- |
+| `IMGCTL` | `modules/image-control` | a page of `CORE.TONE` |
+| `FRAMING` | `modules/framing` | a page of `CORE.ASPECT`, the mask, and the ratio label |
+| `GUIDES` | `modules/guides` | its style, a page, and the guides |
+| `DATE` | `modules/date` | its style and look, a page with a native settings page, and the date |
+| `GRAIN` | `modules/grain` | a page of `CORE.GRAIN` |
+
+`grkit_core::modules::OFFICIAL` lists the official modules in their root order. The release builds each one once into `site/modules`, and the camera packages and the site add the selected ones.
+
+A module folder has these files:
+
+- `module.toml`: the ID, the sources, the tiles, the settings, the menu page, the layers, and the plane filters.
+- `text/<language>.toml`: the page text in each menu language.
+- C sources that include only `runtime/sdk/grkit.h`. A module with only data, such as Grain, has none.
+- `test.c`: the host test of a module with C sources.
+
+[Writing a module](modules.md) is the guide for module authors, and [the module reference](module-reference.md) gives the keys, services, limits, and error numbers. `grkit module new --id <ID> --out <folder>` writes a new module folder that builds and passes its test. `grkit module build --dir <folder>` makes the module file, and `grkit module test --dir <folder>` runs the host test. The build rejects a module that calls a function that the core does not export, such as a compiler helper for a division. `grkit package --module <file>` adds module files to a package.
+
+At power-on, SCAN reserves a script array for the data of the modules, and INSTALL links each module (`runtime/module_link.h`):
+
+1. INSTALL copies the code of each module after the tail. The RTOS maps that area read-only and executable, and no firmware code uses it.
+2. INSTALL copies the data of each module into the array, after the settings table and the context of each module.
+3. INSTALL moves each address word of the module. It fills each import with the address of a core service or with the context of the module.
+4. INSTALL registers the menu page, the layers, and the plane filters of the module in the header, and copies its tiles after the effect icons.
+
+A module that does not link is skipped, and the others load. By default, INSTALL loads the official modules in their order, then the others in the order of their IDs. The [Modules page](#modules-page) changes the order and turns modules off.
+
+The core keeps the value of each module setting (`runtime/settings.h`). INSTALL restores the saved settings from the state file. The resident loader saves them after the core counts a change. A setting of another module is available only if it is public.
+
+The capabilities of the core are public settings too, `CORE.<KEY>` (`grkit_core::capabilities`). The core keeps the value of a capability in a header word, and its hooks read that word, so a module never runs in a hot path. INSTALL applies the patches of a capability only when a loaded module uses its setting. The loader saves the value under the key `CORE.<KEY>`. INSTALL restores it only when a loaded module uses the capability.
+
+| Capability | Values |
 | --- | --- |
-| Image Control | `menu.page`, `tuning`, `picture.encode` |
-| Framing | `menu.page`, `viewfinder.overlay`, `capture.aspect` |
-| Guides | `menu.page`, `viewfinder.overlay` |
-| Date Stamp | `menu.page`, `picture.encode` |
-| Grain | `menu.page`, `pipeline.grain` |
+| `CORE.TONE` | the effect (see Image Control) |
+| `CORE.ASPECT` | the aspect of still pictures (see Framing) |
+| `CORE.GRAIN` | the grain level of recorded pictures |
 
-A point with several plugins calls their handlers in registry order.
+A module page is a choice page: one row for each value of a setting of the module or of a used setting, with the text and tiles of the module. The rows of `CORE.ASPECT` are the ratios of the camera, in the row order of the camera. The core gives the rows of a page of `CORE.TONE`: the effects. A page of an own setting can also give 2 to 5 rows of a native settings page, which opens instead of the page where the camera has one. Each row opens a borrowed native value page; the core borrows five of them on each camera. Such a page can also have a row in the Customize tab of the native MENU: at the first controller change after INSTALL, the core copies the tab descriptor, adds the rows, and points the RAM tab table at the copy, before MENU builds its tabs. A row targets a controller ID that does not exist, and the controller change hook turns it into the settings submenu of the module.
 
-`grkit_core::plugins::PLUGINS` is the only list of plugins. Its order is the menu order.
-The generated files (`runtime/generated/*.h`, `web/src/generated/plugins.ts`) come from the registry, and a test fails if one differs.
+A module layer paints the value of its setting, and the core skips it at 0. Module layers paint in their order. A layer can hide while DISP hides the native information, show only with the full display, or stay off the ADJ canvas. On an open module page, the ADJ canvas shows the highlighted value.
 
-### Add a plugin
+A plane filter changes the planes of each recorded picture with the value of its setting, and the core skips it at 0. Filters run in a fixed stage order, after the color of the effect: frames, then marks such as the date. The core exports `local_time` and `divide` for them.
 
-1. Add the C code in `runtime/plugins/<id>/`: `page.h`, and a handler file if the plugin has layers or encoders. Include only `runtime/plugin.h`.
-2. In `page.h`, define `<ID>_PAGE`, with `<ID>_TILES` as its tile count.
-3. Add the entry to `PLUGINS` in `crates/grkit-core/src/plugins.rs`. Declare its header words in `words`. A saved key refers to one of them with `Slot::Own`.
-4. Add its tiles to `grkit_core::artwork`, its menu text to `grkit_core::menu_text`, and its site text to `web/src/i18n.ts`.
-5. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
-6. Run the tests. They fail if a tile count, a handler order, or an extension point does not agree with the code.
+### Services
+
+The core gives modules events, timers, and a UI (`runtime/services.h`, `runtime/ui.h`). Their state is a block of the module array, and `GRKIT_HOST_SERVICES` holds its address.
+
+- Events: INSTALL registers one subscriber for each module that has `[events]`. The core sends `SETTING_CHANGED` from `setting_store`, and `SYSTEM_READY` from the hook of the shooting screen at its first bind after INSTALL. Both run in the App task. An event that a handler causes is not sent again.
+- Timers: each timer is a one-shot App timer of the firmware. The firmware calls the handler of the core in the App task, and the core calls the callback of the module.
+- UI: the core shows the native message box on the ADJ canvas of the GRKit page. The firmware allows view calls only in the App task. The core counts its calls of module code in the App task (event handlers, timer callbacks, UI callbacks), and the timer and UI services refuse a call outside them. OK on a page row keeps ADJ open when the commit shows a box. A native screen opens as the parameter page does: the core leaves the GRKit page, changes the controller with ADJ as the screen to return to, and the return state opens the GRKit page again. The core tells the parent after it attaches a view, because a new view does not mark its parent dirty. Before it deletes a view, it hides each view of the subtree and purges it from the overlap lists, because other views keep raw pointers to it. The box shows the text ID of the borrowed settings page title, and the text hook gives the text of the module in the menu language. ADJ exit closes the box.
 
 ## Menu
 
-GRKit adds a private entry to the ADJ toolbar, drawn like the native entries. The root lists the installed plugins, then About. Each plugin page owns its rows.
+GRKit adds a private entry to the ADJ toolbar, drawn like the native entries. The root lists the module pages that have rows, then Modules, then About. A page of `CORE.TONE` has rows only with effects.
 The private menu reuses the native ADJ value list, so it behaves like a native entry.
+
+### Modules page
+
+The Modules page (`runtime/manage.h`) lists each module file of `GRKIT/MODULES`, also a module that did not load. OK on a module opens a native settings page with two rows:
+
+- **Load** turns the module on or off. The setting is `CORE.OFF.<ID>`, 1 for Off.
+- **Position** sets the row of the module in the root. The setting is `CORE.POS.<ID>`: the position + 1, or 0 for the default place. A move writes the position of each module.
+
+The choices are settings in the settings table, so the resident loader saves them as other settings. SCAN reads them from `STATE.TXT`: a module that is Off does not load, and the modules load in the order of their positions. So a change applies at the next start. Until then, the root row says to restart. A module that is Off installs no hook, and its saved settings stay in the file.
+
+The settings table also keeps each saved value that no setting of this start takes, such as a setting of a module that is Off. The next save of the loader then keeps the value. The Fn adjustments of a missing effect are not kept.
+
+### Effects page
+
+A page of `CORE.TONE`, such as that of Image Control, has a last row, Effects, when `GRKIT/EFFECTS` has an effect file. It opens the Effects page (`runtime/effects.h`), which has no root row. MENU returns to the Effects row. The page lists at most 64 effect files, those with the smallest IDs, also an effect that did not install. OK on an effect opens a native settings page with two rows:
+
+- **Load** turns the effect on or off.
+- **Order** moves the effect up or down one row. A move writes the position of each effect.
+
+One setting keeps the choice of each listed effect: `CORE.EFFECT.<effect ID>`, with Off in bit 0 and the position + 1, or 0 for the default place, above. SCAN orders the listed effects by their positions, and installs the first 40 that are not Off. Image Control shows them in that order. `REPORT.TXT` gives the status of each listed effect.
+
+The menu hooks install when GRKIT/MODULES lists a module, also in safe mode. In safe mode, the Modules page can turn off the module that stopped the camera.
 
 The menu text follows the camera language. It is data, not code, because the menu region is small.
 
 ## Image Control
 
-Image Control selects an effect for still pictures and the live view by changing a private active-record pointer. Off keeps the native processing.
+The capability `CORE.TONE` selects an effect for still pictures and the live view by changing a private active-record pointer (`runtime/tone.h`). Off keeps the native processing. The Image Control module is its page.
 
 An effect (GRFX0001) replaces the Standard color matrix and tone curves. An optional extension adds a post matrix and selective color.
 
@@ -136,9 +215,9 @@ Photos record the effect and its adjustments in the maker note, so playback show
 
 ## Framing
 
-Framing draws a mask and a ratio badge into the viewfinder overlay. Guides draws its lines in the same path, inside the photo area of the selected ratio.
+The capability `CORE.ASPECT` holds the aspect of still pictures (`runtime/aspect.h`). The Framing module is its page, a mask outside the photo area, and a ratio label. The overlay gives each layer the crop as its capture area, so the lines of Guides also draw inside the photo area of the selected ratio.
 
-After INSTALL, the overlay core also shows a short "GRKit" label in the first still live view, so the user sees that GRKit has loaded. The label uses the overlay hooks, so it shows only when Framing or Guides is installed.
+After INSTALL, the overlay core also shows a short "GRKit" label in the first still live view, so the user sees that GRKit has loaded. The label uses the overlay hooks, so it shows only when a module layer is installed.
 
 The live-view labels, the load cue and the Framing ratios, are rendered in Roboto Condensed Light at build time, in the size and style of the native live-view text (`grkit_core::artwork::overlay_labels`). The installer copies them after the menu text, because the code region has no room for them.
 
@@ -150,9 +229,9 @@ The camera saves a crop as a value, not as a menu row, so a release can add rati
 
 ## Recorded pictures
 
-A hook on the JPEG encode processes each picture plane before encoding: the main picture, the screennail, and the thumbnail. It applies selective color, then the date stamp.
+A hook on the JPEG encode processes each picture plane before encoding: the main picture, the screennail, and the thumbnail. It applies selective color of the effect, then the plane filters of the modules, such as the date of Date Imprint.
 Each still build stores its effect record with its shot settings, so continuous shooting keeps the effect of each shot.
-Grain sets the native grain stage of recorded pictures. The live view and DNG files do not have grain.
+`CORE.GRAIN` sets the native grain stage of recorded pictures. The live view and DNG files do not have grain.
 
 ## Relocation
 
@@ -207,6 +286,7 @@ All private code is in the reservation after the RTOS image. GRKit changes no by
 ## Testing
 
 - Rust tests pin the GRF bytes, the artwork, the generated headers, and the loader scripts.
-- Host C tests check the GRF parser, the effect catalog, the menu, Framing, and the picture code. The menu, Framing, and picture tests run for each target, with the expectations of its family where the behavior differs.
+- Host C tests check the GRF parser, the effect catalog, the state file parser, the module linker, the menu with the Modules and Effects pages, Framing, and the picture code. The menu, Framing, and picture tests run for each target, with the expectations of its family where the behavior differs.
+- `grkit module test` runs the host test of a module against a fake core (`runtime/sdk/grkit_test.h`).
 - `--ignored` tests build the runtime with an ARM toolchain and a local firmware. See [CONTRIBUTING.md](../CONTRIBUTING.md).
 - The synthetic `--ignored` tests need no firmware. They build a target of each family on a pseudo-random image, as the release builds them, and resolve the relocation tables of INSTALL against that image.

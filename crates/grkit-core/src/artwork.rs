@@ -500,181 +500,6 @@ pub fn off_pixels() -> Vec<u8> {
     render_tile("OFF", "plain").expect("constant tile is valid")
 }
 
-/// A panoramic frame inside the same tile used by the other module entries.
-pub fn framing_pixels() -> Vec<u8> {
-    let mut rgba = background();
-    for y in 12..28 {
-        for x in 7..33 {
-            let edge = x == 7 || x == 32 || y == 12 || y == 27;
-            dot(&mut rgba, x, y, if edge { 255 } else { 20 });
-        }
-    }
-    rgba
-}
-
-/// A frame with the proportions of `width` x `height`, centered above its label.
-fn ratio_pixels(label: &str, width: usize, height: usize) -> Vec<u8> {
-    let mut rgba = background();
-    let (left, top) = ((40 - width) / 2, 6 + (19 - height) / 2);
-    for y in top..top + height {
-        for x in left..left + width {
-            let edge = x == left || x == left + width - 1 || y == top || y == top + height - 1;
-            dot(&mut rgba, x, y, if edge { 255 } else { 20 });
-        }
-    }
-    text(&mut rgba, label, 11.0, LABEL_WIDTH, 30.5, 255);
-    rgba
-}
-
-/// Framing artwork in the order of the ratio values (`runtime/firmware.h`):
-/// the module tile, then XPan (65:24), 16:9, 4:3, 2.35:1, 1:1, and 5:4.
-pub fn framing_tiles() -> Vec<Vec<u8>> {
-    vec![
-        framing_pixels(),
-        ratio_pixels("XPan", 30, 11),
-        ratio_pixels("16:9", 30, 17),
-        ratio_pixels("4:3", 24, 18),
-        ratio_pixels("2.35", 30, 13),
-        ratio_pixels("1:1", 18, 18),
-        ratio_pixels("5:4", 22, 18),
-    ]
-}
-
-/// Composition guide styles, in runtime order after Off.
-#[derive(Clone, Copy)]
-enum Guide {
-    Thirds,
-    Center,
-    Golden,
-    Diagonals,
-    ThirdsCenter,
-}
-
-/// A frame of about 3:2 with its guide lines, centered horizontally. Lines are
-/// gray, so they stay distinct from the frame.
-fn guide_frame(rgba: &mut [u8], top: usize, guide: Guide) {
-    let (width, height) = (28, 18);
-    let left = (40 - width) / 2;
-    let (right, bottom) = (left + width - 1, top + height - 1);
-    for y in top..=bottom {
-        for x in left..=right {
-            let edge = x == left || x == right || y == top || y == bottom;
-            dot(rgba, x, y, if edge { 255 } else { 20 });
-        }
-    }
-    // Symmetric line offsets from the left and top edges.
-    let grid = |rgba: &mut [u8], column: usize, row: usize| {
-        for x in [left + column, right - column] {
-            (top + 1..bottom).for_each(|y| dot(rgba, x, y, 170));
-        }
-        for y in [top + row, bottom - row] {
-            (left + 1..right).for_each(|x| dot(rgba, x, y, 170));
-        }
-    };
-    // Even dimensions center the cross between two pixel rows and columns.
-    // `reach` is the arm length from the center pair.
-    let cross = |rgba: &mut [u8], reach: (usize, usize)| {
-        for offset in [0, 1] {
-            (left + 13 - reach.0..=left + 14 + reach.0)
-                .for_each(|x| dot(rgba, x, top + 8 + offset, 170));
-            (top + 8 - reach.1..=top + 9 + reach.1)
-                .for_each(|y| dot(rgba, left + 13 + offset, y, 170));
-        }
-    };
-    match guide {
-        Guide::Thirds => grid(rgba, 9, 6),
-        Guide::Golden => grid(rgba, 10, 7),
-        Guide::Center => cross(rgba, (4, 4)),
-        // A short cross inside the center cell of the grid.
-        Guide::ThirdsCenter => {
-            grid(rgba, 9, 6);
-            cross(rgba, (2, 1));
-        }
-        Guide::Diagonals => {
-            for x in 1..width - 1 {
-                // Round half up, as the runtime's Bresenham lines do.
-                let y = (2 * x * (height - 1) + width - 1) / (2 * (width - 1));
-                dot(rgba, left + x, top + y, 170);
-                dot(rgba, right - x, top + y, 170);
-            }
-        }
-    }
-}
-
-/// A guide frame centered above its label.
-fn guide_pixels(label: &str, guide: Guide) -> Vec<u8> {
-    let mut rgba = background();
-    guide_frame(&mut rgba, 6, guide);
-    text(&mut rgba, label, 11.0, LABEL_WIDTH, 30.5, 255);
-    rgba
-}
-
-/// Guides artwork in runtime order: the module tile, then thirds, center,
-/// golden ratio, diagonals, and thirds with center.
-pub fn guides_tiles() -> Vec<Vec<u8>> {
-    let mut module = background();
-    guide_frame(&mut module, 11, Guide::Thirds);
-    vec![
-        module,
-        guide_pixels("3x3", Guide::Thirds),
-        guide_pixels("Ctr", Guide::Center),
-        guide_pixels("Phi", Guide::Golden),
-        guide_pixels("Diag", Guide::Diagonals),
-        guide_pixels("3x3+", Guide::ThirdsCenter),
-    ]
-}
-
-/// Date stamp artwork in runtime order: the module tile, then the 'YY M D,
-/// 'YY M D H:MM, M D 'YY, D M 'YY, and D M 'YY H:MM styles, each named by a
-/// sample. The last tile has two lines: the day-first order and the time.
-pub fn stamp_tiles() -> Vec<Vec<u8>> {
-    let mut tiles: Vec<_> = ["DATE", "'26", "9:05", "M D", "D M"]
-        .iter()
-        .map(|label| {
-            let mut rgba = background();
-            text(&mut rgba, label, LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
-            rgba
-        })
-        .collect();
-    let mut rgba = background();
-    text(&mut rgba, "D M", 14.0, LABEL_WIDTH, 13.5, 255);
-    text(&mut rgba, "9:05", 14.0, LABEL_WIDTH, 26.5, 255);
-    tiles.push(rgba);
-    tiles
-}
-
-/// Light speckles in rows `top..bottom`, one in `period` pixels on average.
-/// A fixed hash places them, so the artwork stays deterministic.
-fn speckles(rgba: &mut [u8], top: usize, bottom: usize, period: u32) {
-    for y in top..bottom {
-        for x in 6..34 {
-            let hash = (x as u32)
-                .wrapping_mul(0x9e37_79b1)
-                .wrapping_add((y as u32).wrapping_mul(0x85eb_ca77))
-                .rotate_left(13)
-                .wrapping_mul(0xc2b2_ae3d);
-            if (hash >> 16).is_multiple_of(period) {
-                dot(rgba, x, y, 220);
-            }
-        }
-    }
-}
-
-/// Grain artwork in runtime order: the module tile, then the weak, medium,
-/// and strong levels, with more speckles at each level.
-pub fn grain_tiles() -> Vec<Vec<u8>> {
-    let mut module = background();
-    speckles(&mut module, 6, 34, 4);
-    let mut tiles = vec![module];
-    for (label, period) in [("Weak", 9), ("Med", 5), ("Strong", 3)] {
-        let mut rgba = background();
-        speckles(&mut rgba, 6, 24, period);
-        text(&mut rgba, label, 11.0, LABEL_WIDTH, 30.5, 255);
-        tiles.push(rgba);
-    }
-    tiles
-}
-
 /// The GRKit entry of the ADJ toolbar.
 pub fn plugins_pixels() -> Vec<u8> {
     let mut rgba = toolbar_background();
@@ -687,6 +512,13 @@ pub fn plugins_pixels() -> Vec<u8> {
 pub fn version_pixels() -> Vec<u8> {
     let mut rgba = background();
     text(&mut rgba, "VER", LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
+    rgba
+}
+
+/// The Modules row, which lists the modules.
+pub fn modules_pixels() -> Vec<u8> {
+    let mut rgba = background();
+    text(&mut rgba, "MOD", LABEL_SIZE, LABEL_WIDTH, 20.0, 255);
     rgba
 }
 

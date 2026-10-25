@@ -2,9 +2,7 @@
 //! against the Rust tables, and the behavior of the menu, Framing, picture,
 //! catalog, directory, relocation, and selection code.
 
-use grkit_core::{
-    effects, menu_text, modules::Selection, packaging, runtime, selective::Selective,
-};
+use grkit_core::{effects, menu_text, packaging, runtime, selective::Selective};
 use serde_json::{json, Value};
 use std::{
     env,
@@ -126,6 +124,9 @@ fn compile_with(
         command
             .arg("-I")
             .arg(root().join("runtime"))
+            // Module code that a harness links in (runtime/sdk/grkit.h).
+            .arg("-I")
+            .arg(root().join("runtime/sdk"))
             .arg(source)
             .args(extra_sources)
             .arg("-o")
@@ -493,9 +494,9 @@ _Static_assert(GRKIT_RECORD_NAME + 34 <= GRKIT_RECORD_MONOCHROME, "Name overlap"
 _Static_assert(GRKIT_RECORD_CODE + 2 <= GRKIT_RECORD_FEATURES, "Extension overlap");
 _Static_assert(GRKIT_RECORD_POST + 20 <= GRKIT_RECORD_SIZE, "Extension overflow");
 int main(void) {
-    printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE,
-           GRKIT_PICTURE_SCRATCH, GRKIT_HOST_COUNT, GRKIT_HOST_RECORDS, GRKIT_HOST_ACTIVE, GRKIT_HOST_STAMP,
-           GRKIT_HOST_GUIDE, GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE, GRKIT_HOST_PLUGINS, GRKIT_TEXT_SIZE,
+    printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n", GRKIT_HOST_HEADER_SIZE, GRKIT_RECORD_SIZE,
+           GRKIT_PICTURE_SCRATCH, GRKIT_HOST_COUNT, GRKIT_HOST_RECORDS, GRKIT_HOST_ACTIVE, GRKIT_HOST_MODULE_FILTERS,
+           GRKIT_HOST_FRAME_RATIO, GRKIT_RECORD_CODE, GRKIT_HOST_MANAGE, GRKIT_TEXT_SIZE,
            GRKIT_TEXT_SUMMARY, GRKIT_TEXT_STRINGS, GRKIT_TEXT_LANGUAGES, GRKIT_TEXT_RECORDS, GRKIT_SUMMARY_UNITS, GRKIT_TAIL_SIZE);
     return 0;
 }
@@ -519,11 +520,10 @@ int main(void) {
             runtime::HOST_COUNT,
             runtime::HOST_RECORDS,
             runtime::HOST_ACTIVE,
-            runtime::HOST_STAMP,
-            runtime::HOST_GUIDE,
+            grkit_core::abi::HOST_MODULE_FILTERS,
             runtime::HOST_FRAME_RATIO,
             runtime::RECORD_CODE,
-            grkit_core::abi::HOST_PLUGINS,
+            grkit_core::abi::HOST_MANAGE,
             menu_text::TEXT_SIZE,
             menu_text::TEXT_SUMMARY,
             menu_text::STRINGS,
@@ -593,6 +593,38 @@ fn native_directory_contract_skips_long_names_and_a_stale_listing() {
     compile(
         &compiler,
         &root().join("tests/runtime/directory_contract.c"),
+        &executable,
+        &[],
+    );
+    checked(&mut Command::new(&executable));
+}
+
+#[test]
+fn native_state_contract_reads_the_pairs_of_the_loader() {
+    let Some(compiler) = compiler() else {
+        return;
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("state_contract");
+    compile(
+        &compiler,
+        &root().join("tests/runtime/state_contract.c"),
+        &executable,
+        &[],
+    );
+    checked(&mut Command::new(&executable));
+}
+
+#[test]
+fn native_module_link_contract_links_and_rejects_modules() {
+    let Some(compiler) = compiler() else {
+        return;
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let executable = temporary.path().join("module_link_contract");
+    compile(
+        &compiler,
+        &root().join("tests/runtime/module_link_contract.c"),
         &executable,
         &[],
     );
@@ -676,14 +708,22 @@ fn native_picture_contract_applies_post_matrix_and_stamp() {
         return;
     };
     let temporary = tempfile::tempdir().unwrap();
+    // The header that `grkit module build` generates for modules/date: the
+    // handles of its settings STYLE and LOOK.
+    fs::write(
+        temporary.path().join("grkit_module.h"),
+        "#define SETTING_STYLE GRKIT_SETTING(0)\n#define SETTING_LOOK GRKIT_SETTING(1)\n",
+    )
+    .unwrap();
     for (index, target) in targets().iter().enumerate() {
         let executable = temporary.path().join(format!("picture_contract_{index}"));
-        compile_for(
+        compile_with(
             target,
             &compiler,
             &root().join("tests/runtime/picture_contract.c"),
             &executable,
             &[],
+            Some(temporary.path()),
         );
         checked(&mut Command::new(&executable));
     }
@@ -725,87 +765,50 @@ fn runtime_c_sources_compile_for_each_target() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("GRKIT_TARGET_"));
 }
 
+/// Modules are target neutral: each module source includes only the module
+/// SDK and the header that `grkit module build` generates, and names no
+/// firmware symbol or address.
 #[test]
-fn rust_and_installer_c_read_the_same_plugin_files() {
-    let Some(compiler) = compiler() else {
-        return;
-    };
-    let temporary = tempfile::tempdir().unwrap();
-    let executable = temporary.path().join("selection_contract");
-    compile(
-        &compiler,
-        &root().join("tests/runtime/selection_contract.c"),
-        &executable,
-        &[],
-    );
-    // 256 bytes is the largest file the installer reads.
-    let long = format!("{}framing", " ".repeat(249));
-    let cases: [&[u8]; 17] = [
-        b"",
-        b"\n",
-        b"framing\n",
-        b"guides\ndate-stamp\n",
-        b"date-stamp framing guides",
-        b" \tguides\r\n",
-        b"framing\nframing\n",
-        b"image-control\n",
-        b"grain image-control",
-        b"Framing\n",
-        b"framingx\n",
-        b"frame\n",
-        b"framing,guides\n",
-        b"framing\0\n",
-        b"\xff\n",
-        long.as_bytes(),
-        &[b' '; 257],
-    ];
-    for case in cases {
-        let output = checked(Command::new(&executable).arg(hex::encode(case)));
-        let native = String::from_utf8(output.stdout).unwrap();
-        let expected = match Selection::parse(case) {
-            Ok(selection) => format!("{}\n", selection.mask()),
-            Err(_) => "invalid\n".to_owned(),
-        };
-        assert_eq!(native, expected, "{:?}", String::from_utf8_lossy(case));
-    }
-    assert_eq!(
-        Selection::parse(b"guides date-stamp").unwrap().mask(),
-        0b1100
-    );
-    assert!(Selection::parse(long.as_bytes()).is_ok());
-}
-
-/// Plugins are target neutral: each plugin file includes only the plugin
-/// interface and names no firmware symbol or address.
-#[test]
-fn plugins_hold_no_firmware_detail() {
+fn modules_hold_no_firmware_detail() {
     let mut checked = 0;
-    for plugin in fs::read_dir(root().join("runtime/plugins")).unwrap() {
-        for file in fs::read_dir(plugin.unwrap().path()).unwrap() {
-            let path = file.unwrap().path();
-            let text = fs::read_to_string(&path).unwrap();
-            let name = path.display();
-            for line in text.lines().map(str::trim) {
-                if line.starts_with("#include") {
-                    assert_eq!(line, "#include \"../../plugin.h\"", "{name}");
+    let folders = [(
+        "modules",
+        &["#include \"grkit.h\"", "#include \"grkit_module.h\""][..],
+    )];
+    for (folder, includes) in folders {
+        for plugin in fs::read_dir(root().join(folder)).unwrap() {
+            for file in fs::read_dir(plugin.unwrap().path()).unwrap() {
+                let path = file.unwrap().path();
+                // test.c of a module is its host test (`grkit module test`).
+                if !matches!(path.extension().and_then(|e| e.to_str()), Some("c" | "h"))
+                    || path.file_name().is_some_and(|name| name == "test.c")
+                {
+                    continue;
                 }
+                let text = fs::read_to_string(&path).unwrap();
+                let name = path.display();
+                for line in text.lines().map(str::trim) {
+                    if line.starts_with("#include") {
+                        assert!(includes.contains(&line), "{name}: {line}");
+                    }
+                }
+                for symbol in ["FW_", "HOOK_", "firmware.h", "LIVEVIEW_", "ADJ_"] {
+                    assert!(!text.contains(symbol), "{name} names {symbol}");
+                }
+                // RTOS code and data addresses: 0x53000000..0x56000000.
+                for (at, _) in text.match_indices("0x5") {
+                    let digits: String = text[at + 2..]
+                        .chars()
+                        .take_while(char::is_ascii_hexdigit)
+                        .collect();
+                    assert!(
+                        digits.len() < 8 || !matches!(&digits[..2], "53" | "54" | "55"),
+                        "{name} has an address 0x{digits}"
+                    );
+                }
+                checked += 1;
             }
-            for symbol in ["FW_", "HOOK_", "firmware.h", "LIVEVIEW_", "ADJ_"] {
-                assert!(!text.contains(symbol), "{name} names {symbol}");
-            }
-            // RTOS code and data addresses: 0x53000000..0x56000000.
-            for (at, _) in text.match_indices("0x5") {
-                let digits: String = text[at + 2..]
-                    .chars()
-                    .take_while(char::is_ascii_hexdigit)
-                    .collect();
-                assert!(
-                    digits.len() < 8 || !matches!(&digits[..2], "53" | "54" | "55"),
-                    "{name} has an address 0x{digits}"
-                );
-            }
-            checked += 1;
         }
     }
-    assert!(checked >= 8, "Expected the plugin pages and handlers");
+    assert!(checked >= 3, "Expected the module sources");
 }

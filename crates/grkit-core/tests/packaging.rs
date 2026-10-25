@@ -1,6 +1,6 @@
 use std::io::{Cursor, Read, Write};
 
-use grkit_core::{camera, modules::Selection, packaging::*, runtime, testing, Files};
+use grkit_core::{camera, packaging::*, runtime, testing, Files};
 use serde_json::{json, Value};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
@@ -26,7 +26,7 @@ fn package() -> Vec<u8> {
     assemble(
         &[runtime()],
         &testing::effect_set(&["test-effect"]),
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR3,
         &english(),
     )
@@ -243,7 +243,7 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
     let bytes = assemble(
         &[runtime()],
         &effects,
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR3,
         &english(),
     )
@@ -256,11 +256,16 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
     let error = effects
         .insert(testing::effect("effect-overflow"))
         .unwrap_err();
-    assert!(error.to_string().contains("at most 20 effects"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains(&format!("at most {} effects", runtime::MAX_COUNT)),
+        "{error}"
+    );
     let bytes = assemble(
         &[runtime()],
         &EffectSet::default(),
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR3,
         &english(),
     )
@@ -273,97 +278,47 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
 }
 
 #[test]
-fn selected_plugins_are_packaged_and_verified() {
+fn selected_modules_are_packaged_and_verified() {
     let effects = testing::effect_set(&["test-effect"]);
-    let plugins = Selection::from_names(["date-stamp", "image-control"]).unwrap();
-    let bytes = assemble(&[runtime()], &effects, plugins, &camera::GR3, &english())
+    let modules = [testing::module("DATE"), testing::module("IMGCTL")];
+    let bytes = assemble(&[runtime()], &effects, &modules, &camera::GR3, &english())
         .unwrap()
         .bytes;
     let files = unpack(&bytes);
-    assert_eq!(
-        files["SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT"],
-        b"image-control\ndate-stamp\n"
+    assert!(files.contains_key("SD_ROOT/SCRIPT/GRKIT/MODULES/DATE.GRM"));
+    assert!(files.contains_key("SD_ROOT/SCRIPT/GRKIT/MODULES/IMGCTL.GRM"));
+    assert_eq!(verify_package(&bytes).unwrap().modules, ["DATE", "IMGCTL"]);
+    // The plugin file of 1.x is not part of a package.
+    let mut files = unpack(&package());
+    files.insert(
+        "SD_ROOT/SCRIPT/GRKIT/PLUGINS.TXT".into(),
+        b"image-control\n".to_vec(),
     );
-    assert_eq!(
-        verify_package(&bytes).unwrap().plugins.names(),
-        ["image-control", "date-stamp"]
-    );
-    // A package with every plugin has the file too, so a copy over an older
-    // package always replaces its selection.
-    let plain = assemble(
-        &[runtime()],
-        &effects,
-        Selection::ALL,
-        &camera::GR3,
-        &english(),
-    )
-    .unwrap()
-    .bytes;
-    assert_eq!(
-        unpack(&plain)["SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT"],
-        Selection::ALL.file()
-    );
-    assert_eq!(
-        verify_package(&plain).unwrap().plugins.names(),
-        grkit_core::modules::NAMES
-    );
-    assert_eq!(plain, package());
+    assert!(validate_contents(&with_sums(files)).is_err());
 }
 
 #[test]
-fn invalid_plugin_files_and_empty_menus_are_rejected() {
-    for text in [
-        b"hdr\n".as_slice(),
-        b"guides guides",
-        b"Framing",
-        b"framing,guides",
-        b"\xff",
-        // Nothing to show.
-        b"",
-    ] {
-        let mut files = unpack(&package());
-        files.insert("SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT".into(), text.to_vec());
-        assert!(
-            validate_contents(&with_sums(files)).is_err(),
-            "{}",
-            String::from_utf8_lossy(text)
-        );
-    }
-    let mut files = unpack(&package());
-    files.insert(
-        "SD_ROOT/SCRIPT/PLUGINS/PLUGINS.TXT".into(),
-        b" guides\r\n\tframing ".to_vec(),
-    );
-    assert_eq!(
-        validate_contents(&with_sums(files))
-            .unwrap()
-            .plugins
-            .names(),
-        ["framing", "guides"]
-    );
-    // Image Control alone needs effects.
-    let image_control = Selection::from_names(["image-control"]).unwrap();
-    assert!(assemble(
-        &[runtime()],
-        &EffectSet::default(),
-        image_control,
-        &camera::GR3,
-        &english()
-    )
-    .is_err());
-    let bytes = assemble(
-        &[runtime()],
-        &testing::effect_set(&["test-effect"]),
-        image_control,
-        &camera::GR3,
-        &english(),
-    )
-    .unwrap()
-    .bytes;
-    assert_eq!(
-        verify_package(&bytes).unwrap().plugins.names(),
-        ["image-control"]
-    );
+fn packages_that_show_nothing_are_rejected() {
+    let assemble_with = |effects: &[&str], modules: &[&str]| {
+        let modules: Vec<_> = modules.iter().map(|id| testing::module(id)).collect();
+        assemble(
+            &[runtime()],
+            &testing::effect_set(effects),
+            &modules,
+            &camera::GR3,
+            &english(),
+        )
+    };
+    // No module.
+    assert!(assemble_with(&[], &[]).is_err());
+    // Image Control shows only with effects.
+    assert!(assemble_with(&[], &["IMGCTL"]).is_err());
+    assert!(assemble_with(&["test-effect"], &["IMGCTL"]).is_ok());
+    // Effects need Image Control.
+    assert!(assemble_with(&["test-effect"], &["FRAMING"]).is_err());
+    assert!(assemble_with(&[], &["FRAMING"]).is_ok());
+    // A module of another author shows its own page.
+    assert!(assemble_with(&[], &["PROBE"]).is_ok());
 }
 
 #[test]
@@ -404,16 +359,16 @@ fn json_matches_existing_ascii_pretty_format() {
 
 #[test]
 fn runtime_layout_matches_target_capacity() {
-    assert_eq!(runtime::MAX_COUNT, 20);
+    assert_eq!(runtime::MAX_COUNT, 40);
     assert_eq!(
         runtime::layout(0).unwrap(),
-        json!({"words": 43682, "icon_words": [41652]})
+        json!({"words": 128, "tail_words": 45602, "icon_words": [6408]})
     );
     assert_eq!(
-        runtime::layout(20).unwrap(),
-        json!({"words": 65442, "icon_words": [64080, 9612]})
+        runtime::layout(40).unwrap(),
+        json!({"words": 43648, "tail_words": 45602, "icon_words": [64080, 6408]})
     );
-    assert!(runtime::layout(21).is_err());
+    assert!(runtime::layout(41).is_err());
 }
 
 #[test]
@@ -427,28 +382,25 @@ fn allocation_includes_host_icons_at_chunk_boundaries() {
             .iter()
             .map(|v| v.as_u64().unwrap() as usize)
             .collect();
-        // Picture scratch (the date stamp masks, then the shot ring), the menu
+        // The registry holds the header and the records. The tail holds the
+        // picture scratch (the date stamp masks, then the shot ring), the menu
         // text, then the live-view labels.
+        assert_eq!(words * 4, 512 + count * 0x1100, "count {count}");
         assert_eq!(
-            words * 4,
-            512 + count * 0x1100 + 141376 + 72 + 16384 + 16384,
-            "count {count}"
+            layout["tail_words"].as_u64().unwrap() as usize * 4,
+            141376 + 72 + 24576 + 16384
         );
         assert_eq!(
             icons.iter().sum::<usize>() * 4,
-            (count + 26) * 6408,
+            (count + 4) * 6408,
             "count {count}"
         );
         assert!(std::iter::once(&words)
             .chain(&icons)
             .all(|v| (1..=65536).contains(v)));
-        // The 26 host icons come first, so effects after the fourteenth
-        // continue in a second 40-icon chunk.
-        assert_eq!(
-            icons.len(),
-            if count <= 14 { 1 } else { 2 },
-            "count {count}"
-        );
+        // The 4 host icons come first, then the effects, 40 icons in each
+        // chunk. Module tiles follow the effects (runtime/installer.c).
+        assert_eq!(icons.len(), (count + 4).div_ceil(40), "count {count}");
     }
     assert!(runtime::layout(usize::MAX).is_err());
 }
@@ -540,7 +492,7 @@ fn each_camera_gets_its_modeset_file_and_guide() {
     let bytes = assemble(
         &[runtime()],
         &effects,
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR3X,
         &english(),
     )
@@ -646,7 +598,7 @@ fn a_package_has_the_guide_of_its_language_only() {
         let bytes = assemble(
             &[runtime()],
             &effects,
-            Selection::ALL,
+            &testing::official_modules(),
             &camera::GR3X,
             &Guide { language, pdf: PDF },
         )
@@ -704,7 +656,7 @@ fn a_package_has_exactly_one_pdf_guide() {
     assert!(assemble(
         &[runtime()],
         &EffectSet::default(),
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR3,
         &text_guide,
     )
@@ -741,7 +693,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     let bytes = assemble(
         &gr4_runtimes(),
         &EffectSet::default(),
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR4,
         &english(),
     )
@@ -764,7 +716,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     assert!(assemble(
         &[runtime()],
         &EffectSet::default(),
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR4,
         &english()
     )
@@ -773,28 +725,26 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     let bytes = assemble(
         &gr4_runtimes(),
         &testing::effect_set(&["test-effect"]),
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR4,
         &english(),
     )
     .unwrap()
     .bytes;
     assert_eq!(verify_package(&bytes).unwrap().effect_ids, ["test-effect"]);
-    // GR IV has Framing, so Framing alone without effects shows a menu.
-    let framing = Selection::from_names(["framing"]).unwrap();
+    // Date Imprint alone without effects shows a menu.
     assert!(assemble(
         &gr4_runtimes(),
         &EffectSet::default(),
-        framing,
+        &[testing::module("DATE")],
         &camera::GR4,
         &english()
     )
     .is_ok());
-    let image_control = Selection::from_names(["image-control"]).unwrap();
     assert!(assemble(
         &gr4_runtimes(),
         &EffectSet::default(),
-        image_control,
+        &[testing::module("IMGCTL")],
         &camera::GR4,
         &english()
     )
@@ -883,7 +833,7 @@ fn a_package_holds_the_installer_of_each_build_of_its_camera() {
         assemble(
             runtimes,
             &EffectSet::default(),
-            Selection::ALL,
+            &testing::official_modules(),
             &camera::GR4,
             &english(),
         )
@@ -896,27 +846,27 @@ fn a_package_holds_the_installer_of_each_build_of_its_camera() {
     );
     let files = unpack(&bytes);
     for (path, target) in [
-        ("SD_ROOT/SCRIPT/PLUGINS/INSTALL.BIN", "gr4-1.11"),
-        ("SD_ROOT/SCRIPT/PLUGINS/INSTALL2.BIN", "gr4-1.20"),
-        ("SD_ROOT/SCRIPT/PLUGINS/INSTALL3.BIN", "gr4-1.20-0528"),
+        ("SD_ROOT/SCRIPT/GRKIT/INSTALL.BIN", "gr4-1.11"),
+        ("SD_ROOT/SCRIPT/GRKIT/INSTALL2.BIN", "gr4-1.20"),
+        ("SD_ROOT/SCRIPT/GRKIT/INSTALL3.BIN", "gr4-1.20-0528"),
     ] {
         assert_eq!(files[path], testing::marked_installer(target), "{path}");
     }
-    let script = String::from_utf8(files["SD_ROOT/SCRIPT/PLUGINS/INSTALL.SH"].clone()).unwrap();
+    let script = String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"].clone()).unwrap();
     assert_eq!(
         script,
         "for installer in INSTALL.BIN INSTALL2.BIN INSTALL3.BIN; do\n\
-         \x20 /media/storage1/SCRIPT/PLUGINS/$installer --known\n\
+         \x20 /media/storage1/SCRIPT/GRKIT/$installer --known\n\
          \x20 status=$?\n\
          \x20 case $status in 48) ;; *) break ;; esac\n\
          done\n\
          case $status in 48)\n\
          \x20 for installer in INSTALL.BIN INSTALL2.BIN; do\n\
-         \x20   /media/storage1/SCRIPT/PLUGINS/$installer --try\n\
+         \x20   /media/storage1/SCRIPT/GRKIT/$installer --try\n\
          \x20   status=$?\n\
          \x20   case $status in 47) ;; *) break ;; esac\n\
          \x20 done\n\
-         \x20 case $status in 47) /media/storage1/SCRIPT/PLUGINS/INSTALL3.BIN --install; status=$? ;; esac\n\
+         \x20 case $status in 47) /media/storage1/SCRIPT/GRKIT/INSTALL3.BIN --install; status=$? ;; esac\n\
          \x20 ;;\n\
          esac\n\
          echo GR_MODULE_INSTALL_EXIT_$status\n\
@@ -925,23 +875,23 @@ fn a_package_holds_the_installer_of_each_build_of_its_camera() {
     // The first installer scans: the plan is the same for each build. First
     // the script looks up the other installers.
     assert_eq!(
-        String::from_utf8(files["SD_ROOT/SCRIPT/PLUGINS/SCAN.SH"].clone()).unwrap(),
-        "for installer in INSTALL2.BIN INSTALL3.BIN; do [ -e /media/storage1/SCRIPT/PLUGINS/$installer ]; done\n\
-         /media/storage1/SCRIPT/PLUGINS/INSTALL.BIN --scan\n\
+        String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"].clone()).unwrap(),
+        "for installer in INSTALL2.BIN INSTALL3.BIN; do [ -e /media/storage1/SCRIPT/GRKIT/$installer ]; done\n\
+         /media/storage1/SCRIPT/GRKIT/INSTALL.BIN --scan\n\
          status=$?\n\
          echo GR_MODULE_SCAN_EXIT_$status\n\
          exit 0\n"
     );
     let gr3 = unpack(&package());
     assert_eq!(
-        gr3["SD_ROOT/SCRIPT/PLUGINS/SCAN.SH"],
-        b"/media/storage1/SCRIPT/PLUGINS/INSTALL.BIN --scan\nstatus=$?\necho GR_MODULE_SCAN_EXIT_$status\nexit 0\n"
+        gr3["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"],
+        b"/media/storage1/SCRIPT/GRKIT/INSTALL.BIN --scan\nstatus=$?\necho GR_MODULE_SCAN_EXIT_$status\nexit 0\n"
     );
     assert_eq!(
-        gr3["SD_ROOT/SCRIPT/PLUGINS/INSTALL.SH"],
-        b"/media/storage1/SCRIPT/PLUGINS/INSTALL.BIN --install\nstatus=$?\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
+        gr3["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"],
+        b"/media/storage1/SCRIPT/GRKIT/INSTALL.BIN --install\nstatus=$?\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
     );
-    assert!(!gr3.contains_key("SD_ROOT/SCRIPT/PLUGINS/INSTALL2.BIN"));
+    assert!(!gr3.contains_key("SD_ROOT/SCRIPT/GRKIT/INSTALL2.BIN"));
 
     // Each build, in release order.
     let mut runtimes = gr4_runtimes();
@@ -957,13 +907,13 @@ fn a_package_holds_the_installer_of_each_build_of_its_camera() {
 
     // A package whose installers are swapped or missing is refused.
     let mut swapped = files_of(&bytes);
-    let first = swapped["SD_ROOT/SCRIPT/PLUGINS/INSTALL.BIN"].clone();
-    let second = swapped["SD_ROOT/SCRIPT/PLUGINS/INSTALL2.BIN"].clone();
-    swapped.insert("SD_ROOT/SCRIPT/PLUGINS/INSTALL.BIN".into(), second);
-    swapped.insert("SD_ROOT/SCRIPT/PLUGINS/INSTALL2.BIN".into(), first);
+    let first = swapped["SD_ROOT/SCRIPT/GRKIT/INSTALL.BIN"].clone();
+    let second = swapped["SD_ROOT/SCRIPT/GRKIT/INSTALL2.BIN"].clone();
+    swapped.insert("SD_ROOT/SCRIPT/GRKIT/INSTALL.BIN".into(), second);
+    swapped.insert("SD_ROOT/SCRIPT/GRKIT/INSTALL2.BIN".into(), first);
     assert!(validate_contents(&with_sums(swapped)).is_err());
     let mut missing = files_of(&bytes);
-    missing.remove("SD_ROOT/SCRIPT/PLUGINS/INSTALL3.BIN");
+    missing.remove("SD_ROOT/SCRIPT/GRKIT/INSTALL3.BIN");
     assert!(validate_contents(&with_sums(missing)).is_err());
 }
 
@@ -974,37 +924,60 @@ fn files_of(bytes: &[u8]) -> Files {
     files
 }
 
-/// The effect list names the effect files of the package, so their effects
-/// install before others that an earlier package left in the library.
+/// A package puts its effects in the inbox of SCRIPT/GRKIT and lists its
+/// effect and module files in PACKAGE.TXT. No package file is in GRKIT, the
+/// data folder.
 #[test]
-fn packages_list_their_effect_files() {
+fn packages_list_their_files_and_keep_out_of_the_data_folder() {
     let files = unpack(&package());
-    let list = format!("SD_ROOT/{EFFECT_LIST}");
     let effects: Vec<_> = files
         .keys()
-        .filter_map(|name| name.strip_prefix("SD_ROOT/SCRIPT/PLUGINS/EFFECTS/"))
-        .map(|name| format!("{name}\n"))
+        .filter_map(|name| name.strip_prefix("SD_ROOT/SCRIPT/GRKIT/EFFECTS/"))
         .collect();
     assert_eq!(effects.len(), 1);
-    assert_eq!(files[&list], effects.concat().into_bytes());
-    // A package without effects has an empty list.
-    let none = assemble(
+    assert!(files.keys().all(|name| !name.starts_with("SD_ROOT/GRKIT/")));
+    let list = String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/PACKAGE.TXT"].clone()).unwrap();
+    assert!(list.lines().any(|line| line == effects[0]));
+    assert!(list.lines().any(|line| line.ends_with(".GRM")));
+    let mut wrong = files.clone();
+    wrong.insert("SD_ROOT/SCRIPT/GRKIT/PACKAGE.TXT".into(), b"".to_vec());
+    assert!(validate_contents(&with_sums(wrong)).is_err());
+}
+
+#[test]
+fn module_files_install_from_the_modules_folder() {
+    let package = assemble(
         &[runtime()],
         &EffectSet::default(),
-        Selection::ALL.without("image-control").unwrap(),
+        &[testing::module("GUIDES")],
         &camera::GR3,
         &english(),
     )
     .unwrap();
-    assert_eq!(unpack(&none.bytes)[&list], b"");
-    // A list that differs from the effects is rejected. A package from before
-    // the effects library has no list.
-    for wrong in [b"".as_slice(), b"00000000.GRF\n"] {
-        let mut changed = files.clone();
-        changed.insert(list.clone(), wrong.to_vec());
-        assert!(validate_contents(&with_sums(changed)).is_err());
-    }
-    let mut legacy = files.clone();
-    legacy.remove(&list);
-    assert!(validate_contents(&with_sums(legacy)).is_ok());
+    // A module shows a page, so a package with only a module is valid.
+    assert_eq!(package.contents.modules, ["GUIDES"]);
+    let files = unpack(&package.bytes);
+    assert!(files.contains_key("SD_ROOT/SCRIPT/GRKIT/MODULES/GUIDES.GRM"));
+    // The file name is the module ID, and the file must decode.
+    let mut renamed = files.clone();
+    let module = renamed
+        .remove("SD_ROOT/SCRIPT/GRKIT/MODULES/GUIDES.GRM")
+        .unwrap();
+    renamed.insert("SD_ROOT/SCRIPT/GRKIT/MODULES/OTHER.GRM".into(), module);
+    assert!(validate_contents(&with_sums(renamed)).is_err());
+    let mut broken = files.clone();
+    broken.insert(
+        "SD_ROOT/SCRIPT/GRKIT/MODULES/GUIDES.GRM".into(),
+        b"GRKM".to_vec(),
+    );
+    assert!(validate_contents(&with_sums(broken)).is_err());
+    // The same module cannot be in a package twice.
+    assert!(assemble(
+        &[runtime()],
+        &EffectSet::default(),
+        &[testing::module("GUIDES"), testing::module("GUIDES")],
+        &camera::GR3,
+        &english(),
+    )
+    .is_err());
 }

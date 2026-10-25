@@ -58,11 +58,17 @@ fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
         hex::encode(Sha256::digest(artwork::version_pixels())),
         "4119d11482f7f7a0636d481beae529aa4d87a4ec8d4afc62c2d8d4c8b295b0c6"
     );
-    let modules = grkit_core::plugins::tiles();
-    // Seven Framing, six Guides, six Date Stamp, and four Grain tiles,
-    // addressed by offset from the first.
-    assert_eq!(modules.len(), 23);
-    assert_eq!(modules[0], artwork::framing_pixels());
+    // The tiles of the module folders keep the rules of the host artwork.
+    let mut modules: Vec<Vec<u8>> = Vec::new();
+    for entry in std::fs::read_dir(root().join("../modules")).unwrap() {
+        let tiles = entry.unwrap().path().join("tiles");
+        for tile in std::fs::read_dir(tiles).into_iter().flatten() {
+            let png = std::fs::read(tile.unwrap().path()).unwrap();
+            let (width, height, rgba) = grkit_core::png::decode_rgba8(&png).unwrap();
+            assert_eq!((width, height), (40, 40));
+            modules.push(rgba);
+        }
+    }
     for pixels in [
         artwork::plugins_pixels(),
         artwork::version_pixels(),

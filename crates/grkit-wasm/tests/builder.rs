@@ -15,12 +15,22 @@ use testing::effect;
 /// A stand-in for a guide PDF, which the site fetches.
 const PDF: &[u8] = b"%PDF-1.7\n% GRKit test guide\n";
 
-fn builder_with_runtime(files: &Files) -> Builder {
+/// A builder with the runtime and the guide, and no module.
+fn builder_without_modules(files: &Files) -> Builder {
     let mut builder = Builder::new(&manifest(files)).unwrap();
     for path in builder.runtime_paths(0).unwrap().to_vec() {
         builder.add_runtime_file(0, &path, &files[&path]).unwrap();
     }
     builder.set_guide(PDF);
+    builder
+}
+
+/// A builder with the runtime, the guide, and each official module.
+fn builder_with_runtime(files: &Files) -> Builder {
+    let mut builder = builder_without_modules(files);
+    for module in testing::official_modules() {
+        builder.add_module(&module).unwrap();
+    }
     builder
 }
 
@@ -53,24 +63,22 @@ fn a_package_without_effects_is_valid() {
 }
 
 #[test]
-fn omitted_plugins_are_written_and_checked() {
-    let mut builder = builder_with_runtime(&runtime_files());
-    builder.omit_plugin("framing").unwrap();
-    assert!(error(builder.omit_plugin("framing")).contains("Plugin omitted twice"));
-    assert!(error(builder.omit_plugin("hdr")).contains("Unknown plugin"));
-    builder.omit_plugin("guides").unwrap();
+fn modules_are_added_once_and_checked() {
+    let mut builder = builder_without_modules(&runtime_files());
+    // Image Control shows nothing without effects.
+    assert_eq!(
+        builder.add_module(&testing::module("IMGCTL")).unwrap(),
+        "IMGCTL"
+    );
+    assert!(error(builder.add_module(&testing::module("IMGCTL"))).contains("Module added twice"));
+    assert!(builder.add_module(b"GRKM").is_err());
+    assert!(error(builder.build()).contains("shows nothing"));
+    builder.add_effect(&effect("test-a")).unwrap();
     let package = builder.build().unwrap();
     assert_eq!(
-        packaging::verify_package(&package).unwrap().plugins.names(),
-        ["image-control", "date-stamp", "grain"]
+        packaging::verify_package(&package).unwrap().modules,
+        ["IMGCTL"]
     );
-    // Without effects, omitting every other plugin leaves nothing to show.
-    builder.omit_plugin("date-stamp").unwrap();
-    builder.build().unwrap();
-    builder.omit_plugin("grain").unwrap();
-    assert!(error(builder.build()).contains("shows no plugin"));
-    builder.add_effect(&effect("test-a")).unwrap();
-    builder.build().unwrap();
 }
 
 #[test]
@@ -103,6 +111,7 @@ fn a_package_needs_the_guide_pdf() {
     builder.set_guide(b"not a PDF");
     assert!(error(builder.build()).contains("not a PDF document"));
     builder.set_guide(PDF);
+    builder.add_module(&testing::module("FRAMING")).unwrap();
     assert!(builder.build().is_ok());
 }
 
@@ -182,7 +191,8 @@ fn duplicate_invalid_and_excess_effects_are_rejected() {
     for index in 0..runtime::MAX_COUNT {
         full.add_effect(&effect(&format!("test-{index}"))).unwrap();
     }
-    assert!(error(full.add_effect(&effect("test-extra"))).contains("at most 20 effects"));
+    assert!(error(full.add_effect(&effect("test-extra")))
+        .contains(&format!("at most {} effects", runtime::MAX_COUNT)));
     assert!(full.build().is_ok());
 }
 
@@ -201,6 +211,7 @@ fn a_package_adds_each_build_of_the_camera() {
     let mut builder = Builder::new(&builds[0].0).unwrap();
     builder.set_camera("gr4").unwrap();
     builder.set_guide(PDF);
+    builder.add_module(&testing::module("FRAMING")).unwrap();
     for (manifest, _) in &builds[1..] {
         builder.add_build(manifest).unwrap();
     }

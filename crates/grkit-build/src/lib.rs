@@ -4,6 +4,7 @@ pub mod components;
 pub mod dump;
 pub mod firmware;
 pub mod loader;
+pub mod module;
 pub mod port;
 pub mod relocation;
 pub mod target;
@@ -64,6 +65,9 @@ pub struct PatchPlan {
     pub relocations: Vec<(usize, usize)>,
     /// The firmware and tail references of the private code.
     pub references: Vec<Reference>,
+    /// The services that modules import: the hash of each name
+    /// (`grkit_core::grm::symbol_hash`) and the offset of its code in the tail.
+    pub exports: Vec<(u32, u32)>,
 }
 #[derive(Debug)]
 pub struct BuildResult {
@@ -158,8 +162,12 @@ pub fn source_hashes() -> BTreeMap<String, String> {
             include_bytes!("../../grkit-core/src/menu_text.rs").as_slice(),
         ),
         (
-            "plugins.rs",
-            include_bytes!("../../grkit-core/src/plugins.rs").as_slice(),
+            "capabilities.rs",
+            include_bytes!("../../grkit-core/src/capabilities.rs").as_slice(),
+        ),
+        (
+            "modules.rs",
+            include_bytes!("../../grkit-core/src/modules.rs").as_slice(),
         ),
     ] {
         sources.insert(format!("crates/grkit-core/src/{name}"), sha256(bytes));
@@ -212,6 +220,117 @@ pub fn build_runtime(
     let image = verify_firmware(firmware, target)?;
     let tools = Toolchain::discover(clang, lld)?;
     build_image(&image, output, &tools)
+}
+
+/// Build the module `id` from C `sources` into a module file (`grkit_core::grm`).
+/// `directory` must not exist; it receives the objects.
+pub fn build_module(
+    id: &str,
+    version: u32,
+    sources: &[PathBuf],
+    directory: &Path,
+    clang: &str,
+    lld: &str,
+) -> Result<Vec<u8>> {
+    let tools = Toolchain::discover(clang, lld)?;
+    fs::create_dir_all(directory.parent().unwrap_or(Path::new(".")))?;
+    fs::create_dir(directory)
+        .with_context(|| format!("Create new build directory {}", directory.display()))?;
+    let directory = directory.canonicalize()?;
+    let runtime = directory.join("runtime");
+    materialize_runtime(&runtime)?;
+    let sources: Vec<PathBuf> = sources
+        .iter()
+        .map(|source| {
+            source
+                .canonicalize()
+                .with_context(|| format!("Read {}", source.display()))
+        })
+        .collect::<Result<_>>()?;
+    let sources: Vec<&Path> = sources.iter().map(PathBuf::as_path).collect();
+    module::build(
+        id,
+        version,
+        &sources,
+        &runtime.join("sdk"),
+        &directory,
+        &tools,
+    )?
+    .encode()
+}
+
+/// Build the module of `module.toml` in `module_directory` into a module file
+/// (`grkit_core::grm`). `directory` must not exist; it receives the generated
+/// files and the objects. Returns the module ID and the file.
+pub fn build_module_manifest(
+    module_directory: &Path,
+    directory: &Path,
+    clang: &str,
+    lld: &str,
+) -> Result<(String, Vec<u8>)> {
+    let tools = Toolchain::discover(clang, lld)?;
+    fs::create_dir_all(directory.parent().unwrap_or(Path::new(".")))?;
+    fs::create_dir(directory)
+        .with_context(|| format!("Create new build directory {}", directory.display()))?;
+    let directory = directory.canonicalize()?;
+    let runtime = directory.join("runtime");
+    materialize_runtime(&runtime)?;
+    let module = module::build_manifest(
+        &module_directory
+            .canonicalize()
+            .with_context(|| format!("Read {}", module_directory.display()))?,
+        &runtime.join("sdk"),
+        &directory,
+        &tools,
+    )?;
+    Ok((module.id.clone(), module.encode()?))
+}
+
+/// Run the host test of the module in `module_directory` (`test.c`) with the
+/// host compiler `cc`. `directory` must not exist; it receives the build.
+/// Return whether a test ran (`module::test_manifest`).
+pub fn test_module_manifest(module_directory: &Path, directory: &Path, cc: &str) -> Result<bool> {
+    fs::create_dir_all(directory.parent().unwrap_or(Path::new(".")))?;
+    fs::create_dir(directory)
+        .with_context(|| format!("Create new build directory {}", directory.display()))?;
+    let directory = directory.canonicalize()?;
+    let runtime = directory.join("runtime");
+    materialize_runtime(&runtime)?;
+    module::test_manifest(
+        &module_directory
+            .canonicalize()
+            .with_context(|| format!("Read {}", module_directory.display()))?,
+        &runtime.join("sdk"),
+        &directory,
+        Path::new(cc),
+    )
+}
+
+/// The export table of the core: for each service of `grkit_core::grm::EXPORTS`,
+/// the hash of its name and the offset of its code from the start of the tail.
+fn core_exports(
+    layout: &components::Layout,
+    components: &[&components::Component],
+) -> Result<Vec<(u32, u32)>> {
+    grkit_core::grm::EXPORTS
+        .iter()
+        .map(|&(name, symbol)| {
+            let (base, offset) = components
+                .iter()
+                .find_map(|c| {
+                    c.symbols
+                        .get(symbol)
+                        .map(|offset| (c.patches[0].address, *offset))
+                })
+                .with_context(|| {
+                    format!("The core has no symbol {symbol} for the export {name}")
+                })?;
+            Ok((
+                grkit_core::grm::symbol_hash(name),
+                base - layout.tail.0 + offset,
+            ))
+        })
+        .collect()
 }
 
 /// Internal build entry; only the public firmware entry verifies release identity.
@@ -271,10 +390,15 @@ fn build_image(
             })
         })
         .collect();
+    let exports = match image.target.layout {
+        Some(layout) => core_exports(layout, &components)?,
+        None => Vec::new(),
+    };
     let plan = PatchPlan {
         patches,
         relocations,
         references,
+        exports,
     };
     validate_plan(&plan)?;
     let generated = loader::header(&plan, image, env!("CARGO_PKG_VERSION"))?;

@@ -1,0 +1,10 @@
+# Image Control: the effect of still pictures and the live view. The page sets
+# CORE.TONE, and the core gives its rows: the installed effects, with their
+# names, icons, live-view preview, and Fn adjustments. The core applies the
+# color of the effect, selective color included.
+id = "IMGCTL"
+version = 1
+uses = ["CORE.TONE"]
+
+[page]
+setting = "CORE.TONE"

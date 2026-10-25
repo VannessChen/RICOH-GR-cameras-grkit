@@ -31,16 +31,18 @@ static int catalog_name(const char *name, u32 n)
     return 1;
 }
 /* Offer a valid profile from the named file and return the new count. The
-   catalog keeps the `capacity` smallest IDs in ID order. For a duplicate ID, the
-   file with the smallest name wins. The result does not depend on directory order. */
-static u32 catalog_offer(u8 (*profiles)[GRKIT_GRF_MAX_SIZE], char (*names)[CATALOG_NAME_SIZE],
+   catalog keeps the `capacity` smallest IDs in ID order: for each, the first
+   `stride` bytes of its profile, which hold its ID and name, and its file
+   name. For a duplicate ID, the file with the smallest name wins. The result
+   does not depend on directory order. */
+static u32 catalog_offer(u8 *records, u32 stride, char (*names)[CATALOG_NAME_SIZE],
                          u32 count, u32 capacity, const u8 *candidate, const char *name)
 {
     u32 i=0;
-    while(i<count && catalog_compare(profiles[i]+CATALOG_ID,candidate+CATALOG_ID)<0) ++i;
-    if(i<count && !catalog_compare(profiles[i]+CATALOG_ID,candidate+CATALOG_ID)) {
+    while(i<count && catalog_compare(records+i*stride+CATALOG_ID,candidate+CATALOG_ID)<0) ++i;
+    if(i<count && !catalog_compare(records+i*stride+CATALOG_ID,candidate+CATALOG_ID)) {
         if(catalog_compare((const u8 *)names[i],(const u8 *)name)>0) {
-            catalog_copy(profiles[i],candidate,GRKIT_GRF_MAX_SIZE);
+            catalog_copy(records+i*stride,candidate,stride);
             catalog_copy_name(names[i],name);
         }
         return count;
@@ -49,10 +51,10 @@ static u32 catalog_offer(u8 (*profiles)[GRKIT_GRF_MAX_SIZE], char (*names)[CATAL
     /* A full catalog drops its largest ID. */
     if(count==capacity) --count;
     for(u32 j=count;j>i;--j) {
-        catalog_copy(profiles[j],profiles[j-1],GRKIT_GRF_MAX_SIZE);
+        catalog_copy(records+j*stride,records+(j-1)*stride,stride);
         catalog_copy_name(names[j],names[j-1]);
     }
-    catalog_copy(profiles[i],candidate,GRKIT_GRF_MAX_SIZE);
+    catalog_copy(records+i*stride,candidate,stride);
     catalog_copy_name(names[i],name);
     return count+1;
 }

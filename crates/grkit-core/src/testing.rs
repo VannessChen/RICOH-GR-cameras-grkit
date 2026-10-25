@@ -72,3 +72,24 @@ pub fn effect(id: &str) -> Vec<u8> {
         "curves": [&curve, &curve, &curve]});
     effects::encode(&value, &vec![0; effects::ICON_SIZE]).unwrap()
 }
+
+/// A module file (`crate::grm`) with the ID `id` and no registrations.
+pub fn module(id: &str) -> Vec<u8> {
+    crate::grm::Module {
+        id: id.into(),
+        version: 1,
+        code: vec![0; 40],
+        descriptor: 0,
+        ..Default::default()
+    }
+    .encode()
+    .expect("a valid module")
+}
+
+/// A module file for each official module (`crate::modules::OFFICIAL`).
+pub fn official_modules() -> Vec<Vec<u8>> {
+    crate::modules::OFFICIAL
+        .iter()
+        .map(|official| module(official.id))
+        .collect()
+}

@@ -10,17 +10,15 @@ use zip::{write::SimpleFileOptions, CompressionMethod, DateTime, ZipArchive, Zip
 
 use crate::{
     camera::{self, Camera},
-    effects,
-    modules::{self, Selection},
-    runtime, Files,
+    effects, modules, runtime, Files,
 };
 
 pub const RUNTIME_PATHS: [&str; 5] = [
     "SCRIPT/STARTUP.TTL",
-    "SCRIPT/PLUGINS/PLUGINS.TTL",
-    "SCRIPT/PLUGINS/INSTALL.BIN",
-    "SCRIPT/PLUGINS/SCAN.SH",
-    "SCRIPT/PLUGINS/INSTALL.SH",
+    "SCRIPT/GRKIT/LOADER.TTL",
+    "SCRIPT/GRKIT/INSTALL.BIN",
+    "SCRIPT/GRKIT/SCAN.SH",
+    "SCRIPT/GRKIT/INSTALL.SH",
 ];
 pub const MAX_ENTRIES: usize = 200;
 pub const MAX_FILE_SIZE: usize = 16 * 1024 * 1024;
@@ -147,7 +145,7 @@ fn marked_target(binary: &[u8]) -> Option<&str> {
 fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
     let targets = camera.targets();
     if let Some(name) = runtime
-        .get("SCRIPT/PLUGINS/INSTALL.BIN")
+        .get("SCRIPT/GRKIT/INSTALL.BIN")
         .and_then(|binary| marked_target(binary))
     {
         let target = targets
@@ -234,15 +232,15 @@ fn package_runtime(runtimes: &[VerifiedRuntime], camera: &Camera) -> Result<File
     );
     let binaries: Vec<&[u8]> = runtimes
         .iter()
-        .map(|runtime| runtime.files()["SCRIPT/PLUGINS/INSTALL.BIN"].as_slice())
+        .map(|runtime| runtime.files()["SCRIPT/GRKIT/INSTALL.BIN"].as_slice())
         .collect();
     let files = runtime::package_runtime_files(&binaries, runtime::icon_stride(targets[0])?);
     // The builds of a camera share every file but the installer. The package
     // has its own scripts that run the installers.
     let own = [
-        "SCRIPT/PLUGINS/INSTALL.BIN",
-        "SCRIPT/PLUGINS/INSTALL.SH",
-        "SCRIPT/PLUGINS/SCAN.SH",
+        "SCRIPT/GRKIT/INSTALL.BIN",
+        "SCRIPT/GRKIT/INSTALL.SH",
+        "SCRIPT/GRKIT/SCAN.SH",
     ];
     for runtime in runtimes {
         for (name, blob) in runtime.files() {
@@ -263,7 +261,7 @@ pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
         files.len() == RUNTIME_PATHS.len() && RUNTIME_PATHS.iter().all(|p| files.contains_key(*p)),
         "Expected the complete production runtime file set"
     );
-    let binary = &files["SCRIPT/PLUGINS/INSTALL.BIN"];
+    let binary = &files["SCRIPT/GRKIT/INSTALL.BIN"];
     check_installer(binary)?;
     ensure!(
         *files == runtime::runtime_files_for(binary, runtime::icon_stride(target)?),
@@ -359,11 +357,17 @@ pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<VerifiedRuntime> {
     })
 }
 
-/// The list of the effect files of a package. When the effects library on the
-/// card has more effects than the camera installs, the effects of the last
-/// package install first. Each package has the list, also an empty one, so a
-/// copy of a new package over an old one always replaces it.
-pub const EFFECT_LIST: &str = "SCRIPT/PLUGINS/PACKAGE.TXT";
+/// The inbox of the package effects on the card. SCAN copies a new package
+/// effect into the effects library, `GRKIT/EFFECTS`, where a person adds or
+/// deletes effect files.
+pub const EFFECTS_FOLDER: &str = "SCRIPT/GRKIT/EFFECTS";
+
+/// The package list (`runtime/installer.c`): the file name of each effect and
+/// module of the package, one on each line. Each package has it, also
+/// without effects, so a merge copy of a new package over an old one gives
+/// the same result as a replace copy: the installer ignores the package files
+/// that the list does not name.
+pub const PACKAGE_LIST: &str = "SCRIPT/GRKIT/PACKAGE.TXT";
 
 /// The compiled effects of a package, each under its package filename (`effects::filename`).
 #[derive(Clone, Debug, Default)]
@@ -390,14 +394,13 @@ impl EffectSet {
         self.files.insert(name, blob);
         Ok(id)
     }
-
-    /// The contents of `EFFECT_LIST`: one effect filename for each line.
-    pub fn list(&self) -> Vec<u8> {
-        effect_list(self.files.keys())
-    }
 }
 
-fn effect_list<'a>(names: impl IntoIterator<Item = &'a String>) -> Vec<u8> {
+/// The contents of `PACKAGE_LIST`: the file names in name order, one on
+/// each line.
+fn package_list<'a>(names: impl IntoIterator<Item = &'a String>) -> Vec<u8> {
+    let mut names: Vec<&String> = names.into_iter().collect();
+    names.sort();
     names
         .into_iter()
         .map(|name| format!("{name}\n"))
@@ -407,7 +410,7 @@ fn effect_list<'a>(names: impl IntoIterator<Item = &'a String>) -> Vec<u8> {
 
 fn is_effect_path(name: &str) -> bool {
     let Some(stem) = name
-        .strip_prefix("SD_ROOT/SCRIPT/PLUGINS/EFFECTS/")
+        .strip_prefix("SD_ROOT/SCRIPT/GRKIT/EFFECTS/")
         .and_then(|s| s.strip_suffix(".GRF"))
     else {
         return false;
@@ -551,8 +554,8 @@ pub struct Contents {
     /// one for each build.
     pub targets: Vec<&'static str>,
     pub effect_ids: Vec<String>,
-    /// The plugins that the installer installs.
-    pub plugins: Selection,
+    /// The IDs of the module files (`grkit_core::grm`) in the package.
+    pub modules: Vec<String>,
     /// The language of the guide.
     pub language: Language,
     /// The number of package entries, the runtime included.
@@ -599,6 +602,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         .collect();
     mandatory.extend(activation.keys().map(|name| format!("SD_ROOT/{name}")));
     mandatory.extend(["LICENSES.md", "SHA256SUMS"].map(String::from));
+    mandatory.insert(format!("SD_ROOT/{PACKAGE_LIST}"));
     ensure!(
         mandatory.iter().all(|name| contents.contains_key(name)),
         "Package is missing required files"
@@ -615,11 +619,9 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         .collect();
     let targets = package_targets(&runtime, camera)?;
     let mut ids = BTreeSet::new();
-    let mut effect_names = Vec::new();
-    let mut list = None;
-    let mut plugins = Selection::ALL;
+    let mut module_ids = BTreeSet::new();
+    let mut listed = Vec::new();
     let mut language = None;
-    let plugins_path = format!("SD_ROOT/{}", modules::PATH);
     for (name, blob) in contents
         .iter()
         .filter(|(name, _)| !mandatory.contains(*name))
@@ -631,11 +633,21 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
                 "Profile filename does not match its stable ID"
             );
             ensure!(ids.insert(id), "Duplicate effect ID");
-            effect_names.push(name.rsplit('/').next().unwrap_or_default().to_owned());
-        } else if *name == format!("SD_ROOT/{EFFECT_LIST}") {
-            list = Some(blob);
-        } else if *name == plugins_path {
-            plugins = Selection::parse(blob)?;
+            listed.push(name.rsplit('/').next().unwrap_or_default().to_owned());
+        } else if let Some(file) = name
+            .strip_prefix("SD_ROOT/")
+            .and_then(|path| path.strip_prefix(crate::grm::FOLDER))
+            .and_then(|path| path.strip_prefix('/'))
+        {
+            let module = crate::grm::Module::decode(blob)
+                .with_context(|| format!("Read the module {file}"))?;
+            ensure!(
+                file == format!("{}.GRM", module.id),
+                "The module file {file} is not named by its ID {}",
+                module.id
+            );
+            listed.push(file.to_owned());
+            module_ids.insert(module.id);
         } else if let Some(guide) = Language::ALL
             .into_iter()
             .find(|language| language.guide_path() == *name)
@@ -648,36 +660,37 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
         }
     }
     ensure!(
+        contents[&format!("SD_ROOT/{PACKAGE_LIST}")] == package_list(listed.iter()),
+        "{PACKAGE_LIST} must list the effect and module files of the package"
+    );
+    ensure!(
         ids.len() <= runtime::MAX_COUNT,
         "Target effect capacity exceeded"
-    );
-    // Packages before the effects library have no list.
-    ensure!(
-        list.is_none_or(|list| *list == effect_list(&effect_names)),
-        "{EFFECT_LIST} must list the effect files of the package"
     );
     ensure!(
         camera.effects || ids.is_empty(),
         "{} has no Image Control yet, so a package for it cannot have effects",
         camera.name
     );
+    // The effects show only on the page of Image Control, which shows only
+    // with effects.
+    let needs_effects =
+        |id: &String| modules::official(id).is_some_and(|module| module.needs_effects);
     ensure!(
-        plugins
-            .names()
-            .iter()
-            .all(|name| camera.plugins.contains(name)),
-        "{} has no runtime for each selected plugin",
-        camera.name
+        ids.is_empty() || module_ids.iter().any(needs_effects),
+        "The effects need the Image Control module"
     );
     ensure!(
-        !plugins.shows_nothing(ids.len(), camera.plugins),
-        "The package shows no plugin: select a plugin other than Image Control, or add effects"
+        module_ids
+            .iter()
+            .any(|id| !needs_effects(id) || !ids.is_empty()),
+        "The package shows nothing: add a module other than Image Control, or add effects"
     );
     Ok(Contents {
         camera,
         targets,
         effect_ids: ids.into_iter().collect(),
-        plugins,
+        modules: module_ids.into_iter().collect(),
         language: language.context("Package has no installation guide")?,
         entries: contents.len(),
     })
@@ -753,12 +766,12 @@ pub struct Package {
 }
 
 /// Builds the package ZIP for one camera from the runtime of each of its
-/// builds, in release order. `plugins` names the plugins that the installer
-/// installs.
+/// builds, in release order. `modules` holds the module files
+/// (`grkit_core::grm`).
 pub fn assemble(
     runtimes: &[VerifiedRuntime],
     effects: &EffectSet,
-    plugins: Selection,
+    modules: &[Vec<u8>],
     camera: &Camera,
     guide: &Guide,
 ) -> Result<Package> {
@@ -772,13 +785,23 @@ pub fn assemble(
             .map(|(name, blob)| (format!("SD_ROOT/{name}"), blob)),
     );
     for (name, blob) in &effects.files {
-        contents.insert(
-            format!("SD_ROOT/SCRIPT/PLUGINS/EFFECTS/{name}"),
-            blob.clone(),
-        );
+        contents.insert(format!("SD_ROOT/{EFFECTS_FOLDER}/{name}"), blob.clone());
     }
-    contents.insert(format!("SD_ROOT/{EFFECT_LIST}"), effects.list());
-    contents.insert(format!("SD_ROOT/{}", modules::PATH), plugins.file());
+    let mut listed: Vec<String> = effects.files.keys().cloned().collect();
+    for bytes in modules {
+        let id = crate::grm::Module::decode(bytes)?.id;
+        let path = format!("SD_ROOT/{}/{id}.GRM", crate::grm::FOLDER);
+        ensure!(
+            contents.insert(path, bytes.clone()).is_none(),
+            "The module {id} is twice in the package"
+        );
+        listed.push(format!("{id}.GRM"));
+    }
+    listed.sort();
+    contents.insert(
+        format!("SD_ROOT/{PACKAGE_LIST}"),
+        package_list(listed.iter()),
+    );
     check_guide(guide.pdf)?;
     contents.insert(guide.language.guide_path(), guide.pdf.to_vec());
     contents.insert("LICENSES.md".into(), LICENSES.as_bytes().to_vec());

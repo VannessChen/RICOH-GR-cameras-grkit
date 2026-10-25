@@ -1,0 +1,9 @@
+title = "加印日期摄影"
+rows = ["关闭", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"]
+
+[settings.STYLE]
+label = "日期样式"
+
+[settings.LOOK]
+label = "日期字体"
+values = ["经典", "GR1s", "GR II"]

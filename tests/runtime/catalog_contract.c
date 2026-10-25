@@ -25,7 +25,7 @@ static u32 offer(u32 count, const struct candidate *c)
     memset(record, 0, sizeof(record));
     strcpy((char *)record + CATALOG_ID, c->id);
     record[MARK] = c->mark;
-    return catalog_offer(profiles, names, count, CAPACITY, record, c->name);
+    return catalog_offer(&profiles[0][0], GRKIT_GRF_MAX_SIZE, names, count, CAPACITY, record, c->name);
 }
 static void expect(u32 count, const char *const *ids, const u8 *marks, u32 n)
 {

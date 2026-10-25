@@ -16,7 +16,7 @@ The screenshot in the installation guide shows the photo [Snow in Akihabara](htt
 
 ## Effects
 
-Each file in `SD_ROOT/SCRIPT/PLUGINS/EFFECTS/` is one Image Control effect. Each effect of the GRKit catalog is a fit of one film simulation LUT. GRKit contributors made the fits. The files contain the fitted parameters, not the LUTs. "Changes to the LUTs" below describes the changes.
+Each file in `SD_ROOT/GRKIT/EFFECTS/` is one Image Control effect. Each effect of the GRKit catalog is a fit of one film simulation LUT. GRKit contributors made the fits. The files contain the fitted parameters, not the LUTs. "Changes to the LUTs" below describes the changes.
 
 If an effect is not in the GRKit catalog, its author gives its license.
 

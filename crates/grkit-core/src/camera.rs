@@ -31,8 +31,6 @@
 
 use anyhow::{bail, Result};
 
-use crate::modules;
-
 /// A firmware version that a camera runs, and the runtime build for it. Two
 /// builds of one version are two releases with the same version.
 #[derive(Debug, PartialEq, Eq)]
@@ -58,9 +56,6 @@ pub struct Camera {
     pub experimental: bool,
     /// True when the runtime has Image Control, so a package can have effects.
     pub effects: bool,
-    /// The plugins of `plugins::NAMES` that the runtime has. A package cannot
-    /// select the others.
-    pub plugins: &'static [&'static str],
 }
 
 pub const GR3: Camera = Camera {
@@ -82,7 +77,6 @@ pub const GR3: Camera = Camera {
     modeset: "00078350.588",
     experimental: false,
     effects: true,
-    plugins: &modules::NAMES,
 };
 
 pub const GR3X: Camera = Camera {
@@ -104,7 +98,6 @@ pub const GR3X: Camera = Camera {
     modeset: "00078490.609",
     experimental: false,
     effects: true,
-    plugins: &modules::NAMES,
 };
 
 pub const GR4: Camera = Camera {
@@ -132,7 +125,6 @@ pub const GR4: Camera = Camera {
     modeset: "00078560.636",
     experimental: false,
     effects: true,
-    plugins: &modules::NAMES,
 };
 
 pub const CAMERAS: [&Camera; 3] = [&GR3, &GR3X, &GR4];

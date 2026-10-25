@@ -19,8 +19,8 @@ extern u32 menu_destroy_original(u32);
 #define CALL3(a) ((u32 (*)(u32,u32,u32))(a))
 #define WORD(a,o) (*(u32 *)((a)+(o)))
 #define BYTE(a,o) (*(u8 *)((a)+(o)))
-/* The plugin interface, before the services that it declares. */
-#include "plugin.h"
+/* The shared types of the core, before the services that it declares. */
+#include "core.h"
 #define PAGE 6U
 /* GRKIT_HOST_RETURN: a native page (the parameter page or a settings page)
    is opening (1) or open (2). ADJ exited while GRKit was open (3), so the next
@@ -51,6 +51,7 @@ static void plugin_touch(u32 controller);
 static void render(u32 controller);
 static void render_step(u32 controller,u32 step);
 static void enter(u32 controller,u32 edge);
+static void ui_native_returned(volatile u32 *h);
 static const u16 plugins[] = {'G','R','K','i','t',0};
 #ifndef MENU_TEXT
 /* The menu text at a camera address. Host tests map the address. */
@@ -167,22 +168,24 @@ A32_ENTRY u32 menu_viewfinder_icon_select(u32 native_icon,u32 movie) {
 /* The first full ADJ draw follows the toolbar creation. */
 #define TOOLBAR_CREATED(widget,icon) ((void)0)
 #endif
-/* Plugin services (runtime/plugin.h). */
+/* Menu services (runtime/core.h). */
 /* The Image Control summary of effect n. The installer writes one for each
    record in each language (runtime/abi.h). */
 static const u16 *effect_summary(volatile u32 *h,u32 n) {
     return MENU_TEXT(GRKIT_TEXT(h)+GRKIT_TEXT_SUMMARY+
         (menu_language()*GRKIT_TEXT_RECORDS+n)*GRKIT_SUMMARY_UNITS*2);
 }
-static const u8 framing_rows[]={FRAMING_RATIO_ROWS};
-static u32 framing_ratios(void) { return sizeof(framing_rows); }
-static u32 framing_ratio(u32 row) { return row<sizeof(framing_rows) ? framing_rows[row] : 0; }
-static void request_native_aspect(void) { MENU_FRAMING_REQUEST(); }
-static u32 camera_aspect(void) { return MENU_NATIVE_ASPECT(); }
-/* A native aspect change stops the live view first where the family needs
-   that, as the native MENU does. */
+/* The capture aspect (CORE.ASPECT). A native aspect change stops the live
+   view first where the family needs that, as the native MENU does. */
 static void set_camera_aspect(u32 id) { MENU_STOP_LIVE_VIEW(); MENU_SET_NATIVE_ASPECT(id); }
+#define ASPECT_NATIVE() MENU_NATIVE_ASPECT()
+#define ASPECT_SET_NATIVE(id) set_camera_aspect(id)
+#define ASPECT_REQUEST() MENU_FRAMING_REQUEST()
+#include "aspect.h"
 #include "modules.h"
+/* The core exports this service to modules (runtime/sdk/grkit.h). It runs
+   in the context of its caller. */
+__attribute__((used)) void grkit_export_setting_set(u32 handle,u32 value) { setting_store(menu_header(),handle,value); }
 static u32 private_mode(u32 controller) {
     volatile u32 *h=menu_header();
     return h[GRKIT_HOST_MENU_CONTROLLER/4] == controller && h[GRKIT_HOST_MENU_LEVEL/4] != 0;
@@ -300,14 +303,16 @@ A32_ENTRY void menu_refresh(u32 controller) {
         /* The page has ended. A record that no page started stays unused. */
         if(h[GRKIT_HOST_PARAMETERS/4]&1U) h[GRKIT_HOST_PARAMETERS/4]=0;
 #endif
-        /* GRKit reopens at the root row of the module (menu_reopen). Fn on a
-           page returns to that page. Fn starts only from Image Control, so it
-           is visible. A settings page returns to the root. */
+        /* GRKit reopens at the root row of the module (menu_reopen). A page
+           that opened from a page returns to that page: Fn on Image Control,
+           and the settings of a module on the Modules page. The page is
+           visible, because it opened the other page. */
         enter(controller,3);
         if(!root) {
-            menu_open(h,0);
+            menu_open(h,h[GRKIT_HOST_MODULE/4]);
             render(controller);
         }
+        ui_native_returned(h);
         return;
     }
     if(h[GRKIT_HOST_RETURN/4]==RETURN_GRKIT) {
@@ -412,10 +417,12 @@ static void render_step(u32 controller,u32 step) {
         u32 index=start+i;
         /* Private icon IDs are resolved by the host's guarded icon adapter. */
         u32 owner=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? root_module(h,index) : h[GRKIT_HOST_MODULE/4];
-        u32 icon=module_icon(owner,modules[owner].icon(h,index));
+        u32 icon=module_icon(owner,module_at(h,owner)->icon(h,index));
         CALL2(FW_ROW_SET_ICON)(row,icon);
         CALL2(FW_ROW_SET_CHECK)(row,h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_ROOT && module->checked(h,index));
     }
+    /* The rows selected other module pages (module_at). */
+    module=current_module(h);
     /* The size comes from all rows, so that a short last page keeps the
        position of the full pages. The cursor needs the new size. */
     list_frame(view,total);
@@ -453,7 +460,7 @@ static void enter(u32 controller,u32 edge) {
     volatile u32 *h=menu_header();
     u32 view=WORD(controller,ADJ_LIST);
     h[GRKIT_HOST_MENU_CONTROLLER/4]=controller; menu_reopen(h);
-    h[GRKIT_HOST_MENU_SLOT/4]=BYTE(controller,ADJ_SLOT); h[GRKIT_HOST_MENU_EDGE/4]=edge;
+    h[GRKIT_HOST_MENU_EDGE/4]=edge;
     h[GRKIT_HOST_PREVIEW/4]=0;
     CALL3(FW_LIST_SAVE)(view,(u32)(h+GRKIT_HOST_MENU_LIST/4),(u32)(h+GRKIT_HOST_MENU_LIST/4+1));
     render(controller);
@@ -550,8 +557,10 @@ static u32 menu_parameter_title(u32 view) {
 /* The native settings page of a root row (Module::settings). GRKit opens the
    MENU submenu SETTINGS_SUBMENU from ADJ, as the Fn page opens. While
    GRKIT_HOST_SETTINGS holds the module + 1, the submenu reads a private copy
-   of its kind table entry with SETTING_ROWS rows, and the value pages of the
-   rows show and set the settings of the module. The text hooks show the
+   of its kind table entry with the rows of the module (2 to SETTING_ROWS),
+   and the value pages of the rows show and set the settings of the module.
+   Row i opens the borrowed value page SETTINGS_PAGES[i], whose title is the
+   row label SETTINGS_ROW_TEXTS[i]. The text hooks show the
    module title, the row labels, and the values. A value view shows the text
    ID SETTINGS_TITLE_TEXT, so that the text hooks find the view.
 
@@ -566,7 +575,7 @@ static u32 menu_parameter_title(u32 view) {
 #define SETTINGS_MAP(address) ((volatile u32 *)MENU_TEXT(address))
 #endif
 #define SETTINGS_LABELS 0x80
-#define SETTINGS_VIEWS 0x98
+#define SETTINGS_VIEWS (SETTINGS_LABELS+(1+SETTING_ROWS)*8)
 #define SETTINGS_VIEW_SLOTS (SETTING_ROWS+SETTING_VALUES)
 _Static_assert(SUBMENU_KIND_SIZE<=SETTINGS_LABELS && SETTINGS_LABELS+(1+SETTING_ROWS)*8<=SETTINGS_VIEWS &&
                SETTINGS_VIEWS+SETTINGS_VIEW_SLOTS*12<=GRKIT_TEXT_PARAMETER_TITLE-GRKIT_TEXT_SETTINGS,
@@ -577,14 +586,21 @@ static volatile u32 *settings_block(volatile u32 *h) { return SETTINGS_MAP(GRKIT
 /* The settings of the open page, or 0. */
 static const Setting *settings_page(volatile u32 *h) {
     u32 module=h[GRKIT_HOST_SETTINGS/4]-1;
-    return module<ARRAY_COUNT(modules) ? modules[module].settings : 0;
+    return module<MODULE_TOTAL ? module_at(h,module)->settings : 0;
 }
-/* A controller change. The page ends at any controller outside it. */
-A32_ENTRY void menu_settings_controller(u32 id) {
+/* The rows of the open page: the row count of the private entry. */
+static u32 settings_rows(volatile u32 *h) { return ((volatile u8 *)settings_block(h))[SUBMENU_KIND_ROWS]; }
+static u32 menu_rows_controller(volatile u32 *h,u32 id);
+/* A controller change to `id`: returns the controller to change to. A MENU
+   row of a module opens its settings page (menu_rows_controller). The page
+   ends at any controller outside it. */
+A32_ENTRY u32 menu_settings_controller(u32 id) {
     u32 i;
-    if(id==SETTINGS_SUBMENU) return;
-    for(i=0;i<SETTING_ROWS;++i) if(id==settings_pages[i]) return;
+    id=menu_rows_controller(menu_header(),id);
+    if(id==SETTINGS_SUBMENU) return id;
+    for(i=0;i<SETTING_ROWS;++i) if(id==settings_pages[i]) return id;
     menu_header()[GRKIT_HOST_SETTINGS/4]=0;
+    return id;
 }
 /* The kind table that the submenu reads: the private entry at the index of
    the borrowed entry, or the native table. */
@@ -611,7 +627,7 @@ static u32 settings_text(volatile u32 *h,u32 view,u32 id) {
         for(i=0;i<SETTINGS_VIEW_SLOTS;++i)
             if(block[SETTINGS_VIEWS/4+i*3]==view) return (u32)(block+SETTINGS_VIEWS/4+i*3+1)|1U;
     if(id==SETTINGS_TITLE_TEXT) return (u32)(block+SETTINGS_LABELS/4)|1U;
-    for(i=0;i<SETTING_ROWS;++i)
+    for(i=0;i<settings_rows(h);++i)
         if(id==settings_row_texts[i]) return (u32)(block+SETTINGS_LABELS/4+(i+1)*2)|1U;
     return 0;
 }
@@ -625,6 +641,9 @@ static void settings_row(u32 row,u32 setting) {
 }
 A32_ENTRY void menu_settings_value_0(u32 submenu,u32 row) { (void)submenu; settings_row(row,0); }
 A32_ENTRY void menu_settings_value_1(u32 submenu,u32 row) { (void)submenu; settings_row(row,1); }
+A32_ENTRY void menu_settings_value_2(u32 submenu,u32 row) { (void)submenu; settings_row(row,2); }
+A32_ENTRY void menu_settings_value_3(u32 submenu,u32 row) { (void)submenu; settings_row(row,3); }
+A32_ENTRY void menu_settings_value_4(u32 submenu,u32 row) { (void)submenu; settings_row(row,4); }
 static u32 settings_values(volatile u32 *h,const Setting *setting) {
     u32 n=setting->values(h);
     return n<SETTING_VALUES ? n : SETTING_VALUES;
@@ -663,33 +682,155 @@ A32_ENTRY u32 menu_settings_current(u32 value,u32 unused,u32 setting) {
     (void)unused;
     return page ? (page[setting].get(h)==value)+1 : 0;
 }
-/* Start a page for `module`: copy the borrowed entry with SETTING_ROWS rows
-   and the private value methods, and fill the descriptors of the labels. The
-   menu language does not change while the page is open. */
+/* The settings of a page: those of a module page give their count, the
+   others end at the first entry without a label. */
+static u32 settings_count(volatile u32 *h,const Setting *page) {
+    u32 n=0;
+    if(page==choice_settings) n=PAGE_WORD(CHOICE_ENTRY(h)[0],PAGE_SETTING_ROWS);
+    else while(n<SETTING_ROWS && page[n].label) ++n;
+    return n<SETTING_ROWS ? n : SETTING_ROWS;
+}
+/* Start a page for `module`: copy the borrowed entry with the rows of the
+   module, their labels, value pages, and private value methods, and fill
+   the descriptors of the labels. The menu language does not change while
+   the page is open. */
 static void settings_start(volatile u32 *h,u32 module) {
-    static void (*const values[SETTING_ROWS])(u32,u32)={menu_settings_value_0,menu_settings_value_1};
+    static void (*const values[SETTING_ROWS])(u32,u32)={menu_settings_value_0,menu_settings_value_1,
+        menu_settings_value_2,menu_settings_value_3,menu_settings_value_4};
     volatile u32 *block=settings_block(h);
-    const Setting *page=modules[module].settings;
-    u32 stock=FW_SUBMENU_KINDS+SETTINGS_SUBMENU_KIND*SUBMENU_KIND_SIZE, i;
+    const Setting *page=module_at(h,module)->settings;
+    u32 stock=FW_SUBMENU_KINDS+SETTINGS_SUBMENU_KIND*SUBMENU_KIND_SIZE, i, rows=settings_count(h,page);
     for(i=0;i<SUBMENU_KIND_SIZE/4;++i) block[i]=WORD(stock,i*4);
-    ((volatile u8 *)block)[SUBMENU_KIND_ROWS]=SETTING_ROWS;
-    for(i=0;i<SETTING_ROWS;++i) {
+    ((volatile u8 *)block)[SUBMENU_KIND_ROWS]=(u8)rows;
+    for(i=0;i<rows;++i) {
+        ((volatile u16 *)((volatile u8 *)block+SUBMENU_KIND_LABELS))[i]=settings_row_texts[i];
+        block[SUBMENU_KIND_CONTROLLERS/4+i]=settings_pages[i];
+        /* The stock entry has three rows: rows 4 and 5 take the kind of row 1. */
+        block[SUBMENU_KIND_ROW_KINDS/4+i]=block[SUBMENU_KIND_ROW_KINDS/4];
         /* A C++ member pointer: the function, then the adjustment of `this`. */
         block[SUBMENU_KIND_VALUES/4+i*2]=(u32)values[i];
         block[SUBMENU_KIND_VALUES/4+i*2+1]=0;
         descriptor(block+SETTINGS_LABELS/4+(i+1)*2,page[i].label(h));
     }
-    descriptor(block+SETTINGS_LABELS/4,modules[module].title(h));
+    /* The settings of a module or an effect have its name. */
+    descriptor(block+SETTINGS_LABELS/4,module==MANAGE_MODULE ? manage_name(h,manage_open(h)) :
+               module==EFFECTS_MODULE ? effects_name(h,effects_open(h)) : module_at(h,module)->title(h));
     for(i=0;i<SETTINGS_VIEW_SLOTS*3;++i) block[SETTINGS_VIEWS/4+i]=0;
     h[GRKIT_HOST_SETTINGS/4]=module+1;
 }
 #endif
+#ifdef SETTINGS_SUBMENU
+#ifdef FW_MENU_TABS
+/* Rows of modules in the native MENU (GRKIT_PAGE_MENU_ROW). MENU builds its
+   tabs at the first MENU of a start, after a controller change. So the
+   first controller change after INSTALL copies the Customize tab descriptor
+   into the services block (SERVICES_MENU), adds a row for each module page
+   with the flag at the end of its last section, and points the RAM tab
+   table at the copy. A MENU that was built before keeps its tabs until the
+   next start.
+
+   A row targets MENU_ROW_TARGET + its slot, which no controller has: the
+   controller change becomes a change to the borrowed settings submenu with
+   the settings of the module, and MENU on the submenu returns to MENU. A
+   filler gives the row the text IDs MENU_ROW_LABEL_TEXT and
+   MENU_ROW_VALUE_TEXT, and the text hook gives the title of the page and
+   the label of its committed row for the views of the row. */
+#define MENU_ROW_TARGET 0x2000f00U
+#define MENU_ROW_LABEL_TEXT (settings_row_texts[0])
+#define MENU_ROW_VALUE_TEXT (settings_row_texts[1])
+_Static_assert(MENU_TAB_SIZE==MENU_ROWS_TAB_SIZE,"The services block holds a MENU tab");
+static volatile u32 *menu_row(volatile u32 *h,u32 slot) {
+    return services_word(h,SERVICES_MENU+8U+slot*MENU_ROW_SIZE);
+}
+/* The fillers of the rows (below). */
+static void (*const fillers[MENU_ROWS_SLOTS])(u32,u32);
+static void menu_rows_install(volatile u32 *h) {
+    volatile u32 *state=services_word(h,SERVICES_MENU);
+    u32 copy=(u32)services_word(h,SERVICES_MENU+MENU_ROWS_TAB), stock, rows, module, slots=0, i;
+    if(state[MENU_ROWS_DONE/4]) return;
+    state[MENU_ROWS_DONE/4]=1;
+    stock=WORD(FW_MENU_TABS+4*MENU_TAB_CUSTOMIZE,0);
+    if(!stock) return;
+    for(i=0;i<MENU_TAB_SIZE/4;++i) WORD(copy,4*i)=WORD(stock,4*i);
+    rows=BYTE(copy,MENU_TAB_ROWS);
+    for(module=0;module<module_pages(h) && slots<MENU_ROWS_SLOTS && rows<MENU_TAB_MAX_ROWS;++module) {
+        h[GRKIT_HOST_MODULE_CHOICE/4]=module;
+        if(!(PAGE_WORD(CHOICE_ENTRY(h)[0],PAGE_FLAGS)&CHOICE_MENU_ROW) || !module_at(h,module)->settings) continue;
+        WORD(copy,MENU_TAB_FILLERS+8*rows)=(u32)fillers[slots];
+        WORD(copy,MENU_TAB_FILLERS+8*rows+4)=0;
+        WORD(copy,MENU_TAB_TARGETS+4*rows)=MENU_ROW_TARGET+slots;
+        WORD(copy,MENU_TAB_PREDICATES+8*rows)=0;
+        WORD(copy,MENU_TAB_PREDICATES+8*rows+4)=0;
+        menu_row(h,slots)[MENU_ROW_MODULE/4]=module;
+        ++slots; ++rows;
+    }
+    state[MENU_ROWS_COUNT/4]=slots;
+    if(!slots) return;
+    BYTE(copy,MENU_TAB_ROWS)=(u8)rows;
+    WORD(FW_MENU_TABS+4*MENU_TAB_CUSTOMIZE,0)=copy;
+}
+static u32 menu_rows_controller(volatile u32 *h,u32 id) {
+    u32 slot=id-MENU_ROW_TARGET;
+    if(!h[GRKIT_HOST_SERVICES/4]) return id;
+    menu_rows_install(h);
+    if(slot>=services_word(h,SERVICES_MENU)[MENU_ROWS_COUNT/4]) return id;
+    settings_start(h,menu_row(h,slot)[MENU_ROW_MODULE/4]);
+    return SETTINGS_SUBMENU;
+}
+/* A filler: the label and the value of row view `row`. The views are known
+   first, because a setter asks the text hook at once. A view measures its
+   text only when its ID changes, so each gets ID 0 first. */
+static void menu_row_fill(u32 slot,u32 row) {
+    volatile u32 *h=menu_header(), *at=menu_row(h,slot);
+    const Module *page;
+    if(!h[GRKIT_HOST_SERVICES/4] || slot>=services_word(h,SERVICES_MENU)[MENU_ROWS_COUNT/4]) return;
+    page=module_at(h,at[MENU_ROW_MODULE/4]);
+    at[MENU_ROW_LABEL/4]=WORD(row,MENU_ROW_LABEL_VIEW);
+    at[MENU_ROW_VALUE/4]=WORD(row,MENU_ROW_VALUE_VIEW);
+    descriptor(at+MENU_ROW_LABEL_TEXT_AT/4,page->title(h));
+    /* The value: the label of the committed row, as a native row shows
+       its value. */
+    descriptor(at+MENU_ROW_VALUE_TEXT_AT/4,page->label(h,page->committed(h)));
+    CALL3(FW_STRING_VIEW_RESET)(at[MENU_ROW_LABEL/4],0,0);
+    CALL3(FW_MENU_ROW_LABEL)(row,MENU_ROW_LABEL_TEXT,MENU_ROW_LABEL_TEXT);
+    CALL3(FW_STRING_VIEW_RESET)(at[MENU_ROW_VALUE/4],0,0);
+    CALL2(FW_MENU_ROW_VALUE)(row,MENU_ROW_VALUE_TEXT);
+}
+#define MENU_ROW_FILLER(n) \
+    A32_ENTRY void menu_row_fill_##n(u32 menu,u32 row) { (void)menu; menu_row_fill(n,row); }
+MENU_ROW_FILLER(0) MENU_ROW_FILLER(1) MENU_ROW_FILLER(2) MENU_ROW_FILLER(3)
+MENU_ROW_FILLER(4) MENU_ROW_FILLER(5) MENU_ROW_FILLER(6) MENU_ROW_FILLER(7)
+static void (*const fillers[MENU_ROWS_SLOTS])(u32,u32)={menu_row_fill_0,menu_row_fill_1,menu_row_fill_2,
+    menu_row_fill_3,menu_row_fill_4,menu_row_fill_5,menu_row_fill_6,menu_row_fill_7};
+/* The text of a view of a MENU row, or 0. */
+static u32 menu_rows_text(volatile u32 *h,u32 view,u32 id) {
+    u32 slot, n;
+    if(!h[GRKIT_HOST_SERVICES/4]) return 0;
+    n=services_word(h,SERVICES_MENU)[MENU_ROWS_COUNT/4];
+    for(slot=0;slot<n && slot<MENU_ROWS_SLOTS;++slot) {
+        volatile u32 *at=menu_row(h,slot);
+        if(id==MENU_ROW_LABEL_TEXT && view==at[MENU_ROW_LABEL/4]) return (u32)(at+MENU_ROW_LABEL_TEXT_AT/4)|1U;
+        if(id==MENU_ROW_VALUE_TEXT && view==at[MENU_ROW_VALUE/4]) return (u32)(at+MENU_ROW_VALUE_TEXT_AT/4)|1U;
+    }
+    return 0;
+}
+#else
+static u32 menu_rows_controller(volatile u32 *h,u32 id) { (void)h; return id; }
+static u32 menu_rows_text(volatile u32 *h,u32 view,u32 id) { (void)h; (void)view; (void)id; return 0; }
+#endif
+#endif
+/* The timer and UI services for modules. */
+#include "ui.h"
 /* The text descriptor for `view` and text ID `id`, or 0 for the native text.
    Bit 0 selects the font of the menu language. */
 A32_ENTRY u32 menu_text_override(u32 view,u32 id) {
     u32 title=menu_parameter_title(view);
     if(title) return title;
+    title=ui_text_override(menu_header(),id);
+    if(title) return title;
 #ifdef SETTINGS_SUBMENU
+    title=menu_rows_text(menu_header(),view,id);
+    if(title) return title;
     return settings_text(menu_header(),view,id);
 #else
     (void)id;
@@ -697,17 +838,32 @@ A32_ENTRY u32 menu_text_override(u32 view,u32 id) {
 #endif
 }
 /* OK on a root row with settings opens the native settings page where the
-   target has one. The page returns to the root (menu_refresh). */
+   target has one, and so does OK on a row of the Modules or Effects page,
+   for its module or effect. The page returns to where it opened
+   (menu_refresh). */
 static u32 open_settings(u32 controller) {
 #ifdef SETTINGS_SUBMENU
     volatile u32 *h=menu_header();
-    u32 module;
-    if(h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_ROOT || ADJ_MOVIE(controller)==1) return 0;
-    module=root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]);
-    if(!modules[module].settings) return 0;
+    u32 module, root=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT;
+    if(ADJ_MOVIE(controller)==1) return 0;
+    if(root) {
+        module=root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]);
+        /* OK on the Modules row opens its list. */
+        if(module==MANAGE_MODULE) return 0;
+    }
+    else if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && h[GRKIT_HOST_MODULE/4]==MANAGE_MODULE) {
+        module=MANAGE_MODULE;
+        MANAGE_MAP(h[GRKIT_HOST_MANAGE/4]+MANAGE_OPEN)[0]=manage_module(h,h[GRKIT_HOST_MENU_CURSOR/4]);
+    }
+    else if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && h[GRKIT_HOST_MODULE/4]==EFFECTS_MODULE) {
+        module=EFFECTS_MODULE;
+        effects_word(h,EFFECTS_OPEN)[0]=effects_at(h,h[GRKIT_HOST_MENU_CURSOR/4]);
+    }
+    else return 0;
+    if(!module_at(h,module)->settings) return 0;
     leave(controller);
     settings_start(h,module);
-    h[GRKIT_HOST_RETURN/4]=RETURN_OPENING|RETURN_ROOT;
+    h[GRKIT_HOST_RETURN/4]=RETURN_OPENING|(root ? RETURN_ROOT : 0);
     CALL3(FW_CHANGE_CONTROLLER)(controller,SETTINGS_SUBMENU,0x2000000);
     return 1;
 #else
@@ -745,6 +901,10 @@ A32_ENTRY void menu_native_touch(u32 controller,u32 slot) {
 A32_ENTRY void menu_exit(u32 controller) {
     volatile u32 *h=menu_header();
     u32 in_grkit=private_mode(controller);
+    /* A box of the UI service closes with ADJ, and a native screen that
+       waits to open does not open. */
+    ui_close(h);
+    ui_native_cancel(h);
     leave(controller);
     h[GRKIT_HOST_BACK_PENDING/4]=0;
     h[GRKIT_HOST_PREVIEW/4]=0;
@@ -765,6 +925,8 @@ A32_ENTRY void menu_exit(u32 controller) {
 A32_ENTRY u32 menu_destroy(u32 controller) {
     volatile u32 *h=menu_header();
     u32 widget=0, result;
+    ui_close(h);
+    ui_native_cancel(h);
     if(h[GRKIT_HOST_TOOLBAR_OWNER/4]==controller) {
         widget=h[GRKIT_HOST_TOOLBAR_WIDGET/4];
         h[GRKIT_HOST_TOOLBAR_WIDGET/4]=0;
@@ -802,6 +964,11 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
     if(kind==EV_SWITCH && !menu_press(BYTE(WORD((u32)event,4),0),WORD(WORD((u32)event,4),4))) return 0;
     back=back_event(h,kind,private_mode(controller));
     if(back==2) return 0;
+    /* A message, a confirm, or a progress box takes each key. */
+    if(private_mode(controller) && ui_modal(h)) {
+        ui_event(h,kind,back==1);
+        return 0;
+    }
     if(back==1) {
         if(menu_back(h)) { render(controller); return 0; }
         /* MENU on the root closes ADJ, as on a native entry: the restored
@@ -874,14 +1041,26 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
        OK on a root row opens its page. OK on a page row commits it and closes
        ADJ, as OK on a native value does: the restored native list gets the
        confirm, as after MENU on the root. An ADJ press closes ADJ from the
-       root too, as on a native entry; on a page it commits the row first. */
+       root too, as on a native entry; on a page it commits the row first.
+       If the commit made a module show a UI box or ask for a native screen,
+       ADJ stays open on the page instead (ui_holds_page). */
     if(kind==EV_CONFIRM) {
         u32 page=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE, close=page;
+        /* OK on the Modules or Effects page opens the settings of the row,
+           and OK on the Effects row opens the Effects page. */
+        if(page && (h[GRKIT_HOST_MODULE/4]==MANAGE_MODULE || h[GRKIT_HOST_MODULE/4]==EFFECTS_MODULE ||
+                    effects_row_open(h))) close=0;
 #ifdef EV_ADJ_PRESS
         if(after_adj_press(h)) close=1;
 #endif
+        if(!close && effects_row_open(h)) {
+            menu_open(h,EFFECTS_MODULE);
+            render(controller);
+            return 0;
+        }
         if(!close && open_settings(controller)) return 0;
         if(page || !close) menu_confirm(h);
+        if(close && ui_holds_page(h)) close=0;
         if(close) {
             leave(controller);
             h[GRKIT_HOST_RETURN/4]=RETURN_CLOSING;
@@ -912,16 +1091,24 @@ u32 menu_playback_private(void) {
     return playback_icon(menu_header(),WORD(CALL0(FW_PLAYBACK_METADATA)(),METADATA_TONE));
 }
 #endif
+_Static_assert(GRKIT_ICONS_PER_CHUNK==40 && (GRKIT_HOST_ICON_CHUNKS_WORDS*40)*1639U>>16==GRKIT_HOST_ICON_CHUNKS_WORDS*40/40,
+               "The module tile chunk uses slot / 40");
 /* IDs stay in transient private widgets and never enter native settings. */
 A32_ENTRY u32 menu_icon(u32 id) {
     volatile u32 *h=menu_header();
     u32 index=id-0x8000;
-    /* Plugin tiles are contiguous from the first one. */
-    if(id-PLUGIN_ICON<PLUGIN_TILES)
-        return h[GRKIT_HOST_TILE_ICON/4]+(id-PLUGIN_ICON)*GRKIT_ICON_STRIDE;
+    /* Module tiles follow the effect icons in the chunks. slot * 1639 >> 16
+       is slot / 40 for each slot of the chunks. */
+    if(id-GRKIT_ICON_MODULE_TILE(0)<GRKIT_MODULE_TILES_MAX) {
+        u32 slot=GRKIT_HOST_ICON_COUNT+h[GRKIT_HOST_COUNT/4]+id-GRKIT_ICON_MODULE_TILE(0), chunk=slot*1639U>>16;
+        if(chunk>=GRKIT_HOST_ICON_CHUNKS_WORDS || !h[GRKIT_HOST_ICON_CHUNKS/4+chunk]) return 0;
+        return h[GRKIT_HOST_ICON_CHUNKS/4+chunk]+(slot-chunk*GRKIT_ICONS_PER_CHUNK)*GRKIT_ICON_STRIDE;
+    }
     if(id==GRKIT_ICON_GRKIT) return h[GRKIT_HOST_PLUGINS_ICON/4];
     /* The installer puts the Version icon after the GRKit icon. */
     if(id==GRKIT_ICON_VERSION) return h[GRKIT_HOST_PLUGINS_ICON/4] ? h[GRKIT_HOST_PLUGINS_ICON/4]+GRKIT_ICON_STRIDE : 0;
+    /* The Modules icon follows the Version icon. */
+    if(id==GRKIT_ICON_MODULES) return h[GRKIT_HOST_PLUGINS_ICON/4] ? h[GRKIT_HOST_PLUGINS_ICON/4]+2*GRKIT_ICON_STRIDE : 0;
     if(id==0x7fff) return h[GRKIT_HOST_OFF_ICON/4] ? h[GRKIT_HOST_OFF_ICON/4] : NATIVE_OFF_ICON();
     if(index>=h[GRKIT_HOST_COUNT/4]) return 0;
     return WORD(h[GRKIT_HOST_RECORDS/4]+index*GRKIT_RECORD_SIZE,GRKIT_RECORD_ICON);

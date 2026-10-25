@@ -1,0 +1,36 @@
+# Framing: the aspect of still pictures. The page sets CORE.ASPECT, and the
+# core sets the native aspect or crops. The layers show the crop in the
+# live view.
+id = "FRAMING"
+version = 1
+sources = ["framing.c"]
+# Tile n shows value n. Tile 0 is the module tile, for Off at the root.
+tiles = [
+    "tiles/0-module.png",
+    "tiles/1-xpan.png",
+    "tiles/2-16-9.png",
+    "tiles/3-4-3.png",
+    "tiles/4-2-35.png",
+    "tiles/5-1-1.png",
+    "tiles/6-5-4.png",
+]
+uses = ["CORE.ASPECT"]
+
+[page]
+setting = "CORE.ASPECT"
+off_row = true
+
+# The mask stays in each display, because it shows the capture area.
+[[layers]]
+paint = "framing_mask"
+setting = "CORE.ASPECT"
+order = 10
+
+# The ratio label shows with the full display, like the top row of native
+# settings. It covers the guides that cross it.
+[[layers]]
+paint = "framing_badge"
+setting = "CORE.ASPECT"
+order = 30
+full_disp = true
+live_only = true

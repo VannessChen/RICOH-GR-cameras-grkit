@@ -80,6 +80,10 @@
    Standard parameter page (still mode). */
 #define ADJ_IC_SLOT_TYPE 15
 #define IC_PARAMETERS_CONTROLLER 0x2000017
+/* The native screens of ui_open_native (runtime/ui.h): the targets of the
+   MENU rows White Balance (still) and LCD, the same on each GR IV build. */
+#define UI_NATIVE_WHITE_BALANCE 0x2000064U
+#define UI_NATIVE_LCD 0x200001dU
 /* ImageControlDetailController, as on GR III with other fields: the type
    (+0x19c), the set kind (+0x19d), and the base kind of its row table
    (+0x19e, 0 Standard). The model snapshot holds one byte for each row kind
@@ -94,18 +98,39 @@
 #define PARAMETER_KINDS {0,1,2,3,4,5,6,14,15}
 #define DETAIL_EV_SUBPAGE 0x8c
 /* The native settings page of a GRKit root row, as on GR III: the MENU
-   submenu Instant Review (0x20000d4, entry 11 of FW_SUBMENU_KINDS) and its
-   value pages Display Time (0x20000d9) and Zoom Review (0x20000da). The text
-   IDs of the title and the rows are in the build header. */
+   submenu Instant Review (0x20000d4, entry 11 of FW_SUBMENU_KINDS), its three
+   value pages (0x20000d9 Display Time, 0x20000da Zoom Review, 0x20000db), and
+   two plain value pages of the MENU Setup tab (0x20000b5, 0x20000b6), whose
+   records follow those of Instant Review. The text IDs of the title and the
+   rows are in the build header. */
 #define SUBMENU_KIND_SIZE 0x64
 #define SUBMENU_KIND_ROWS 6
+#define SUBMENU_KIND_LABELS 8
 #define SUBMENU_KIND_CONTROLLERS 0x14
+#define SUBMENU_KIND_ROW_KINDS 0x28
 #define SUBMENU_KIND_VALUES 0x3c
 #define SETTINGS_SUBMENU 0x20000d4U
 #define SETTINGS_SUBMENU_KIND 11
-#define SETTINGS_PAGES {0x20000d9U,0x20000daU}
+#define SETTINGS_PAGES {0x20000d9U,0x20000daU,0x20000dbU,0x20000b5U,0x20000b6U}
 #define ROW_TEXT_VIEW 0xf8
 #define ROW_VALUE_VIEW 0xfc
+/* Rows of modules in the native MENU (runtime/menu.c). MENU builds its
+   tabs at the first MENU of a start from the tab descriptors in the RAM
+   table FW_MENU_TABS of the build header; entry MENU_TAB_CUSTOMIZE is the
+   Customize tab. A descriptor holds the row count (u8) at MENU_TAB_ROWS, then for each of
+   MENU_TAB_MAX_ROWS rows its filler (a C++ member pointer), its target
+   controller, and its predicate (a member pointer, 0 for a row that always
+   shows). A filler gets the row view and sets its label view (+0xec) and
+   value view with the row setters. */
+#define MENU_TAB_CUSTOMIZE 3
+#define MENU_TAB_SIZE 0x384
+#define MENU_TAB_ROWS 0x8b
+#define MENU_TAB_FILLERS 0x8c
+#define MENU_TAB_TARGETS 0x1bc
+#define MENU_TAB_PREDICATES 0x254
+#define MENU_TAB_MAX_ROWS 38
+#define MENU_ROW_LABEL_VIEW 0xec
+#define MENU_ROW_VALUE_VIEW 0xfc
 /* AdjModeController fields. GR IV adds two FunctionGuideViews before the list,
    which moves the list and the slot byte by 8. */
 #define ADJ_CANVAS 0x4

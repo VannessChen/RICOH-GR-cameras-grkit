@@ -168,6 +168,7 @@ fn patch_and_branch_validation() {
         site: None,
     };
     let mut plan = PatchPlan {
+        exports: vec![],
         patches: vec![patch.clone()],
         relocations: vec![(0, 0)],
         references: Vec::new(),
@@ -287,6 +288,194 @@ fn tools() -> Result<Toolchain> {
     )
 }
 
+/// The probe module of `tests/modules` builds into a module that imports only
+/// services of the core and the installer, and registers one layer.
+#[test]
+#[ignore = "Requires ARM-capable Clang and LLD; run with --ignored"]
+fn synthetic_probe_module_builds() -> Result<()> {
+    let tools = tools()?;
+    let directory = tempfile::tempdir()?;
+    let bytes = build_module(
+        "PROBE",
+        1,
+        &[Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/modules/probe/probe.c")],
+        &directory.path().join("objects"),
+        tools.clang.to_str().unwrap(),
+        tools.lld.to_str().unwrap(),
+    )?;
+    let module = grkit_core::grm::Module::decode(&bytes)?;
+    assert_eq!(module.id, "PROBE");
+    let mut names: Vec<_> = module
+        .imports
+        .iter()
+        .map(|import| import.name.as_str())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(
+        names,
+        ["grkit_self", "overlay_label", "setting_get", "setting_set"]
+    );
+    // The descriptor: its size, the ABI, then one registration of a layer.
+    let word =
+        |offset: u32| u32::from_le_bytes(module.code[offset as usize..][..4].try_into().unwrap());
+    assert_eq!(word(module.descriptor), grkit_core::grm::DESCRIPTOR_SIZE);
+    assert_eq!(
+        word(module.descriptor + 4),
+        grkit_core::grm::ABI_MAJOR << 16
+    );
+    assert_eq!(word(module.descriptor + 12), 1);
+    assert_eq!(word(word(module.descriptor + 8)), 1);
+    Ok(())
+}
+
+/// The module folders of the repository (`modules/<id>`).
+fn module_folders() -> Vec<std::path::PathBuf> {
+    let mut folders: Vec<_> =
+        fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../modules"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.join("module.toml").is_file())
+            .collect();
+    folders.sort();
+    folders
+}
+
+/// Each module folder passes its host test (`grkit module test`). The test
+/// needs a host C compiler: `cc`, or GRKIT_HOST_CC.
+#[test]
+fn module_folders_pass_their_host_tests() -> Result<()> {
+    let cc = std::env::var("GRKIT_HOST_CC").unwrap_or_else(|_| "cc".into());
+    if std::process::Command::new(&cc)
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        assert!(
+            std::env::var_os("GRKIT_REQUIRE_NATIVE_TESTS").is_none(),
+            "No host C compiler {cc}"
+        );
+        return Ok(());
+    }
+    for folder in module_folders() {
+        let directory = tempfile::tempdir()?;
+        // A module with C sources has a test.
+        let tested = test_module_manifest(&folder, &directory.path().join("build"), &cc)
+            .with_context(|| format!("Test {}", folder.display()))?;
+        assert_eq!(
+            tested,
+            !module::generate(&folder)?.0.sources.is_empty(),
+            "{}",
+            folder.display()
+        );
+    }
+    Ok(())
+}
+
+/// Write the module template (`grkit module new`) into a new folder.
+fn template_folder(directory: &Path, id: &str) -> Result<std::path::PathBuf> {
+    let folder = directory.join(id.to_ascii_lowercase());
+    for (name, bytes) in grkit_core::grm::template(id)? {
+        let path = folder.join(name);
+        fs::create_dir_all(path.parent().unwrap())?;
+        fs::write(path, bytes)?;
+    }
+    Ok(folder)
+}
+
+/// The module template passes its host test, as the module folders do.
+#[test]
+fn module_template_passes_its_host_test() -> Result<()> {
+    assert!(grkit_core::grm::template("hello").is_err());
+    assert!(grkit_core::grm::template("TOOLONGID").is_err());
+    let cc = std::env::var("GRKIT_HOST_CC").unwrap_or_else(|_| "cc".into());
+    if std::process::Command::new(&cc)
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        assert!(
+            std::env::var_os("GRKIT_REQUIRE_NATIVE_TESTS").is_none(),
+            "No host C compiler {cc}"
+        );
+        return Ok(());
+    }
+    let directory = tempfile::tempdir()?;
+    // An ID that starts with a digit and has a character that no tile shows.
+    let folder = template_folder(directory.path(), "1_NEW")?;
+    assert!(test_module_manifest(
+        &folder,
+        &directory.path().join("build"),
+        &cc
+    )?);
+    Ok(())
+}
+
+/// The module template builds for the camera.
+#[test]
+#[ignore = "Requires ARM-capable Clang and LLD; run with --ignored"]
+fn synthetic_module_template_builds() -> Result<()> {
+    let tools = tools()?;
+    let directory = tempfile::tempdir()?;
+    let folder = template_folder(directory.path(), "HELLO")?;
+    let (id, bytes) = build_module_manifest(
+        &folder,
+        &directory.path().join("objects"),
+        tools.clang.to_str().unwrap(),
+        tools.lld.to_str().unwrap(),
+    )?;
+    assert_eq!(id, "HELLO");
+    assert_eq!(grkit_core::grm::Module::decode(&bytes)?.id, "HELLO");
+    Ok(())
+}
+
+/// Each module folder builds for the camera, and its file decodes.
+#[test]
+#[ignore = "Requires ARM-capable Clang and LLD; run with --ignored"]
+fn synthetic_module_folders_build() -> Result<()> {
+    let tools = tools()?;
+    for folder in module_folders() {
+        let directory = tempfile::tempdir()?;
+        let (id, bytes) = build_module_manifest(
+            &folder,
+            &directory.path().join("objects"),
+            tools.clang.to_str().unwrap(),
+            tools.lld.to_str().unwrap(),
+        )?;
+        let module = grkit_core::grm::Module::decode(&bytes)?;
+        assert_eq!(module.id, id);
+        assert!(module
+            .imports
+            .iter()
+            .all(|i| grkit_core::grm::importable(&i.name)));
+    }
+    Ok(())
+}
+
+/// A module that needs a compiler helper does not build, because the core does
+/// not export it.
+#[test]
+#[ignore = "Requires ARM-capable Clang and LLD; run with --ignored"]
+fn synthetic_module_rejects_unknown_imports() -> Result<()> {
+    let tools = tools()?;
+    let directory = tempfile::tempdir()?;
+    let source = directory.path().join("divide.c");
+    fs::write(
+        &source,
+        "#include \"grkit.h\"\nu32 divide(u32 a, u32 b) { return a / b; }\nstatic const GrkitRegistration r[] = {{0, 0}};\nGRKIT_MODULE(r, 0, 0, 0, 0, 0, 0);\n",
+    )?;
+    let error = build_module(
+        "DIVIDE",
+        1,
+        &[source],
+        &directory.path().join("objects"),
+        tools.clang.to_str().unwrap(),
+        tools.lld.to_str().unwrap(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("__aeabi_uidiv"), "{error}");
+    Ok(())
+}
+
 /// The synthetic builds relocate as the production builds do: the pinned
 /// image resolves each symbol of the installer to its pinned address.
 #[test]
@@ -316,7 +505,7 @@ fn synthetic_arm_build_is_reproducible() -> Result<()> {
             first.manifest["generated_header_sha256"],
             sha256(&generated)
         );
-        let installer = &first.files["SCRIPT/PLUGINS/INSTALL.BIN"];
+        let installer = &first.files["SCRIPT/GRKIT/INSTALL.BIN"];
         assert_eq!(&installer[..6], b"\x7fELF\x01\x01");
         assert_eq!(&installer[16..20], &[2, 0, 40, 0]);
         for item in first.manifest["files"].as_array().unwrap() {
@@ -353,8 +542,8 @@ fn synthetic_arm_hooks_match_the_target_tables() -> Result<()> {
     // The regions of GR III, independent of the layout methods.
     let gr3 = target::GR3_210.layout.unwrap();
     assert_eq!(gr3.processing(), (0x540b6100, 0x540b6500));
-    assert_eq!(gr3.menu(), (0x540b6500, 0x540b9800));
-    assert_eq!(gr3.framing(), (0x540b9800, 0x540be000));
+    assert_eq!(gr3.menu(), (0x540b6500, 0x540bb400));
+    assert_eq!(gr3.framing(), (0x540bb400, 0x540c2000));
     for target in SYNTHETIC_TARGETS {
         synthetic_hooks(target, &tools)?;
     }
@@ -737,6 +926,7 @@ fn builtin_effects_brighten_with_exposure() -> Result<()> {
 #[test]
 fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     let plan = PatchPlan {
+        exports: vec![],
         patches: vec![
             Patch {
                 address: 0x53002080,
@@ -758,14 +948,19 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     };
     validate_plan(&plan)?;
     let header = loader::header(&plan, &synthetic_gr3(), TEST_VERSION)?;
-    // The effects folder of the package is the inbox of the library in the
-    // data folder, which no package holds.
+    // The card layout: the package in SCRIPT/GRKIT, the data in GRKIT.
     for line in [
-        "#define INBOX_PATH \"/media/storage1/SCRIPT/PLUGINS/EFFECTS\"",
-        "#define LIBRARY_PATH \"/media/storage1/GRKIT/EFFECTS\"",
-        "#define INDEX_PATH \"/media/storage1/GRKIT/EFFECTS.TXT\"",
+        "#define PLAN_PATH \"/media/storage1/SCRIPT/GRKIT/MODULE.BIN\"",
+        "#define BOOT_PATH \"/media/storage1/SCRIPT/GRKIT/BOOT.TXT\"",
+        "#define INBOX_PATH \"/media/storage1/SCRIPT/GRKIT/EFFECTS\"",
+        "#define PACKAGE_PATH \"/media/storage1/SCRIPT/GRKIT/PACKAGE.TXT\"",
         "#define IMPORTED_PATH \"/media/storage1/GRKIT/IMPORTED.TXT\"",
-        "#define PACKAGE_PATH \"/media/storage1/SCRIPT/PLUGINS/PACKAGE.TXT\"",
+        "#define PACKAGE_MODULES_PATH \"/media/storage1/SCRIPT/GRKIT/MODULES\"",
+        "#define LIBRARY_PATH \"/media/storage1/GRKIT/EFFECTS\"",
+        "#define STATE_PATH \"/media/storage1/GRKIT/STATE.TXT\"",
+        "#define REPORT_PATH \"/media/storage1/GRKIT/REPORT.TXT\"",
+        "#define SAFE_PATH \"/media/storage1/GRKIT/SAFE\"",
+        "#define MODULES_PATH \"/media/storage1/GRKIT/MODULES\"",
     ] {
         assert!(header.lines().any(|l| l == line), "{line}");
     }
@@ -777,7 +972,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
     assert_eq!(
         sha256(header.as_bytes()),
-        "8cb94a5389484c9d662050f69bd632de960ea9df923890d7cbbb3713f5013e42"
+        "1b30c3fa0cb1ff561961fa2273842e9db3814bb998c3d5f135084840b08f1183"
     );
     Ok(())
 }
@@ -785,6 +980,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
 #[test]
 fn generated_header_marks_only_rtos_tail_patches_as_unchecked() -> Result<()> {
     let plan = PatchPlan {
+        exports: vec![],
         patches: vec![
             Patch {
                 address: 0x53002080,
@@ -841,6 +1037,7 @@ fn every_code_region_lies_in_the_tail() {
 #[test]
 fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
     let plan = PatchPlan {
+        exports: vec![],
         patches: vec![Patch {
             address: target::GR3_210.layout.unwrap().tail.0,
             points: 0,
@@ -853,10 +1050,18 @@ fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
     };
     let header = loader::header(&plan, &synthetic_gr3(), TEST_VERSION)?;
     assert!(header.contains("{0x540b6000,4,1,before_0,after_0},"));
-    // Code in the tail belongs to no extension point. Image Control needs the
-    // menu, tuning, and picture encode points (bits 0, 1, and 4).
+    // Code in the tail belongs to no extension point.
     assert!(header.contains("static const u32 patch_points[] = {0x0};"));
-    assert!(header.contains("static const u32 plugin_points[] = {0x13,0xd,0x5,0x11,0x21};"));
+    // CORE.TONE needs the tuning and picture encode points (bits 1 and 4),
+    // CORE.ASPECT the overlay and capture aspect points (bits 2 and 3), and
+    // CORE.GRAIN the grain point (bit 5).
+    assert!(header.contains(
+        "static const char *const core_setting_names[] = {\"CORE.TONE\",\"CORE.ASPECT\",\"CORE.GRAIN\"};"
+    ));
+    assert!(header.contains("static const u32 core_setting_points[] = {0x12,0xc,0x20};"));
+    assert!(header.contains(
+        "static const char *const official_modules[] = {\"IMGCTL.GRM\",\"FRAMING.GRM\",\"GUIDES.GRM\",\"DATE.GRM\",\"GRAIN.GRM\"};"
+    ));
     Ok(())
 }
 
@@ -887,23 +1092,23 @@ fn production_scripts_and_activation_match_fixed_contracts() {
     let expected = [
         (
             "SCRIPT/STARTUP.TTL",
-            "bfa9f28e54f87af7a8191d915365c1617f533f1fdd2d6fcc47d0f549fe51083e",
+            "b8c3481389e351d3ff330be1368642ca201d4e173c3c462a63c708eb6a335ce8",
         ),
         (
-            "SCRIPT/PLUGINS/PLUGINS.TTL",
-            "e3dcc2ca1a745d00952b6972300c9719d5de1879247eac271c1e51f4d93f9edf",
+            "SCRIPT/GRKIT/LOADER.TTL",
+            "95cfd207b529e7a5a01c7e8571e349abaab14533109dcdae7ada2f53e853603c",
         ),
         (
-            "SCRIPT/PLUGINS/INSTALL.BIN",
+            "SCRIPT/GRKIT/INSTALL.BIN",
             "706abe3c90152075e656b661079730facf323f3ebccda7547ee1935c90845a09",
         ),
         (
-            "SCRIPT/PLUGINS/SCAN.SH",
-            "69529aeb6e5201c703cc0a2ef5d58ad48c0b473da84c75e242a74a0462ce8c86",
+            "SCRIPT/GRKIT/SCAN.SH",
+            "cd07c4fd87a77936e3539e394dca56d59479b68c38e27a6a5847922005e9351a",
         ),
         (
-            "SCRIPT/PLUGINS/INSTALL.SH",
-            "eaa25cde3b7a957eae4de653150343abc556cbce826513fc5e70ed3bd95fe9af",
+            "SCRIPT/GRKIT/INSTALL.SH",
+            "96366773406e274ebcb11190b13169451e5377343586c23a2dce1af8badb36fb",
         ),
     ];
     assert_eq!(files.len(), expected.len());
@@ -947,19 +1152,11 @@ fn each_camera_offers_what_its_runtime_has() {
             camera.id
         );
         assert!(layout.sites.len() == target.family.hooks.len());
-        // Each point of each plugin that the camera offers has hooks.
+        // Each extension point has hooks: those of the capabilities, and
+        // those of the module pages, layers, and filters.
         let points: Vec<_> = target.family.hooks.iter().map(|hook| hook.point).collect();
-        for plugin in &grkit_core::plugins::PLUGINS {
-            if camera.plugins.contains(&plugin.id) {
-                for point in plugin.points {
-                    assert!(
-                        points.contains(point),
-                        "{} {} {point:?}",
-                        camera.id,
-                        plugin.id
-                    );
-                }
-            }
+        for point in grkit_core::capabilities::Point::ALL {
+            assert!(points.contains(&point), "{} {point:?}", camera.id);
         }
     }
 }

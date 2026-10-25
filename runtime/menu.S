@@ -526,6 +526,8 @@ menu_settings_change:
     push {r0-r3, r12, lr}
     mov r0, r1
     bl menu_settings_controller
+    /* The C function gives the controller to change to, in r1. */
+    str r0, [sp, #4]
     pop {r0-r3, r12, lr}
     .inst HOOK_MENU_SETTINGS_CHANGE_STOCK
     ldr pc, =HOOK_MENU_SETTINGS_CHANGE_RESUME
@@ -596,5 +598,20 @@ SETTINGS_METHOD menu_settings_count_1, menu_settings_count, 1, HOOK_MENU_SETTING
 SETTINGS_METHOD menu_settings_draw_1, menu_settings_draw, 1, HOOK_MENU_SETTINGS_DRAW_1_STOCK, HOOK_MENU_SETTINGS_DRAW_1_RESUME
 SETTINGS_METHOD menu_settings_apply_1, menu_settings_apply, 1, HOOK_MENU_SETTINGS_APPLY_1_STOCK, HOOK_MENU_SETTINGS_APPLY_1_RESUME
 SETTINGS_METHOD menu_settings_current_1, menu_settings_current, 1, HOOK_MENU_SETTINGS_CURRENT_1_STOCK, HOOK_MENU_SETTINGS_CURRENT_1_RESUME
+.ltorg
+SETTINGS_METHOD menu_settings_count_2, menu_settings_count, 2, HOOK_MENU_SETTINGS_COUNT_2_STOCK, HOOK_MENU_SETTINGS_COUNT_2_RESUME
+SETTINGS_METHOD menu_settings_draw_2, menu_settings_draw, 2, HOOK_MENU_SETTINGS_DRAW_2_STOCK, HOOK_MENU_SETTINGS_DRAW_2_RESUME
+SETTINGS_METHOD menu_settings_apply_2, menu_settings_apply, 2, HOOK_MENU_SETTINGS_APPLY_2_STOCK, HOOK_MENU_SETTINGS_APPLY_2_RESUME
+SETTINGS_METHOD menu_settings_current_2, menu_settings_current, 2, HOOK_MENU_SETTINGS_CURRENT_2_STOCK, HOOK_MENU_SETTINGS_CURRENT_2_RESUME
+.ltorg
+SETTINGS_METHOD menu_settings_count_3, menu_settings_count, 3, HOOK_MENU_SETTINGS_COUNT_3_STOCK, HOOK_MENU_SETTINGS_COUNT_3_RESUME
+SETTINGS_METHOD menu_settings_draw_3, menu_settings_draw, 3, HOOK_MENU_SETTINGS_DRAW_3_STOCK, HOOK_MENU_SETTINGS_DRAW_3_RESUME
+SETTINGS_METHOD menu_settings_apply_3, menu_settings_apply, 3, HOOK_MENU_SETTINGS_APPLY_3_STOCK, HOOK_MENU_SETTINGS_APPLY_3_RESUME
+SETTINGS_METHOD menu_settings_current_3, menu_settings_current, 3, HOOK_MENU_SETTINGS_CURRENT_3_STOCK, HOOK_MENU_SETTINGS_CURRENT_3_RESUME
+.ltorg
+SETTINGS_METHOD menu_settings_count_4, menu_settings_count, 4, HOOK_MENU_SETTINGS_COUNT_4_STOCK, HOOK_MENU_SETTINGS_COUNT_4_RESUME
+SETTINGS_METHOD menu_settings_draw_4, menu_settings_draw, 4, HOOK_MENU_SETTINGS_DRAW_4_STOCK, HOOK_MENU_SETTINGS_DRAW_4_RESUME
+SETTINGS_METHOD menu_settings_apply_4, menu_settings_apply, 4, HOOK_MENU_SETTINGS_APPLY_4_STOCK, HOOK_MENU_SETTINGS_APPLY_4_RESUME
+SETTINGS_METHOD menu_settings_current_4, menu_settings_current, 4, HOOK_MENU_SETTINGS_CURRENT_4_STOCK, HOOK_MENU_SETTINGS_CURRENT_4_RESUME
 .ltorg
 #endif

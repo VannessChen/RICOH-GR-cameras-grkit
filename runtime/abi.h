@@ -8,6 +8,15 @@
    through the literal GRKIT_HEADER_REFERENCE, which the installer relocates. */
 #define GRKIT_HEADER_REFERENCE 0x58012340
 #define GRKIT_HOST_HEADER_SIZE 512
+#define GRKIT_MODULE_SLOTS 8
+#define GRKIT_MODULE_SETTINGS_MAX 160
+/* Icon slots: the host icons, then the effect icons, then the module tiles, in
+   chunks of GRKIT_ICONS_PER_CHUNK (GRKIT_HOST_ICON_CHUNKS).
+   GRKIT_ICON_MODULE_TILE(n) is the icon ID of module tile n. */
+#define GRKIT_HOST_ICON_COUNT 4
+#define GRKIT_ICONS_PER_CHUNK 40
+#define GRKIT_MODULE_TILES_MAX 64
+#define GRKIT_ICON_MODULE_TILE(n) (0x7000U+(n))
 #define GRKIT_HOST_MAGIC_VALUE 0x314d5247
 #define GRKIT_HOST_VERSION_VALUE 1
 /* Number of Image Control records. */
@@ -32,26 +41,30 @@
 #define GRKIT_HOST_MENU_LEVEL 36
 /* Highlighted row of the private menu. */
 #define GRKIT_HOST_MENU_CURSOR 40
-/* Native ADJ slot when the private menu opened. A diagnostic. */
-#define GRKIT_HOST_MENU_SLOT 44
-/* Guide style previewed on the ADJ canvas while GRKIT_HOST_FRAME_PREVIEW is
-   set. */
-#define GRKIT_HOST_GUIDE_PREVIEW 48
-/* Date stamp style: 0 Off, 1 'YY M D, 2 'YY M D H:MM, 3 M D 'YY, 4 D M 'YY. */
-#define GRKIT_HOST_STAMP 52
-/* Installed plugins: bit n is plugin n of grkit_core::plugins::PLUGINS and
-   module n of the menu. A plugin that needs effects is set only with effects. */
-#define GRKIT_HOST_PLUGINS 56
+/* Address of the tail, an array of its own: the picture scratch, the menu
+   text, then the live-view labels. INSTALL writes it. */
+#define GRKIT_HOST_TAIL 44
+/* Grain level, the capability CORE.GRAIN: 0 Off, 1 weak, 2 medium, 3 strong.
+   The native grain stage of recorded pictures uses it instead of the native
+   grain settings. */
+#define GRKIT_HOST_GRAIN 48
+/* Address of the module list of the Modules page (runtime/manage.h), or 0
+   without a listed module. INSTALL writes it. */
+#define GRKIT_HOST_MANAGE 52
+/* Address of the state of the core services (runtime/services.h): the event
+   subscribers, the timers, and the UI. INSTALL writes it, with the module
+   array. */
+#define GRKIT_HOST_SERVICES 56
 /* Nonzero while the menu rebuilds the native list. The list callback and the
    native Image Control preview ignore the changes. */
 #define GRKIT_HOST_MENU_REBUILDING 60
 /* Native list position, saved when the private menu opens. */
 #define GRKIT_HOST_MENU_LIST 64
 #define GRKIT_HOST_MENU_LIST_WORDS 2
-/* The module + 1 whose native settings page the menu opened from its root row
-   (Module.settings, runtime/plugin.h), or 0. While it is set, the hooks of the
-   borrowed native page show the settings of that module. A change to a
-   controller outside the page clears it. */
+/* The module + 1 whose native settings page the menu opened (Module.settings,
+   runtime/core.h), or 0. While it is set, the hooks of the borrowed native
+   page show the settings of that module. A change to a controller outside the
+   page clears it. */
 #define GRKIT_HOST_SETTINGS 72
 /* Number of ADJ events. GRKIT_HOST_MENU_EVENT_RING holds the last ones. */
 #define GRKIT_HOST_MENU_EVENTS 76
@@ -105,9 +118,10 @@
 /* Record of the last live-view build: an owned record, or 0 for native
    processing. */
 #define GRKIT_HOST_LIVE_RECORD 200
-/* Committed composition guide style: 0 Off, 1 thirds, 2 center, 3 golden
-   ratio, 4 diagonals. */
-#define GRKIT_HOST_GUIDE 204
+/* The capabilities in use: bit n is set when a loaded module uses capability n
+   (GRKIT_CORE_SETTING_BASE + n). INSTALL writes it, and the resident loader
+   restores only the values of these capabilities. */
+#define GRKIT_HOST_CAPABILITIES 204
 /* Framing ratio: 0 native, then the Framing rows. */
 #define GRKIT_HOST_FRAME_RATIO 208
 /* ADJ Framing page preview: 0 none, else the highlighted ratio + 1. */
@@ -116,9 +130,9 @@
 #define GRKIT_HOST_FRAME_DRAWS 216
 /* ADJ canvas of the preview. It stays set until a full draw erases the mask. */
 #define GRKIT_HOST_FRAME_PREVIEW_CANVAS 220
-/* Icon of the first plugin tile. The tiles of each plugin follow in plugin
-   order (grkit_core::plugins::tiles). */
-#define GRKIT_HOST_TILE_ICON 224
+/* Address of the effect list of the Effects page (runtime/effects.h), or 0
+   without a listed effect. INSTALL writes it. */
+#define GRKIT_HOST_EFFECTS 224
 /* Live view controller that Framing draws on, or 0. */
 #define GRKIT_HOST_FRAME_OWNER 228
 /* Canvas of that controller. */
@@ -136,19 +150,55 @@
    away. 3: ADJ exited from GRKit, so the next ADJ opens GRKit. 4: MENU or OK
    on GRKit passed the event that closes ADJ to the native list. */
 #define GRKIT_HOST_RETURN 252
-/* The words of the plugins (grkit_core::plugins::Plugin::words), in plugin
-   order, then zero words. GRKIT_PLUGIN_<PLUGIN>_<WORD> gives each offset. */
-#define GRKIT_HOST_PLUGIN_AREA 256
-#define GRKIT_HOST_PLUGIN_AREA_WORDS 63
+/* Number of module plane filters in GRKIT_HOST_MODULE_FILTERS. INSTALL writes
+   it. */
+#define GRKIT_HOST_MODULE_FILTER_COUNT 256
+/* Two words for each module plane filter, in stage order: its apply function,
+   and its setting handle in the low half with its stage in the high half. */
+#define GRKIT_HOST_MODULE_FILTERS 260
+#define GRKIT_HOST_MODULE_FILTERS_WORDS 8
+/* Address of the module settings table, or 0 (runtime/settings.h). INSTALL
+   writes it. */
+#define GRKIT_HOST_MODULE_SETTINGS 292
+/* The ADJ preview of a module page: its setting handle plus 1 (0 for none),
+   then the highlighted value. Module layers of that setting paint the
+   highlighted value on the ADJ canvas. */
+#define GRKIT_HOST_MODULE_PREVIEW 296
+#define GRKIT_HOST_MODULE_PREVIEW_WORDS 2
+/* Number of module pages in GRKIT_HOST_MODULE_PAGES. INSTALL writes it. */
+#define GRKIT_HOST_MODULE_PAGE_COUNT 304
+/* Three words for each module page (runtime/sdk/grkit.h), in load order: the
+   address of its GrkitPage, its setting handle, and the global index of its
+   tile 0 (GRKIT_ICON_MODULE_TILE). */
+#define GRKIT_HOST_MODULE_PAGES 308
+#define GRKIT_HOST_MODULE_PAGES_WORDS 24
+/* The module page that the generic page callbacks of the menu serve. */
+#define GRKIT_HOST_MODULE_CHOICE 404
+/* Number of module layers in GRKIT_HOST_MODULE_LAYERS. INSTALL writes it. */
+#define GRKIT_HOST_MODULE_LAYER_COUNT 408
+/* Three words for each module layer, in painting order: its paint function,
+   its setting handle (GRKIT_NO_SETTING paints with the value 1), and its flags
+   in the low half with its order in the high half. */
+#define GRKIT_HOST_MODULE_LAYERS 412
+#define GRKIT_HOST_MODULE_LAYERS_WORDS 24
 /* Key of the inputs of the last private curve composition in the gamma stage,
    or 0 (runtime/processing.h). */
 #define GRKIT_HOST_GAMMA_KEY 508
-/* Date Imprint look: 0 classic seven-segment digits, 1 GR1s dot-matrix digits,
-   2 GR II digits. */
-#define GRKIT_PLUGIN_DATE_STAMP_LOOK 256
-/* Grain level: 0 Off, 1 weak, 2 medium, 3 strong. The native grain stage of
-   recorded pictures uses it instead of the native grain settings. */
-#define GRKIT_PLUGIN_GRAIN_LEVEL 260
+
+/* The capabilities of the core (grkit_core::capabilities): the handle of each
+   CORE setting, and for each handle in order, its header word and its number
+   of values. CORE.TONE has neither: its value is the active record, and the
+   effects give its number of values (runtime/tone.h). */
+#define GRKIT_CORE_SETTING_BASE 0x100U
+#define GRKIT_CORE_SETTING_COUNT 3U
+#define GRKIT_CORE_TONE 0x100U
+#define GRKIT_CORE_TONE_VALUES 0U
+#define GRKIT_CORE_ASPECT 0x101U
+#define GRKIT_CORE_ASPECT_VALUES 7U
+#define GRKIT_CORE_GRAIN 0x102U
+#define GRKIT_CORE_GRAIN_VALUES 4U
+#define GRKIT_CORE_SETTING_WORDS 0,208,48
+#define GRKIT_CORE_SETTING_VALUES 0,7,4
 
 /* An Image Control record. The records follow the header. */
 #define GRKIT_RECORD_SIZE 0x1100
@@ -239,58 +289,53 @@
    UTF-16 strings. At GRKIT_TEXT_SUMMARY, the installer writes the Image
    Control summary of each record in each language, GRKIT_SUMMARY_UNITS units
    each, language-major. */
-#define GRKIT_TEXT_SIZE 16384
+#define GRKIT_TEXT_SIZE 24576
 /* Live-view labels after the menu text. The installer copies the label table
    of the build (grkit_core::artwork::overlay_labels): for label n, a u16
    width, a u16 height, and the u32 offset of its pixels from the table start
    at 8 n. Each pixel is one byte of text coverage, row by row. */
 #define GRKIT_LABELS_SIZE 16384
 /* Everything after the records: the script array must hold it. */
-#define GRKIT_TAIL_SIZE 174216
+#define GRKIT_TAIL_SIZE 182408
 #define GRKIT_TEXT_SUMMARY 8192
 /* The parameter page title of a GRKit session, after the summaries: the page,
    its vtable, and the descriptor of the effect name. */
-#define GRKIT_TEXT_PARAMETER_TITLE 16368
+#define GRKIT_TEXT_PARAMETER_TITLE 24560
 /* The native settings page of a GRKit session, before the parameter page
    title: the borrowed submenu entry, the text descriptors, and the views that
    show settings (runtime/menu.c). */
-#define GRKIT_TEXT_SETTINGS 16112
+#define GRKIT_TEXT_SETTINGS 24176
 #define GRKIT_TEXT_LANGUAGES 4
-#define GRKIT_TEXT_RECORDS 20
-#define GRKIT_TEXT(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE+GRKIT_PICTURE_SCRATCH)
+#define GRKIT_TEXT_RECORDS 40
+#define GRKIT_TEXT(h) ((h)[GRKIT_HOST_TAIL/4]+GRKIT_PICTURE_SCRATCH)
 #define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)
 #define GRKIT_LABEL_COUNT 7
 /* String IDs of the label table, in grkit_core::menu_text order. A run of IDs
    follows the rows or values that it names. */
 #define TEXT_IMAGE_CONTROL 0
-#define TEXT_FRAMING 1
-#define TEXT_GUIDES 2
-#define TEXT_DATE_STAMP 3
-#define TEXT_DATE_STYLE 4
-#define TEXT_DATE_LOOK 5
-#define TEXT_GRAIN 6
-#define TEXT_OFF 7
-/* Framing values 1..6: XPan 65:24, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
-#define TEXT_RATIO 8
-/* Guides rows 1..5: thirds, center, golden ratio, diagonals, thirds and
-   center. */
-#define TEXT_GUIDE 14
-/* Date Stamp rows 1..5: the date styles. */
-#define TEXT_STAMP 19
-/* Date Look values 0..2: classic, GR1s, GR II. */
-#define TEXT_LOOK 24
-/* Grain rows 1..3: weak, medium, strong. */
-#define TEXT_GRAIN_LEVEL 27
-#define TEXT_IMAGE_OFF_SUMMARY 30
-/* Summaries for each value, Off first. */
-#define TEXT_FRAMING_SUMMARY 31
-#define TEXT_GUIDES_SUMMARY 38
-#define TEXT_STAMP_SUMMARY 44
-#define TEXT_GRAIN_SUMMARY 50
+#define TEXT_OFF 1
+#define TEXT_IMAGE_OFF_SUMMARY 2
 /* The Image Control summary before an effect name, for the installer. */
-#define TEXT_IMAGE_PREFIX 54
+#define TEXT_IMAGE_PREFIX 3
 /* The About row: the GRKit version. */
-#define TEXT_VERSION 55
-#define GRKIT_TEXT_STRINGS 56
+#define TEXT_VERSION 4
+/* The title of the Modules page. */
+#define TEXT_MODULES 5
+/* The Modules root row: no change, a change for the next start, safe mode. */
+#define TEXT_MODULES_SUMMARY 6
+/* The settings row that turns a module on or off. */
+#define TEXT_LOAD 9
+#define TEXT_ON 10
+/* The settings row of the place of a module in the root. */
+#define TEXT_POSITION 11
+/* The title of the Effects page. */
+#define TEXT_EFFECTS 12
+/* The last row of Image Control: no change, a change for the next start. */
+#define TEXT_EFFECTS_SUMMARY 13
+/* The settings row that moves an effect. */
+#define TEXT_ORDER 15
+/* Move up, then Move down. */
+#define TEXT_MOVE_UP 16
+#define GRKIT_TEXT_STRINGS 18
 
 #endif

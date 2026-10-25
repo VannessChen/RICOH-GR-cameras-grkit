@@ -1,0 +1,4 @@
+title = "フレーミング"
+rows = ["オフ", "XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"]
+# The value in the root row, which has less room than a row.
+summaries = ["オフ", "XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"]

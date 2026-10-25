@@ -1,13 +1,13 @@
 /* The core of viewfinder.overlay and the C part of capture.aspect. The live
    view canvas, its bitmap, and the native aspect are firmware details, so they
-   stay here. The plugins paint layers on a checked surface. */
+   stay here. The layers of the modules paint on a checked surface. */
 #include "firmware.h"
 #include "abi.h"
 #ifndef FRAMING_PIXELS
 #define FRAMING_PIXELS(address) ((volatile u32 *)(address))
 #endif
 #define OVERLAY_PIXELS(address) FRAMING_PIXELS(address)
-#include "plugin.h"
+#include "core.h"
 
 #define FRAMING_SETTINGS() (((u32 (*)(void))FW_SETTINGS)())
 #ifndef FRAMING_NATIVE_ASPECT
@@ -40,10 +40,9 @@ static u32 framing_display_mode(void) {
 #define FRAMING_DISPLAY_MODE() framing_display_mode()
 #endif
 
-/* Plugin services (runtime/plugin.h). */
-static const u8 framing_rows[]={FRAMING_RATIO_ROWS};
-static u32 framing_ratios(void) { return sizeof(framing_rows); }
-static u32 framing_ratio(u32 row) { return row<sizeof(framing_rows) ? framing_rows[row] : 0; }
+/* The capture aspect (CORE.ASPECT). */
+#define ASPECT_NATIVE() FRAMING_NATIVE_ASPECT()
+#include "aspect.h"
 static u32 native_display(void) { return FRAMING_DISPLAY_MODE(); }
 #ifndef LABEL_MAP
 #define LABEL_MAP(address) ((const volatile u8 *)(address))
@@ -80,16 +79,23 @@ static void overlay_label(const Surface *s,u32 label,u32 left,u32 top) {
     }
 }
 
-/* The plugin handler files and PLUGIN_LAYERS. */
-#include "generated/layers.h"
+#include "settings.h"
+/* The core exports these services to modules (runtime/sdk/grkit.h). INSTALL
+   links each module call to it by name (grkit_core::grm::EXPORTS). The menu
+   component exports setting_set, because a setting of CORE.ASPECT changes
+   the native aspect. */
+__attribute__((used)) void grkit_export_overlay_label(const Surface *s,u32 label,u32 left,u32 top) {
+    overlay_label(s,label,left,top);
+}
+__attribute__((used)) u32 grkit_export_setting_get(u32 handle) { return setting_value(framing_header(),handle); }
 
-/* The layers in painting order (Layer.order in the registry). */
-static const Layer layers[]={PLUGIN_LAYERS};
-#define LAYER_COUNT (sizeof(layers)/sizeof(layers[0]))
-/* The committed value of a layer, or 0 for Off and for a plugin that
-   PLUGINS.TXT does not install. */
-static u32 layer_value(volatile u32 *h,const Layer *layer) {
-    return PLUGIN_INSTALLED(h,layer->plugin) ? layer->value(h) : 0;
+/* The capture aspect id of the crop: 0 = 3:2, 1 = 4:3, 2 = 16:9. XPan and
+   2.35:1 use id 2 with their own heights, and 5:4 uses id 1 with its own
+   widths (runtime/framing.S). GR III hides ids 1 and 2 from its menu, but its
+   capture and playback code support them. 1:1 is native on each camera. */
+static __attribute__((unused)) u32 framing_capture_id(volatile u32 *h) {
+    static const u8 ids[]={0,2,2,1,2,0,1};
+    return ids[framing_crop(h)];
 }
 /* ---- Load cue -----------------------------------------------------------
    INSTALL runs a few seconds after power-on, and the GRKit entry exists only
@@ -128,17 +134,60 @@ static u32 cue_update(volatile u32 *h,u32 controller) {
     h[GRKIT_HOST_LOAD_CUE/4]=0;
     return 1;
 }
+/* The module layers that INSTALL registered (GRKIT_HOST_MODULE_LAYERS), or 0
+   for a count out of range. Each has three words: its paint function, its
+   setting handle, and its flags with its order in the high half. */
+static u32 module_layers(volatile u32 *h) {
+    u32 n=h[GRKIT_HOST_MODULE_LAYER_COUNT/4];
+    return n<=GRKIT_MODULE_SLOTS ? n : 0;
+}
+#define MODULE_LAYER(h,i) ((h)+GRKIT_HOST_MODULE_LAYERS/4+(i)*3)
+/* The flags of a layer (runtime/sdk/grkit.h). */
+#define MODULE_LAYER_FOLLOW_DISP 1U
+#define MODULE_LAYER_FULL_DISP 2U
+#define MODULE_LAYER_LIVE_ONLY 4U
+#define NO_SETTING 0xffffffffU
+/* The value of module layer i in the live view: its setting, or 1 without
+   one. A layer is off while DISP hides what its flags need. */
+static u32 module_layer_value(volatile u32 *h,u32 i) {
+    volatile u32 *l=MODULE_LAYER(h,i);
+    if((l[2]&MODULE_LAYER_FOLLOW_DISP) && native_display()>DISPLAY_SIMPLE) return 0;
+    if((l[2]&MODULE_LAYER_FULL_DISP) && native_display()!=DISPLAY_FULL) return 0;
+    return l[1]==NO_SETTING ? 1 : setting_value(h,l[1]);
+}
 static u32 layers_active(volatile u32 *h) {
     u32 i;
-    for(i=0;i<LAYER_COUNT;++i) if(layer_value(h,&layers[i])) return 1;
+    for(i=0;i<module_layers(h);++i) if(module_layer_value(h,i)) return 1;
     return 0;
+}
+/* Paint module layer i with `value`, which is not 0. A host test maps the
+   function address. */
+#ifndef MODULE_PAINT
+#define MODULE_PAINT(address,surface,value) ((void (*)(const Surface *,u32))(address))(surface,value)
+#endif
+static void module_paint(volatile u32 *h,u32 i,const Surface *surface,u32 value) {
+    MODULE_PAINT(MODULE_LAYER(h,i)[0],surface,value);
+}
+/* Paint the module layers in their order. In the ADJ preview, the layers of
+   the previewed setting paint its highlighted value, DISP does not hide
+   layers, and a live-only layer does not paint. */
+static void module_layers_paint(volatile u32 *h,const Surface *surface,u32 preview) {
+    u32 i, value;
+    for(i=0;i<module_layers(h);++i) {
+        if(!preview) value=module_layer_value(h,i);
+        else if(MODULE_LAYER(h,i)[2]&MODULE_LAYER_LIVE_ONLY) value=0;
+        else if(h[GRKIT_HOST_MODULE_PREVIEW/4] && h[GRKIT_HOST_MODULE_PREVIEW/4]-1==MODULE_LAYER(h,i)[1]) {
+            value=h[GRKIT_HOST_MODULE_PREVIEW/4+1];
+            if(value>=setting_limit(h,MODULE_LAYER(h,i)[1])) value=0;
+        }
+        else value=MODULE_LAYER(h,i)[1]==NO_SETTING ? 1 : setting_value(h,MODULE_LAYER(h,i)[1]);
+        if(value) module_paint(h,i,surface,value);
+    }
 }
 /* Whether the live view has something to draw: a layer or the cue. */
 static u32 overlay_active(volatile u32 *h) { return cue_shown(h) || layers_active(h); }
-/* The capture area: the Framing ratio when Framing is installed. */
-static u32 capture_area(volatile u32 *h) {
-    return PLUGIN_INSTALLED(h,PLUGIN_FRAMING) ? framing_value(h) : 0;
-}
+/* The capture area: the crop of CORE.ASPECT, or 0 for the full 3:2 area. */
+static u32 capture_area(volatile u32 *h) { return framing_crop(h); }
 
 #ifdef FRAMING_XPAN_NATIVE
 /* The live view shows the Framing ratio in native 3:2. XPan and 2.35:1 also
@@ -156,7 +205,8 @@ static u32 capture_area(volatile u32 *h) {
 #ifdef FRAMING_CAPTURE_ASPECT
 /* The still aspect property handler calls this for each requested value. The
    native menu requests 0 for 3:2, so 3:2 records the Framing ratio. Other
-   native ratios pass unchanged. Only an installed Framing hooks the handler. */
+   native ratios pass unchanged. Only a module that uses CORE.ASPECT hooks the
+   handler. */
 u32 framing_capture_request(u32 request) {
     return request ? request : framing_capture_id(framing_header());
 }
@@ -164,7 +214,7 @@ u32 framing_capture_request(u32 request) {
    aspect differs from the Framing ratio, for example after a menu change. */
 static void capture_sync(u32 controller) {
     volatile u32 *h=framing_header();
-    if(PLUGIN_INSTALLED(h,PLUGIN_FRAMING) && BYTE(controller,LIVEVIEW_MOVIE)==0 &&
+    if(CAPABILITY_USED(h,GRKIT_CORE_ASPECT) && BYTE(controller,LIVEVIEW_MOVIE)==0 &&
        FRAMING_NATIVE_ASPECT()==0 && FRAMING_CAPTURE_ASPECT()!=framing_capture_id(h))
         FRAMING_REQUEST_ASPECT();
 }
@@ -197,6 +247,9 @@ void framing_bind(u32 controller) {
     if(h[GRKIT_HOST_FRAME_CANVAS/4] &&
        (cue_update(h,controller) || (!h[GRKIT_HOST_FRAME_BITMAP/4] && overlay_active(h))))
         FRAMING_INVALIDATE(h[GRKIT_HOST_FRAME_CANVAS/4]);
+    /* The first shooting screen after INSTALL: the modules are ready. This
+       hook runs in the App task. */
+    if(h[GRKIT_HOST_FRAME_CANVAS/4]) services_ready(h);
 }
 void framing_leave(u32 controller) {
     volatile u32 *h=framing_header();
@@ -241,29 +294,25 @@ void framing_prepare(u32 canvas) {
        (canvas && h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]==canvas))
         BYTE(canvas,0xa0)=1;
 }
-/* The ADJ Framing and Guides pages preview their highlighted row on the ADJ
-   canvas, below the menu controls (runtime/modules.h: frame_preview). After
-   the page ends, one more full draw erases the drawing and releases the
-   canvas. */
+/* Module pages preview their highlighted value on the ADJ canvas, below the
+   menu controls (runtime/modules.h: frame_preview). The page of CORE.ASPECT
+   previews the area of its highlighted ratio. After the page ends, one more
+   full draw erases the drawing and releases the canvas. */
 static void preview_paint(volatile u32 *h,u32 canvas,u32 bitmap) {
-    u32 preview=h[GRKIT_HOST_FRAME_PREVIEW/4],style=h[GRKIT_HOST_GUIDE_PREVIEW/4],data,area,i;
+    u32 preview=h[GRKIT_HOST_FRAME_PREVIEW/4],data,area;
     Surface surface;
     if(!preview) { h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=0; return; }
-    if(preview>FRAMING_RATIO_MAX+1U || style>GUIDES_STYLE_MAX || (preview<2 && !style)) return;
+    if(preview>sizeof(photo_boxes)/sizeof(photo_boxes[0]) || !module_layers(h)) return;
     data=canvas_pixels(canvas,bitmap);
     area=preview-1;
     SHOWN_AREA(data,area);
     if(!data) return;
     surface.data=data; surface.stride=HALF(bitmap,0x18); surface.area=area; surface.box=photo_boxes[area];
-    for(i=0;i<LAYER_COUNT;++i) {
-        const Layer *layer=&layers[i];
-        u32 value=layer->plugin==PLUGIN_FRAMING ? area : style;
-        if(!layer->live_only && value) layer->paint(&surface,value);
-    }
+    module_layers_paint(h,&surface,1);
 }
 void framing_paint(u32 canvas,u32 bitmap) {
     volatile u32 *h=framing_header();
-    u32 owner=h[GRKIT_HOST_FRAME_OWNER/4],full,data,cue,area,i;
+    u32 owner=h[GRKIT_HOST_FRAME_OWNER/4],full,data,cue,area;
     Surface surface;
     if(canvas && canvas==h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]) { preview_paint(h,canvas,bitmap); return; }
     if(canvas!=h[GRKIT_HOST_FRAME_CANVAS/4] || !owner) return;
@@ -281,10 +330,7 @@ void framing_paint(u32 canvas,u32 bitmap) {
     if(!data && !cue) { ++h[GRKIT_HOST_FRAME_SKIPPED/4]; return; }
     if(data) {
         surface.data=data; surface.stride=HALF(bitmap,0x18); surface.area=area; surface.box=photo_boxes[area];
-        for(i=0;i<LAYER_COUNT;++i) {
-            u32 value=layer_value(h,&layers[i]);
-            if(value) layers[i].paint(&surface,value);
-        }
+        module_layers_paint(h,&surface,0);
     }
     if(cue) {
         /* Centered, on the baseline of the native focus distance. */

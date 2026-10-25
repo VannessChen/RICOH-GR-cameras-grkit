@@ -4,7 +4,7 @@ mod storage;
 
 use anyhow::{ensure, Context, Result};
 use clap::{Parser, Subcommand};
-use grkit_core::{cube::Encoding, effects, fit, modules::Selection, packaging, site, Files};
+use grkit_core::{cube::Encoding, effects, fit, packaging, site, Files};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -12,7 +12,11 @@ use std::path::PathBuf;
 const MAX_LUT_SIZE: usize = 1024 * 1024 * 1024;
 
 #[derive(Parser)]
-#[command(name = "grkit", version, about = "Build GRKit plugins and SD effects")]
+#[command(
+    name = "grkit",
+    version,
+    about = "Build GRKit runtimes, modules, and SD effects"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -39,6 +43,11 @@ enum Command {
         clang: String,
         #[arg(long, default_value = "ld.lld")]
         lld: String,
+    },
+    /// Build a module file (.GRM) from C sources that include runtime/sdk/grkit.h.
+    Module {
+        #[command(subcommand)]
+        command: ModuleCommand,
     },
     /// Port the firmware addresses of a runtime build to another build of the
     /// firmware, such as a new version (docs/architecture.md, Porting).
@@ -78,13 +87,14 @@ enum Command {
         /// order (`grkit cameras`). Repeat it for a camera with several builds.
         #[arg(long, required = true)]
         build: Vec<PathBuf>,
-        /// Compiled effects. Without effects, the installer does not install Image Control.
+        /// Compiled effects. They need the Image Control module.
         #[arg(long)]
         effects: Option<PathBuf>,
-        /// The plugins to install, separated by commas. Without this option, the
-        /// package installs each plugin.
-        #[arg(long, value_delimiter = ',', value_parser = grkit_core::plugins::NAMES)]
-        plugins: Option<Vec<String>>,
+        /// A module file (.GRM) that the package installs. Repeat it for each
+        /// module. `grkit module build` makes the files of the official
+        /// modules in `modules/`.
+        #[arg(long = "module", required = true)]
+        modules: Vec<PathBuf>,
         /// The camera that the package enables SD scripts on.
         #[arg(long, default_value = "gr3", value_parser = grkit_core::camera::CAMERAS.map(|camera| camera.id))]
         camera: String,
@@ -137,6 +147,58 @@ enum Command {
         build: PathBuf,
         #[arg(long)]
         out: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum ModuleCommand {
+    /// Write a new module folder: a working module with one setting, a menu
+    /// page, a layer, its text, its tiles, and a host test.
+    New {
+        /// The module ID: 1 to 8 characters A-Z, 0-9, or _.
+        #[arg(long)]
+        id: String,
+        /// The new folder.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Build a module from a folder with module.toml, or a module whose C
+    /// sources define its descriptor (GRKIT_MODULE) with --id and --source.
+    Build {
+        /// A module folder with module.toml.
+        #[arg(long, conflicts_with_all = ["id", "sources"], required_unless_present = "id")]
+        dir: Option<PathBuf>,
+        /// The module ID: 1 to 8 characters A-Z, 0-9, or _. The file is <ID>.GRM.
+        #[arg(long, requires = "sources")]
+        id: Option<String>,
+        #[arg(long, default_value_t = 1)]
+        version: u32,
+        /// A C source file of the module. Repeat it for each file.
+        #[arg(long = "source")]
+        sources: Vec<PathBuf>,
+        /// The module file to write.
+        #[arg(long)]
+        out: PathBuf,
+        /// A new directory for the objects. The default is next to the output.
+        #[arg(long)]
+        objects: Option<PathBuf>,
+        #[arg(long, default_value = "clang")]
+        clang: String,
+        #[arg(long, default_value = "ld.lld")]
+        lld: String,
+    },
+    /// Run the host test of a module folder: its test.c, with the harness of
+    /// runtime/sdk/grkit_test.h.
+    Test {
+        /// A module folder with module.toml and test.c.
+        #[arg(long)]
+        dir: PathBuf,
+        /// A new directory for the build. The default is a temporary one.
+        #[arg(long)]
+        objects: Option<PathBuf>,
+        /// The host C compiler.
+        #[arg(long, default_value = "cc")]
+        cc: String,
     },
 }
 
@@ -244,6 +306,69 @@ fn run(command: Command) -> Result<Value> {
             Ok(
                 json!({"output": result.output, "target": result.manifest["target"], "files": result.files.len()}),
             )
+        }
+        Command::Module {
+            command:
+                ModuleCommand::Build {
+                    dir,
+                    id,
+                    version,
+                    sources,
+                    out,
+                    objects,
+                    clang,
+                    lld,
+                },
+        } => {
+            storage::validate_output(&out)?;
+            let objects = objects.unwrap_or_else(|| out.with_extension("objects"));
+            let (id, bytes) = match (dir, id) {
+                (Some(dir), _) => grkit_build::build_module_manifest(&dir, &objects, &clang, &lld)?,
+                (None, Some(id)) => {
+                    let bytes =
+                        grkit_build::build_module(&id, version, &sources, &objects, &clang, &lld)?;
+                    (id, bytes)
+                }
+                (None, None) => anyhow::bail!("Give --dir, or --id and --source"),
+            };
+            std::fs::write(&out, &bytes)?;
+            // The installer loads a module only from <ID>.GRM.
+            let card_name = format!("{id}.GRM");
+            let named = out
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.eq_ignore_ascii_case(&card_name));
+            if !named {
+                eprintln!(
+                    "Name the file {card_name} on the card: GRKit loads a module only from its ID."
+                );
+            }
+            Ok(json!({"output": out, "id": id, "bytes": bytes.len(), "card_name": card_name}))
+        }
+        Command::Module {
+            command: ModuleCommand::New { id, out },
+        } => {
+            storage::validate_output(&out)?;
+            let files = grkit_core::grm::template(&id)?;
+            for (name, bytes) in &files {
+                let path = out.join(name);
+                std::fs::create_dir_all(path.parent().unwrap_or(&out))?;
+                std::fs::write(&path, bytes)?;
+            }
+            Ok(json!({"output": out, "id": id, "files": files.len()}))
+        }
+        Command::Module {
+            command: ModuleCommand::Test { dir, objects, cc },
+        } => {
+            let temporary = tempfile::tempdir()?;
+            let objects = objects.unwrap_or_else(|| temporary.path().join("build"));
+            // A module without sources has no test: its manifest is checked.
+            let test = if grkit_build::test_module_manifest(&dir, &objects, &cc)? {
+                "passed"
+            } else {
+                "manifest checked"
+            };
+            Ok(json!({"module": dir, "test": test}))
         }
         Command::Port {
             target,
@@ -399,7 +524,7 @@ fn run(command: Command) -> Result<Value> {
         Command::Package {
             build,
             effects,
-            plugins,
+            modules,
             camera,
             language,
             guide,
@@ -413,17 +538,17 @@ fn run(command: Command) -> Result<Value> {
                 Some(directory) => storage::read_effects(&directory)?,
                 None => packaging::EffectSet::default(),
             };
-            let plugins = match plugins {
-                Some(names) => Selection::from_names(names.iter().map(String::as_str))?,
-                None => Selection::ALL,
-            };
             let camera = grkit_core::camera::find(&camera)?;
             let language = packaging::Language::parse(&language)?;
             let pdf = storage::read_bounded(&guide, packaging::MAX_FILE_SIZE)?;
+            let modules = modules
+                .iter()
+                .map(|path| storage::read_bounded(path, packaging::MAX_FILE_SIZE))
+                .collect::<Result<Vec<_>>>()?;
             let package = packaging::assemble(
                 &runtimes,
                 &effects,
-                plugins,
+                &modules,
                 camera,
                 &packaging::Guide {
                     language,
@@ -435,7 +560,7 @@ fn run(command: Command) -> Result<Value> {
             Ok(
                 json!({"path": out, "sha256": packaging::sha256(&package.bytes),
                 "camera": contents.camera.id, "entries": contents.entries,
-                "plugins": contents.plugins.names(), "language": contents.language.code()}),
+                "modules": contents.modules, "language": contents.language.code()}),
             )
         }
         Command::Guides { out } => {
@@ -489,7 +614,7 @@ fn run(command: Command) -> Result<Value> {
             Ok(
                 json!({"valid": true, "camera": contents.camera.id, "targets": contents.targets,
                 "effects": contents.effect_ids.len(),
-                "plugins": contents.plugins.names(), "language": contents.language.code()}),
+                "modules": contents.modules, "language": contents.language.code()}),
             )
         }
         Command::ScriptsOff { camera, out } => {

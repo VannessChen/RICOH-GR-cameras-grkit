@@ -1,9 +1,10 @@
 #include "firmware.h"
 #include "abi.h"
-#include "plugin.h"
+#include "core.h"
 /* The core of picture.encode, and the post-curve matrix of tuning. The JPEG
    planes, the cache, and the shot ring are firmware and core details, so they
-   stay here. The plugins change the checked planes (runtime/plugins). */
+   stay here. Selective color of the effects and the plane filters of the
+   modules change the checked planes. */
 #ifndef WORD
 #define WORD(p,o) (*(volatile u32 *)((p)+(o)))
 #endif
@@ -97,7 +98,7 @@ static const u8 picture_area_ids[7]={0,4,2,1,5,0,6};
 #endif
 #ifndef PICTURE_SCRATCH
 /* Stamp masks after the header and the records, inside the loader's registry array. */
-#define PICTURE_SCRATCH(h) ((h)[GRKIT_HOST_RECORDS/4]+(h)[GRKIT_HOST_COUNT/4]*GRKIT_RECORD_SIZE)
+#define PICTURE_SCRATCH(h) ((h)[GRKIT_HOST_TAIL/4])
 #endif
 #ifndef PICTURE_BARRIER
 #define PICTURE_BARRIER() __asm__ volatile("dmb ish" ::: "memory")
@@ -106,22 +107,38 @@ static const u8 picture_area_ids[7]={0,4,2,1,5,0,6};
 #define PICTURE_MAP(address) ((u8 *)(address))
 #endif
 
-/* Plugin services (runtime/plugin.h). */
+/* Core services (runtime/core.h). */
 /* Shift-subtract division: the freestanding link has no division helper. */
-static u32 divide(u32 n,u32 d) {
+static u32 core_divide(u32 n,u32 d) {
     u32 q=0,bit=1;
     while(d<n && !(d&0x80000000U)) { d<<=1; bit<<=1; }
     while(bit) { if(n>=d) { n-=d; q|=bit; } d>>=1; bit>>=1; }
     return q;
 }
+/* The core exports these services to modules (runtime/sdk/grkit.h). */
+__attribute__((used)) void grkit_export_local_time(u8 *out) { PICTURE_DATE(out); }
+__attribute__((used)) u32 grkit_export_divide(u32 n,u32 d) { return core_divide(n,d); }
 static void flush(const Plane *p) {
     PICTURE_CACHE_FLUSH(p->y,p->pitch*p->height);
     PICTURE_CACHE_FLUSH(p->c,p->pitch*(p->half ? p->height>>1 : p->height));
 }
-static void local_time(u8 *out) { PICTURE_DATE(out); }
 
-/* The plugin handler files and PLUGIN_ENCODERS. */
-#include "generated/encoders.h"
+#include "aspect.h"
+#include "settings.h"
+/* The module plane filters that INSTALL registered (GRKIT_HOST_MODULE_FILTERS),
+   or 0 for a count out of range. Each has two words: its apply function, and
+   its setting handle with its stage in the high half. */
+#define MODULE_FILTER_MAX (GRKIT_HOST_MODULE_FILTERS_WORDS/2)
+static u32 module_filters(volatile u32 *h) {
+    u32 n=h[GRKIT_HOST_MODULE_FILTER_COUNT/4];
+    return n<=MODULE_FILTER_MAX ? n : 0;
+}
+#define MODULE_FILTER(h,i) ((h)+GRKIT_HOST_MODULE_FILTERS/4+(i)*2)
+/* Apply a module filter. A host test maps the function address. */
+#ifndef MODULE_APPLY
+#define MODULE_APPLY(address,set,value) ((void (*)(PictureSet *,u32))(address))(set,value)
+#endif
+#include "selective.h"
 
 /* Visible area of a preview picture: black bars depend on the capture aspect. */
 static void visible_area(volatile u32 *h,Plane *p) {
@@ -129,8 +146,8 @@ static void visible_area(volatile u32 *h,Plane *p) {
        2.35:1, and 5:4 (runtime/framing.S). */
     static const u8 screennail[7][2]={{0,0},{40,0},{0,38},{120,0},{0,107},{0,87},{60,0}};
     static const u8 thumbnail[7][2]={{0,8},{0,0},{0,16},{20,0},{0,30},{0,26},{6,0}};
-    /* The capture area: the Framing ratio when Framing is installed. */
-    u32 ratio=PLUGIN_INSTALLED(h,PLUGIN_FRAMING) ? h[GRKIT_HOST_FRAME_RATIO/4] : 0;
+    /* The capture area: the crop of CORE.ASPECT when a module uses it. */
+    u32 ratio=CAPABILITY_USED(h,GRKIT_CORE_ASPECT) ? h[GRKIT_HOST_FRAME_RATIO/4] : 0;
     u32 native=PICTURE_NATIVE_ASPECT(), id;
     const u8 *inset=0;
     id=PICTURE_AREA_ID(native,ratio);
@@ -200,16 +217,13 @@ static u32 native_monochrome(u32 shot) {
     return 0;
 #endif
 }
-/* The encode handlers in call order (Encoder.order in the registry). */
-static const Encoder encoders[]={PLUGIN_ENCODERS};
-#define ENCODER_COUNT (sizeof(encoders)/sizeof(encoders[0]))
 /* Once per plane set. The second full-size image (descriptor 3) shares the
    main planes. */
 void picture_encode(u32 process,u32 message) {
     volatile u32 *h=framing_header();
     /* Configuration +0x34 holds the shot settings of the encoded pictures. */
     u32 config=WORD(message,8), record=shot_record(h,WORD(config,0x34));
-    u32 done[4], wanted[ENCODER_COUNT], any=0, i, j;
+    u32 done[4], selective, values[MODULE_FILTER_MAX], filters=module_filters(h), any, i, j;
     PictureSet set;
     Plane p;
     (void)process;
@@ -222,9 +236,13 @@ void picture_encode(u32 process,u32 message) {
         set.mono=WORD(record,GRKIT_RECORD_MONOCHROME)&1;
     }
     else set.mono=native_monochrome(WORD(config,0x34));
-    for(i=0;i<ENCODER_COUNT;++i) {
-        wanted[i]=PLUGIN_INSTALLED(h,encoders[i].plugin) && encoders[i].wanted(h,&set);
-        any|=wanted[i];
+    /* The color of the effect first: selective color of its record. */
+    selective=selective_wanted(&set);
+    any=selective;
+    /* The value of each filter. A filter does not run at 0. */
+    for(i=0;i<filters;++i) {
+        values[i]=setting_value(h,MODULE_FILTER(h,i)[1]&0xffffU);
+        any|=values[i];
     }
     if(!any) return;
     for(i=0;i<4;++i) {
@@ -238,6 +256,8 @@ void picture_encode(u32 process,u32 message) {
     }
     if(!set.count) return;
     for(i=0;i<set.count;++i) flush(&set.planes[i]);
-    for(i=0;i<ENCODER_COUNT;++i) if(wanted[i]) encoders[i].encode(h,&set);
+    if(selective) selective_encode(&set);
+    /* The module filters follow the color of the effect, in stage order. */
+    for(i=0;i<filters;++i) if(values[i]) MODULE_APPLY(MODULE_FILTER(h,i)[0],&set,values[i]);
     for(i=0;i<set.count;++i) flush(&set.planes[i]);
 }

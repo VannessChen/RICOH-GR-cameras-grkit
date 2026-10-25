@@ -61,12 +61,17 @@
 #define FW_ADJ_SLOT_TYPE FIRMWARE(0x531bd580)
 #define FW_ADJ_SNAPSHOT FIRMWARE(0x531bcdf0)
 /* The settings page: the MENU submenu kind table, the text IDs of Instant
-   Review, Display Time, and Zoom Review, and the row text setters. */
+   Review and of the five value pages, and the row text setters. */
 #define FW_SUBMENU_KINDS FIRMWARE(0x53da6718)
 #define SETTINGS_TITLE_TEXT 0x204
-#define SETTINGS_ROW_TEXTS {0x206,0x208}
+#define SETTINGS_ROW_TEXTS {0x206,0x208,0x188,0x1a8,0x1ae}
 #define FW_ROW_TEXT FIRMWARE(0x5357ade0)
 #define FW_ROW_VALUE FIRMWARE(0x535831e8)
+/* The RAM table of the MENU tab descriptors, and the MENU row setters of
+   the label and of the value text. */
+#define FW_MENU_TABS FIRMWARE(0x55001e78)
+#define FW_MENU_ROW_LABEL FIRMWARE(0x5357a1c0)
+#define FW_MENU_ROW_VALUE FIRMWARE(0x5357a474)
 #define FW_ADJ_REFRESH FIRMWARE(0x531bf3c8)
 #define FW_ADJ_SELECT_SLOT FIRMWARE(0x531bf94c)
 #define FW_CHANGE_CONTROLLER FIRMWARE(0x53182e4c)
@@ -102,5 +107,29 @@
 #define FW_CACHE_FLUSH FIRMWARE(0x53a95804)
 #define FW_CLOCK FIRMWARE(0x538f21a0)
 #define FW_LOCAL_TIME FIRMWARE(0x538ea9b0)
+
+/* The UI service (runtime/ui.h): the view factory, the App task timers,
+   the message box, its progress bar, and the texts of its buttons. */
+#define FW_VIEW_FACTORY FIRMWARE(0x53589ee4)
+#define FW_TIMER_SERVICE FIRMWARE(0x5323ed18)
+#define FW_TIMER_START FIRMWARE(0x5325f59c)
+#define FW_TIMER_CANCEL FIRMWARE(0x5325f320)
+#define FW_MESSAGE_BACKGROUND FIRMWARE(0x53578bcc)
+#define FW_MESSAGE_SET FIRMWARE(0x53578c74)
+#define FW_MESSAGE_BUTTONS FIRMWARE(0x53578fc0)
+#define FW_MESSAGE_ENABLE_BUTTONS FIRMWARE(0x53579144)
+#define FW_MESSAGE_CURSOR FIRMWARE(0x5357903c)
+#define FW_MESSAGE_GET_CURSOR FIRMWARE(0x5357972c)
+#define FW_PROGRESS_PERCENT FIRMWARE(0x53576770)
+#define UI_EXECUTE_TEXT 0x2d8
+#define UI_CANCEL_TEXT 0x2d9
+/* The slider of ui_slider: the setters of a slider configuration (init,
+   range, and one flag) and its apply to a SliderView, and the icons that the
+   native sliders use. */
+#define FW_SLIDER_INIT FIRMWARE(0x5357b7d4)
+#define FW_SLIDER_RANGE FIRMWARE(0x5357b830)
+#define FW_SLIDER_FLAG FIRMWARE(0x5357b850)
+#define FW_SLIDER_APPLY FIRMWARE(0x5357b968)
+#define UI_SLIDER_ICONS {0x23a,0x4a,0xb9,0x248}
 
 #endif

@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
 
-use grkit_core::{camera, modules::Selection, packaging::*, testing, Files};
+use grkit_core::{camera, packaging::*, testing, Files};
 use serde_json::Value;
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
@@ -10,7 +10,7 @@ fn package() -> Vec<u8> {
     assemble(
         &[testing::runtime("gr3-2.10")],
         &testing::effect_set(&["test-effect"]),
-        Selection::ALL,
+        &testing::official_modules(),
         &camera::GR3,
         &Guide {
             language: Language::English,

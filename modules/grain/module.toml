@@ -1,0 +1,18 @@
+# Grain: film grain in recorded pictures. The core applies the level of
+# CORE.GRAIN in the native grain stage, so the module has only its page.
+id = "GRAIN"
+version = 1
+sources = []
+# Tile n shows value n. Tile 0 is the module tile, for Off at the root.
+tiles = [
+    "tiles/0-module.png",
+    "tiles/1-weak.png",
+    "tiles/2-medium.png",
+    "tiles/3-strong.png",
+]
+# 0 Off, 1 weak, 2 medium, 3 strong.
+uses = ["CORE.GRAIN"]
+
+[page]
+setting = "CORE.GRAIN"
+off_row = true

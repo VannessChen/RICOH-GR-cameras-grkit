@@ -59,7 +59,7 @@ Write the text in English, for people who use GRKit. The change type sets the ve
 | `minor` | Features | 1.0.0 to 1.1.0 |
 | `major` | Breaking Changes | 1.0.0 to 2.0.0 |
 
-Use `major` for a change that an earlier package cannot follow, for example a new format of `STATE.TXT`, `PLUGINS.TXT`, or the GRF files.
+Use `major` for a change that an earlier package cannot follow, for example a new format of `STATE.TXT`, the module files, or the GRF files.
 
 ## Release a version
 
@@ -67,7 +67,7 @@ Use `major` for a change that an earlier package cannot follow, for example a ne
 2. If the site does not serve the version within 15 minutes, `Deploy` fails and the release stays a draft. Examine the deployment in the Cloudflare dashboard. If it failed, retry it there, because a second `Deploy` run makes no new commit. Then start `Deploy` with the tag `vX.Y.Z`.
 3. The release holds these files. Install the package of each camera that you have, and test it.
    - `GRKit-X.Y.Z-site.tar.gz`: the site. Releases before 1.2.0 name it `site.tar.gz`, and `Deploy` and `Site` accept both names.
-   - `GRKit-X.Y.Z-gr3.zip`, `GRKit-X.Y.Z-gr3x.zip`, and `GRKit-X.Y.Z-gr4.zip`: the package of each camera, with the published runtime of each of its builds, each effect in `effects/`, each plugin, and the English guide. The site makes the same package by default.
+   - `GRKit-X.Y.Z-gr3.zip`, `GRKit-X.Y.Z-gr3x.zip`, and `GRKit-X.Y.Z-gr4.zip`: the package of each camera, with the published runtime of each of its builds, each effect in `effects/`, each official module, and the English guide. The site makes the same package by default.
    - `GRKit-X.Y.Z-dump.zip`: the firmware dump tool of `runtime/dump/` for each camera. The site footer links to it.
 4. If a test fails, start `Deploy` with the tag of the previous release. The site then serves that release again.
 
