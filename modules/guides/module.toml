@@ -19,14 +19,44 @@ values = 6
 saved = true
 public = true
 
+# The line color: 0 black as the native grid, 1 white, 2 yellow.
+[[settings]]
+key = "COLOR"
+values = 3
+saved = true
+public = true
+
+# The line opacity: 0 50% as the native grid, 1 100%.
+[[settings]]
+key = "OPACITY"
+values = 2
+saved = true
+public = true
+
+# Hide with DISP: 0 On, the guides hide while DISP hides the native information, 1 Off,
+# they always show.
+[[settings]]
+key = "DISP"
+values = 2
+saved = true
+public = true
+
 [page]
 setting = "STYLE"
 off_row = true
+settings = ["STYLE", "COLOR", "OPACITY", "DISP"]
+# The GRKit section of MENU turns each style on or off for ADJ.
+options = true
 
-# Above the Framing mask (10), below the Framing ratio label (30). The guides
-# hide while DISP hides the native information.
+# Above the Framing mask (10), below the Framing ratio label (30). One layer
+# follows DISP and one does not; each paints only for its DISP value.
 [[layers]]
 paint = "guides_paint"
 setting = "STYLE"
 order = 20
 follow_disp = true
+
+[[layers]]
+paint = "guides_paint_always"
+setting = "STYLE"
+order = 20

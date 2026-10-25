@@ -148,9 +148,11 @@ static u32 module_layers(volatile u32 *h) {
 #define MODULE_LAYER_LIVE_ONLY 4U
 #define NO_SETTING 0xffffffffU
 /* The value of module layer i in the live view: its setting, or 1 without
-   one. A layer is off while DISP hides what its flags need. */
+   one. A layer is off while DISP hides what its flags need, and while a soft
+   Off stops its module. */
 static u32 module_layer_value(volatile u32 *h,u32 i) {
     volatile u32 *l=MODULE_LAYER(h,i);
+    if(services_suspended(h,l[0])) return 0;
     if((l[2]&MODULE_LAYER_FOLLOW_DISP) && native_display()>DISPLAY_SIMPLE) return 0;
     if((l[2]&MODULE_LAYER_FULL_DISP) && native_display()!=DISPLAY_FULL) return 0;
     return l[1]==NO_SETTING ? 1 : setting_value(h,l[1]);
@@ -181,7 +183,7 @@ static void module_layers_paint(volatile u32 *h,const Surface *surface,u32 previ
             if(value>=setting_limit(h,MODULE_LAYER(h,i)[1])) value=0;
         }
         else value=MODULE_LAYER(h,i)[1]==NO_SETTING ? 1 : setting_value(h,MODULE_LAYER(h,i)[1]);
-        if(value) module_paint(h,i,surface,value);
+        if(value && !services_suspended(h,MODULE_LAYER(h,i)[0])) module_paint(h,i,surface,value);
     }
 }
 /* Whether the live view has something to draw: a layer or the cue. */

@@ -34,18 +34,24 @@ Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-
 
 Photo: [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/) by nagi usano, [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/).
 
-- **Image Control:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. On the GRK menu, press Fn on the Image Control row to adjust the selected effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings.
+- **Film Look:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. On the GRK menu, press Fn on the Film Look row to adjust the selected effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings.
 - **Framing:** select XPan, 2.35:1, 16:9, 4:3, 5:4, or 1:1. 1:1 sets the camera's own 1:1 aspect ratio. Each other ratio sets the native aspect ratio to 3:2, and the viewfinder dims the area outside the photo. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
-- **Guides:** select a guide style. The lines show only in the viewfinder.
-- **Date Imprint:** press OK to open its settings. In **Date Style**, select a date style. In **Date Look**, select the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
+- **Guides:** select a guide style. Press Fn to set the color, the opacity, and whether the lines also show while DISP hides the shooting information. The lines show only in the viewfinder.
+- **Date Imprint:** select a date style. Press Fn to set **Date Style** and **Date Font**, the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.
-- **Modules:** a row for each module on the card. Press OK on a module to open its settings. **Load** turns the module on or off, and **Position** sets its row in GRK. A module that did not load shows its file name and an error number. A change applies at the next power-on.
-
-Highlight the last row, GRK, to see the GRKit version.
 
 Press MENU to go back one level. GRKit keeps your settings after power-off.
 
-GRKit keeps the effects in the `GRKIT/EFFECTS` folder. A new package adds its effects there and replaces their earlier versions. It does not remove other effects. To add an effect, copy its file into `GRKIT/EFFECTS`. To remove one, turn the camera off and delete its file. A later package adds it again only when its file in the package changes. To add a module, copy its file into `GRKIT/MODULES`. The last row of Image Control, **Effects**, lists each effect file. Press OK on an effect to open its settings. **Load** turns the effect on or off, and **Order** moves it up or down in Image Control. GRKit installs the first 40 effects that are on. A change applies at the next power-on. `GRKIT/REPORT.TXT` lists the modules and the effects of the last power-on, and the reason when a module did not load.
+All the settings of GRKit are also in the **GRKit** section at the end of the Customize tab (C) of MENU:
+
+- Each module has a row. Its first setting, **Enable**, turns the module on or off at once. A module that is off leaves ADJ, while the Off value of a module, such as Off in Framing, keeps it in ADJ. Its other settings follow. Film Look has **Film Stock**, which selects the effect, and the **Parameters** of the selected effect.
+- Film Look, Framing, and Guides have an **Options** row after **Enable**. It lists the effects, ratios, or guide styles. Press OK on one to turn it on or off; a value that is off shows **(Off)**. ADJ shows only the values that are on.
+- **ADJ Order** sets the order of the modules in GRK. Select a module, then its new position. The new order applies at once.
+- **About GRKit** shows the GRKit version and the project address.
+
+`GRKIT/REPORT.TXT` gives the GRKit version.
+
+GRKit keeps the effects in the `GRKIT/EFFECTS` folder. A new package adds its effects there and replaces their earlier versions. It does not remove other effects. To add an effect, copy its file into `GRKIT/EFFECTS`. To remove one, turn the camera off and delete its file. A later package adds it again only when its file in the package changes. To add a module, copy its file into `GRKIT/MODULES`. **Options** of Film Look in the GRKit section of MENU lists each effect file and turns it on or off in Film Look at once. GRKit installs at most 40 effects, first those that are on. If you turn on an effect that did not install, it shows at the next power-on. `GRKIT/REPORT.TXT` lists the modules and the effects of the last power-on, and the reason when a module did not load.
 
 ## Troubleshooting
 
@@ -61,7 +67,7 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 ### GRK does not show in ADJ
 
 1. Wait a few seconds after power-on. GRKit loads after the camera starts. When it has loaded, the shooting screen shows **GRKit** at the top for a few seconds.
-2. Look for GRK in ADJ. It is not in MENU.
+2. Look for GRK in ADJ. The GRKit settings are also in the GRKit section of the Customize tab of MENU.
 3. If the camera did not show Mode Set Command in step 3, do step 3 again.
 4. Make sure that the card root has the `SCRIPT` folder. Copy all the contents of `SD_ROOT`, including `SCRIPT`.
 5. If the card has `SCRIPT/GRKIT/INSTALL.ERR`, GRKit did not install. Make sure that the package is for the firmware version of your camera. To see the firmware version, open the camera menu. If the version is correct, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR` and `GRKIT/REPORT.TXT`.
@@ -71,7 +77,7 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 
 In safe mode, GRKit loads no module, and `GRKIT/REPORT.TXT` says why. Safe mode starts in two cases:
 
-- The last three power-ons did not finish. A power-off in the first 20 seconds also counts. After a power-on of 20 seconds or more, the next power-on loads the modules again. If the camera stopped after you added a module, set **Load** of that module to Off in **Modules**, or delete the module from `GRKIT/MODULES`.
+- The last three power-ons did not finish. A power-off in the first 20 seconds also counts. After a power-on of 20 seconds or more, the next power-on loads the modules again. If the camera stopped after you added a module, set **Enable** of that module to Off in the GRKit section of the Customize tab of MENU, or delete the module from `GRKIT/MODULES`.
 - The `GRKIT` folder has a file named `SAFE`. To load the modules again, delete the file.
 
 ## Remove or recover

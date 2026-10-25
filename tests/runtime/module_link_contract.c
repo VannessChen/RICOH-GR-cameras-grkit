@@ -224,12 +224,12 @@ int main(void)
     assert(registrations() == GRM_BAD_DESCRIPTOR);
     reset(); code_words[PAGE] = 36;
     assert(registrations() == GRM_BAD_DESCRIPTOR);
-    /* Native settings rows: two settings of the module, the first the page
-       setting, each with its texts. */
+    /* Native settings rows: settings of the module, the first the page
+       setting, each with its texts. The page setting alone is a row too. */
     reset(); code_words[PAGE + 8] = 2;
     assert(registrations() == 0 && page_count == 1);
     reset(); code_words[PAGE + 8] = 1;
-    assert(registrations() == GRM_BAD_DESCRIPTOR);
+    assert(registrations() == 0 && page_count == 1);
     reset(); code_words[PAGE + 8] = GRM_SETTING_ROWS + 1;
     assert(registrations() == GRM_BAD_DESCRIPTOR);
     reset(); code_words[PAGE + 8] = 2; code_words[ROWS + 1] = 1;
@@ -249,7 +249,10 @@ int main(void)
     assert(registrations() == GRM_BAD_DESCRIPTOR);
     reset(); code_words[PAGE + 2] = GRM_USED; code_words[PAGE + 3] = GRM_CHOICE_CORE_ROWS;
     assert(registrations() == GRM_BAD_DESCRIPTOR);
-    reset(); code_words[PAGE + 3] = 4;
+    /* A page can have options; another flag is an error. */
+    reset(); code_words[PAGE + 3] = GRM_CHOICE_OPTIONS;
+    assert(registrations() == 0 && page_count == 1);
+    reset(); code_words[PAGE + 3] = 8;
     assert(registrations() == GRM_BAD_DESCRIPTOR);
     /* Filters: a stage of the core, a setting that the module has, and
        apply code. */

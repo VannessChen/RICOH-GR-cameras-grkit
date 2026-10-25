@@ -15,13 +15,13 @@ Photo: [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/
 
 GRKit adds a sixth entry, GRK, to the ADJ menu. It has five modules:
 
-- **Image Control**: film looks such as Portra 400, Velvia 100, and Tri-X 400. The viewfinder previews the look.
+- **Film Look**: the colors of films such as Portra 400, Velvia 100, and Tri-X 400. The viewfinder previews the look.
 - **Framing**: XPan (65:24), 2.35:1, 16:9, 4:3, 5:4, or 1:1 photos, on every camera. A ratio that the camera has uses its own aspect ratio. For the other ratios, the viewfinder dims the area outside the photo.
 - **Guides**: thirds, center, golden ratio, or diagonal lines.
 - **Date Imprint**: an orange date on the photo, like a film camera's data back.
 - **Grain**: film grain on the photo, in three strengths.
 
-The Modules row turns each module on or off and sets its place in the menu. The last row shows the GRKit version.
+The GRKit section at the end of the Customize tab of MENU has all the settings. It has the settings of each module with its Enable row, the order of the modules in ADJ, and About GRKit with the version and the project address.
 
 You select the modules when you make a package. The menu shows only those modules. To write a module, see [Writing a module](docs/modules.md).
 
@@ -41,8 +41,8 @@ You select the modules when you make a package. The menu shows only those module
 | RICOH GR IV | 1.20 | Experimental |
 | RICOH GR IV HDF | 1.11 | Supported |
 | RICOH GR IV HDF | 1.20 | Experimental |
-| RICOH GR IV Monochrome | 1.00 | Supported, without Image Control |
-| RICOH GR IV Monochrome | 1.10 | Experimental, without Image Control |
+| RICOH GR IV Monochrome | 1.00 | Supported, without Film Look |
+| RICOH GR IV Monochrome | 1.10 | Experimental, without Film Look |
 
 A supported camera runs the same runtime as a tested camera, but is not tested itself. An experimental firmware version has not been tested on a camera.
 

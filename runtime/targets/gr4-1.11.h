@@ -44,6 +44,8 @@
 #define FW_ICON_VIEW_SET_ICON FIRMWARE(0x53576e38)
 #define FW_ICON_VIEW_DESTROY FIRMWARE(0x53576d0c)
 #define FW_STRING_VIEW_RESET FIRMWARE(0x5357338c)
+/* The width of the text of a string view, in pixels. */
+#define FW_STRING_VIEW_WIDTH FIRMWARE(0x535731d4)
 #define FW_LIST_SET_COUNT FIRMWARE(0x535711e4)
 #define FW_LIST_ROW FIRMWARE(0x53570a9c)
 #define FW_LIST_SAVE FIRMWARE(0x53570b3c)
@@ -61,10 +63,14 @@
 #define FW_ADJ_SLOT_TYPE FIRMWARE(0x531bd580)
 #define FW_ADJ_SNAPSHOT FIRMWARE(0x531bcdf0)
 /* The settings page: the MENU submenu kind table, the text IDs of Instant
-   Review and of the five value pages, and the row text setters. */
+   Review, of the five value pages and of the sixth row (a label of another
+   submenu), the row text setters, and the OK and MENU guides of a value
+   page. */
 #define FW_SUBMENU_KINDS FIRMWARE(0x53da6718)
 #define SETTINGS_TITLE_TEXT 0x204
-#define SETTINGS_ROW_TEXTS {0x206,0x208,0x188,0x1a8,0x1ae}
+#define SETTINGS_ROW_TEXTS {0x206,0x208,0x188,0x1a8,0x1ae,0x1ce}
+#define SELECT_GUIDE_OK_TEXT 0x338
+#define SELECT_GUIDE_BACK_TEXT 0x339
 #define FW_ROW_TEXT FIRMWARE(0x5357ade0)
 #define FW_ROW_VALUE FIRMWARE(0x535831e8)
 /* The RAM table of the MENU tab descriptors, and the MENU row setters of
@@ -75,6 +81,11 @@
 #define FW_ADJ_REFRESH FIRMWARE(0x531bf3c8)
 #define FW_ADJ_SELECT_SLOT FIRMWARE(0x531bf94c)
 #define FW_CHANGE_CONTROLLER FIRMWARE(0x53182e4c)
+/* The controller factory singleton, which holds one instance of each controller. */
+#define INFO_TITLE_TEXT 0x2ab
+#define INFO_LABEL_TEXTS {0x2ad,0x2af,0x2b1}
+#define FW_STRING_VIEW_SET_ASCII FIRMWARE(0x5356d1c8)
+#define FW_CONTROLLER_FACTORY FIRMWARE(0x53185f14)
 /* The UI language byte of the static settings object 0x55084dd8 (reader
    0x5329b068, +0x1497), with the GR III values. Not confirmed on a camera. */
 #define LANGUAGE_SETTING_BYTE (FIRMWARE(0x55084dd8) + 0x1497)

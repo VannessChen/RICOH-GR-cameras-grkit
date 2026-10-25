@@ -25,8 +25,10 @@ static void check_mask(const u16 *box, u32 area)
 
 int main(void)
 {
-    /* The descriptor: no own setting, a page and two layers of CORE.ASPECT. */
-    assert(grkit_module.setting_count == 0 && grkit_module.use_count == 1);
+    /* The descriptor: MASK and LABEL, a page of CORE.ASPECT with their
+       settings rows, and two layers. */
+    assert(grkit_module.setting_count == 2 && grkit_module.use_count == 1);
+    assert(SETTING_MASK == GRKIT_SETTING(0) && SETTING_LABEL == GRKIT_SETTING(1));
     assert(grkit_module.registration_count == 3 && grkit_module.tile_count == 7);
     /* The mask covers each pixel outside the photo area, and no other. */
     check_mask(xpan, 1);
@@ -50,6 +52,30 @@ int main(void)
         framing_badge(&s, 1);
         assert(grkit_test_labels == 1);
         assert(grkit_test_label[0] == LABEL_RATIO(1) && grkit_test_label[1] == LABEL_LEFT && grkit_test_label[2] == LABEL_TOP);
+        /* LABEL Off draws no label. */
+        grkit_test_settings[SETTING_LABEL] = 1;
+        framing_badge(&s, 1);
+        assert(grkit_test_labels == 1);
+        grkit_test_settings[SETTING_LABEL] = 0;
+    }
+    /* MASK Black fills the outside opaque; Frame lines leave it clear and
+       draw 2 white pixels inside each edge of the photo area. */
+    {
+        Surface s = grkit_test_surface(xpan);
+        s.area = 1;
+        grkit_test_settings[SETTING_MASK] = 1;
+        grkit_test_clear();
+        framing_mask(&s, 1);
+        assert(grkit_test_pixel(10, 10) == 0xff000000U && grkit_test_pixel(360, 240) == GRKIT_TEST_CLEAR);
+        grkit_test_settings[SETTING_MASK] = 2;
+        grkit_test_clear();
+        framing_mask(&s, 1);
+        assert(grkit_test_pixel(10, 10) == GRKIT_TEST_CLEAR && grkit_test_pixel(360, 240) == GRKIT_TEST_CLEAR);
+        assert(grkit_test_pixel(360, 107) == 0xffffffffU && grkit_test_pixel(360, 108) == 0xffffffffU);
+        assert(grkit_test_pixel(360, 109) == GRKIT_TEST_CLEAR && grkit_test_pixel(360, 372) == 0xffffffffU);
+        assert(grkit_test_pixel(0, 240) == 0xffffffffU && grkit_test_pixel(1, 240) == 0xffffffffU);
+        assert(grkit_test_pixel(2, 240) == GRKIT_TEST_CLEAR && grkit_test_pixel(719, 240) == 0xffffffffU);
+        grkit_test_settings[SETTING_MASK] = 0;
     }
     return 0;
 }

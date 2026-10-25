@@ -24,9 +24,9 @@ pub struct Official {
 /// The official modules in the default root order.
 pub const OFFICIAL: [Official; 5] = [
     Official {
-        id: "IMGCTL",
-        folder: "image-control",
-        key: "imageControl",
+        id: "FILMLOOK",
+        folder: "film-look",
+        key: "filmLook",
         needs_effects: true,
     },
     Official {

@@ -267,7 +267,7 @@ static void assert_guides(u32 ratio,u32 style,u32 badge)
         u32 expected=SENTINEL;
         if(x<720) {
             if(ratio && (x<box[0] || x>=box[2] || y<box[1] || y>=box[3])) expected=0x80000000;
-            if(expected_guide(ratio,style,x,y)) expected=GUIDE_COLOR;
+            if(expected_guide(ratio,style,x,y)) expected=0x80000000U;
             if(badge) expected=expected_badge(ratio,x,y,expected);
         }
         assert(pixels[1+y*TEST_STRIDE+x]==expected);

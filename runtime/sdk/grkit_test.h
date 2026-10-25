@@ -31,9 +31,12 @@ u32 grkit_test_pixel(u32 x, u32 y);
 void grkit_test_clear(void);
 /* A 720 x 480 surface over the photo area `box` {left, top, right, bottom}. */
 Surface grkit_test_surface(const u16 *box);
-/* The values of the settings: handle n is entry n. setting_get and
-   setting_set of the harness use them. */
+/* The values of the settings: handle n is entry n, and setting k of the
+   module is handle GRKIT_TEST_SETTING_BASE + k, so its entry is
+   grkit_test_settings[SETTING_<KEY>]. setting_get and setting_set of the
+   harness use them. */
 #define GRKIT_TEST_SETTINGS 64U
+#define GRKIT_TEST_SETTING_BASE 16U
 extern u32 grkit_test_settings[GRKIT_TEST_SETTINGS];
 /* The calls of overlay_label, and the label, left, and top of the last one. */
 extern u32 grkit_test_labels;

@@ -5,8 +5,8 @@ describe('planModules', () => {
   it('adds every module by default', () => {
     expect(planModules(ALL_MODULES, 2)).toEqual({
       includeEffects: true,
-      modules: ['IMGCTL', 'FRAMING', 'GUIDES', 'DATE', 'GRAIN'],
-      visible: ['imageControl', 'framing', 'guides', 'dateStamp', 'grain'],
+      modules: ['FILMLOOK', 'FRAMING', 'GUIDES', 'DATE', 'GRAIN'],
+      visible: ['filmLook', 'framing', 'guides', 'dateStamp', 'grain'],
     });
   });
 
@@ -20,12 +20,12 @@ describe('planModules', () => {
   });
 
   it('adds Image Control only with effects', () => {
-    expect(planModules(new Set<ModuleKey>(['imageControl']), 0)).toEqual({
+    expect(planModules(new Set<ModuleKey>(['filmLook']), 0)).toEqual({
       includeEffects: true,
       modules: [],
       visible: [],
     });
-    expect(planModules(new Set<ModuleKey>(['imageControl']), 1).modules).toEqual(['IMGCTL']);
+    expect(planModules(new Set<ModuleKey>(['filmLook']), 1).modules).toEqual(['FILMLOOK']);
   });
 
   it('plans only the modules that the site offers for the camera', () => {

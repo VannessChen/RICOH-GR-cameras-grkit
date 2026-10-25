@@ -42,9 +42,9 @@ static u8 directory_entries[4096];
    effects, then the installed effects and the listed effects
    (PLANNED_EFFECT bytes each). The loader reads the first seven words. */
 #define PLAN_HEADER 40U
-/* A listed effect: the head of its profile, its file name, its status, and
-   its choice. */
-#define PLANNED_EFFECT (64U + 16U + 8U)
+/* A listed effect: the head of its profile, its file name, its status, its
+   choice, and its record. */
+#define PLANNED_EFFECT (64U + 16U + 12U)
 static u8 plan[PLAN_HEADER + MAX_COUNT * GRKIT_GRF_MAX_SIZE + EFFECTS_LISTED * PLANNED_EFFECT];
 static u32 count, size, icon_chunks;
 /* The package folder holds the core, the package list, the package modules,
@@ -102,13 +102,15 @@ static void number(u32 value)
 #include "manage.h"
 /* The effect files that GRKit lists (runtime/effects.h): the head of each
    profile, which holds its ID and name, its file name, its status at this
-   start, and its choice in the Effects page: Off in bit 0, and its position
+   start, and its choice in the GRKit section of MENU: Off in bit 0, and its position
    + 1, or 0 for the default place, above. SCAN lists them in ID order, then
    orders them by their choices. */
 #define LISTED_HEAD 64U
 static u8 listed[EFFECTS_LISTED + 1][LISTED_HEAD];
 static char names[EFFECTS_LISTED + 1][CATALOG_NAME_SIZE];
 static u32 listed_count, listed_status[EFFECTS_LISTED], listed_choice[EFFECTS_LISTED];
+/* The record of each listed effect, or EFFECTS_NO_RECORD. */
+static u32 listed_record[EFFECTS_LISTED];
 static long directory_read(long fd, u8 *buffer, u32 size)
 { return syscall6(217,fd,(u32)buffer,size,0,0,0); }
 static long directory_seek(long fd, long offset, u32 whence)
@@ -372,8 +374,10 @@ static u32 effect_choice_id(u32 i)
 }
 /* Read the choices of the listed effects and order them: an effect with a
    position first, then the effects of the package, then the others, each
-   group in ID order. Then install the first MAX_COUNT effects that are not
-   Off, in that order. A pending effect installs from the inbox. */
+   group in ID order. Then install the effects that are not Off, in that
+   order, then the effects that are Off while there is room, at most
+   MAX_COUNT: an installed effect turns on or off at once
+   (runtime/effects.h). A pending effect installs from the inbox. */
 static struct state saved_state;
 static void choose_effects(void)
 {
@@ -394,24 +398,25 @@ static void choose_effects(void)
             t = listed_choice[j]; listed_choice[j] = listed_choice[j - 1]; listed_choice[j - 1] = t;
         }
     count = 0;
-    for (u32 i = 0; i < listed_count; ++i) {
-        char path[EFFECT_PATH_SIZE];
-        u32 size;
-        listed_status[i] = EFFECT_OFF;
-        if (listed_choice[i] & 1) continue;
-        listed_status[i] = EFFECT_OVER;
-        if (count == MAX_COUNT) continue;
-        /* The file can change between the two reads: a profile with another
-           ID does not install. */
-        if (!join(path, sizeof(path), library_path, names[i]) || !(size = read_effect(path, profiles[count])))
-            if (!join(path, sizeof(path), inbox_path, names[i]) || !(size = read_effect(path, profiles[count]))) size = 0;
-        if (!size || !valid_profile(profiles[count], size) || !equal(profiles[count] + CATALOG_ID, listed[i] + CATALOG_ID, 32)) {
-            listed_status[i] = EFFECT_UNREADABLE;
-            continue;
+    for (u32 pass = 0; pass < 2; ++pass)
+        for (u32 i = 0; i < listed_count; ++i) {
+            char path[EFFECT_PATH_SIZE];
+            u32 size, off = listed_choice[i] & 1;
+            if (!pass) listed_record[i] = EFFECTS_NO_RECORD;
+            if (off != pass) continue;
+            listed_status[i] = off ? EFFECT_OFF : EFFECT_OVER;
+            if (count == MAX_COUNT) continue;
+            /* The file can change between the two reads: a profile with
+               another ID does not install. */
+            if (!join(path, sizeof(path), library_path, names[i]) || !(size = read_effect(path, profiles[count])))
+                if (!join(path, sizeof(path), inbox_path, names[i]) || !(size = read_effect(path, profiles[count]))) size = 0;
+            if (!size || !valid_profile(profiles[count], size) || !equal(profiles[count] + CATALOG_ID, listed[i] + CATALOG_ID, 32)) {
+                listed_status[i] = EFFECT_UNREADABLE;
+                continue;
+            }
+            if (!off) listed_status[i] = EFFECT_LOADED;
+            listed_record[i] = count++;
         }
-        listed_status[i] = EFFECT_LOADED;
-        ++count;
-    }
 }
 /* The effects of GRKIT/EFFECTS: GRKit lists at most EFFECTS_LISTED, those
    with the smallest IDs, and installs at most MAX_COUNT of them. */
@@ -585,16 +590,23 @@ static u32 module_first[MODULES_MAX], module_settings[MODULES_MAX], module_use_c
 static u32 module_tile_first[MODULES_MAX];
 static char module_uses[MODULES_MAX][GRM_USES][GRM_NAME + 1];
 /* The result of each listed module for REPORT.TXT and the Modules page: 0
-   when it loads, MANAGE_SAFE in safe mode, MANAGE_OFF when it is Off, else a
+   when it loads, also when it is Off, MANAGE_SAFE in safe mode, else a
    status (runtime/module_link.h), with the name of the missing import or
    setting of GRM_MISSING_IMPORT and GRM_MISSING_SETTING. */
 _Static_assert(MODULES_MAX == MANAGE_MODULES, "The Modules page lists each module");
 static u32 module_status[MODULES_MAX];
 static char module_detail[MODULES_MAX][GRM_NAME + 1];
-/* The choices of the Modules page (runtime/manage.h): Off, and the position
-   + 1 or 0. INSTALL also notes the title texts and tile 0 of each module. */
-static u32 module_off[MODULES_MAX], module_position[MODULES_MAX];
+/* The choices of the GRKit section of MENU (runtime/manage.h): Off, the
+   position + 1 or 0, and the values that are off in ADJ of each module.
+   INSTALL also notes the title texts and tile 0 of each module. */
+static u32 module_off[MODULES_MAX], module_position[MODULES_MAX], module_rows[MODULES_MAX];
 static u32 module_title[MODULES_MAX], module_tile[MODULES_MAX];
+/* The code range and the used capabilities of each loaded module, for the
+   soft Off of runtime/manage.h. */
+static u32 module_code_from[MODULES_MAX], module_code_to[MODULES_MAX], module_capabilities[MODULES_MAX];
+/* The capabilities of the modules that run: not those of a module that is
+   Off, which loads stopped (runtime/manage.h). */
+static u32 capabilities_running;
 /* The addresses of the module list, of the effect list, and of the state of
    the core services, or 0 (install_modules). */
 static u32 module_list, effect_list, services_block;
@@ -719,7 +731,7 @@ static u32 manage_id(u32 i, const char *key)
     name[n] = 0;
     return grm_state_id(name);
 }
-/* Read the choices of the Modules page and order the modules by them: a
+/* Read the choices of the GRKit section and order the modules by them: a
    module with a position before the others, then the others in root order. */
 static void order_modules(void)
 {
@@ -727,6 +739,7 @@ static void order_modules(void)
     for (u32 i = 0; i < module_count; ++i) {
         module_off[i] = state_value(&saved_state, manage_id(i, "OFF"), &value) && value == 1;
         module_position[i] = state_value(&saved_state, manage_id(i, "POS"), &value) && value <= MANAGE_MODULES ? value : 0;
+        module_rows[i] = state_value(&saved_state, manage_id(i, "ROWS"), &value) && value < 1U << MANAGE_OPTION_VALUES ? value : 0;
         keys[i] = module_position[i] ? module_position[i] : MANAGE_DEFAULT_KEY + i;
     }
     for (u32 i = 1; i < module_count; ++i)
@@ -739,12 +752,13 @@ static void order_modules(void)
             t = keys[j]; keys[j] = keys[j - 1]; keys[j - 1] = t;
             t = module_off[j]; module_off[j] = module_off[j - 1]; module_off[j - 1] = t;
             t = module_position[j]; module_position[j] = module_position[j - 1]; module_position[j - 1] = t;
+            t = module_rows[j]; module_rows[j] = module_rows[j - 1]; module_rows[j - 1] = t;
             t = module_source[j]; module_source[j] = module_source[j - 1]; module_source[j - 1] = t;
         }
 }
 /* Whether a setting of this start takes the saved value of `id`: a
    capability that a usable module uses, a saved setting of a usable module,
-   or a choice of the Modules page. The Fn adjustments are not kept. */
+   or a choice of the GRKit section. The Fn adjustments are not kept. */
 static int state_taken(u32 id)
 {
     static const u32 core_ids[] = {CORE_STATE_IDS};
@@ -762,7 +776,7 @@ static int state_taken(u32 id)
     for (u32 k = 0; k < setting_total; ++k)
         if ((setting_flags[k] & GRM_SETTING_SAVED) && grm_state_id(setting_names[k]) == id) return 1;
     for (u32 i = 0; i < module_count; ++i)
-        if (manage_id(i, "OFF") == id || manage_id(i, "POS") == id) return 1;
+        if (manage_id(i, "OFF") == id || manage_id(i, "POS") == id || manage_id(i, "ROWS") == id) return 1;
     for (u32 i = 0; i < listed_count; ++i)
         if (effect_choice_id(i) == id) return 1;
     return 0;
@@ -795,7 +809,8 @@ static void plan_modules(void)
     module_overflow = 0;
     module_contexts = module_data_words = 0;
     for (u32 i = 0; i < MODULES_MAX; ++i) {
-        module_status[i] = module_off[i] = module_position[i] = module_title[i] = 0;
+        module_status[i] = module_off[i] = module_position[i] = module_rows[i] = module_title[i] = 0;
+        module_code_from[i] = module_code_to[i] = module_capabilities[i] = 0;
         module_detail[i][0] = 0;
         module_tile[i] = MANAGE_NO_TILE;
     }
@@ -813,17 +828,19 @@ static void plan_modules(void)
     }
     if (!module_count) return;
     order_modules();
-    /* The module array: the settings table with the choices of the Modules
-       and Effects pages and the kept values, the contexts, the module list,
+    /* The module array: the settings table with the choices of the GRKit
+       section of MENU and the kept values, the contexts, the module list,
        the effect list, then the data of each module. The effects are listed
        later (discover), so the modules leave room for each of them. */
-    u32 contexts = 0, data = 0, choices = 2 * module_count + EFFECTS_LISTED;
+    u32 contexts = 0, data = 0, choices = MANAGE_PER_MODULE * module_count + EFFECTS_LISTED;
     u32 list = MANAGE_WORDS(module_count) + EFFECT_LIST_WORDS(EFFECTS_LISTED);
     for (u32 i = 0; i < module_count; ++i) {
         struct grm_setting settings[GRM_SETTINGS];
         u32 n = 0, uses = 0, tiles = 0;
         const u8 *tile_data;
-        int status = safe_mode ? (int)MANAGE_SAFE : module_off[i] ? (int)MANAGE_OFF : read_module(i);
+        /* A module that is Off loads too, stopped (runtime/manage.h), so that
+           Enable turns it on at once. Its code does not run while it is Off. */
+        int status = safe_mode ? (int)MANAGE_SAFE : read_module(i);
         if (!status) status = grm_settings(&module, module.code, 0, settings, &n, module_uses[i], &uses);
         if (!status) status = grm_tiles(&module, module.code, 0, &tile_data, &tiles);
         if (!status && module_tiles + tiles > GRKIT_MODULE_TILES_MAX) status = GRM_NO_ROOM;
@@ -865,7 +882,7 @@ static void plan_array(void)
     module_words = kept_count = 0;
 #ifndef GRKIT_NO_MODULES
     if (!module_count) return;
-    u32 entries = setting_total + 2 * module_count + listed_count;
+    u32 entries = setting_total + MANAGE_PER_MODULE * module_count + listed_count;
     u32 fixed = SETTINGS_WORDS(entries) + module_contexts + MANAGE_WORDS(module_count) +
                 EFFECT_LIST_WORDS(listed_count) + SERVICES_WORDS + module_data_words;
     u32 room = GRKIT_MODULE_SETTINGS_MAX - entries;
@@ -941,6 +958,7 @@ static int scan(void)
         copy(entry + LISTED_HEAD, (const u8 *)names[i], CATALOG_NAME_SIZE);
         put32(entry + 80, listed_status[i]);
         put32(entry + 84, listed_choice[i]);
+        put32(entry + 88, listed_record[i]);
     }
     u32 done = 0, total = effects_at + listed_count * PLANNED_EFFECT;
     while (done < total) {
@@ -1067,7 +1085,9 @@ static int read_plan(void)
         listed[i][CATALOG_ID + 31] = 0;
         listed_status[i] = get32(entry + 80);
         listed_choice[i] = get32(entry + 84);
-        if (listed_status[i] > EFFECT_UNREADABLE || listed_choice[i] >= EFFECT_CHOICE_VALUES) return 37;
+        listed_record[i] = get32(entry + 88);
+        if (listed_status[i] > EFFECT_UNREADABLE || listed_choice[i] >= EFFECT_CHOICE_VALUES ||
+            (listed_record[i] != EFFECTS_NO_RECORD && listed_record[i] >= count)) return 37;
     }
     for (u32 i = 0; i < count; ++i) {
         copy(profiles[i], plan + PLAN_HEADER + i * GRKIT_GRF_MAX_SIZE, GRKIT_GRF_MAX_SIZE);
@@ -1115,9 +1135,10 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
     symbols[self].hash = 0x811c9dc5;
     for (const char *p = "grkit_self"; *p; ++p) { symbols[self].hash ^= (u8)*p; symbols[self].hash *= 0x01000193; }
     /* The settings table. A saved setting has its state file ID; a second
-       setting with the same ID is not saved. The choices of the Modules page
-       and the kept values follow the settings of the modules. */
-    u32 choices = 2 * module_count + listed_count, total = setting_total + choices + kept_count;
+       setting with the same ID is not saved. The choices of the GRKit
+       section, those of the effects, and the kept values follow the settings
+       of the modules. */
+    u32 choices = MANAGE_PER_MODULE * module_count + listed_count, total = setting_total + choices + kept_count;
     store(array, total);
     store(array + 4, 0);
     for (u32 k = 0; k < setting_total; ++k) {
@@ -1135,16 +1156,19 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
         store(entry + 8, setting_values[k]);
     }
     for (u32 i = 0; i < module_count; ++i) {
-        u32 entry = array + 4 * SETTINGS_ENTRY(setting_total + 2 * i);
+        u32 entry = array + 4 * SETTINGS_ENTRY(setting_total + MANAGE_PER_MODULE * i);
         store(entry, manage_id(i, "OFF"));
         store(entry + 4, module_off[i]);
         store(entry + 8, 2);
         store(entry + 12, manage_id(i, "POS"));
         store(entry + 16, module_position[i]);
         store(entry + 20, MANAGE_MODULES + 1);
+        store(entry + 24, manage_id(i, "ROWS"));
+        store(entry + 28, module_rows[i]);
+        store(entry + 32, 1U << MANAGE_OPTION_VALUES);
     }
     for (u32 i = 0; i < listed_count; ++i) {
-        u32 entry = array + 4 * SETTINGS_ENTRY(setting_total + 2 * module_count + i);
+        u32 entry = array + 4 * SETTINGS_ENTRY(setting_total + MANAGE_PER_MODULE * module_count + i);
         store(entry, effect_choice_id(i));
         store(entry + 4, listed_choice[i]);
         store(entry + 8, EFFECT_CHOICE_VALUES);
@@ -1165,7 +1189,7 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
     for (u32 k = 0; k < SERVICES_WORDS; ++k) store(services + 4 * k, 0);
     services_block = services;
     if (!sync_alias(array, list_at - array)) return 21;
-    module_page_count = module_layer_count = module_filter_count = capabilities_used = 0;
+    module_page_count = module_layer_count = module_filter_count = capabilities_used = capabilities_running = 0;
     for (u32 i = 0; i < module_count; ++i) {
         if (!(module_usable >> i & 1) || read_module(i)) continue;
         u32 context = context_at, code_base = code_at, data_base = data_at, data_bytes = module.data_size + module.bss_size;
@@ -1249,6 +1273,14 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
             continue;
         }
         copy(at(code_base), module_code, module.code_size);
+        /* The native settings rows of each page get absolute setting handles
+           (runtime/modules.h): row 0 the page setting, the others settings of
+           the module. */
+        for (u32 k = 0; k < page_count; ++k) {
+            u32 rows = word(pages[k].address + 32), list = word(pages[k].address + 36);
+            for (u32 r = 0; r < rows && pages[k].setting != GRM_NO_SETTING; ++r)
+                store(list + r * 16 + 4, r ? module_handle(i, use_handles, word(list + r * 16 + 4)) : pages[k].setting);
+        }
         copy(at(data_base), module_data, module.data_size);
         zero(at(data_base + module.data_size), module.bss_size);
         if (!sync_alias(code_base, module.code_size)) return 21;
@@ -1261,7 +1293,7 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
             copy(at(icon + ICON_PIXELS), tiles + k * GRM_TILE_BYTES, GRM_TILE_BYTES);
             if (!sync_alias(icon, ICON_STRIDE)) return 21;
         }
-        /* The Modules page shows the title of the first page and tile 0. */
+        /* Module management shows the title of the first page. */
         if (page_count) module_title[i] = word(pages[0].address + 16);
         if (tile_count) module_tile[i] = module_tile_first[i];
         /* The pages in load order, and the layers in painting order: a
@@ -1314,6 +1346,10 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
         /* The patches of the used capabilities and of the menu. */
         needed_points |= points;
         capabilities_used |= capabilities;
+        module_code_from[i] = code_base;
+        module_code_to[i] = code_base + module.code_size;
+        module_capabilities[i] = capabilities;
+        if (!module_off[i]) capabilities_running |= capabilities;
         print("GR_MODULE_LOADED "); print(module.id); print(" "); number(code_base); print("\n");
     }
     /* The module list of the Modules page. */
@@ -1329,6 +1365,9 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
         store(entry + MANAGE_STATUS, status);
         store(entry + MANAGE_TITLE, status ? 0 : module_title[i]);
         store(entry + MANAGE_TILE, status ? MANAGE_NO_TILE : module_tile[i]);
+        store(entry + MANAGE_CODE, status ? 0 : module_code_from[i]);
+        store(entry + MANAGE_CODE_END, status ? 0 : module_code_to[i]);
+        store(entry + MANAGE_USES, status ? 0 : module_capabilities[i]);
         for (const char *p = module_names[i]; *p && *p != '.'; ++p) name[n++] = (u16)(*p >= 'a' && *p <= 'z' ? *p - 32 : *p);
         /* An error shows after the name: "NAME (52)". */
         if (status > MANAGE_OFF) {
@@ -1341,16 +1380,28 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
         while (n < MANAGE_NAME_UNITS) name[n++] = 0;
     }
     if (!sync_alias(list_at, 4 * MANAGE_WORDS(module_count))) return 21;
-    /* The effect list of the Effects page. Installed effect n has record n. */
+    /* The modules that are Off start stopped: the core calls none of their
+       code (SERVICES_SUSPENDED). */
+    {
+        u32 stopped = 0;
+        for (u32 i = 0; i < module_count && stopped < SERVICES_SUSPENDED_MAX; ++i) {
+            if (module_status[i] || !module_off[i]) continue;
+            store(services + SERVICES_SUSPENDED + 4 + 8 * stopped, module_code_from[i]);
+            store(services + SERVICES_SUSPENDED + 8 + 8 * stopped, module_code_to[i]);
+            ++stopped;
+        }
+        store(services + SERVICES_SUSPENDED, stopped);
+    }
+    /* The effect list of the GRKit section of MENU, with the record of each
+       installed effect. */
     effect_list = listed_count ? effects_list : 0;
     store(effects_list + EFFECTS_COUNT, listed_count);
-    store(effects_list + EFFECTS_SETTINGS, setting_total + 2 * module_count);
-    store(effects_list + EFFECTS_OPEN, 0);
-    for (u32 i = 0, record = 0; i < listed_count; ++i) {
+    store(effects_list + EFFECTS_SETTINGS, setting_total + MANAGE_PER_MODULE * module_count);
+    for (u32 i = 0; i < listed_count; ++i) {
         u32 entry = effects_list + EFFECTS_HEADER + i * EFFECTS_STRIDE, n = 0;
         volatile u16 *name = (volatile u16 *)at(entry + EFFECTS_NAME);
         store(entry + EFFECTS_STATUS, listed_status[i]);
-        store(entry + EFFECTS_RECORD, listed_status[i] == EFFECT_LOADED ? record++ : EFFECTS_NO_RECORD);
+        store(entry + EFFECTS_RECORD, listed_record[i]);
         for (; n < 16 && listed[i][48 + n]; ++n) name[n] = listed[i][48 + n];
         while (n < EFFECTS_NAME_UNITS) name[n++] = 0;
     }
@@ -1590,8 +1641,8 @@ static int install(void)
     }
 #endif
 #ifndef GRKIT_NO_MODULES
-    /* The Modules page lists each module, also when none loads, so the menu
-       hooks install with a listed module. */
+    /* The GRKit section of MENU lists each module, also when none loads, so
+       the menu hooks install with a listed module. */
     if (module_count) {
         u32 code = relocated[TAIL_SYMBOL] + TAIL_BYTES;
         if (code + module_code_bytes > RTOS_EXECUTABLE_END) return GRM_NO_ROOM;
@@ -1601,7 +1652,7 @@ static int install(void)
         store(base + GRKIT_HOST_EFFECTS, effect_list);
         store(base + GRKIT_HOST_SERVICES, services_block);
         store(base + GRKIT_HOST_MODULE_SETTINGS, module_array);
-        store(base + GRKIT_HOST_CAPABILITIES, capabilities_used);
+        store(base + GRKIT_HOST_CAPABILITIES, capabilities_running);
         store(base + GRKIT_HOST_MODULE_PAGE_COUNT, module_page_count);
         for (u32 i = 0; i < module_page_count * 3; ++i) store(base + GRKIT_HOST_MODULE_PAGES + i * 4, module_pages[i]);
         store(base + GRKIT_HOST_MODULE_LAYER_COUNT, module_layer_count);
@@ -1753,9 +1804,9 @@ static void write_report(int status)
         say(module_names[i]);
         if (module_source[i]) say(" (GRKIT\\MODULES)");
         u32 result = module_status[i];
-        if (!result && (module_usable >> i & 1)) say("  loaded\r\n");
+        if (!result && (module_usable >> i & 1))
+            say(module_off[i] ? "  loaded, stopped: Enable is Off in the GRKit section of MENU\r\n" : "  loaded\r\n");
         else if (result == MANAGE_SAFE) say("  not loaded: safe mode\r\n");
-        else if (result == MANAGE_OFF) say("  not loaded: Off in the Modules page of GRKit\r\n");
         else {
             say("  not loaded: error "); say_number(result); say(", "); say(module_reason(result));
             say(module_detail[i]); say("\r\n");
@@ -1773,7 +1824,9 @@ static void write_report(int status)
         name[k] = 0;
         say(name); say(" ("); say(names[i]); say(")");
         if (listed_status[i] == EFFECT_LOADED) say("  loaded\r\n");
-        else if (listed_status[i] == EFFECT_OFF) say("  not loaded: Off in the Effects page of GRKit\r\n");
+        else if (listed_status[i] == EFFECT_OFF && listed_record[i] != EFFECTS_NO_RECORD)
+            say("  loaded, hidden: Off in the GRKit section of MENU\r\n");
+        else if (listed_status[i] == EFFECT_OFF) say("  not loaded: Off in the GRKit section of MENU\r\n");
         else if (listed_status[i] == EFFECT_OVER) { say("  not loaded: GRKit installs at most "); say_number(MAX_COUNT); say(" effects\r\n"); }
         else say("  not loaded: the file changed during the start\r\n");
     }

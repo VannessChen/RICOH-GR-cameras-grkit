@@ -5,6 +5,7 @@
 #include "grkit_module.h"
 
 void guides_paint(const Surface *s, u32 style);
+void guides_paint_always(const Surface *s, u32 style);
 
 static const u16 full[4] = {0, 0, 720, 480};
 
@@ -14,10 +15,12 @@ static int on_line(u32 value, u32 line) { return value == line - 1 || value == l
 int main(void)
 {
     Surface s = grkit_test_surface(full);
-    /* The descriptor: the STYLE setting with 6 values, a page and a layer. */
-    assert(grkit_module.setting_count == 1 && grkit_module.settings[0].values == 6);
-    assert(grkit_module.registration_count == 2 && grkit_module.tile_count == 6);
-    assert(SETTING_STYLE == 0);
+    /* The descriptor: STYLE with 6 values, COLOR, OPACITY, and DISP, a page
+       with their settings rows, and the two layers. */
+    assert(grkit_module.setting_count == 4 && grkit_module.settings[0].values == 6);
+    assert(grkit_module.registration_count == 3 && grkit_module.tile_count == 6);
+    assert(SETTING_STYLE == GRKIT_SETTING(0) && SETTING_COLOR == GRKIT_SETTING(1) &&
+           SETTING_OPACITY == GRKIT_SETTING(2) && SETTING_DISP == GRKIT_SETTING(3));
     /* Thirds: lines at 240, 480 and 160, 320, black at 50% alpha. */
     grkit_test_clear();
     guides_paint(&s, 1);
@@ -38,6 +41,30 @@ int main(void)
     guides_paint(&s, 4);
     assert(grkit_test_pixel(0, 0) == 0x80000000U && grkit_test_pixel(719, 478) == 0x80000000U);
     assert(grkit_test_pixel(719, 0) == 0x80000000U && grkit_test_pixel(0, 478) == 0x80000000U);
+    /* White at 100%, and yellow at 50%. */
+    grkit_test_settings[SETTING_COLOR] = 1;
+    grkit_test_settings[SETTING_OPACITY] = 1;
+    grkit_test_clear();
+    guides_paint(&s, 1);
+    assert(grkit_test_pixel(240, 0) == 0xffffffffU);
+    grkit_test_settings[SETTING_COLOR] = 2;
+    grkit_test_settings[SETTING_OPACITY] = 0;
+    grkit_test_clear();
+    guides_paint(&s, 1);
+    /* Red in the low byte: the native yellow is red ff, green e1, blue 00. */
+    assert(grkit_test_pixel(240, 0) == 0x8000e1ffU);
+    grkit_test_settings[SETTING_COLOR] = 0;
+    /* DISP 0: only the layer that follows DISP paints; DISP 1: only the
+       other one. */
+    grkit_test_clear();
+    guides_paint_always(&s, 1);
+    assert(grkit_test_pixel(240, 0) == GRKIT_TEST_CLEAR);
+    grkit_test_settings[SETTING_DISP] = 1;
+    guides_paint(&s, 1);
+    assert(grkit_test_pixel(240, 0) == GRKIT_TEST_CLEAR);
+    guides_paint_always(&s, 1);
+    assert(grkit_test_pixel(240, 0) == 0x80000000U);
+    grkit_test_settings[SETTING_DISP] = 0;
     /* An unknown style draws nothing. */
     grkit_test_clear();
     guides_paint(&s, 6);

@@ -13,7 +13,7 @@ The official modules in `modules/` are complete examples:
 | `modules/framing` | a page and two layers of a capability, `CORE.ASPECT` |
 | `modules/date` | two settings, a page with a native settings page, and a plane filter |
 | `modules/grain` | a module with only data: a page of `CORE.GRAIN` |
-| `modules/image-control` | a page of `CORE.TONE`, whose rows the core gives |
+| `modules/film-look` | a page of `CORE.TONE`, whose rows the core gives |
 
 ## Prerequisites
 
@@ -147,13 +147,13 @@ title = "Guides"
 rows = ["Off", "Thirds", "Center", "Golden Ratio", "Diagonals", "Thirds + Center"]
 ```
 
-- `title` is the name of the page. The Modules page also shows it as the name of the module.
+- `title` is the name of the page. The GRKit section of MENU also shows it as the name of the module.
 - `rows` has one label for each value of the page setting.
 - `summaries` is optional. It gives a shorter value for the root row, which shows `<title><separator><value>`.
 
 A page with a native settings page also gives the text of each row in `[settings.<KEY>]`. See `modules/date/text/en.toml`.
 
-The tiles are 40 x 40 PNG files. Tile n shows value n of the page setting. Tile 0 is also the module tile: the root shows it at value 0, and the Modules page shows it next to the module. A choice page needs one tile for each value.
+The tiles are 40 x 40 PNG files. Tile n shows value n of the page setting. Tile 0 is also the module tile: the root shows it at value 0. A choice page needs one tile for each value.
 
 ## Write the C code
 
@@ -248,7 +248,7 @@ A test uses these parts of the harness:
 | `grkit_test_clear()`, `grkit_test_pixel(x, y)`, `GRKIT_TEST_CLEAR` | clear the surface, and read a pixel after a paint |
 | `GRKIT_TEST_PLANES`, `GRKIT_TEST_PLANE_BYTES`, `GRKIT_BYTES(address)` | plane memory for a `PictureSet` |
 | `grkit_test_scratch` | the scratch of a `PictureSet` |
-| `grkit_test_settings[handle]` | the value of each setting. Handle n is setting n of the module. |
+| `grkit_test_settings[SETTING_<KEY>]` | the value of each setting of the module. `SETTING_<KEY>` is already a handle: pass it to `setting_get` as it is. The harness starts the handles above 0, as the camera does. |
 | `grkit_test_time` | the time that `local_time` gives |
 | `grkit_test_labels`, `grkit_test_label` | the number of `overlay_label` calls, and the label, left, and top of the last one |
 | `grkit_test_timers`, `grkit_test_fire_timers()` | the number of started timers, and a call of each timer, as the App task would |
@@ -327,15 +327,22 @@ To remove a module, delete its file from `GRKIT/MODULES`. The state file keeps i
 
 ## Turn a module on or off, or move it
 
-The Modules page in the GRKit menu lists each module file of the package and of `GRKIT/MODULES`, also a module that did not load. It shows the error number after the name of such a module, such as `HELLO (55)`.
+The **GRKit** section at the end of the Customize tab of the native MENU has a row for each module file of the package and of `GRKIT/MODULES`, also a module that did not load. A module that did not load shows the error number after its name, such as `HELLO (55)`.
 
-1. Open the GRKit entry in ADJ, and select **Modules**.
-2. Select the module, and push OK.
-3. Set **Load** to On or Off.
-4. Set **Position** to the row of the module in the GRKit root.
-5. Power off the camera, and power it on again.
+To turn a module on or off:
 
-A change applies at the next power-on. Until then, the root row of the Modules page says to restart. A module that is Off does not load, and its saved settings stay in the state file.
+1. Push MENU, and open the Customize tab.
+2. Select the row of the module in the GRKit section, and push Right.
+3. Select **Enable**, then **On** or **Off**. Push OK.
+4. Power off the camera, and power it on again.
+
+To move the page of a module in the GRKit root of ADJ:
+
+1. Select the **ADJ Order** row in the GRKit section, and push Right.
+2. Select the module, and push Right.
+3. Select its new position. Push OK.
+
+Enable and the order apply at once. A module that is Off stops: its page leaves ADJ, and its code does not run. Its saved settings stay in the state file. A module that you add to `GRKIT/MODULES` loads at the next power-on; until then, the About GRKit row says to restart.
 
 ## If the camera stops at power-on
 
@@ -344,9 +351,9 @@ A module can stop the camera. GRKit then starts in the safe mode, in which no mo
 - After three starts in a row that did not finish, the safe mode starts by itself.
 - To start the safe mode yourself, put an empty file `GRKIT/SAFE` on the card.
 
-In the safe mode, `REPORT.TXT` says why no module loads, and the Modules page stays available.
+In the safe mode, `REPORT.TXT` says why no module loads, and the GRKit section of MENU stays available.
 
-1. Delete the module that you added last from `GRKIT/MODULES`, or set its **Load** to Off on the Modules page.
+1. Delete the module that you added last from `GRKIT/MODULES`, or set its **Enable** to **Off** in the GRKit section of MENU.
 2. If you made `GRKIT/SAFE`, delete it.
 3. Power on the camera.
 

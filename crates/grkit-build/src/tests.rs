@@ -542,8 +542,11 @@ fn synthetic_arm_hooks_match_the_target_tables() -> Result<()> {
     // The regions of GR III, independent of the layout methods.
     let gr3 = target::GR3_210.layout.unwrap();
     assert_eq!(gr3.processing(), (0x540b6100, 0x540b6500));
-    assert_eq!(gr3.menu(), (0x540b6500, 0x540bb400));
-    assert_eq!(gr3.framing(), (0x540bb400, 0x540c2000));
+    assert_eq!(gr3.menu(), (0x540b6500, 0x540c2000));
+    // Framing starts after the menu code, at the next 256-byte boundary.
+    assert_eq!(gr3.framing(0x540bb3f4), (0x540bb400, 0x540c2000));
+    assert_eq!(gr3.framing(0x540bb400), (0x540bb400, 0x540c2000));
+    assert_eq!(gr3.framing(0), (0x540b6500, 0x540c2000));
     for target in SYNTHETIC_TARGETS {
         synthetic_hooks(target, &tools)?;
     }
@@ -559,7 +562,8 @@ fn synthetic_hooks(target: &'static target::Target, tools: &Toolchain) -> Result
     let layout = target.layout.unwrap();
     let processing = components::processing(directory.path(), &runtime, &body, tools)?;
     let menu = components::menu(directory.path(), &runtime, &body, tools)?;
-    let framing = components::framing(directory.path(), &runtime, &body, tools)?;
+    let menu_end = menu.patches[0].address + menu.code_size as u32;
+    let framing = components::framing(directory.path(), &runtime, &body, tools, menu_end)?;
 
     // Reject changes to the widget's input and output context, not just its BL.
     let &(widget, stock) = layout.contexts.last().unwrap();
@@ -593,7 +597,7 @@ fn synthetic_hooks(target: &'static target::Target, tools: &Toolchain) -> Result
         (
             &framing,
             components::Part::Framing,
-            layout.framing(),
+            layout.framing(menu_end),
             layout.framing_patches,
         ),
     ] {
@@ -975,7 +979,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
     assert_eq!(
         sha256(header.as_bytes()),
-        "69859393d3f197271d7ae5c2d81f7ff43cf8085f2fbb5308373feb5e733ca180"
+        "0b2d623d42bc81ff308eccae8d38b5bcdc60815b2016c5ce36d62c977fb3f28e"
     );
     Ok(())
 }
@@ -1020,20 +1024,30 @@ fn every_code_region_lies_in_the_tail() {
             "{}",
             target.name
         );
-        let mut regions = vec![layout.menu(), layout.framing()];
-        if target.family.processing_source.is_some() {
-            regions.push(layout.processing());
-        }
-        regions.sort();
+        // The processing region, then the menu, then Framing after the menu
+        // code, which shares the menu region.
+        let (menu_start, menu_stop) = layout.menu();
         let mut next = tail;
-        for (start, stop) in regions {
+        if target.family.processing_source.is_some() {
+            let (start, stop) = layout.processing();
             assert!(
-                start >= next && start < stop && stop <= end,
+                start >= next && start < stop && stop <= menu_start,
                 "{}",
                 target.name
             );
             next = stop;
         }
+        assert!(
+            menu_start >= next && menu_start < menu_stop && menu_stop == end,
+            "{}",
+            target.name
+        );
+        let (start, stop) = layout.framing(menu_start + 0x10);
+        assert!(
+            start > menu_start && start % 0x100 == 0 && stop == end,
+            "{}",
+            target.name
+        );
     }
 }
 
@@ -1063,7 +1077,7 @@ fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
     ));
     assert!(header.contains("static const u32 core_setting_points[] = {0x12,0xc,0x20};"));
     assert!(header.contains(
-        "static const char *const official_modules[] = {\"IMGCTL.GRM\",\"FRAMING.GRM\",\"GUIDES.GRM\",\"DATE.GRM\",\"GRAIN.GRM\"};"
+        "static const char *const official_modules[] = {\"FILMLOOK.GRM\",\"FRAMING.GRM\",\"GUIDES.GRM\",\"DATE.GRM\",\"GRAIN.GRM\"};"
     ));
     Ok(())
 }

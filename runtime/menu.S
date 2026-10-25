@@ -526,11 +526,37 @@ menu_settings_change:
     push {r0-r3, r12, lr}
     mov r0, r1
     bl menu_settings_controller
-    /* The C function gives the controller to change to, in r1. */
+    /* The C function gives the controller to change to, in r1, or 0: no
+       change happens. */
+    cmp r0, #0
+    beq 1f
     str r0, [sp, #4]
     pop {r0-r3, r12, lr}
     .inst HOOK_MENU_SETTINGS_CHANGE_STOCK
     ldr pc, =HOOK_MENU_SETTINGS_CHANGE_RESUME
+1:
+    pop {r0-r3, r12, lr}
+    bx lr
+
+#ifdef HOOK_MENU_INFO_UPDATE
+/* The update of the camera information page (menu.c: menu_info_fill). The
+   entry hook keeps r0 (the controller) and lr, and returns into
+   menu_info_after: the stock prologue copies sp, so its epilogue restores
+   this frame and returns here. */
+.global menu_info_update
+.type menu_info_update, %function
+menu_info_update:
+    push {r0, lr}
+    ldr lr, =menu_info_after
+    .inst HOOK_MENU_INFO_UPDATE_STOCK
+    ldr pc, =HOOK_MENU_INFO_UPDATE_RESUME
+menu_info_after:
+    pop {r0, lr}
+    push {r4, lr}
+    bl menu_info_fill
+    pop {r4, pc}
+.ltorg
+#endif
 
 /* Each replaces the MOVT of the submenu kind table base with a BL, after the
    function has saved lr. The register gets the whole base. Other registers and
@@ -566,6 +592,42 @@ SETTINGS_KINDS_SAVED menu_settings_kinds_r2, 2
 SETTINGS_KINDS_REGISTER menu_settings_kinds_r8, r8
 SETTINGS_KINDS_REGISTER menu_settings_kinds_r5, r5
 SETTINGS_KINDS_SAVED menu_settings_kinds_r3_1, 3
+
+/* The submenu has six row views instead of five (SETTING_ROWS): each native
+   submenu has five rows or fewer, and a GRKit settings page has six. Its
+   constructor builds the list from five row types on the stack: the stub
+   replaces the store of the fifth, stores a sixth after it (the stack guard
+   follows at fp - 0x18), and sets the count. */
+.global menu_settings_build
+.type menu_settings_build, %function
+menu_settings_build:
+    strb ip, [fp, #-0x1c]
+    strb ip, [fp, #-0x1b]
+    mov r2, #6
+    bx lr
+/* The draw hides the rows from the row count to the last view, the sixth:
+   the two compares with the last row. */
+.global menu_settings_hide_first
+.type menu_settings_hide_first, %function
+menu_settings_hide_first:
+    cmp r7, #5
+    bx lr
+.global menu_settings_hide_next
+.type menu_settings_hide_next, %function
+menu_settings_hide_next:
+    cmp r4, #5
+    bx lr
+/* The kind of row r4 from the kind table (r8 its base, r3 the word index of
+   the kind). The entry has room for the kinds of five rows: the sixth takes
+   the kind of the first, whose word index is r3 - r4. */
+.global menu_settings_row_kind
+.type menu_settings_row_kind, %function
+menu_settings_row_kind:
+    cmp r4, #5
+    ldrlo r1, [r8, r3, lsl #2]
+    subhs r1, r3, r4
+    ldrhs r1, [r8, r1, lsl #2]
+    bx lr
 
 /* The entry of a value page method: r0 is the page, r1 and r2 the arguments.
    The C function gets r1, r2, and the row of the setting. It returns 0 for

@@ -16,8 +16,8 @@ The [README](README.md#build-from-source) builds a GR III package. For other pac
 - GR IIIx: package with `--camera gr3x` and `--guide build/guides/gr3x/en.pdf`. The runtime is the same as for GR III.
 - HDF models: package for the base camera, for example `--camera gr3` for GR III HDF.
 - GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4` and `--guide build/guides/gr4/en.pdf`.
-- GR IV Monochrome: package as for GR IV, without the Image Control module (`IMGCTL.GRM`) and without `--effects`.
-- Fewer modules: give `--module` only for the modules to install. Effects need the Image Control module.
+- GR IV Monochrome: package as for GR IV, without the Film Look module (`FILMLOOK.GRM`) and without `--effects`.
+- Fewer modules: give `--module` only for the modules to install. Effects need the Film Look module.
 - Guide language: add `--language zh-Hans`, `--language zh-Hant`, or `--language ja`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
 
 ## Test

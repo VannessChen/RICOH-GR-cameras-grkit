@@ -95,7 +95,7 @@ const HOOKS: &[HookSpec] = &[
     bl("menu_parameter_row_7", Menu, Tuning),
     bl("menu_parameter_row_8", Menu, Tuning),
     // A GRKit root row opens a borrowed native MENU submenu as its settings
-    // page (`runtime/menu.c`, `Module.settings`). The Instant Review submenu
+    // page (`runtime/menu_settings.h`, `Module.settings`). The Instant Review submenu
     // shows the rows, and the Display Time and Zoom Review value pages show
     // the values of the two settings. ChangeController (its entry) ends the
     // session at any other controller. The five MOVT of the submenu kind
@@ -103,11 +103,20 @@ const HOOKS: &[HookSpec] = &[
     // Then the row count, row text, apply, and current-value methods of the
     // two value pages.
     b("menu_settings_change", Menu, MenuPage),
+    // The update of the camera information page, which About GRKit shows.
+    b("menu_info_update", Menu, MenuPage),
     bl("menu_settings_kinds_r3_0", Menu, MenuPage),
     bl("menu_settings_kinds_r2", Menu, MenuPage),
     bl("menu_settings_kinds_r8", Menu, MenuPage),
     bl("menu_settings_kinds_r5", Menu, MenuPage),
     bl("menu_settings_kinds_r3_1", Menu, MenuPage),
+    // The submenu shows six rows (`runtime/menu.S`): the store of the fifth
+    // row type in its constructor, the two compares of the rows to hide, and
+    // the load of the row kind in its draw.
+    bl("menu_settings_build", Menu, MenuPage),
+    bl("menu_settings_hide_first", Menu, MenuPage),
+    bl("menu_settings_hide_next", Menu, MenuPage),
+    bl("menu_settings_row_kind", Menu, MenuPage),
     b("menu_settings_count_0", Menu, MenuPage),
     b("menu_settings_draw_0", Menu, MenuPage),
     b("menu_settings_apply_0", Menu, MenuPage),

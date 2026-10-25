@@ -294,10 +294,10 @@ export function App() {
                     <span className="module-description">
                       {t.modulesText[module.key]}
                     </span>
-                    {module.key === 'imageControl' &&
-                      enabled.has('imageControl') &&
+                    {module.key === 'filmLook' &&
+                      enabled.has('filmLook') &&
                       selection?.size === 0 && (
-                        <span className="module-warning">{t.imageControlEmpty}</span>
+                        <span className="module-warning">{t.filmLookEmpty}</span>
                       )}
                   </span>
                   <a
@@ -316,7 +316,7 @@ export function App() {
 
         <section className="section" aria-labelledby="effects-label" ref={prefetchInView}>
           <h2 id="effects-label">{t.effects}</h2>
-          {!available.includes('imageControl') ? (
+          {!available.includes('filmLook') ? (
             <p className="status section-body">{t.effectsUnavailable(camera.name)}</p>
           ) : plan.includeEffects ? (
             <ErrorBoundary

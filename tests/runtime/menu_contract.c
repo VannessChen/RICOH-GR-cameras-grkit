@@ -38,9 +38,10 @@ static unsigned *page_at(unsigned address)
 #define PAGE_WORD(p,o) (*page_at((p)+(o)))
 #define TEST_SETTINGS 0x5f000000U
 /* Three module settings, the Off and Position settings of three listed
-   modules (runtime/manage.h), then the choices of three listed effects
-   (runtime/effects.h). */
-static unsigned settings_memory[2 + 3 * 12];
+   modules (runtime/manage.h), the choices of three listed effects
+   (runtime/effects.h), then COLOR, OPACITY, and DISP of Guides for the MENU
+   page tests. */
+static unsigned settings_memory[2 + 3 * 18];
 static volatile unsigned *mapped_settings(unsigned address)
 {
     assert(address == TEST_SETTINGS);
@@ -53,7 +54,7 @@ static volatile unsigned *mapped_settings(unsigned address)
 #define TEST_EFFECTS (TEST_MANAGE + 0x100U)
 static unsigned manage_memory[(0x100 + 12 + 3 * 44) / 4];
 /* The module list: the header, then module i at word MANAGE_ENTRY(i). */
-#define MANAGE_ENTRY(i) (4 + (i) * 11)
+#define MANAGE_ENTRY(i) (4 + (i) * 14)
 static volatile unsigned *mapped_manage(unsigned address)
 {
     assert(address >= TEST_MANAGE && address < TEST_MANAGE + sizeof(manage_memory) && !(address & 3));
@@ -65,7 +66,49 @@ static volatile unsigned *mapped_manage(unsigned address)
 #define GUIDE_STYLE settings_memory[3]
 #define DATE_STYLE settings_memory[6]
 #define DATE_LOOK settings_memory[9]
+/* The services block of the core (runtime/services.h). */
+#define TEST_SERVICES 0x5c000000U
+static unsigned services_memory[0x4000];
+static volatile unsigned *mapped_services(unsigned address)
+{
+    assert(address >= TEST_SERVICES && address < TEST_SERVICES + sizeof(services_memory) && !(address & 3));
+    return &services_memory[(address - TEST_SERVICES) / 4];
+}
+#define SERVICES_MAP(address) mapped_services(address)
+/* The firmware objects that the MENU pages read: rows and controllers at
+   TEST_OBJECTS, and the stock submenu kind table at its firmware address. */
+#define TEST_OBJECTS 0x5b000000U
+static unsigned object_memory[0x1000];
+static unsigned stock_kinds[17 * 0x64 / 4];
+static unsigned *object_at(unsigned address);
+#define MENU_OBJECT_WORD(a,o) (*object_at((a)+(o)))
+/* The firmware view calls of the MENU pages: the function of each, in order.
+   A string view measures 0 wide. */
+static unsigned view_calls, view_functions[16];
+static unsigned view_record(unsigned fn, unsigned a, unsigned b, unsigned c)
+{
+    (void)a; (void)b; (void)c;
+    if (view_calls < 16) view_functions[view_calls] = fn;
+    ++view_calls;
+    return 0;
+}
+static int view_called(unsigned fn)
+{
+    for (unsigned i = 0; i < view_calls && i < 16; ++i) if (view_functions[i] == fn) return 1;
+    return 0;
+}
+#define MENU_VIEW1(fn,a) view_record((fn), (a), 0, 0)
+#define MENU_VIEW2(fn,a,b) view_record((fn), (a), (b), 0)
+#define MENU_VIEW3(fn,a,b,c) view_record((fn), (a), (b), (c))
 #include "menu.c"
+_Static_assert(SERVICES_SIZE <= sizeof(services_memory), "The test maps the services block");
+static unsigned *object_at(unsigned address)
+{
+    if (address >= FW_SUBMENU_KINDS && address < FW_SUBMENU_KINDS + sizeof(stock_kinds))
+        return &stock_kinds[(address - FW_SUBMENU_KINDS) / 4];
+    assert(address >= TEST_OBJECTS && address < TEST_OBJECTS + sizeof(object_memory) && !(address & 3));
+    return &object_memory[(address - TEST_OBJECTS) / 4];
+}
 /* The page of module i (runtime/modules.h). */
 #define MODULE(i) (*module_at(test_header, (i)))
 /* XPan, a crop on every camera. */
@@ -158,7 +201,34 @@ static void install_setting_rows(u32 slot)
     *page_at(page + PAGE_SETTING_LIST) = rows;
     for (u32 r = 0; r < 2; ++r) {
         *page_at(rows + r * 16) = 16;
-        *page_at(rows + r * 16 + ROW_SETTING) = r;
+        /* INSTALL writes the handle of each row: STYLE is handle 1. */
+        *page_at(rows + r * 16 + ROW_SETTING) = r + 1;
+        *page_at(rows + r * 16 + ROW_LABEL) = texts;
+        for (u32 language = 0; language < 4; ++language) *page_at(texts + language * 4) = page_text(labels[r]);
+        texts += 16;
+        *page_at(rows + r * 16 + ROW_VALUES) = texts;
+        for (u32 value = 0; value < counts[r]; ++value)
+            for (u32 language = 0; language < 4; ++language)
+                *page_at(texts + (value * 4 + language) * 4) = page_text(values[r][value]);
+        texts += counts[r] * 16;
+    }
+    assert(texts <= page + TEST_PAGE_SIZE);
+}
+/* The settings rows of Guides, as modules/guides has them: STYLE (handle 0),
+   COLOR (15), OPACITY (16), and DISP (17). */
+static void install_guide_rows(u32 slot)
+{
+    u32 page = TEST_PAGE + slot * TEST_PAGE_SIZE, rows = page + 0x200, texts = rows + 64;
+    static const char *const colors[] = {"Black", "White", "Yellow"}, *const opacities[] = {"50%", "100%"},
+                             *const disp[] = {"On", "Off"};
+    const char *const labels[4] = {"Style", "Color", "Opacity", "Hide with DISP"};
+    const char *const *values[4] = {guide_names, colors, opacities, disp};
+    const u32 counts[4] = {6, 3, 2, 2}, handles[4] = {0, 15, 16, 17};
+    *page_at(page + PAGE_SETTING_ROWS) = 4;
+    *page_at(page + PAGE_SETTING_LIST) = rows;
+    for (u32 r = 0; r < 4; ++r) {
+        *page_at(rows + r * 16) = 16;
+        *page_at(rows + r * 16 + ROW_SETTING) = handles[r];
         *page_at(rows + r * 16 + ROW_LABEL) = texts;
         for (u32 language = 0; language < 4; ++language) *page_at(texts + language * 4) = page_text(labels[r]);
         texts += 16;
@@ -171,13 +241,13 @@ static void install_setting_rows(u32 slot)
     assert(texts <= page + TEST_PAGE_SIZE);
 }
 /* The official modules (modules/), as INSTALL registers them in their root
-   order: Image Control, a page of CORE.TONE with rows from the core;
+   order: Film Look, a page of CORE.TONE with rows from the core;
    Framing, a page and layers of CORE.ASPECT; Guides, its STYLE setting and
    a layer; Date Imprint, its STYLE and LOOK settings, a page with native
    settings rows, and a filter; Grain, a page of CORE.GRAIN. */
 static void install_modules(void)
 {
-    install_page(0, "Image Control", 0, 0, GRKIT_CORE_TONE, 0);
+    install_page(0, "Film Look", 0, 0, GRKIT_CORE_TONE, 0);
     install_page(1, "Framing", ratio_values, 7, GRKIT_CORE_ASPECT, 0);
     install_page(2, "Guides", guide_names, 6, 0, 7);
     install_page(3, "Date Imprint", stamp_names, 6, 1, 13);
@@ -240,8 +310,8 @@ int main(void)
     test_header[GRKIT_HOST_RECORDS / 4] = 0x59005000;
     assert(selected_icon(test_header) == 0x7fff);
     descriptor(slot, MODULE(0).summary(test_header));
-    assert(same(MODULE(0).summary(test_header), "Image Control: Off") && slot[0] == 0x113);
-    assert(same(MODULE(0).title(test_header), "Image Control"));
+    assert(same(MODULE(0).summary(test_header), "Film Look: Off") && slot[0] == 0x10f);
+    assert(same(MODULE(0).title(test_header), "Film Look"));
     /* Each language reads its own strings, and an unknown language reads English. */
     for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES + 2; ++language) {
         u32 table = language < GRKIT_TEXT_LANGUAGES ? language : 0;
@@ -250,7 +320,7 @@ int main(void)
             assert(text(test_header, id) == text_arena + text_arena[table * GRKIT_TEXT_STRINGS + id] / 2);
     }
     test_language = 2;
-    assert(!same(text(test_header, TEXT_IMAGE_OFF_SUMMARY), "Image Control: Off"));
+    assert(!same(text(test_header, TEXT_IMAGE_OFF_SUMMARY), "Film Look: Off"));
     /* The text hooks select the font of the text language. */
     assert(menu_table_index() == 18);
     test_language = 1;
@@ -277,7 +347,7 @@ int main(void)
     test_header[GRKIT_HOST_ACTIVE / 4] += 4;
     assert(menu_viewfinder_icon_select(0x167, 0) == 0x167);
     test_header[GRKIT_HOST_ACTIVE / 4] = 0;
-    /* Fn and its hint apply to effect rows of Image Control only. */
+    /* Fn and its hint apply to effect rows of Film Look only. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
     assert(!parameters_row(test_header));
@@ -288,7 +358,7 @@ int main(void)
     test_header[GRKIT_HOST_MODULE / 4] = 0;
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
     assert(!parameters_row(test_header));
-    /* On the root, Fn applies to the Image Control row while an effect is
+    /* On the root, Fn applies to the Film Look row while an effect is
        committed. Off and the rows of other modules have no parameters. */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
     assert(!parameters_row(test_header));
@@ -414,10 +484,11 @@ int main(void)
     assert(exit_return(RETURN_OPENING | RETURN_ROOT, 0) == (RETURN_PARAMETERS | RETURN_ROOT));
     assert(exit_return(RETURN_PARAMETERS | RETURN_ROOT, 0) == 0);
     assert(RETURN_STATE(RETURN_PARAMETERS | RETURN_ROOT) == RETURN_PARAMETERS);
-    /* The root lists the five official modules, then About. Without effects,
-       the page of Image Control does not show. */
+    /* The root lists the five official modules. Module management and the
+       version are in the native MENU. Without effects, the page of Image
+       Control does not show. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = 1;
-    assert(count(test_header) == 6);
+    assert(count(test_header) == 5);
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = 2;
     assert(count(test_header) == 6);
     test_header[GRKIT_HOST_COUNT / 4] = 0;
@@ -720,7 +791,7 @@ int main(void)
     /* Pages start at multiples of PAGE for every supported catalog row. */
     for (u32 row = 0; row <= 146; ++row) assert(page_start(row) == row / PAGE * PAGE);
 
-    /* Image Control opens at the committed row. */
+    /* Film Look opens at the committed row. */
     test_header[GRKIT_HOST_PREVIEW / 4] = 0;
     test_header[GRKIT_HOST_ACTIVE / 4] = 0x59005000 + 3 * GRKIT_RECORD_SIZE;
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
@@ -755,7 +826,7 @@ int main(void)
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0);
     assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0);
-    /* Off opens Image Control at the Off row. */
+    /* Off opens Film Look at the Off row. */
     assert(menu_back(test_header));
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
@@ -768,24 +839,13 @@ int main(void)
     highlight(test_header);
     assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0);
 
-    /* About is the last root row. Its summary gives the version, and OK on it
-       opens no page and changes nothing. */
+    /* With module pages, the root has no About row: the version is in the
+       native MENU. */
     test_header[GRKIT_HOST_COUNT / 4] = 5;
     test_header[GRKIT_HOST_PREVIEW / 4] = 0;
     menu_start(test_header);
-    assert(count(test_header) == 6 && root_module(test_header, 5) == ABOUT_MODULE);
-    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 5;
-    assert(same(current_module(test_header)->summary(test_header), "Version 0.0.0"));
-    assert(PAGE_ICON(ABOUT_MODULE, 5) == GRKIT_ICON_VERSION);
-    {
-        u32 active = test_header[GRKIT_HOST_ACTIVE / 4], requests = framing_requests;
-        highlight(test_header);
-        menu_confirm(test_header);
-        assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 5);
-        assert(test_header[GRKIT_HOST_ACTIVE / 4] == active && framing_requests == requests);
-        assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0 && !parameters_row(test_header));
-        assert(!menu_back(test_header));
-    }
+    assert(count(test_header) == 5 && !(visible_modules(test_header) >> ABOUT_MODULE & 1));
+    assert(same(MODULE(ABOUT_MODULE).summary(test_header), "Version 0.0.0"));
     /* An About page cannot stay open: it has no rows. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
     test_header[GRKIT_HOST_MODULE / 4] = ABOUT_MODULE;
@@ -798,7 +858,7 @@ int main(void)
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 0;
     test_header[GRKIT_HOST_MODULE_PAGE_COUNT / 4] = 3;
     menu_start(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0 && count(test_header) == 4);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0 && count(test_header) == 3);
     assert(current_module(test_header) == &MODULE(IMAGE_MODULE));
     assert(root_module(test_header, 1) == FRAMING_MODULE);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
@@ -811,7 +871,6 @@ int main(void)
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MODULE / 4] == GUIDES_MODULE);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2);
-    assert(root_module(test_header, 3) == ABOUT_MODULE);
     /* The page of a module page that is gone does not stay open. */
     test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
     test_header[GRKIT_HOST_MODULE / 4] = DATE_MODULE;
@@ -822,12 +881,12 @@ int main(void)
     menu_normalize(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     test_header[GRKIT_HOST_MODULE_PAGE_COUNT / 4] = ALL_PAGES;
-    /* Without effects, the page of Image Control does not show. */
+    /* Without effects, the page of Film Look does not show. */
     test_header[GRKIT_HOST_COUNT / 4] = 0;
     assert(visible_modules(test_header) == (1U << FRAMING_MODULE | 1U << GUIDES_MODULE | 1U << DATE_MODULE |
-                                            1U << GRAIN_MODULE | 1U << ABOUT_MODULE));
+                                            1U << GRAIN_MODULE));
     menu_start(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 5);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 4);
     assert(root_module(test_header, 0) == FRAMING_MODULE);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
     menu_confirm(test_header);
@@ -847,13 +906,13 @@ int main(void)
     assert(current_module(test_header) == &MODULE(ABOUT_MODULE));
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && !menu_back(test_header));
-    /* Image Control alone keeps the root level. Its page opens at the committed
+    /* Film Look alone keeps the root level. Its page opens at the committed
        effect, where Fn applies. */
     test_header[GRKIT_HOST_MODULE_PAGE_COUNT / 4] = 1;
     test_header[GRKIT_HOST_COUNT / 4] = 5;
     test_header[GRKIT_HOST_ACTIVE / 4] = 0x59005000 + 2 * GRKIT_RECORD_SIZE;
     menu_start(test_header);
-    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 2);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && count(test_header) == 1);
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == IMAGE_MODULE);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 3 && parameters_row(test_header));
@@ -872,7 +931,7 @@ int main(void)
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == GRAIN_ROW);
     test_header[GRKIT_HOST_MODULE / 4] = ABOUT_MODULE;
     menu_reopen(test_header);
-    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == count(test_header) - 1);
+    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
     test_header[GRKIT_HOST_MODULE / 4] = GUIDES_MODULE;
     menu_reopen(test_header);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == GUIDES_ROW);
@@ -888,7 +947,7 @@ int main(void)
     /* The settings page of Date Imprint: the date style, then the look. Only
        Date Imprint has one. */
     for (u32 module = 0; module < MODULE_TOTAL; ++module)
-        assert(!MODULE(module).settings == (module != DATE_MODULE && module != MANAGE_MODULE && module != EFFECTS_MODULE));
+        assert(!MODULE(module).settings == (module != DATE_MODULE && module != MANAGE_MODULE));
     {
         const Setting *page = MODULE(DATE_MODULE).settings;
         volatile u32 *block = settings_block(test_header);
@@ -953,22 +1012,24 @@ int main(void)
         DATE_LOOK = 0;
     }
 
-    /* The Modules page lists Guides and Date Imprint, which loaded, and a
+    /* The module list holds Guides and Date Imprint, which loaded, and a
        module that did not link. Its settings follow the three module
-       settings. */
+       settings: CORE.OFF, CORE.POS, and CORE.ROWS of each. */
     {
-        _Static_assert(MANAGE_STRIDE == 44 && MANAGE_HEADER == 16, "The test list matches manage.h");
+        _Static_assert(MANAGE_STRIDE == 56 && MANAGE_HEADER == 16, "The test list matches manage.h");
         const u32 roots = count(test_header);
         const Setting *page;
         u32 entry;
         test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
         assert(!(visible_modules(test_header) >> MANAGE_MODULE & 1));
-        settings_memory[0] = 9;
+        settings_memory[0] = 12;
         for (u32 i = 0; i < 3; ++i) {
-            settings_memory[2 + (3 + 2 * i) * 3 + 1] = 0;
-            settings_memory[2 + (3 + 2 * i) * 3 + 2] = 2;
-            settings_memory[2 + (4 + 2 * i) * 3 + 1] = 0;
-            settings_memory[2 + (4 + 2 * i) * 3 + 2] = MANAGE_MODULES + 1;
+            settings_memory[2 + (3 + 3 * i) * 3 + 1] = 0;
+            settings_memory[2 + (3 + 3 * i) * 3 + 2] = 2;
+            settings_memory[2 + (4 + 3 * i) * 3 + 1] = 0;
+            settings_memory[2 + (4 + 3 * i) * 3 + 2] = MANAGE_MODULES + 1;
+            settings_memory[2 + (5 + 3 * i) * 3 + 1] = 0;
+            settings_memory[2 + (5 + 3 * i) * 3 + 2] = 1U << MANAGE_OPTION_VALUES;
         }
         memset(manage_memory, 0, sizeof(manage_memory));
         manage_memory[0] = 3;
@@ -977,91 +1038,154 @@ int main(void)
         manage_memory[entry] = MANAGE_LOADED;
         manage_memory[entry + 1] = TEST_PAGE + 2 * TEST_PAGE_SIZE + 0x28;
         manage_memory[entry + 2] = 7;
-        entry += 11;
+        entry += 14;
         manage_memory[entry] = MANAGE_LOADED;
         manage_memory[entry + 1] = TEST_PAGE + 3 * TEST_PAGE_SIZE + 0x28;
         manage_memory[entry + 2] = MANAGE_NO_TILE;
-        entry += 11;
+        entry += 14;
         manage_memory[entry] = 52;
         manage_memory[entry + 2] = MANAGE_NO_TILE;
-        ascii((unsigned short *)&manage_memory[entry + 3], "BROKEN (52)");
+        ascii((unsigned short *)&manage_memory[entry + 6], "BROKEN (52)");
         test_header[GRKIT_HOST_MANAGE / 4] = TEST_MANAGE;
-        /* The root gets the Modules row before About. */
-        assert(count(test_header) == roots + 1);
-        assert(root_module(test_header, roots - 1) == MANAGE_MODULE && root_module(test_header, roots) == ABOUT_MODULE);
-        assert(same(MODULE(MANAGE_MODULE).summary(test_header), "Modules"));
-        assert(PAGE_ICON(MANAGE_MODULE, 0) == GRKIT_ICON_MODULES);
-        /* The page: the title of a loaded module, the name of another one. */
+        /* The root has no ADJ Order row: it is in the GRKit section of MENU.
+           A loaded page finds its listed module by its title, and each loaded
+           page shows. */
+        assert(count(test_header) == roots && !(visible_modules(test_header) >> MANAGE_MODULE & 1));
+        assert(page_listed(test_header, 2) == 0 && page_listed(test_header, 3) == 1 && page_listed(test_header, 0) == MANAGE_MODULES);
+        assert(visible_modules(test_header) >> 3 & 1);
+        /* The ADJ Order page lists the title of a loaded module and the name
+           of another one. */
         test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
         test_header[GRKIT_HOST_MODULE / 4] = MANAGE_MODULE;
-        assert(same(current_module(test_header)->title(test_header), "Modules"));
+        assert(same(current_module(test_header)->title(test_header), "ADJ Order"));
         assert(count(test_header) == 3);
         assert(same(MODULE(MANAGE_MODULE).label(test_header, 0), "Guides"));
         assert(same(MODULE(MANAGE_MODULE).label(test_header, 1), "Date Imprint"));
         assert(same(MODULE(MANAGE_MODULE).label(test_header, 2), "BROKEN (52)"));
-        assert(PAGE_ICON(MANAGE_MODULE, 0) == GUIDE_TILE(0) && PAGE_ICON(MANAGE_MODULE, 1) == GRKIT_ICON_MODULES);
-        for (u32 row = 0; row < 3; ++row) assert(MODULE(MANAGE_MODULE).checked(test_header, row));
-        /* The settings of Date Imprint: Load, then Position. */
-        manage_memory[3] = 1;
+        /* The settings page of the first group: a row for each module, in
+           order, whose values are the positions 1 to 3. */
         test_header[GRKIT_HOST_SETTINGS / 4] = MANAGE_MODULE + 1;
         page = settings_page(test_header);
-        assert(page == MODULE(MANAGE_MODULE).settings);
-        assert(same(page[0].label(test_header), "Load") && same(page[1].label(test_header), "Position"));
-        assert(menu_settings_count(0, 0, 0) == 3 && menu_settings_count(0, 0, 1) == 4);
-        assert(same(page[0].value_text(test_header, 0), "On") && same(page[0].value_text(test_header, 1), "Off"));
+        assert(page == MODULE(MANAGE_MODULE).settings && settings_count(test_header, page) == 3);
+        /* settings_start writes the row count; a row past it gets no hook. */
+        ((volatile u8 *)settings_block(test_header))[SUBMENU_KIND_ROWS] = 3;
+        assert(!menu_settings_count(0, 0, 3) && !menu_settings_apply(0, 0, 4));
+        assert(same(page[0].label(test_header), "Guides") && same(page[1].label(test_header), "Date Imprint"));
+        assert(same(page[2].label(test_header), "BROKEN (52)"));
+        assert(menu_settings_count(0, 0, 1) == 4);
         assert(same(page[1].value_text(test_header, 0), "1") && same(page[1].value_text(test_header, 2), "3"));
-        assert(menu_settings_current(0, 0, 0) == 2 && menu_settings_current(1, 0, 1) == 2);
-        /* Off applies at the next start: the row shows Off, and the root
-           row says to restart. */
-        assert(menu_settings_apply(1, 0, 0) == 1 && settings_memory[2 + 5 * 3 + 1] == 1);
-        assert(!MODULE(MANAGE_MODULE).checked(test_header, 1) && PAGE_ICON(MANAGE_MODULE, 1) == GRKIT_ICON_OFF);
-        assert(same(MODULE(MANAGE_MODULE).summary(test_header), "Modules: Restart to apply"));
+        assert(menu_settings_current(1, 0, 1) == 2 && menu_settings_current(0, 0, 1) == 1);
         /* Position 1 moves Date Imprint first. Each module gets its row + 1. */
         assert(menu_settings_apply(0, 0, 1) == 1);
-        assert(settings_memory[2 + 6 * 3 + 1] == 1 && settings_memory[2 + 4 * 3 + 1] == 2 && settings_memory[2 + 8 * 3 + 1] == 3);
-        assert(same(MODULE(MANAGE_MODULE).label(test_header, 0), "Date Imprint"));
-        assert(same(MODULE(MANAGE_MODULE).label(test_header, 1), "Guides"));
-        assert(MODULE(MANAGE_MODULE).committed(test_header) == 0 && menu_settings_current(0, 0, 1) == 2);
-        /* The last row, then back. A row past the end does nothing. */
-        assert(menu_settings_apply(2, 0, 1) == 1 && same(MODULE(MANAGE_MODULE).label(test_header, 2), "Date Imprint"));
-        assert(menu_settings_apply(3, 0, 1) == 1 && same(MODULE(MANAGE_MODULE).label(test_header, 2), "Date Imprint"));
-        assert(menu_settings_apply(1, 0, 1) == 1 && menu_settings_apply(0, 0, 0) == 1);
-        assert(same(MODULE(MANAGE_MODULE).label(test_header, 1), "Date Imprint"));
-        /* The order and the Off choices of this start: no restart. */
+        assert(settings_memory[2 + 7 * 3 + 1] == 1 && settings_memory[2 + 4 * 3 + 1] == 2 && settings_memory[2 + 10 * 3 + 1] == 3);
+        assert(same(page[0].label(test_header), "Date Imprint") && same(page[1].label(test_header), "Guides"));
+        assert(menu_settings_current(0, 0, 0) == 2);
+        /* The order applies at once: the page of Date Imprint comes first in
+           the root of ADJ, and no restart is due. */
+        assert(root_row(test_header, 3) + 1 == root_row(test_header, 2) && root_module(test_header, root_row(test_header, 3)) == 3);
         assert(same(MODULE(MANAGE_MODULE).summary(test_header), "Modules"));
-        /* Safe mode shows in the root row. */
+        /* Position 3 moves it last; the others keep their order. */
+        assert(menu_settings_apply(2, 0, 0) == 1);
+        assert(same(page[0].label(test_header), "Guides") && same(page[1].label(test_header), "BROKEN (52)"));
+        assert(same(page[2].label(test_header), "Date Imprint"));
+        /* Position 2 restores the order of this start. */
+        assert(menu_settings_apply(1, 0, 2) == 1 && same(page[1].label(test_header), "Date Imprint"));
+        assert(same(MODULE(MANAGE_MODULE).summary(test_header), "Modules"));
+        assert(root_row(test_header, 2) + 1 == root_row(test_header, 3));
+        /* A page of six rows: the entry has no room for the controller of the
+           last row, so OK on it changes to the kind of the first row. That
+           opens the value page of SETTINGS_ALIAS for the last row: its title
+           is the label of the last row, and its methods are those of the
+           last row. The submenu shows its own labels again. */
+        {
+            volatile u32 *block = settings_block(test_header);
+            static const u32 row_texts[] = SETTINGS_ROW_TEXTS, pages[] = SETTINGS_PAGES;
+            const u32 kind = 0x21c, view = 0x59200000;
+            _Static_assert(sizeof(row_texts) / sizeof(row_texts[0]) == SETTING_ROWS, "A label for each row");
+            ((volatile u8 *)block)[SUBMENU_KIND_ROWS] = SETTING_ROWS;
+            block[SUBMENU_KIND_ROW_KINDS / 4] = kind;
+            assert(menu_settings_controller(kind) == pages[SETTINGS_ALIAS]);
+            assert(test_header[GRKIT_HOST_SETTINGS / 4] == (MANAGE_MODULE + 1 | SETTINGS_LAST_ROW));
+            assert(settings_alias(test_header, SETTINGS_ALIAS) == SETTING_ROWS - 1 && settings_alias(test_header, 1) == 1);
+            assert(menu_text_override(view, row_texts[SETTINGS_ALIAS]) ==
+                   ((u32)(block + SETTINGS_LABELS / 4 + SETTING_ROWS * 2) | 1U));
+            /* The last row is past the modules of the group: its value page
+               moves no module, where that of the first row would. */
+            assert(menu_settings_apply(2, 0, SETTINGS_ALIAS) == 1);
+            assert(same(page[0].label(test_header), "Guides") && same(page[1].label(test_header), "Date Imprint"));
+            assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+            assert(test_header[GRKIT_HOST_SETTINGS / 4] == MANAGE_MODULE + 1);
+            assert(menu_text_override(view, row_texts[SETTINGS_ALIAS]) == ((u32)(block + SETTINGS_LABELS / 4 + 2) | 1U));
+            assert(menu_text_override(view, row_texts[SETTING_ROWS - 1]) ==
+                   ((u32)(block + SETTINGS_LABELS / 4 + SETTING_ROWS * 2) | 1U));
+            /* The value page of the first row is its own. */
+            assert(menu_settings_controller(pages[SETTINGS_ALIAS]) == pages[SETTINGS_ALIAS]);
+            assert(!(test_header[GRKIT_HOST_SETTINGS / 4] & SETTINGS_LAST_ROW));
+            ((volatile u8 *)block)[SUBMENU_KIND_ROWS] = 3;
+        }
+        /* A page with options hides the values that are off in ADJ: the bits
+           of CORE.ROWS of its module. Off stays. A hidden value of the
+           setting shows no checked row. */
+        *page_at(TEST_PAGE + 2 * TEST_PAGE_SIZE + PAGE_FLAGS) |= CHOICE_OPTIONS;
+        test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
+        test_header[GRKIT_HOST_MODULE / 4] = GUIDES_MODULE;
+        settings_memory[2 + 1] = 1;
+        assert(count(test_header) == 6 && MODULE(GUIDES_MODULE).committed(test_header) == 1);
+        settings_memory[2 + 5 * 3 + 1] = 1U << 1 | 1U;
+        assert(count(test_header) == 5 && same(MODULE(GUIDES_MODULE).label(test_header, 0), "Off"));
+        assert(same(MODULE(GUIDES_MODULE).label(test_header, 1), "Center") && !MODULE(GUIDES_MODULE).committed(test_header));
+        assert(!MODULE(GUIDES_MODULE).checked(test_header, 0) && !MODULE(GUIDES_MODULE).checked(test_header, 1));
+        settings_memory[2 + 5 * 3 + 1] = 0;
+        settings_memory[2 + 1] = 0;
+        *page_at(TEST_PAGE + 2 * TEST_PAGE_SIZE + PAGE_FLAGS) &= ~CHOICE_OPTIONS;
+        test_header[GRKIT_HOST_MODULE / 4] = MANAGE_MODULE;
+        /* Enable Off of a loaded module applies at once, as a soft Off: its
+           page leaves the root of ADJ, and no restart is due. */
+        settings_memory[2 + 6 * 3 + 1] = 1;
+        assert(manage_stopped(test_header, 1) && !manage_changed(test_header));
+        assert(!(visible_modules(test_header) >> 3 & 1));
+        settings_memory[2 + 6 * 3 + 1] = 0;
+        assert(!manage_stopped(test_header, 1) && visible_modules(test_header) >> 3 & 1);
+        /* Enable On of a module that was Off at this start waits for the next
+           start. Off of a module that did not load changes nothing. */
+        manage_memory[MANAGE_ENTRY(1)] = MANAGE_OFF;
+        assert(manage_changed(test_header) && same(MODULE(MANAGE_MODULE).summary(test_header), "Modules: Restart to apply"));
+        settings_memory[2 + 6 * 3 + 1] = 1;
+        assert(!manage_changed(test_header) && !manage_stopped(test_header, 1));
+        settings_memory[2 + 6 * 3 + 1] = 0;
+        manage_memory[MANAGE_ENTRY(1)] = MANAGE_LOADED;
+        /* Safe mode shows in the summary. */
         manage_memory[2] = MANAGE_SAFE_MODE;
         assert(same(MODULE(MANAGE_MODULE).summary(test_header), "Modules: Safe mode"));
-        /* A count past the list hides the row. */
+        /* A count past the list lists nothing. */
         manage_memory[0] = MANAGE_MODULES + 1;
         test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
-        assert(!(visible_modules(test_header) >> MANAGE_MODULE & 1));
+        assert(!manage_count(test_header));
         test_header[GRKIT_HOST_MANAGE / 4] = 0;
         test_header[GRKIT_HOST_SETTINGS / 4] = 0;
         settings_memory[0] = 3;
     }
 
-    /* The Effects page: Portra 400 and Velvia 100 installed as records 0 and
-       1, and Gold 200 Off. Their choices follow the settings of the Modules
-       page. */
+    /* The effect list: Portra 400 and Velvia 100 installed as records 0 and
+       1, and Gold 200 Off, not installed. Their choices follow the settings
+       of the GRKit section. The options rows of MENU (runtime/menu.c) turn
+       them on or off with effects_turn. */
     {
-        _Static_assert(EFFECTS_STRIDE == 44 && EFFECTS_HEADER == 12, "The test list matches effects.h");
+        _Static_assert(EFFECTS_STRIDE == 44 && EFFECTS_HEADER == 8, "The test list matches effects.h");
         static const char *const effect_names[] = {"Portra 400", "Velvia 100", "Gold 200"};
         volatile unsigned *list = &manage_memory[0x100 / 4];
-        const Setting *page;
-        settings_memory[0] = 12;
+        settings_memory[0] = 15;
         for (u32 i = 0; i < 3; ++i) {
-            settings_memory[2 + (9 + i) * 3 + 1] = i == 2;
-            settings_memory[2 + (9 + i) * 3 + 2] = EFFECT_CHOICE_VALUES;
-            list[3 + i * 11] = i == 2 ? EFFECT_OFF : EFFECT_LOADED;
-            list[3 + i * 11 + 1] = i == 2 ? EFFECTS_NO_RECORD : i;
-            memset((void *)&list[3 + i * 11 + 2], 0, 36);
-            ascii((unsigned short *)&list[3 + i * 11 + 2], effect_names[i]);
+            settings_memory[2 + (12 + i) * 3 + 1] = i == 2;
+            settings_memory[2 + (12 + i) * 3 + 2] = EFFECT_CHOICE_VALUES;
+            list[2 + i * 11] = i == 2 ? EFFECT_OFF : EFFECT_LOADED;
+            list[2 + i * 11 + 1] = i == 2 ? EFFECTS_NO_RECORD : i;
+            memset((void *)&list[2 + i * 11 + 2], 0, 36);
+            ascii((unsigned short *)&list[2 + i * 11 + 2], effect_names[i]);
         }
-        list[0] = 3; list[1] = 9; list[2] = 0;
+        list[0] = 3; list[1] = 12;
         test_header[GRKIT_HOST_COUNT / 4] = 5;
-        /* A module reads and sets CORE.TONE as a setting: the row of the
-           active effect. */
+        /* A module reads and sets CORE.TONE as a setting: n + 1 for record n. */
         assert(setting_limit(test_header, GRKIT_CORE_TONE) == 6);
         setting_store(test_header, GRKIT_CORE_TONE, 2);
         assert(setting_value(test_header, GRKIT_CORE_TONE) == 2 && tone_value(test_header) == 2);
@@ -1069,68 +1193,261 @@ int main(void)
         assert(setting_value(test_header, GRKIT_CORE_TONE) == 2);
         setting_store(test_header, GRKIT_CORE_TONE, 0);
         assert(!setting_value(test_header, GRKIT_CORE_TONE) && !test_header[GRKIT_HOST_ACTIVE / 4]);
-        /* Without a listed effect, Image Control has no Effects row. */
+        /* Without a list, Film Look shows Off and each record. */
         test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
         test_header[GRKIT_HOST_MODULE / 4] = IMAGE_MODULE;
         assert(count(test_header) == 6);
+        /* With the list, Film Look shows Off and the installed effects that
+           are On, in the order of their choices, and no other row. */
         test_header[GRKIT_HOST_EFFECTS / 4] = TEST_EFFECTS;
-        /* The last row of Image Control opens the Effects page. It shows the
-           committed effect in the live view and has no Fn adjustments. */
-        assert(count(test_header) == 7);
-        test_header[GRKIT_HOST_MENU_CURSOR / 4] = 6;
-        assert(effects_row_open(test_header));
-        assert(same(MODULE(IMAGE_MODULE).label(test_header, 6), "Effects"));
-        assert(PAGE_ICON(IMAGE_MODULE, 6) == GRKIT_ICON_MODULES && !MODULE(IMAGE_MODULE).checked(test_header, 6));
-        assert(!MODULE(IMAGE_MODULE).parameters(test_header, 6) && MODULE(IMAGE_MODULE).parameters(test_header, 5));
-        test_header[GRKIT_HOST_PREVIEW / 4] = 7;
-        highlight(test_header);
-        assert(test_header[GRKIT_HOST_PREVIEW / 4] == 0);
-        test_header[GRKIT_HOST_MENU_CURSOR / 4] = 5;
-        assert(!effects_row_open(test_header));
-        /* The page: its rows, icons, and marks. It has no root row. */
-        menu_open(test_header, EFFECTS_MODULE);
-        menu_normalize(test_header);
-        assert(test_header[GRKIT_HOST_MODULE / 4] == EFFECTS_MODULE && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 0);
-        assert(!(visible_modules(test_header) >> EFFECTS_MODULE & 1));
-        assert(same(current_module(test_header)->title(test_header), "Effects") && count(test_header) == 3);
-        for (u32 row = 0; row < 3; ++row) {
-            assert(same(MODULE(EFFECTS_MODULE).label(test_header, row), effect_names[row]));
-            assert(MODULE(EFFECTS_MODULE).checked(test_header, row) == (row != 2));
-        }
-        assert(PAGE_ICON(EFFECTS_MODULE, 0) == GRKIT_ICON_EFFECT(0) && PAGE_ICON(EFFECTS_MODULE, 2) == GRKIT_ICON_OFF);
-        /* The settings of Portra 400: Load, then Order, whose values are moves. */
-        test_header[GRKIT_HOST_SETTINGS / 4] = EFFECTS_MODULE + 1;
-        page = settings_page(test_header);
-        assert(page == MODULE(EFFECTS_MODULE).settings);
-        assert(same(page[0].label(test_header), "Load") && same(page[1].label(test_header), "Order"));
-        assert(same(page[1].value_text(test_header, 0), "Move up") && same(page[1].value_text(test_header, 1), "Move down"));
-        assert(menu_settings_current(0, 0, 1) == 1 && menu_settings_current(1, 0, 1) == 1);
-        /* Move down: Velvia 100 comes first, and each effect gets its row + 1. */
-        assert(menu_settings_apply(1, 0, 1) == 1);
-        assert(settings_memory[2 + 10 * 3 + 1] == 2 && settings_memory[2 + 9 * 3 + 1] == 4 && settings_memory[2 + 11 * 3 + 1] == 7);
-        assert(same(MODULE(EFFECTS_MODULE).label(test_header, 0), "Velvia 100") && MODULE(EFFECTS_MODULE).committed(test_header) == 1);
-        assert(same(MODULE(IMAGE_MODULE).label(test_header, 6), "Effects: Restart to apply"));
-        /* The first row does not move up; back up restores the order. */
-        assert(menu_settings_apply(0, 0, 1) == 1 && settings_memory[2 + 9 * 3 + 1] == 2);
-        assert(menu_settings_apply(0, 0, 1) == 1 && settings_memory[2 + 9 * 3 + 1] == 2);
-        assert(same(MODULE(IMAGE_MODULE).label(test_header, 6), "Effects"));
-        /* Gold 200 On keeps its position. */
-        list[2] = 2;
-        assert(menu_settings_current(1, 0, 0) == 2 && menu_settings_apply(0, 0, 0) == 1);
-        assert(settings_memory[2 + 11 * 3 + 1] == 6 && MODULE(EFFECTS_MODULE).checked(test_header, 2));
-        assert(same(MODULE(IMAGE_MODULE).label(test_header, 6), "Effects: Restart to apply"));
-        /* MENU returns to the Effects row of Image Control. */
-        test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_MODULE;
-        test_header[GRKIT_HOST_MODULE / 4] = EFFECTS_MODULE;
-        assert(menu_back(test_header));
-        assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == IMAGE_MODULE);
-        assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 6);
-        /* Without listed effects, an open Effects page returns to the root. */
-        test_header[GRKIT_HOST_MODULE / 4] = EFFECTS_MODULE;
+        assert(count(test_header) == 3 && tone_page_values(test_header) == 3);
+        assert(tone_row_index(test_header, 1) == 0 && tone_row_index(test_header, 2) == 1);
+        assert(MODULE(IMAGE_MODULE).parameters(test_header, 2) && !MODULE(IMAGE_MODULE).parameters(test_header, 0));
+        assert(PAGE_ICON(IMAGE_MODULE, 2) == GRKIT_ICON_EFFECT(1));
+        /* A new order shows at once: Velvia 100 first. */
+        settings_memory[2 + 13 * 3 + 1] = 1 << 1;
+        settings_memory[2 + 12 * 3 + 1] = 2 << 1;
+        assert(tone_row_index(test_header, 1) == 1 && tone_row_index(test_header, 2) == 0 && !effects_changed(test_header));
+        MODULE(IMAGE_MODULE).apply(test_header, 2);
+        assert(tone_value(test_header) == 1 && MODULE(IMAGE_MODULE).committed(test_header) == 2);
+        /* Off of the committed Portra 400 hides it at once and commits Off. On
+           shows it again. */
+        effects_turn(test_header, 0, 1);
+        assert(effects_off(test_header, 0) && !tone_value(test_header) && count(test_header) == 2);
+        assert(tone_row_index(test_header, 1) == 1 && MODULE(IMAGE_MODULE).committed(test_header) == 0);
+        effects_turn(test_header, 0, 0);
+        assert(!effects_off(test_header, 0) && count(test_header) == 3);
+        /* Gold 200, which did not install, waits for the next start when it
+           turns On. */
+        effects_turn(test_header, 2, 0);
+        assert(!effects_off(test_header, 2) && effects_changed(test_header) && count(test_header) == 3);
+        effects_turn(test_header, 2, 1);
+        assert(!effects_changed(test_header));
         test_header[GRKIT_HOST_EFFECTS / 4] = 0;
-        menu_normalize(test_header);
-        assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT);
         test_header[GRKIT_HOST_SETTINGS / 4] = 0;
+        settings_memory[0] = 3;
+    }
+    /* The MENU pages: the settings page of a module in the GRKit section,
+       its options page, the GRKit section rows, and About GRKit. The listed
+       modules are Film Look, Framing, and Guides, with their pages in slots
+       0 to 2; their CORE.OFF, CORE.POS, and CORE.ROWS are handles 3 to 11.
+       Guides has the settings rows of modules/guides. */
+    {
+        static const u32 pages[] = SETTINGS_PAGES;
+        static const u16 row_texts[] = SETTINGS_ROW_TEXTS;
+        volatile u32 *h = test_header, *block = settings_block(test_header), *menu;
+        const u32 guides = TEST_PAGE + 2 * TEST_PAGE_SIZE, film = TEST_PAGE, view = 0x5a000000, kind = 0x21c;
+        const Setting *page;
+        u32 entry;
+        memset(services_memory, 0, sizeof services_memory);
+        memset(object_memory, 0, sizeof object_memory);
+        memset(stock_kinds, 0, sizeof stock_kinds);
+        h[GRKIT_HOST_SERVICES / 4] = TEST_SERVICES;
+        menu = services_word(h, SERVICES_MENU);
+        /* The section is in place: no copy of the native tab. */
+        menu[MENU_ROWS_DONE / 4] = 1;
+        stock_kinds[(SETTINGS_SUBMENU_KIND * SUBMENU_KIND_SIZE + SUBMENU_KIND_ROW_KINDS) / 4] = kind;
+        settings_memory[0] = 18;
+        for (u32 i = 0; i < 3; ++i) {
+            settings_memory[2 + (3 + 3 * i) * 3 + 1] = 0;
+            settings_memory[2 + (3 + 3 * i) * 3 + 2] = 2;
+            settings_memory[2 + (4 + 3 * i) * 3 + 1] = 0;
+            settings_memory[2 + (4 + 3 * i) * 3 + 2] = MANAGE_MODULES + 1;
+            settings_memory[2 + (5 + 3 * i) * 3 + 1] = 0;
+            settings_memory[2 + (5 + 3 * i) * 3 + 2] = 1U << MANAGE_OPTION_VALUES;
+            settings_memory[2 + (12 + i) * 3 + 1] = i == 2;
+            settings_memory[2 + (12 + i) * 3 + 2] = EFFECT_CHOICE_VALUES;
+        }
+        const u32 limits[3] = {3, 2, 2};
+        for (u32 i = 0; i < 3; ++i) {
+            settings_memory[2 + (15 + i) * 3 + 1] = 0;
+            settings_memory[2 + (15 + i) * 3 + 2] = limits[i];
+        }
+        manage_memory[0] = 3;
+        manage_memory[1] = 3;
+        manage_memory[2] = 0;
+        for (u32 i = 0; i < 3; ++i) {
+            entry = MANAGE_ENTRY(i);
+            memset(&manage_memory[entry], 0, MANAGE_STRIDE);
+            manage_memory[entry] = MANAGE_LOADED;
+            manage_memory[entry + 1] = TEST_PAGE + i * TEST_PAGE_SIZE + 0x28;
+            manage_memory[entry + 2] = MANAGE_NO_TILE;
+        }
+        h[GRKIT_HOST_MANAGE / 4] = TEST_MANAGE;
+        h[GRKIT_HOST_EFFECTS / 4] = TEST_EFFECTS;
+        install_guide_rows(2);
+        *page_at(guides + PAGE_FLAGS) |= CHOICE_OPTIONS;
+
+        /* The page of Guides has six rows: Enable, Options, then the four
+           settings of the module. */
+        menu[MENU_ROWS_LISTED / 4] = 2;
+        menu[MENU_ROWS_PAGE / 4] = 2;
+        settings_open(h, LISTED_PAGE, 0);
+        /* The page shows: the change to the borrowed submenu. */
+        assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+        page = settings_page(h);
+        assert(page == listed_settings && settings_rows(h) == SETTING_ROWS);
+        assert(same(page[0].label(h), "Enable") && same(page[1].label(h), "Options"));
+        assert(same(page[2].label(h), "Style") && same(page[3].label(h), "Color"));
+        assert(same(page[4].label(h), "Opacity") && same(page[5].label(h), "Hide with DISP"));
+        /* Without options, the page has five rows. */
+        *page_at(guides + PAGE_FLAGS) &= ~CHOICE_OPTIONS;
+        assert(listed_rows(h) == 5 && same(page[1].label(h), "Style"));
+        *page_at(guides + PAGE_FLAGS) |= CHOICE_OPTIONS;
+        /* The entry has room for the controllers and kinds of five rows. The
+           last row keeps its label and its value method in the entry; its
+           controller is the kind of the first row. */
+        for (u32 i = 0; i < SETTING_ROWS - 1; ++i) assert(block[SUBMENU_KIND_CONTROLLERS / 4 + i] == pages[i]);
+        assert(((volatile u16 *)((volatile u8 *)block + SUBMENU_KIND_LABELS))[SETTING_ROWS - 1] == row_texts[SETTING_ROWS - 1]);
+        assert(block[SUBMENU_KIND_VALUES / 4 + 2 * (SETTING_ROWS - 1)] == (u32)(unsigned long)menu_settings_value_5);
+        assert(block[SUBMENU_KIND_ROW_KINDS / 4] == kind);
+        /* The value method of the last row shows its value. */
+        object_memory[ROW_VALUE_VIEW / 4] = view + 5;
+        view_calls = 0;
+        menu_settings_value_5(0, TEST_OBJECTS);
+        assert(block[SETTINGS_VIEWS / 4 + 5 * 3] == view + 5 && view_called(FW_ROW_VALUE));
+        assert(menu_text_override(view + 5, SETTINGS_TITLE_TEXT) == ((u32)(block + SETTINGS_VIEWS / 4 + 5 * 3 + 1) | 1U));
+        /* OK on the last row opens the value page of SETTINGS_ALIAS for the
+           last row: its title, its values, and its setting. */
+        assert(menu_settings_controller(kind) == pages[SETTINGS_ALIAS]);
+        assert(h[GRKIT_HOST_SETTINGS / 4] & SETTINGS_LAST_ROW);
+        assert(menu_settings_count(0, 0, SETTINGS_ALIAS) == 3);
+        assert(menu_text_override(view, row_texts[SETTINGS_ALIAS]) ==
+               ((u32)(block + SETTINGS_LABELS / 4 + SETTING_ROWS * 2) | 1U));
+        assert(menu_settings_apply(1, 0, SETTINGS_ALIAS) == 1 && settings_memory[2 + 17 * 3 + 1] == 1);
+        assert(menu_settings_current(1, 0, SETTINGS_ALIAS) == 2 && menu_settings_current(0, 0, SETTINGS_ALIAS) == 1);
+        settings_memory[2 + 17 * 3 + 1] = 0;
+        /* The return to the page ends it, and the page reads its rows again. */
+        assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+        assert(!(h[GRKIT_HOST_SETTINGS / 4] & SETTINGS_LAST_ROW) && settings_rows(h) == SETTING_ROWS);
+
+        /* The options page lists the guide styles but Off. Its title names
+           the module; MENU reads Back; OK keeps the native word in English
+           and reads Toggle in Chinese. */
+        assert(menu_settings_controller(pages[1]) == pages[1] && !menu[MENU_ROWS_STAY_ROW / 4]);
+        assert(menu_settings_count(0, 0, 1) == 6);
+        assert(menu_text_override(view, row_texts[1]) ==
+               ((u32)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TEXTS) | 1U));
+        assert(same((const u16 *)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TITLE), "Guides Options"));
+        assert(!menu_text_override(view, SELECT_GUIDE_OK_TEXT));
+        assert(menu_text_override(view, SELECT_GUIDE_BACK_TEXT) ==
+               ((u32)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TEXTS + 16) | 1U));
+        test_language = 1;
+        assert(menu_text_override(view, SELECT_GUIDE_OK_TEXT) ==
+               ((u32)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TEXTS + 8) | 1U));
+        menu_text_override(view, row_texts[1]);
+        assert(((const u16 *)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TITLE))[6] == text(h, TEXT_OPTIONS)[0]);
+        test_language = 0;
+        /* Each option keeps the view and the text of its row. */
+        for (u32 k = 0; k < 5; ++k) {
+            object_memory[(0x100 + k * 0x40 + ROW_TEXT_VIEW) / 4] = view + 0x10 + k;
+            assert(menu_settings_draw(TEST_OBJECTS + 0x100 + k * 0x40, k, 1) == 1);
+            assert(menu_text_override(view + 0x10 + k, SETTINGS_TITLE_TEXT) ==
+                   ((u32)(value_entry(h, k) + MENU_VALUE_TEXT_AT / 4) | 1U));
+        }
+        assert(same((const u16 *)(value_entry(h, 1) + MENU_VALUE_TEXT / 4), "Center"));
+        /* OK turns Center off: the bit of its value in CORE.ROWS of Guides,
+           the text of its row, and the page stays with the cursor on it. */
+        assert(menu_settings_apply(1, 0, 1) == 1);
+        assert(settings_memory[2 + 11 * 3 + 1] == 1U << 2);
+        assert(same((const u16 *)(value_entry(h, 1) + MENU_VALUE_TEXT / 4), "Center (Off)"));
+        assert(menu[MENU_ROWS_STAY / 4] && menu[MENU_ROWS_STAY_ROW / 4] == 1);
+        assert(menu_settings_current(1, 0, 1) == 2 && menu_settings_current(0, 0, 1) == 1);
+        assert(menu_settings_controller(pages[1]) == 0 && !menu[MENU_ROWS_STAY / 4]);
+        assert(menu_settings_apply(1, 0, 1) == 1 && !settings_memory[2 + 11 * 3 + 1]);
+        assert(same((const u16 *)(value_entry(h, 1) + MENU_VALUE_TEXT / 4), "Center"));
+        menu_settings_controller(pages[1]);
+        assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+        /* The native rows reuse their views, so a view that showed an option
+           shows the text of the page that reuses it: a row value of the
+           settings page, and a value of the Style page. */
+        object_memory[ROW_VALUE_VIEW / 4] = view + 0x10;
+        menu_settings_value_2(0, TEST_OBJECTS);
+        assert(menu_text_override(view + 0x10, SETTINGS_TITLE_TEXT) == ((u32)(block + SETTINGS_VIEWS / 4 + 2 * 3 + 1) | 1U));
+        assert(menu_settings_controller(pages[2]) == pages[2]);
+        object_memory[(0x100 + ROW_TEXT_VIEW) / 4] = view + 0x10;
+        assert(menu_settings_draw(TEST_OBJECTS + 0x100, 0, 2) == 1);
+        assert(menu_text_override(view + 0x10, SETTINGS_TITLE_TEXT) ==
+               ((u32)(block + SETTINGS_VIEWS / 4 + SETTING_ROWS * 3 + 1) | 1U));
+        assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+
+        /* The page of Film Look: Enable, Options, and Film Stock, whose
+           values are Off and the effects that are On. A committed effect adds
+           Parameters, which opens the Fn adjustments and shows no value. */
+        *page_at(film + PAGE_FLAGS) |= CHOICE_OPTIONS;
+        h[GRKIT_HOST_ACTIVE / 4] = 0;
+        menu[MENU_ROWS_LISTED / 4] = 0;
+        menu[MENU_ROWS_PAGE / 4] = 0;
+        settings_open(h, LISTED_PAGE, 0);
+        page = settings_page(h);
+        assert(settings_rows(h) == 3 && same(page[2].label(h), "Film Stock"));
+        assert(page[1].values(h) == 3 && page[2].values(h) == 3 && same(page[2].value_text(h, 0), "Off"));
+        assert(!settings_long(h, page, 2) && settings_options(h, page, 1));
+        page[2].set(h, 1);
+        assert(tone_value(h) && page[2].get(h) == 1);
+        assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+        assert(settings_rows(h) == 4 && same(page[3].label(h), "Parameters") && !page[3].value_text(h, 0)[0]);
+        assert(settings_fn_row(h, page, 3) && block[SUBMENU_KIND_CONTROLLERS / 4 + 3] == MENU_FN_TARGET);
+        page[2].set(h, 0);
+        assert(!h[GRKIT_HOST_ACTIVE / 4]);
+        *page_at(film + PAGE_FLAGS) &= ~CHOICE_OPTIONS;
+
+        /* A MENU row of a module shows its title and the value of its page,
+           or Off while Enable is Off. The rows give their texts while a MENU
+           tab shows, and not while the borrowed submenu does. */
+        menu[MENU_ROWS_COUNT / 4] = 1;
+        menu_row(h, 0)[MENU_ROW_KIND / 4] = MENU_ROW_LISTED;
+        menu_row(h, 0)[MENU_ROW_MODULE / 4] = 2;
+        object_memory[(0x800 + MENU_ROW_LABEL_VIEW) / 4] = view + 0x30;
+        object_memory[(0x800 + MENU_ROW_VALUE_VIEW) / 4] = view + 0x31;
+        GUIDE_STYLE = 1;
+        menu_row_fill(0, TEST_OBJECTS + 0x800);
+        assert(menu_text_override(view + 0x30, MENU_ROW_LABEL_TEXT) !=
+               ((u32)(menu_row(h, 0) + MENU_ROW_LABEL_TEXT_AT / 4) | 1U));
+        menu[MENU_ROWS_CURRENT / 4] = 0x200004a;
+        assert(menu_text_override(view + 0x30, MENU_ROW_LABEL_TEXT) ==
+               ((u32)(menu_row(h, 0) + MENU_ROW_LABEL_TEXT_AT / 4) | 1U));
+        assert(menu_text_override(view + 0x40, MENU_ROW_LABEL_TEXT) ==
+               ((u32)services_word(h, SERVICES_MENU + MENU_ROWS_TITLE_AT) | 1U));
+        assert(menu_row(h, 0)[MENU_ROW_LABEL_TEXT_AT / 4] == ((6 + 1) | 0x100));
+        assert(menu_row(h, 0)[MENU_ROW_VALUE_TEXT_AT / 4] == ((6 + 1) | 0x100));
+        settings_memory[2 + 9 * 3 + 1] = 1;
+        menu_row_fill(0, TEST_OBJECTS + 0x800);
+        assert(menu_row(h, 0)[MENU_ROW_VALUE_TEXT_AT / 4] == ((3 + 1) | 0x100));
+        settings_memory[2 + 9 * 3 + 1] = 0;
+        GUIDE_STYLE = 0;
+        /* A scroll moves a row view to another slot: the view shows the row
+           of its new slot. */
+        menu[MENU_ROWS_COUNT / 4] = 2;
+        menu_row(h, 1)[MENU_ROW_KIND / 4] = MENU_ROW_ADJ;
+        menu_row(h, 1)[MENU_ROW_MODULE / 4] = 0;
+        menu_row_fill(1, TEST_OBJECTS + 0x800);
+        assert(!menu_row(h, 0)[MENU_ROW_LABEL / 4] && !menu_row(h, 0)[MENU_ROW_VALUE / 4]);
+        assert(menu_text_override(view + 0x30, MENU_ROW_LABEL_TEXT) ==
+               ((u32)(menu_row(h, 1) + MENU_ROW_LABEL_TEXT_AT / 4) | 1U));
+        menu[MENU_ROWS_COUNT / 4] = 1;
+
+        /* About GRKit: the camera information page shows the version and the
+           project address, only after the About GRKit row opened it. */
+        assert(!menu_text_override(view, INFO_TITLE_TEXT));
+        menu[MENU_ROWS_ABOUT / 4] = 1;
+        assert(!menu_text_override(view, INFO_TITLE_TEXT));
+        assert(menu_settings_controller(INFO_CONTROLLER) == INFO_CONTROLLER);
+        menu[MENU_ROWS_ABOUT / 4] = 1;
+        assert(menu_text_override(view, INFO_TITLE_TEXT) ==
+               ((u32)services_word(h, SERVICES_MENU + MENU_ROWS_ABOUT_TEXTS) | 1U));
+        assert(services_word(h, SERVICES_MENU + MENU_ROWS_ABOUT_TEXTS)[0] == ((11 + 1) | 0x100));
+        menu_info_fill(TEST_OBJECTS + 0xc00);
+        assert(!strcmp((const char *)services_word(h, SERVICES_MENU + MENU_ROWS_ABOUT_LINES) + MENU_ABOUT_LINE,
+                       "github.com/ahonn/grkit"));
+        menu[MENU_ROWS_ABOUT / 4] = 0;
+
+        h[GRKIT_HOST_SETTINGS / 4] = 0;
+        h[GRKIT_HOST_SERVICES / 4] = 0;
+        h[GRKIT_HOST_MANAGE / 4] = 0;
+        h[GRKIT_HOST_EFFECTS / 4] = 0;
+        *page_at(guides + PAGE_SETTING_ROWS) = 0;
+        *page_at(guides + PAGE_FLAGS) &= ~CHOICE_OPTIONS;
         settings_memory[0] = 3;
     }
     return 0;

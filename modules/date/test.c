@@ -39,7 +39,7 @@ int main(void)
        settings rows, and one filter. */
     assert(grkit_module.setting_count == 2 && grkit_module.settings[0].values == 6 && grkit_module.settings[1].values == 3);
     assert(grkit_module.registration_count == 2 && grkit_module.tile_count == 6);
-    assert(SETTING_STYLE == 0 && SETTING_LOOK == 1);
+    assert(SETTING_STYLE == GRKIT_SETTING(0) && SETTING_LOOK == GRKIT_SETTING(1));
     /* Each look of each style lights the lower right corner of the picture
        and nothing else. */
     for (u32 look = 0; look < 3; ++look)

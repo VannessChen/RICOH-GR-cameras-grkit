@@ -2,4 +2,4 @@
 default: minor
 ---
 
-The last row of Image Control opens an Effects page that turns each effect on or off and moves it up or down.
+The GRKit section of MENU turns each effect, Framing ratio, and guide style on or off, so that ADJ shows only those in use.

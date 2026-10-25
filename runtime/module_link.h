@@ -27,7 +27,7 @@
 #define GRM_PAGE_CHOICE 1U
 #define GRM_CHOICE_OFF_ROW 1U
 #define GRM_CHOICE_CORE_ROWS 2U
-#define GRM_PAGE_MENU_ROW 4U
+#define GRM_CHOICE_OPTIONS 4U
 #define GRM_LAYER_FOLLOW_DISP 1U
 #define GRM_LAYER_FULL_DISP 2U
 #define GRM_LAYER_LIVE_ONLY 4U
@@ -348,8 +348,7 @@ static int grm_registrations(const struct grm_module *m, const u8 *code, u32 bas
             if (!page || grm_word(page) < 40 || grm_word(page + 4) != GRM_PAGE_CHOICE) return GRM_BAD_DESCRIPTOR;
             u32 setting = grm_word(page + 8), flags = grm_word(page + 12), rows = grm_word(page + 28);
             if (!grm_setting_reference(setting, setting_count, use_count) ||
-                (flags & ~(GRM_CHOICE_OFF_ROW | GRM_CHOICE_CORE_ROWS | GRM_PAGE_MENU_ROW)) ||
-                ((flags & GRM_PAGE_MENU_ROW) && !grm_word(page + 32))) return GRM_BAD_DESCRIPTOR;
+                (flags & ~(GRM_CHOICE_OFF_ROW | GRM_CHOICE_CORE_ROWS | GRM_CHOICE_OPTIONS))) return GRM_BAD_DESCRIPTOR;
             /* The core gives the rows of a page of a used capability: the
                page has only its title. The installer checks the setting. */
             if (flags & GRM_CHOICE_CORE_ROWS) {
@@ -372,15 +371,19 @@ static int grm_registrations(const struct grm_module *m, const u8 *code, u32 bas
             u32 setting_rows = grm_word(page + 32);
             if (setting_rows) {
                 const u8 *list = grm_code_at(m, code, base, grm_word(page + 36), setting_rows * 16);
-                if (setting_rows < 2 || setting_rows > GRM_SETTING_ROWS || !list || (setting & GRM_USED))
+                if (setting_rows > GRM_SETTING_ROWS || !list || rows > GRM_SETTING_ROW_VALUES)
                     return GRM_BAD_DESCRIPTOR;
+                /* Row 0 is the page setting, also a used one, with a text for
+                   each row of the page. The others are settings of the
+                   module. */
                 for (u32 r = 0; r < setting_rows; ++r) {
                     const u8 *row = list + r * 16;
                     u32 own = grm_word(row + 4);
-                    if (grm_word(row) < 16 || own >= setting_count || (!r && own != setting) ||
-                        settings[own].values > GRM_SETTING_ROW_VALUES ||
+                    u32 values = r ? (own < setting_count ? settings[own].values : 0) : rows;
+                    if (grm_word(row) < 16 || (r ? own >= setting_count : own != setting) ||
+                        !values || values > GRM_SETTING_ROW_VALUES ||
                         !grm_texts(m, code, base, grm_word(row + 8), GRM_LANGUAGES) ||
-                        !grm_texts(m, code, base, grm_word(row + 12), settings[own].values * GRM_LANGUAGES))
+                        !grm_texts(m, code, base, grm_word(row + 12), values * GRM_LANGUAGES))
                         return GRM_BAD_DESCRIPTOR;
                 }
             }

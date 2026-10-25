@@ -5,5 +5,5 @@ rows = ["Off", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"]
 label = "Date Style"
 
 [settings.LOOK]
-label = "Date Look"
+label = "Date Font"
 values = ["Classic", "GR1s", "GR II"]

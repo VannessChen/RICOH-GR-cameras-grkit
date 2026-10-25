@@ -239,9 +239,10 @@ void picture_encode(u32 process,u32 message) {
     /* The color of the effect first: selective color of its record. */
     selective=selective_wanted(&set);
     any=selective;
-    /* The value of each filter. A filter does not run at 0. */
+    /* The value of each filter. A filter does not run at 0, or while a soft
+       Off stops its module. */
     for(i=0;i<filters;++i) {
-        values[i]=setting_value(h,MODULE_FILTER(h,i)[1]&0xffffU);
+        values[i]=services_suspended(h,MODULE_FILTER(h,i)[0]) ? 0 : setting_value(h,MODULE_FILTER(h,i)[1]&0xffffU);
         any|=values[i];
     }
     if(!any) return;

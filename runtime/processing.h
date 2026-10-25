@@ -122,7 +122,12 @@ module_parameters:
     ldr r3, [r0, #GRKIT_HOST_PROCESSING_CALLS]
     add r3, r3, #1
     str r3, [r0, #GRKIT_HOST_PROCESSING_CALLS]
+    // Without a module that uses CORE.TONE, as after a soft Off of Film Look
+    // (runtime/manage.h), the native processing runs.
+    ldr r3, [r0, #GRKIT_HOST_CAPABILITIES]
     ldr r0, [r0, #GRKIT_HOST_ACTIVE]
+    tst r3, #GRKIT_CORE_TONE_BIT
+    moveq r0, #0
     // Context 1 is the live view (ImageTuningLiveview); 0 is the still path.
     ldrb r2, [PROCESSING_CONTEXT, #0x2ac]
     cmp r2, #1

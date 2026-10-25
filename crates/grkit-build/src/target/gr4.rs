@@ -91,11 +91,20 @@ const HOOKS: &[HookSpec] = &[
     bl("menu_parameter_row_8", Menu, Tuning),
     // The settings page, as on GR III.
     b("menu_settings_change", Menu, MenuPage),
+    // The update of the camera information page, which About GRKit shows.
+    b("menu_info_update", Menu, MenuPage),
     bl("menu_settings_kinds_r3_0", Menu, MenuPage),
     bl("menu_settings_kinds_r2", Menu, MenuPage),
     bl("menu_settings_kinds_r8", Menu, MenuPage),
     bl("menu_settings_kinds_r5", Menu, MenuPage),
     bl("menu_settings_kinds_r3_1", Menu, MenuPage),
+    // The submenu shows six rows (`runtime/menu.S`): the store of the fifth
+    // row type in its constructor, the two compares of the rows to hide, and
+    // the load of the row kind in its draw.
+    bl("menu_settings_build", Menu, MenuPage),
+    bl("menu_settings_hide_first", Menu, MenuPage),
+    bl("menu_settings_hide_next", Menu, MenuPage),
+    bl("menu_settings_row_kind", Menu, MenuPage),
     b("menu_settings_count_0", Menu, MenuPage),
     b("menu_settings_draw_0", Menu, MenuPage),
     b("menu_settings_apply_0", Menu, MenuPage),

@@ -663,6 +663,17 @@ fn native_framing_contract_preserves_canvas_bounds_and_settings() {
         format!("static const unsigned char overlay_labels[] = {{{labels}}};\n"),
     )
     .unwrap();
+    // The module headers of Framing and Guides, which the harness compiles
+    // in one file: their setting indexes, and each setting at its default 0.
+    std::fs::write(
+        temporary.path().join("grkit_module.h"),
+        "#ifndef GRKIT_MODULE_H\n#define GRKIT_MODULE_H\n\
+         #define SETTING_STYLE 0U\n#define SETTING_COLOR 1U\n#define SETTING_OPACITY 2U\n\
+         #define SETTING_DISP 3U\n#define SETTING_MASK 0U\n#define SETTING_LABEL 1U\n\
+         const GrkitContext grkit_self;\n\
+         u32 setting_get(u32 handle) { (void)handle; return 0; }\n#endif\n",
+    )
+    .unwrap();
     for (index, target) in targets().iter().enumerate() {
         let executable = temporary.path().join(format!("framing_contract_{index}"));
         compile_with(

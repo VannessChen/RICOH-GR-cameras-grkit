@@ -41,9 +41,10 @@ pub const MODULE_SETTING_VALUES: usize = 65536;
 /// The most values of a row of a native settings page (`SETTING_VALUES` in
 /// runtime/core.h): one for each module that the Modules page lists.
 pub const NATIVE_SETTING_VALUES: usize = 8;
-/// The most rows of a native settings page (`SETTING_ROWS` in
-/// `runtime/core.h`): the borrowed submenu entry has five value methods. A
-/// page has 0, or 2 to this many rows.
+/// The most settings rows of a module page (`GRM_SETTING_ROWS`). A page has 0,
+/// or 2 to this many rows. The native settings page shows one row more
+/// (`SETTING_ROWS` in `runtime/core.h`): in MENU, the Enable row of the
+/// module comes first.
 pub const NATIVE_SETTING_ROWS: usize = 5;
 /// The most artwork tiles of all modules. The installer puts them in the
 /// icon chunks after the effect icons.
@@ -917,17 +918,17 @@ mod tests {
                 .and_then(|value| value.trim_end_matches('U').parse::<usize>().ok());
             assert_eq!(value, Some(NATIVE_SETTING_VALUES), "{file}");
         }
-        for (file, name) in [
-            ("module_link.h", "GRM_SETTING_ROWS"),
-            ("sdk/grkit.h", "GRKIT_SETTING_ROWS"),
-            ("core.h", "SETTING_ROWS"),
+        for (file, name, rows) in [
+            ("module_link.h", "GRM_SETTING_ROWS", NATIVE_SETTING_ROWS),
+            ("sdk/grkit.h", "GRKIT_SETTING_ROWS", NATIVE_SETTING_ROWS),
+            ("core.h", "SETTING_ROWS", NATIVE_SETTING_ROWS + 1),
         ] {
             let text = std::fs::read_to_string(root.join(file)).unwrap();
             let value = text
                 .lines()
                 .find_map(|line| line.strip_prefix(&format!("#define {name} ")))
                 .and_then(|value| value.trim_end_matches('U').parse::<usize>().ok());
-            assert_eq!(value, Some(NATIVE_SETTING_ROWS), "{file}");
+            assert_eq!(value, Some(rows), "{file}");
         }
     }
 

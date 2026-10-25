@@ -52,23 +52,67 @@
 #define UI_START 68U
 #define UI_CHANGED 72U
 #define UI_SIZE 76U
-/* The rows of modules in the native MENU (runtime/menu.c): whether the
-   Customize tab has been patched and the number of rows; for each row its
-   module, its label and value views, and their text descriptors; then the
-   private copy of the Customize tab descriptor. */
+/* The GRKit section of the native MENU (runtime/menu_section.h): whether the Customize
+   tab has been patched, the number of rows, the group of the ADJ Order page
+   that is open, the controller of the last controller change,
+   the listed module of the open module page and its page slot, whether ADJ
+   has refreshed after INSTALL, the text descriptor of the section title,
+   and whether an options value page stays open; for each row its module or
+   group, its label and value views, their text descriptors, and what it
+   opens; then the private copy of the Customize
+   tab descriptor. */
 #define SERVICES_MENU (SERVICES_UI + UI_SIZE)
 #define MENU_ROWS_DONE 0U
 #define MENU_ROWS_COUNT 4U
-#define MENU_ROWS_SLOTS 8U
+#define MENU_ROWS_GROUP 8U
+#define MENU_ROWS_CURRENT 12U
+#define MENU_ROWS_LISTED 16U
+#define MENU_ROWS_PAGE 20U
+#define MENU_ROWS_ADJ 24U
+#define MENU_ROWS_TITLE_AT 28U
+/* Set by OK on an option: the value page stays open (runtime/menu_settings.h); the
+   row of that option, where the page puts its cursor; then for each value of
+   a long value page, an options page or Film Stock, which draws each row at
+   once: its row and text view, the text descriptor and the text of the view
+   (MENU_VALUE_UNITS units). */
+#define MENU_ROWS_STAY 36U
+#define MENU_ROWS_STAY_ROW 40U
+#define MENU_ROWS_VALUES 44U
+#define MENU_VALUES_MAX 64U
+#define MENU_VALUE_UNITS 32U
+#define MENU_VALUE_ROW 0U
+#define MENU_VALUE_VIEW 4U
+#define MENU_VALUE_TEXT_AT 8U
+#define MENU_VALUE_TEXT 16U
+#define MENU_VALUE_SIZE (MENU_VALUE_TEXT + 2U * MENU_VALUE_UNITS)
+#define MENU_ROWS_SLOTS 12U
 #define MENU_ROW_MODULE 0U
 #define MENU_ROW_LABEL 4U
 #define MENU_ROW_VALUE 8U
 #define MENU_ROW_LABEL_TEXT_AT 12U
 #define MENU_ROW_VALUE_TEXT_AT 20U
-#define MENU_ROW_SIZE 28U
-#define MENU_ROWS_TAB (8U + MENU_ROWS_SLOTS * MENU_ROW_SIZE)
+#define MENU_ROW_KIND 28U
+#define MENU_ROW_SIZE 32U
+/* Whether the camera information page shows About GRKit, the text
+   descriptors of its title and labels, and its ASCII lines. */
+#define MENU_ROWS_ABOUT (MENU_ROWS_VALUES + MENU_VALUES_MAX * MENU_VALUE_SIZE)
+#define MENU_ROWS_ABOUT_TEXTS (MENU_ROWS_ABOUT + 4U)
+#define MENU_ROWS_ABOUT_LINES (MENU_ROWS_ABOUT_TEXTS + 3U * 8U)
+#define MENU_ABOUT_LINE 40U
+/* The text descriptors of the title and of the OK and MENU guides of an
+   options value page, then the text of its title. */
+#define MENU_ROWS_PAGE_TEXTS (MENU_ROWS_ABOUT_LINES + 2U * MENU_ABOUT_LINE)
+#define MENU_PAGE_TITLE_UNITS 48U
+#define MENU_ROWS_PAGE_TITLE (MENU_ROWS_PAGE_TEXTS + 3U * 8U)
+#define MENU_ROWS_FIRST (MENU_ROWS_PAGE_TITLE + 2U * MENU_PAGE_TITLE_UNITS)
+#define MENU_ROWS_TAB (MENU_ROWS_FIRST + MENU_ROWS_SLOTS * MENU_ROW_SIZE)
 #define MENU_ROWS_TAB_SIZE 0x384U
-#define SERVICES_SIZE (SERVICES_MENU + MENU_ROWS_TAB + MENU_ROWS_TAB_SIZE)
+/* The code of the modules that a soft Off stopped at this start
+   (runtime/manage.h): their count, then the start and the end of the code of
+   each. The core calls no module code in these ranges. */
+#define SERVICES_SUSPENDED (SERVICES_MENU + MENU_ROWS_TAB + MENU_ROWS_TAB_SIZE)
+#define SERVICES_SUSPENDED_MAX 8U
+#define SERVICES_SIZE (SERVICES_SUSPENDED + 4U + 8U * SERVICES_SUSPENDED_MAX)
 #define SERVICES_WORDS (SERVICES_SIZE / 4U)
 /* The events (GRKIT_EVENT_*). */
 #define SERVICE_EVENT_SYSTEM_READY 1U
@@ -89,18 +133,31 @@ static __attribute__((unused)) volatile u32 *services_word(volatile u32 *h,u32 o
 static __attribute__((unused)) u32 services_in_app(volatile u32 *h) {
     return h[GRKIT_HOST_SERVICES/4] && services_word(h,SERVICES_APP)[0];
 }
-/* Call module code in the App task with one, two, or three arguments. */
+/* Whether `fn` is code of a module that a soft Off stopped. */
+static __attribute__((unused)) u32 services_suspended(volatile u32 *h,u32 fn) {
+    u32 n, i;
+    if(!h[GRKIT_HOST_SERVICES/4]) return 0;
+    n=services_word(h,SERVICES_SUSPENDED)[0];
+    for(i=0;i<n && i<SERVICES_SUSPENDED_MAX;++i)
+        if(fn>=services_word(h,SERVICES_SUSPENDED+4+8*i)[0] && fn<services_word(h,SERVICES_SUSPENDED+8+8*i)[0]) return 1;
+    return 0;
+}
+/* Call module code in the App task with one, two, or three arguments. Code
+   of a stopped module does not run. */
 static __attribute__((unused)) void services_call1(volatile u32 *h,u32 fn,u32 a) {
+    if(services_suspended(h,fn)) return;
     ++services_word(h,SERVICES_APP)[0];
     ((void (*)(u32))fn)(a);
     --services_word(h,SERVICES_APP)[0];
 }
 static __attribute__((unused)) void services_call2(volatile u32 *h,u32 fn,u32 a,u32 b) {
+    if(services_suspended(h,fn)) return;
     ++services_word(h,SERVICES_APP)[0];
     ((void (*)(u32,u32))fn)(a,b);
     --services_word(h,SERVICES_APP)[0];
 }
 static __attribute__((unused)) void services_call3(volatile u32 *h,u32 fn,u32 a,u32 b,u32 c) {
+    if(services_suspended(h,fn)) return;
     ++services_word(h,SERVICES_APP)[0];
     ((void (*)(u32,u32,u32))fn)(a,b,c);
     --services_word(h,SERVICES_APP)[0];

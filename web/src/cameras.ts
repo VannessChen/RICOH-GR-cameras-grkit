@@ -84,7 +84,7 @@ export const CAMERAS: readonly Camera[] = [
     support: {
       ...releases('gr4'),
       firmware: '1.00 / 1.10',
-      modules: CAMERA_MODULES.gr4.filter((key) => key !== 'imageControl'),
+      modules: CAMERA_MODULES.gr4.filter((key) => key !== 'filmLook'),
       noEffects: true,
     },
   },

@@ -95,13 +95,13 @@ A package holds only `SCRIPT`. `SCRIPT/STARTUP.TTL`, which the camera runs, incl
 
 When a package is new, SCAN copies its listed effects into the library, where each replaces the file with the same name. `GRKIT/IMPORTED.TXT` records the package that the library has, with a hash of each file. So a copy of the same package changes nothing, and an effect that a person deleted from the library stays deleted until a package with a different file brings it. The first boot without the library copies every valid effect of `SCRIPT/PLUGINS/EFFECTS`, where GRKit 1.2 kept its effects, then every valid inbox file. A listed effect that SCAN could not copy installs from the inbox. By default, the effects of the package come first, then the other effects of the library, each group in ID order.
 
-GRKit lists at most 64 effect files and installs at most 40 of them (see [Effects page](#effects-page)). `REPORT.TXT` gives the status of each listed effect. Without a module that uses `CORE.TONE`, no effect installs. The installer deletes and renames no file in these folders. On the camera's Linux, a rename does not replace a file. On GR IV exFAT, a delete made later lookups fail.
+GRKit lists at most 64 effect files and installs at most 40 of them (see [Options](#options)). `REPORT.TXT` gives the status of each listed effect. Without a module that uses `CORE.TONE`, no effect installs. The installer deletes and renames no file in these folders. On the camera's Linux, a rename does not replace a file. On GR IV exFAT, a delete made later lookups fail.
 
 ### Report and safe mode
 
 At each boot, INSTALL writes `GRKIT/REPORT.TXT` when its text changes. The report gives the GRKit version and target, the result of each module, the installed effects, and the safe mode. It writes the file in place, because a rename does not replace a file.
 
-In the safe mode, SCAN loads no module, so INSTALL applies only the patches of no extension point and the menu patches for the Modules page. The safe mode starts in two cases:
+In the safe mode, SCAN loads no module, so INSTALL applies only the patches of no extension point and the menu patches for module management. The safe mode starts in two cases:
 
 - `GRKIT/SAFE` exists.
 - The last three boots did not finish. SCAN counts each boot in `SCRIPT/GRKIT/BOOT.TXT`, and the loader deletes the file about 20 s after INSTALL. A quick power-off also leaves a boot unfinished, so the limit is three.
@@ -121,7 +121,7 @@ Each feature is a module in its own file, `GRKIT/MODULES/<ID>.GRM`. The same fil
 
 | Module | Folder | Contents |
 | --- | --- | --- |
-| `IMGCTL` | `modules/image-control` | a page of `CORE.TONE` |
+| `FILMLOOK` | `modules/film-look` | a page of `CORE.TONE` |
 | `FRAMING` | `modules/framing` | a page of `CORE.ASPECT`, the mask, and the ratio label |
 | `GUIDES` | `modules/guides` | its style, a page, and the guides |
 | `DATE` | `modules/date` | its style and look, a page with a native settings page, and the date |
@@ -145,7 +145,7 @@ At power-on, SCAN reserves a script array for the data of the modules, and INSTA
 3. INSTALL moves each address word of the module. It fills each import with the address of a core service or with the context of the module.
 4. INSTALL registers the menu page, the layers, and the plane filters of the module in the header, and copies its tiles after the effect icons.
 
-A module that does not link is skipped, and the others load. By default, INSTALL loads the official modules in their order, then the others in the order of their IDs. The [Modules page](#modules-page) changes the order and turns modules off.
+A module that does not link is skipped, and the others load. By default, INSTALL loads the official modules in their order, then the others in the order of their IDs. [The GRKit section of MENU](#grkit-section-of-menu) changes the order and turns modules off.
 
 The core keeps the value of each module setting (`runtime/settings.h`). INSTALL restores the saved settings from the state file. The resident loader saves them after the core counts a change. A setting of another module is available only if it is public.
 
@@ -153,11 +153,11 @@ The capabilities of the core are public settings too, `CORE.<KEY>` (`grkit_core:
 
 | Capability | Values |
 | --- | --- |
-| `CORE.TONE` | the effect (see Image Control) |
+| `CORE.TONE` | the effect (see Film Look) |
 | `CORE.ASPECT` | the aspect of still pictures (see Framing) |
 | `CORE.GRAIN` | the grain level of recorded pictures |
 
-A module page is a choice page: one row for each value of a setting of the module or of a used setting, with the text and tiles of the module. The rows of `CORE.ASPECT` are the ratios of the camera, in the row order of the camera. The core gives the rows of a page of `CORE.TONE`: the effects. A page of an own setting can also give 2 to 5 rows of a native settings page, which opens instead of the page where the camera has one. Each row opens a borrowed native value page; the core borrows five of them on each camera. Such a page can also have a row in the Customize tab of the native MENU: at the first controller change after INSTALL, the core copies the tab descriptor, adds the rows, and points the RAM tab table at the copy, before MENU builds its tabs. A row targets a controller ID that does not exist, and the controller change hook turns it into the settings submenu of the module.
+A module page is a choice page: one row for each value of a setting of the module or of a used setting, with the text and tiles of the module. The rows of `CORE.ASPECT` are the ratios of the camera, in the row order of the camera. The core gives the rows of a page of `CORE.TONE`: the effects. A page of an own setting can also give 2 to 5 rows of a native settings page. OK on the root row opens the page of the module for a quick change; Fn opens the native settings page, where the camera has one. Each row opens a borrowed native value page; the core borrows five of them on each camera. The native submenus have five rows or fewer, and the submenu of a settings page has six: four hooks make its constructor build six row views, hide the rows past the count up to the sixth, and give the sixth row the kind of the first. The submenu table entry has room for five rows, so OK on the sixth row changes to the kind of the first row, which no controller has. The controller change hook turns it into the value page of the first row, which then shows the sixth row (`SETTINGS_LAST_ROW`). Each module also has a row in the GRKit section of the native MENU (see [GRKit section of MENU](#grkit-section-of-menu)). A row targets a controller ID that does not exist, and the controller change hook turns it into the settings submenu of the module: Enable, then the rows of its page. A value page needs the submenu that opens it, so a page without settings rows gets a submenu with the row of the page setting. The Parameters row of a page of `CORE.TONE` opens the native parameter page with the committed effect, as Fn in ADJ does; the core first takes the model snapshot that a cancel restores, with a stand-in for the ADJ controller whose movie flag reads still.
 
 A module layer paints the value of its setting, and the core skips it at 0. Module layers paint in their order. A layer can hide while DISP hides the native information, show only with the full display, or stay off the ADJ canvas. On an open module page, the ADJ canvas shows the highlighted value.
 
@@ -176,33 +176,43 @@ The core gives modules events, timers, and a UI (`runtime/services.h`, `runtime/
 GRKit adds a private entry to the ADJ toolbar, drawn like the native entries. The root lists the module pages that have rows, then Modules, then About. A page of `CORE.TONE` has rows only with effects.
 The private menu reuses the native ADJ value list, so it behaves like a native entry.
 
-### Modules page
+### GRKit section of MENU
 
-The Modules page (`runtime/manage.h`) lists each module file of `GRKIT/MODULES`, also a module that did not load. OK on a module opens a native settings page with two rows:
+The native MENU has one place for GRKit: a section titled GRKit at the end of the Customize tab. At the first controller change after INSTALL, the core copies the Customize tab descriptor, adds the section and its rows, and points the RAM tab table at the copy. A MENU that was built before gives up its instance in the controller factory, so the next MENU builds its tabs again. The rows, in order:
 
-- **Load** turns the module on or off. The setting is `CORE.OFF.<ID>`, 1 for Off.
-- **Position** sets the row of the module in the root. The setting is `CORE.POS.<ID>`: the position + 1, or 0 for the default place. A move writes the position of each module.
+- One row for each module file of the package and of `GRKIT/MODULES`, also a module that did not load (module management, `runtime/manage.h`). The row shows the value of the module page. It opens **Enable**, which turns the module on or off: the setting `CORE.OFF.<ID>`, 1 for Off; then the settings of the page. The row of a page of `CORE.TONE` opens Enable, Options, **Film Stock**, which lists Off and the shown effects in their ADJ order, then **Parameters**, the native parameter page of the committed effect. A module without a loaded page has only Enable.
+- **ADJ Order**, one row for each group of six modules. Each row of its settings page is a module, in their order. Its values are the positions 1 to the module count, and a choice moves the module to that position: the setting `CORE.POS.<ID>`, the position + 1, or 0 for the default place. A move writes the position of each module, so the page shows the new order at once. The page of a module shows in the GRKit root of ADJ while the module is loaded.
+- **About GRKit** shows the GRKit version and the project address on the native camera information page (`INFO_CONTROLLER`): an entry hook of its update (`menu_info_update`) sets its lines, and the text hook gives its title and labels, only after this row opens it. The row shows the version, safe mode, or that a change waits for the next start.
 
-The choices are settings in the settings table, so the resident loader saves them as other settings. SCAN reads them from `STATE.TXT`: a module that is Off does not load, and the modules load in the order of their positions. So a change applies at the next start. Until then, the root row says to restart. A module that is Off installs no hook, and its saved settings stay in the file.
+The choices are settings in the settings table, so the resident loader saves them as other settings. SCAN reads them from `STATE.TXT` and loads the modules in the order of their positions. A module that is Off loads too, stopped. The choices apply at once:
+
+- The root of ADJ and the module rows of the section follow the positions.
+- Off stops a module (`manage_suspend`). Its page leaves ADJ, the core calls none of its code (layers, plane filters, event handlers, timer and UI callbacks; `services_suspended`), and the capabilities that only it uses count as unused (`GRKIT_HOST_CAPABILITIES`): `CORE.TONE` gives the native processing, `CORE.ASPECT` no crop, and `CORE.GRAIN` no grain. Its settings keep their values. On starts it again.
+
+Only On of a module that did not load, such as a module added after the start, waits for the next start, and the About GRKit row says to restart until then.
+
+A text that does not fit the value column of a native row moves left, so that it ends at the end of the column (`fit_value`). The core measures it with the string view of the camera.
 
 The settings table also keeps each saved value that no setting of this start takes, such as a setting of a module that is Off. The next save of the loader then keeps the value. The Fn adjustments of a missing effect are not kept.
 
-### Effects page
+### Options
 
-A page of `CORE.TONE`, such as that of Image Control, has a last row, Effects, when `GRKIT/EFFECTS` has an effect file. It opens the Effects page (`runtime/effects.h`), which has no root row. MENU returns to the Effects row. The page lists at most 64 effect files, those with the smallest IDs, also an effect that did not install. OK on an effect opens a native settings page with two rows:
+A module page can have options (`GRKIT_CHOICE_OPTIONS`, `options = true` in `module.toml`). The settings page of the module in the GRKit section then has an **Options** row after Enable; without room, the first settings of the page leave it. The row opens a native value page that lists every option, with `(Off)` after an option that is off. Its title names the module, such as Framing Options. Its MENU guide reads Back; its OK guide reads Toggle in the Chinese and Japanese menus (切换, 切換, 切替), a word as wide as the native one. A value page of more values than the value slots, such as Film Stock, keeps the text of each value in the same entries as the options. OK turns the option on or off, and the page stays open: the controller change that follows is dropped (`MENU_ROWS_STAY`), the row is drawn again, and the page keeps its cursor on the option. A change applies at once:
 
-- **Load** turns the effect on or off.
-- **Order** moves the effect up or down one row. A move writes the position of each effect.
+- The options of a page of a setting are its values but Off. `CORE.ROWS.<ID>` keeps a bit for each value that is Off, at most 16 values. The page in ADJ and the value page in MENU leave those values out (`choice_rows` in `runtime/modules.h`). Off of the value of the setting sets it to Off.
+- The options of a page of `CORE.TONE` are the listed effects (`runtime/effects.h`), at most 64 effect files, those with the smallest IDs, also an effect that did not install. One setting keeps the choice of each: `CORE.EFFECT.<effect ID>`, with Off in bit 0 and the position + 1, or 0 for the default place, above. Off of the committed effect commits Off (`effects_turn`).
 
-One setting keeps the choice of each listed effect: `CORE.EFFECT.<effect ID>`, with Off in bit 0 and the position + 1, or 0 for the default place, above. SCAN orders the listed effects by their positions, and installs the first 40 that are not Off. Image Control shows them in that order. `REPORT.TXT` gives the status of each listed effect.
+SCAN orders the listed effects by their positions, and installs at most 40: those that are not Off, then those that are Off while there is room. Film Look shows Off, then the installed effects that are not Off, in that order (`runtime/tone.h`). On of an effect that did not install waits for the next start, and the About GRKit row says to restart until then. `REPORT.TXT` gives the status of each listed effect.
 
-The menu hooks install when GRKIT/MODULES lists a module, also in safe mode. In safe mode, the Modules page can turn off the module that stopped the camera.
+The menu hooks install when GRKIT/MODULES lists a module, also in safe mode. So the GRKit section can turn off the module that stopped the camera.
+
+An ADJ that opened before INSTALL refreshes at its first event after INSTALL, so the GRK slot shows.
 
 The menu text follows the camera language. It is data, not code, because the menu region is small.
 
-## Image Control
+## Film Look
 
-The capability `CORE.TONE` selects an effect for still pictures and the live view by changing a private active-record pointer (`runtime/tone.h`). Off keeps the native processing. The Image Control module is its page.
+The capability `CORE.TONE` selects an effect for still pictures and the live view by changing a private active-record pointer (`runtime/tone.h`). Off keeps the native processing. The Film Look module is its page.
 
 An effect (GRFX0001) replaces the Standard color matrix and tone curves. An optional extension adds a post matrix and selective color.
 
@@ -287,7 +297,7 @@ All private code is in the reservation after the RTOS image. GRKit changes no by
 ## Testing
 
 - Rust tests pin the GRF bytes, the artwork, the generated headers, and the loader scripts.
-- Host C tests check the GRF parser, the effect catalog, the state file parser, the module linker, the menu with the Modules and Effects pages, Framing, and the picture code. The menu, Framing, and picture tests run for each target, with the expectations of its family where the behavior differs.
+- Host C tests check the GRF parser, the effect catalog, the state file parser, the module linker, the menu with module management, the options, and the effects, Framing, and the picture code. The menu, Framing, and picture tests run for each target, with the expectations of its family where the behavior differs.
 - `grkit module test` runs the host test of a module against a fake core (`runtime/sdk/grkit_test.h`).
 - `--ignored` tests build the runtime with an ARM toolchain and a local firmware. See [CONTRIBUTING.md](../CONTRIBUTING.md).
 - The synthetic `--ignored` tests need no firmware. They build a target of each family on a pseudo-random image, as the release builds them, and resolve the relocation tables of INSTALL against that image.

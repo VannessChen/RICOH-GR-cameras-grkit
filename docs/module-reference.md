@@ -65,8 +65,8 @@ A setting reference in `page`, `layers`, or `filters` is a key of `settings`, or
 | --- | --- | --- | --- |
 | `setting` | string | required | The setting of the page: a setting reference. |
 | `off_row` | boolean | `false` | Row 0 shows the Off icon instead of tile 0. |
-| `settings` | array of strings | `[]` | The rows of a native settings page: keys of `settings`, the first the page setting. Give 0, or 2 to 5 keys (`GRKIT_SETTING_ROWS`). |
-| `menu` | boolean | `false` | A row in the Customize tab of the native MENU that opens the native settings page (`GRKIT_PAGE_MENU_ROW`). The page needs `settings`. |
+| `settings` | array of strings | `[]` | The rows of a native settings page: the page setting, then keys of `settings`. Give 0 to 5 keys (`GRKIT_SETTING_ROWS`). With one key, the page setting alone, the row gets a label of its own, and Fn opens no settings page. |
+| `options` | boolean | `false` | The settings page of the module in the GRKit section of MENU has an Options row, which turns each value of the page on or off in ADJ, or each effect for a page of `CORE.TONE` (`GRKIT_CHOICE_OPTIONS`). A page of a setting with options needs `off_row` and at most 16 values. Without room on the settings page, its first rows leave it. |
 
 A page of `CORE.TONE` has no `off_row` and no `settings`, and it needs no tiles. Its text has only `title`.
 
@@ -106,7 +106,7 @@ A module with a page has one text file for each menu language: `text/en.toml`, `
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `title` | string | The name of the page. The Modules page shows the title of the first page as the module name. |
+| `title` | string | The name of the page. The GRKit section of MENU shows the title of the first page as the module name. |
 | `rows` | array of strings | One label for each value of the page setting. A page of `CORE.TONE` has none. |
 | `summaries` | array of strings | Optional. The value in the root row, one for each value. Without it, the root row shows the label. |
 | `settings.<KEY>.label` | string | The label of a row of the native settings page. |
@@ -123,7 +123,7 @@ For a page of a used setting, the build takes the number of values from `rows` i
 A tile is a 40 x 40 PNG file. The build stores it as RGBA, 6400 bytes. The installer copies the tiles into the icon slots after the effect icons.
 
 - Tile n shows value n of the page setting, on its row and on the root row.
-- Tile 0 is also the module tile. The Modules page shows it next to the module.
+- Tile 0 is also the module tile.
 - A choice page needs at least one tile for each value.
 
 ## Settings
@@ -188,7 +188,7 @@ The core has three public settings of its own, the capabilities. A module uses a
 `CORE.TONE`:
 
 - A page of `CORE.TONE` gives only its title. The core gives the rows: the effect names, their icons, the live-view preview, and the Fn adjustments of each effect. The page shows only when effects are installed.
-- `setting_get` returns the row of the selected effect in Image Control: 0 for Off, n + 1 for the effect in row n + 1. `setting_set` selects an effect by its row. The rows follow the order of the Effects page, so keep no row number across a restart.
+- `setting_get` returns 0 for Off, or n + 1 for installed effect n of this start. `setting_set` selects an effect by that value. Film Look shows the effects in the order of their choices, which can change while the camera runs, so the value is not a row of the page. Keep no value across a restart.
 
 `CORE.ASPECT`:
 
@@ -220,29 +220,29 @@ A page is a choice page in the GRKit menu: one row for each value of its setting
 - The root shows a page only if it has two rows or more.
 - The installer rejects a page whose number of rows is not the number of values of its setting.
 
-The root lists the pages in the order of the modules. The official modules come first, then the others in the order of their file names. The Modules page can change the order. See [Modules page](architecture.md#modules-page).
+The root lists the pages in the order of the modules. The official modules come first, then the others in the order of their file names. The ADJ Order row of the GRKit section of MENU can change the order. A page shows while its module is loaded. See [GRKit section of MENU](architecture.md#grkit-section-of-menu).
 
 **Page of `CORE.TONE`.** The core gives the rows. The page has only its title (`GRKIT_CHOICE_CORE_ROWS`).
 
-**Native settings page.** A page of a setting of the module can give 2 to 5 rows of a native settings page (`GRKIT_SETTING_ROWS`). Where the camera has such a page, OK on the root row opens it instead of the choice page. The rows obey these rules:
+**Native settings page.** A page of a setting of the module can give 2 to 5 rows of a native settings page (`GRKIT_SETTING_ROWS`). Where the camera has such a page, Fn and the MENU row open it (see below). The rows obey these rules:
 
-- Each row is a setting of the module, not a used setting.
-- The first row is the page setting.
-- Each row setting has at most 8 values (`GRKIT_SETTING_ROW_VALUES`).
+- The first row is the page setting, also a used setting such as `CORE.ASPECT`. Its values are the rows of the page, and its value texts default to the row texts.
+- The other rows are settings of the module.
+- Each row has at most 8 values (`GRKIT_SETTING_ROW_VALUES`).
 - Each row has a label and a text for each value in each language.
 
 See `modules/date` for an example.
 
-**MENU row.** A page with native settings rows can also set `menu = true`. GRKit then adds a row at the end of the Customize tab of the native MENU. The row shows the page title and the label of the current value. Right on the row opens the native settings page, and MENU on that page returns to the row. Rules:
+**Fn and MENU.** Fn on the root row of a page, or on the page, opens its native settings page. Each module also has a row in the GRKit section at the end of the Customize tab of the native MENU. The row shows the page title and the label of the current value. Right on the row opens the native settings page with an Enable row before the rows of the page, or, for a page without settings rows, Enable and the row of the page setting (at most 64 values). So the GRKit section shows each row of a page, or the last 4 of a page with options. A page can have one settings row, the page setting, to give that row a label of its own; Fn then does not open the settings page. The row of a page of `CORE.TONE` shows the committed effect and opens Enable, Options, Film Stock, which selects the effect, and Parameters, the Fn adjustments of the effect. MENU on that page returns to the row. Rules:
 
-- GRKit adds at most 8 MENU rows, in the order of the modules, while the tab has room.
+- GRKit adds at most 8 MENU rows, in the order of the modules, while the tab has room. A page with more than 8 values and no settings rows gets no row.
 - GRKit adds the rows before the first MENU after it loads. If MENU opened before GRKit loaded, the rows show from the next power-on.
 
 ### Layers
 
 A layer paints over the still live view. The core calls `paint` for each draw of the live view with the value of the layer setting. It does not call `paint` while the value is 0.
 
-The surface is 32-bit ARGB, 720 x 480 pixels:
+The surface has 720 x 480 pixels of 32 bits. A pixel holds red in its low byte, then green, blue, and alpha in its high byte, so the bytes in memory are R, G, B, A:
 
 | Field | Meaning |
 | --- | --- |
@@ -386,7 +386,7 @@ A number picker is not a service yet. For a row in the native MENU, see MENU row
 | BSS: zero-initialized data | after the data, in the same array | read and write. INSTALL sets it to 0. |
 
 The installer copies the code of each module after the code of the earlier modules. The code stays valid even if the resident script stops.
-One script array of 65536 words holds the data and BSS of all modules. The same array also holds the settings table, the context of each module, and the lists of the Modules page and the Effects page.
+One script array of 65536 words holds the data and BSS of all modules. The same array also holds the settings table, the context of each module, and the lists of module management and of the effects.
 
 ## Limits
 
@@ -427,7 +427,7 @@ FRAMING.GRM  loaded
 HELLO.GRM  not loaded: error 51, it needs another version of GRKit
 ```
 
-The Modules page shows the same number after the module name, such as `HELLO (51)`.
+The GRKit section of MENU shows the same number after the module name, such as `HELLO (51)`.
 
 | Error | Report text | Cause |
 | --- | --- | --- |
@@ -443,7 +443,7 @@ Other lines:
 | Report text | Meaning |
 | --- | --- |
 | `loaded` | The module loaded. |
-| `not loaded: Off in the Modules page of GRKit` | **Load** is Off on the Modules page. |
+| `not loaded: Enable is Off in the GRKit section of MENU` | Enable of the module is Off in the GRKit section of MENU. |
 | `not loaded: safe mode` | GRKit is in the safe mode, so no module loads. See [Report and safe mode](architecture.md#report-and-safe-mode). |
 
 When a module does not load, the other modules still load. A module that requires a setting of it can then get error 55.

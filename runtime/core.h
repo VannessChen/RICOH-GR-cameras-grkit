@@ -39,8 +39,7 @@ typedef short s16;
 
 /* One setting of a native settings page: its row label, its values (at most
    SETTING_VALUES, grkit_core::runtime::NATIVE_SETTING_VALUES), the text of a
-   value, and the stored value. The Position row of the Modules page has a
-   value for each module (runtime/manage.h). */
+   value, and the stored value. */
 #define SETTING_VALUES 8U
 typedef struct {
     const u16 *(*label)(volatile u32 *);
@@ -49,9 +48,13 @@ typedef struct {
     u32 (*get)(volatile u32 *);
     void (*set)(volatile u32 *,u32);
 } Setting;
-/* The most rows of a native settings page: the borrowed submenu entry has
-   room for five value methods. A page has 2 to SETTING_ROWS rows. */
-#define SETTING_ROWS 5U
+/* The most rows of a native settings page: the settings of a module page
+   (GRM_SETTING_ROWS) and the Enable row before them in MENU. The borrowed
+   submenu builds six row views (runtime/menu.S: menu_settings_build), one
+   more than the native five. Its table entry has room for five rows: the
+   sixth borrows the kind of the first and the value page of another row
+   (runtime/menu_settings.h: SETTINGS_ALIAS). A page has 2 to SETTING_ROWS rows. */
+#define SETTING_ROWS 6U
 
 typedef struct {
     const u16 *(*title)(volatile u32 *);
@@ -86,7 +89,8 @@ GRKIT_MAYBE_UNUSED static const u16 *text(volatile u32 *h,u32 id);
 GRKIT_MAYBE_UNUSED static const u16 *effect_summary(volatile u32 *h,u32 n);
 /* ---- viewfinder.overlay --------------------------------------------------- */
 
-/* A 32-bit ARGB drawing surface of 720 x 480 pixels. `area` is the capture
+/* A 32-bit drawing surface of 720 x 480 pixels, red in the low byte and
+   alpha in the high byte (runtime/sdk/grkit.h). `area` is the capture
    area that the surface shows: 0 for the full 3:2 area, else the crop.
    `box` is its photo area {left, top, right, bottom}. */
 typedef struct {

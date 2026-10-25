@@ -16,3 +16,5 @@ uses = ["CORE.GRAIN"]
 [page]
 setting = "CORE.GRAIN"
 off_row = true
+# One native settings row: the MENU row of the module names the level.
+settings = ["CORE.GRAIN"]

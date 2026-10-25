@@ -193,10 +193,13 @@
 #define GRKIT_CORE_SETTING_COUNT 3U
 #define GRKIT_CORE_TONE 0x100U
 #define GRKIT_CORE_TONE_VALUES 0U
+#define GRKIT_CORE_TONE_BIT 0x1
 #define GRKIT_CORE_ASPECT 0x101U
 #define GRKIT_CORE_ASPECT_VALUES 7U
+#define GRKIT_CORE_ASPECT_BIT 0x2
 #define GRKIT_CORE_GRAIN 0x102U
 #define GRKIT_CORE_GRAIN_VALUES 4U
+#define GRKIT_CORE_GRAIN_BIT 0x4
 #define GRKIT_CORE_SETTING_WORDS 0,208,48
 #define GRKIT_CORE_SETTING_VALUES 0,7,4
 
@@ -312,30 +315,35 @@
 #define GRKIT_LABEL_COUNT 7
 /* String IDs of the label table, in grkit_core::menu_text order. A run of IDs
    follows the rows or values that it names. */
-#define TEXT_IMAGE_CONTROL 0
-#define TEXT_OFF 1
-#define TEXT_IMAGE_OFF_SUMMARY 2
+#define TEXT_OFF 0
+#define TEXT_IMAGE_OFF_SUMMARY 1
 /* The Image Control summary before an effect name, for the installer. */
-#define TEXT_IMAGE_PREFIX 3
+#define TEXT_IMAGE_PREFIX 2
 /* The About row: the GRKit version. */
-#define TEXT_VERSION 4
-/* The title of the Modules page. */
-#define TEXT_MODULES 5
+#define TEXT_VERSION 3
 /* The Modules root row: no change, a change for the next start, safe mode. */
-#define TEXT_MODULES_SUMMARY 6
-/* The settings row that turns a module on or off. */
-#define TEXT_LOAD 9
-#define TEXT_ON 10
-/* The settings row of the place of a module in the root. */
-#define TEXT_POSITION 11
-/* The title of the Effects page. */
-#define TEXT_EFFECTS 12
-/* The last row of Image Control: no change, a change for the next start. */
-#define TEXT_EFFECTS_SUMMARY 13
-/* The settings row that moves an effect. */
-#define TEXT_ORDER 15
-/* Move up, then Move down. */
-#define TEXT_MOVE_UP 16
-#define GRKIT_TEXT_STRINGS 18
+#define TEXT_MODULES_SUMMARY 4
+/* The settings row that turns a module or an effect on or off. */
+#define TEXT_ENABLE 7
+#define TEXT_ON 8
+/* The GRKit row of MENU in safe mode. */
+#define TEXT_SAFE_MODE 9
+/* The GRKit row of MENU after a change for the next start. */
+#define TEXT_RESTART 10
+/* The Image Control settings row that opens the Fn adjustments. */
+#define TEXT_ADJUSTMENTS 11
+/* The ADJ Order rows of MENU: the first group of modules, then the second. */
+#define TEXT_ADJ 12
+/* The settings row that lists the options of a module page. */
+#define TEXT_OPTIONS 14
+/* About GRKit: the title, the Version row and its value, the Project row and
+   its value. */
+#define TEXT_ABOUT 15
+/* The Film Look settings row that selects the effect. */
+#define TEXT_FILM 20
+/* The guides of an options value page: OK turns an option on or off, MENU goes
+   back. */
+#define TEXT_GUIDE 21
+#define GRKIT_TEXT_STRINGS 23
 
 #endif

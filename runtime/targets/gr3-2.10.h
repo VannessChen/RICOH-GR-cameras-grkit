@@ -48,6 +48,8 @@
 #define FW_ICON_VIEW_SET_ICON FIRMWARE(0x5339a9a0)
 #define FW_ICON_VIEW_DESTROY FIRMWARE(0x5339a874)
 #define FW_STRING_VIEW_RESET FIRMWARE(0x53396f80)
+/* The width of the text of a string view, in pixels. */
+#define FW_STRING_VIEW_WIDTH FIRMWARE(0x53396dc8)
 #define FW_LIST_SET_COUNT FIRMWARE(0x53394e8c)
 #define FW_LIST_ROW FIRMWARE(0x53394758)
 #define FW_LIST_SAVE FIRMWARE(0x533947f0)
@@ -90,7 +92,7 @@
 #define PARAMETER_KINDS {0,1,2,3,4,5,6,13,14}
 /* The page event that opens another controller (0x2000015) from the page. */
 #define DETAIL_EV_SUBPAGE 0x88
-/* The native settings page of a GRKit root row (runtime/menu.c). It borrows
+/* The native settings page of a GRKit root row (runtime/menu_settings.h). It borrows
    the MENU submenu Instant Review (controller 0x20000be, entry 10 of the
    submenu kind table), its three value pages (0x20000c3 Display Time,
    0x20000c4 Zoom Review, 0x20000c5), and two value pages of the MENU Setup
@@ -114,24 +116,37 @@
 #define SETTINGS_SUBMENU_KIND 10
 #define SETTINGS_PAGES {0x20000c3U,0x20000c4U,0x20000c5U,0x200009fU,0x20000a0U}
 /* The text IDs of the submenu title and of the title of each value page,
-   which are also the row labels. */
+   which are also the row labels. The sixth row, which has no value page of
+   its own, shows a label of another submenu. */
 #define SETTINGS_TITLE_TEXT 0x1e7
-#define SETTINGS_ROW_TEXTS {0x1e9,0x1eb,0x16e,0x194,0x1ed}
+#define SETTINGS_ROW_TEXTS {0x1e9,0x1eb,0x16e,0x194,0x1ed,0x1b0}
+/* The guides of a SelectMenu value page: OK and MENU. */
+#define SELECT_GUIDE_OK_TEXT 0x301
+#define SELECT_GUIDE_BACK_TEXT 0x302
 /* Row text setters: a value page row sets the string view at +0xf8, and a
    submenu row its value view at +0xfc. Each sets a text ID. */
 #define FW_ROW_TEXT FIRMWARE(0x5339e7a0)
 #define ROW_TEXT_VIEW 0xf8
 #define FW_ROW_VALUE FIRMWARE(0x533a6ad0)
 #define ROW_VALUE_VIEW 0xfc
-/* Rows of modules in the native MENU (runtime/menu.c). MENU builds its
+/* Rows of modules in the native MENU (runtime/menu_section.h). MENU builds its
    tabs at the first MENU of a start from the tab descriptors in the RAM
-   table FW_MENU_TABS; entry MENU_TAB_CUSTOMIZE is the Customize tab. A
+   table FW_MENU_TABS; entry MENU_TAB_GRKIT is the Customize tab. A
    descriptor holds the row count (u8) at MENU_TAB_ROWS, then for each of
    MENU_TAB_MAX_ROWS rows its filler (a C++ member pointer), its target
    controller, and its predicate (a member pointer, 0 for a row that always
    shows). A filler gets the row view and sets its label view (+0xec) and
    value view with the row setters. */
-#define MENU_TAB_CUSTOMIZE 3
+/* The MENU tab of the GRKit section (Customize, C), and the sections of a
+   tab descriptor: their count, title text IDs, and first rows. The Setup
+   tab has all MENU_TAB_MAX_SECTIONS sections; Customize has 3. */
+#define MENU_TAB_GRKIT 3
+#define MENU_TAB_SECTIONS 0x68
+#define MENU_TAB_TITLES 0x6a
+#define MENU_TAB_STARTS 0x80
+#define MENU_TAB_MAX_SECTIONS 11
+/* The TopMenu instance in the controller factory (FW_CONTROLLER_FACTORY). */
+#define MENU_TOP_SLOT 0x74
 #define MENU_TAB_SIZE 0x384
 #define MENU_TAB_ROWS 0x8b
 #define MENU_TAB_FILLERS 0x8c
@@ -143,9 +158,25 @@
 #define FW_MENU_ROW_LABEL FIRMWARE(0x5339dc70)
 #define FW_MENU_ROW_VALUE FIRMWARE(0x5339de6c)
 #define MENU_ROW_VALUE_VIEW 0xf8
+/* A native view keeps its frame {x, y, width, height} at VIEW_FRAME, and its
+   vtable sets it at VIEW_SET_FRAME. The value of a MENU or submenu row shows
+   in a column of VALUE_COLUMN pixels from the x of the view. */
+#define VIEW_FRAME 0x20
+#define VIEW_SET_FRAME 0x18
+#define VALUE_COLUMN 140
 #define FW_ADJ_REFRESH FIRMWARE(0x531a4114)
 #define FW_ADJ_SELECT_SLOT FIRMWARE(0x531a4864)
 #define FW_CHANGE_CONTROLLER FIRMWARE(0x5316c9d8)
+/* The controller factory singleton, which holds one instance of each controller. */
+/* The camera information page (Setup tab, Firmware Info/Options), which
+   About GRKit opens: its controller, the text ID of its title, and its two
+   lines, ASCII string views that the page update sets (menu_info_update)
+   with FW_STRING_VIEW_SET_ASCII(view, text). */
+#define INFO_CONTROLLER 0x200011aU
+#define INFO_TITLE_TEXT 0x28d
+#define INFO_LINES {0x168,0x16c}
+#define FW_STRING_VIEW_SET_ASCII FIRMWARE(0x53390ef8)
+#define FW_CONTROLLER_FACTORY FIRMWARE(0x5316f350)
 /* AdjModeController fields. */
 #define ADJ_CANVAS 0x4
 /* The current UI settings object is at this slot, +4 in the object
@@ -173,7 +204,8 @@
 #define ADJ_LIST 0x1f0
 #define ADJ_SLOT 0x1f4
 /* 1 in movie mode. */
-#define ADJ_MOVIE(controller) BYTE(controller,0x270)
+#define ADJ_MOVIE_FIELD 0x270
+#define ADJ_MOVIE(controller) BYTE(controller,ADJ_MOVIE_FIELD)
 #define ADJ_ACTION 0x279
 
 /* AdjModeController events (the first halfword of an event). */

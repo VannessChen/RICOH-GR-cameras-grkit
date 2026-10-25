@@ -280,14 +280,17 @@ fn target_capacity_and_empty_effect_selection_are_supported() {
 #[test]
 fn selected_modules_are_packaged_and_verified() {
     let effects = testing::effect_set(&["test-effect"]);
-    let modules = [testing::module("DATE"), testing::module("IMGCTL")];
+    let modules = [testing::module("DATE"), testing::module("FILMLOOK")];
     let bytes = assemble(&[runtime()], &effects, &modules, &camera::GR3, &english())
         .unwrap()
         .bytes;
     let files = unpack(&bytes);
     assert!(files.contains_key("SD_ROOT/SCRIPT/GRKIT/MODULES/DATE.GRM"));
-    assert!(files.contains_key("SD_ROOT/SCRIPT/GRKIT/MODULES/IMGCTL.GRM"));
-    assert_eq!(verify_package(&bytes).unwrap().modules, ["DATE", "IMGCTL"]);
+    assert!(files.contains_key("SD_ROOT/SCRIPT/GRKIT/MODULES/FILMLOOK.GRM"));
+    assert_eq!(
+        verify_package(&bytes).unwrap().modules,
+        ["DATE", "FILMLOOK"]
+    );
     // The plugin file of 1.x is not part of a package.
     let mut files = unpack(&package());
     files.insert(
@@ -312,8 +315,8 @@ fn packages_that_show_nothing_are_rejected() {
     // No module.
     assert!(assemble_with(&[], &[]).is_err());
     // Image Control shows only with effects.
-    assert!(assemble_with(&[], &["IMGCTL"]).is_err());
-    assert!(assemble_with(&["test-effect"], &["IMGCTL"]).is_ok());
+    assert!(assemble_with(&[], &["FILMLOOK"]).is_err());
+    assert!(assemble_with(&["test-effect"], &["FILMLOOK"]).is_ok());
     // Effects need Image Control.
     assert!(assemble_with(&["test-effect"], &["FRAMING"]).is_err());
     assert!(assemble_with(&[], &["FRAMING"]).is_ok());
@@ -744,7 +747,7 @@ fn a_gr4_package_has_its_modeset_file_guide_and_modules() {
     assert!(assemble(
         &gr4_runtimes(),
         &EffectSet::default(),
-        &[testing::module("IMGCTL")],
+        &[testing::module("FILMLOOK")],
         &camera::GR4,
         &english()
     )

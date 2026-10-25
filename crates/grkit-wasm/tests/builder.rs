@@ -67,17 +67,17 @@ fn modules_are_added_once_and_checked() {
     let mut builder = builder_without_modules(&runtime_files());
     // Image Control shows nothing without effects.
     assert_eq!(
-        builder.add_module(&testing::module("IMGCTL")).unwrap(),
-        "IMGCTL"
+        builder.add_module(&testing::module("FILMLOOK")).unwrap(),
+        "FILMLOOK"
     );
-    assert!(error(builder.add_module(&testing::module("IMGCTL"))).contains("Module added twice"));
+    assert!(error(builder.add_module(&testing::module("FILMLOOK"))).contains("Module added twice"));
     assert!(builder.add_module(b"GRKM").is_err());
     assert!(error(builder.build()).contains("shows nothing"));
     builder.add_effect(&effect("test-a")).unwrap();
     let package = builder.build().unwrap();
     assert_eq!(
         packaging::verify_package(&package).unwrap().modules,
-        ["IMGCTL"]
+        ["FILMLOOK"]
     );
 }
 

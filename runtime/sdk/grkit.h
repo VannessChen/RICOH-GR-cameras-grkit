@@ -25,7 +25,9 @@ typedef unsigned char u8;
 
 /* ---- overlay.layer -------------------------------------------------------- */
 
-/* A 32-bit ARGB drawing surface of 720 x 480 pixels over the still live view.
+/* A 32-bit drawing surface of 720 x 480 pixels over the still live view. A
+   pixel holds red in its low byte, then green, blue, and alpha in its high
+   byte (bytes R, G, B, A in memory), as the native graphics layer reads it.
    `area` is the capture area that the surface shows: 0 for the full 3:2
    area, else the ratio value of the crop (CORE.ASPECT). `box` is its photo
    area {left, top, right, bottom}. */
@@ -173,9 +175,14 @@ typedef struct {
    GRKIT_CHOICE_OFF_ROW. Each text is one UTF-16 string for each language.
    The installer rejects the module if `rows` is not the number of values.
 
-   A page of a setting of this module can also have 2 to GRKIT_SETTING_ROWS
-   rows of a native settings page. Where the camera has such a page, OK on
-   the root row opens it with these rows instead of the choice page.
+   A page of a setting of this module can also have 1 to GRKIT_SETTING_ROWS
+   rows of a native settings page. Fn on the root row or on the page opens
+   it when it has 2 rows or more. Each module also has a row in the GRKit
+   section of the Customize tab of the native MENU, which opens the native
+   settings page with an Enable row before its rows, or Enable and the row
+   of the page setting (at most 8 values) for a page without settings rows;
+   so MENU shows at most 4 rows of a page. The row of a page of CORE.TONE
+   opens Enable and the Fn adjustments of the committed effect.
 
    A page of CORE.TONE has GRKIT_CHOICE_CORE_ROWS and only its title: the
    core gives its rows, the effects, with their names, icons, live-view
@@ -183,11 +190,13 @@ typedef struct {
 #define GRKIT_PAGE_CHOICE 1U
 #define GRKIT_CHOICE_OFF_ROW 1U
 #define GRKIT_CHOICE_CORE_ROWS 2U
-/* A page with native settings rows can also have a row in the Customize tab
-   of the native MENU. Right on the row opens the native settings page, and
-   MENU returns to MENU. The row shows the title of the page and the label
-   of the value of its setting. GRKit adds at most 8 such rows. */
-#define GRKIT_PAGE_MENU_ROW 4U
+/* The settings page of the module in the GRKit section of MENU has an
+   Options row: a list that turns each value of the page but Off on or off in
+   ADJ, or each effect for a page of CORE.TONE. A value that is off does not
+   show in ADJ, and Off of the value of the setting sets the setting to 0. A
+   page of a setting with options has GRKIT_CHOICE_OFF_ROW and at most 16
+   values. */
+#define GRKIT_CHOICE_OPTIONS 4U
 #define GRKIT_SETTING_ROWS 5U
 typedef struct {
     u32 size;
@@ -198,7 +207,7 @@ typedef struct {
     const u16 *const *summaries; /* values x GRKIT_LANGUAGES */
     const u16 *const *labels;    /* values x GRKIT_LANGUAGES */
     u32 rows;
-    u32 setting_rows;            /* 0, or 2 to GRKIT_SETTING_ROWS */
+    u32 setting_rows;            /* 0 to GRKIT_SETTING_ROWS */
     const GrkitSettingRow *settings;
 } GrkitPage;
 

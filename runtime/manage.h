@@ -1,37 +1,51 @@
 #ifndef GRKIT_MANAGE_H
 #define GRKIT_MANAGE_H
-/* The Modules page: the root row before About lists each module file of
-   GRKIT/MODULES, also one that did not load. OK on a module opens a native
-   settings page with two rows: Load (On or Off) and Position (its place in
-   the GRKit root). A change applies at the next start, and the root row says
-   so until then.
+/* Module management: the GRKit section of the native MENU lists each module
+   file of the package and of GRKIT/MODULES, also one that did not load. Its
+   settings page turns the module on or off (Enable), and the ADJ Order row of
+   the section orders the modules, and so their pages in the GRKit root of
+   ADJ, at once. Off applies at once too, as a soft Off: the page of the
+   module leaves ADJ, and the core calls no code of the module and treats the
+   capabilities that only it uses as unused (manage_suspend). The module
+   does not load at the next start. On applies at once to a module that
+   loaded at this start, and at the next start to another one; the About
+   GRKit row says so until then.
 
-   Two settings of the settings table keep the choices of each listed module
-   (runtime/settings.h): CORE.OFF.<ID>, 1 for Off, and CORE.POS.<ID>, its
-   position + 1, or 0 for the default place. The resident loader saves them
-   as other settings, and SCAN reads them to select and order the modules
-   (runtime/installer.c).
+   Three settings of the settings table keep the choices of each listed
+   module (runtime/settings.h): CORE.OFF.<ID>, 1 for Off; CORE.POS.<ID>, its
+   position + 1, or 0 for the default place; and CORE.ROWS.<ID>, a bit for
+   each value of its page that is off in ADJ (the options of the page,
+   runtime/modules.h).
+   The resident loader saves them as other settings, and SCAN reads them to
+   select and order the modules (runtime/installer.c).
 
    INSTALL writes the module list (GRKIT_HOST_MANAGE): MANAGE_HEADER words,
    then MANAGE_STRIDE bytes for each listed module, in the order of the last
    start. The includer defines u16, u32, and the header fields. */
 #define MANAGE_COUNT 0U
 /* The handle of CORE.OFF of module 0. Module i has CORE.OFF at handle
-   base + 2i and CORE.POS at base + 2i + 1. */
+   base + 3i, CORE.POS at base + 3i + 1, and CORE.ROWS at base + 3i + 2. */
 #define MANAGE_SETTINGS 4U
+#define MANAGE_PER_MODULE 3U
+/* CORE.ROWS has a bit for each of the first MANAGE_OPTION_VALUES values. */
+#define MANAGE_OPTION_VALUES 16U
 #define MANAGE_FLAGS 8U
 #define MANAGE_SAFE_MODE 1U
 /* The listed module whose native settings page the Modules page opened. */
 #define MANAGE_OPEN 12U
 #define MANAGE_HEADER 16U
 /* Each module: its status at this start, the address of the title texts of
-   its page or 0, the global index of its tile 0 or MANAGE_NO_TILE, then its
-   name: the file name before .GRM, with the error status after a module that
-   did not link. */
+   its page or 0, the global index of its tile 0 or MANAGE_NO_TILE, the start
+   and the end of its code and the capabilities that it uses (a loaded module;
+   0 otherwise), then its name: the file name before .GRM, with the error
+   status after a module that did not link. */
 #define MANAGE_STATUS 0U
 #define MANAGE_TITLE 4U
 #define MANAGE_TILE 8U
-#define MANAGE_NAME 12U
+#define MANAGE_CODE 12U
+#define MANAGE_CODE_END 16U
+#define MANAGE_USES 20U
+#define MANAGE_NAME 24U
 #define MANAGE_NAME_UNITS 16U
 #define MANAGE_STRIDE (MANAGE_NAME + 2U * MANAGE_NAME_UNITS)
 #define MANAGE_NO_TILE 0xffffffffU
@@ -58,8 +72,13 @@ static u32 manage_count(volatile u32 *h) {
 }
 static u32 manage_word(volatile u32 *h,u32 offset) { return MANAGE_MAP(h[GRKIT_HOST_MANAGE/4]+offset)[0]; }
 static u32 manage_entry(volatile u32 *h,u32 module) { return h[GRKIT_HOST_MANAGE/4]+MANAGE_HEADER+module*MANAGE_STRIDE; }
-static u32 manage_off_handle(volatile u32 *h,u32 module) { return manage_word(h,MANAGE_SETTINGS)+2*module; }
+static u32 manage_off_handle(volatile u32 *h,u32 module) {
+    return manage_word(h,MANAGE_SETTINGS)+MANAGE_PER_MODULE*module;
+}
 static u32 manage_off(volatile u32 *h,u32 module) { return setting_value(h,manage_off_handle(h,module)); }
+/* The values of the page of a module that are off in ADJ, a bit each. */
+static u32 manage_rows_handle(volatile u32 *h,u32 module) { return manage_off_handle(h,module)+2; }
+static u32 manage_hidden_values(volatile u32 *h,u32 module) { return setting_value(h,manage_rows_handle(h,module)); }
 /* The sort key of a module: its CORE.POS, or the default place after them. */
 static u32 manage_key(volatile u32 *h,u32 module) {
     u32 position=setting_value(h,manage_off_handle(h,module)+1);
@@ -84,15 +103,36 @@ static u32 manage_row(volatile u32 *h,u32 module) {
     for(row=0;row<manage_count(h);++row) if(manage_module(h,row)==module) return row;
     return 0;
 }
-/* Whether the choices differ from this start: a module turns on or off, or
-   the order changes. */
+static u32 manage_status(volatile u32 *h,u32 module) { return MANAGE_MAP(manage_entry(h,module)+MANAGE_STATUS)[0]; }
+/* Whether a choice waits for the next start: a module that did not load
+   because it was Off is On. */
 static u32 manage_changed(volatile u32 *h) {
     u32 i;
-    for(i=0;i<manage_count(h);++i) {
-        u32 status=MANAGE_MAP(manage_entry(h,i)+MANAGE_STATUS)[0];
-        if(manage_off(h,i)!=(status==MANAGE_OFF) || manage_module(h,i)!=i) return 1;
-    }
+    for(i=0;i<manage_count(h);++i)
+        if(manage_status(h,i)==MANAGE_OFF && !manage_off(h,i)) return 1;
     return 0;
+}
+/* Whether a soft Off stops a module that loaded at this start. */
+static u32 manage_stopped(volatile u32 *h,u32 module) {
+    return manage_status(h,module)==MANAGE_LOADED && manage_off(h,module);
+}
+/* Apply the soft Off after a change of Enable: the code ranges of the
+   stopped modules (SERVICES_SUSPENDED), and the capabilities of the modules
+   that run (GRKIT_HOST_CAPABILITIES). */
+static void manage_suspend(volatile u32 *h) {
+    u32 i, n=0, uses=0;
+    if(!h[GRKIT_HOST_SERVICES/4]) return;
+    for(i=0;i<manage_count(h);++i) {
+        u32 entry=manage_entry(h,i);
+        if(manage_status(h,i)!=MANAGE_LOADED) continue;
+        if(!manage_off(h,i)) { uses|=MANAGE_MAP(entry+MANAGE_USES)[0]; continue; }
+        if(n>=SERVICES_SUSPENDED_MAX) continue;
+        services_word(h,SERVICES_SUSPENDED+4+8*n)[0]=MANAGE_MAP(entry+MANAGE_CODE)[0];
+        services_word(h,SERVICES_SUSPENDED+8+8*n)[0]=MANAGE_MAP(entry+MANAGE_CODE_END)[0];
+        ++n;
+    }
+    services_word(h,SERVICES_SUSPENDED)[0]=n;
+    h[GRKIT_HOST_CAPABILITIES/4]=uses;
 }
 /* The name of a module: the title of its page in the menu language, else
    its file name. */
@@ -102,7 +142,15 @@ static const u16 *manage_name(volatile u32 *h,u32 module) {
     return (const u16 *)MANAGE_MAP(entry+MANAGE_NAME);
 }
 
-static const u16 *manage_title(volatile u32 *h) { return text(h,TEXT_MODULES); }
+/* The listed module of a loaded module page, by the address of its title
+   texts, or MANAGE_MODULES. */
+static u32 manage_of_title(volatile u32 *h,u32 title) {
+    u32 i;
+    for(i=0;i<manage_count(h);++i)
+        if(title && MANAGE_MAP(manage_entry(h,i)+MANAGE_TITLE)[0]==title) return i;
+    return MANAGE_MODULES;
+}
+static const u16 *manage_title(volatile u32 *h) { return text(h,TEXT_ADJ); }
 static const u16 *manage_summary(volatile u32 *h) {
     if(manage_word(h,MANAGE_FLAGS)&MANAGE_SAFE_MODE) return text(h,TEXT_MODULES_SUMMARY+2);
     return text(h,TEXT_MODULES_SUMMARY+manage_changed(h));
@@ -127,39 +175,56 @@ static u32 manage_committed(volatile u32 *h) {
     return module<manage_count(h) ? manage_row(h,module) : 0;
 }
 
-/* The settings page of module MANAGE_OPEN. */
-static u32 manage_open(volatile u32 *h) {
-    u32 module=manage_word(h,MANAGE_OPEN);
-    return module<manage_count(h) ? module : 0;
+/* The ADJ Order rows of the GRKit section of MENU (runtime/menu_section.h) open a
+   native settings page for each group of MANAGE_GROUP_ROWS listed modules,
+   in their order. Each row is a module, and its values are the positions 1
+   to the module count; the row shows the position of the module. A choice
+   moves the module to that position and gives each module its row + 1 as
+   CORE.POS, so the page shows the new order at once; the change applies at
+   the next start. SERVICES_MENU + MENU_ROWS_GROUP holds the group of the
+   open page. */
+#define MANAGE_GROUP_ROWS SETTING_ROWS
+#define MANAGE_GROUPS ((MANAGE_MODULES+MANAGE_GROUP_ROWS-1U)/MANAGE_GROUP_ROWS)
+static u32 manage_group(volatile u32 *h) {
+    return h[GRKIT_HOST_SERVICES/4] ? services_word(h,SERVICES_MENU+MENU_ROWS_GROUP)[0] : 0;
 }
-static const u16 *manage_load_label(volatile u32 *h) { return text(h,TEXT_LOAD); }
-static u32 manage_load_values(volatile u32 *h) { (void)h; return 2; }
-static const u16 *manage_load_text(volatile u32 *h,u32 value) { return text(h,value ? TEXT_OFF : TEXT_ON); }
-static u32 manage_load_get(volatile u32 *h) { return manage_off(h,manage_open(h)); }
-static void manage_load_set(volatile u32 *h,u32 value) { setting_store(h,manage_off_handle(h,manage_open(h)),value); }
-static const u16 *manage_position_label(volatile u32 *h) { return text(h,TEXT_POSITION); }
-static u32 manage_position_values(volatile u32 *h) { return manage_count(h); }
-static const u16 manage_digits[MANAGE_MODULES][2]={{'1',0},{'2',0},{'3',0},{'4',0},{'5',0},{'6',0},{'7',0},{'8',0}};
-static const u16 *manage_position_text(volatile u32 *h,u32 value) {
+/* The rows of the open group. */
+static u32 manage_group_rows(volatile u32 *h) {
+    u32 first=manage_group(h)*MANAGE_GROUP_ROWS, n=manage_count(h);
+    return first>=n ? 0 : n-first<MANAGE_GROUP_ROWS ? n-first : MANAGE_GROUP_ROWS;
+}
+_Static_assert(MANAGE_MODULES<=SETTING_VALUES,"A value page holds each position");
+static u32 manage_values(volatile u32 *h) { return manage_count(h); }
+static const u16 manage_positions[MANAGE_MODULES][2]={{'1',0},{'2',0},{'3',0},{'4',0},{'5',0},{'6',0},{'7',0},{'8',0}};
+static const u16 *manage_value_text(volatile u32 *h,u32 value) {
     (void)h;
-    return manage_digits[value<MANAGE_MODULES ? value : 0];
+    return manage_positions[value<MANAGE_MODULES ? value : MANAGE_MODULES-1];
 }
-static u32 manage_position_get(volatile u32 *h) { return manage_row(h,manage_open(h)); }
-/* Move the module to row `value`: each module gets its row + 1 as CORE.POS. */
-static void manage_position_set(volatile u32 *h,u32 value) {
-    u32 n=manage_count(h), order[MANAGE_MODULES], module=manage_open(h), row, at=0;
-    if(value>=n) return;
-    for(row=0;row<n;++row) {
-        u32 next=manage_module(h,row);
-        if(next!=module) order[at++]=next;
-    }
-    for(row=n-1;row>value;--row) order[row]=order[row-1];
-    order[value]=module;
-    for(row=0;row<n;++row) setting_store(h,manage_off_handle(h,order[row])+1,row+1);
+/* Move the module at `row` to row `to`, the others keep their order: each
+   module gets its row + 1. */
+static void manage_move(volatile u32 *h,u32 row,u32 to) {
+    u32 n=manage_count(h), order[MANAGE_MODULES], i, moved;
+    if(row>=n || to>=n) return;
+    for(i=0;i<n;++i) order[i]=manage_module(h,i);
+    moved=order[row];
+    for(i=row;i<to;++i) order[i]=order[i+1];
+    for(i=row;i>to;--i) order[i]=order[i-1];
+    order[to]=moved;
+    for(i=0;i<n;++i) setting_store(h,manage_off_handle(h,order[i])+1,i+1);
 }
+#define MANAGE_ROW(n) \
+    static const u16 *manage_label_##n(volatile u32 *h) { \
+        return manage_name(h,manage_module(h,manage_group(h)*MANAGE_GROUP_ROWS+n)); } \
+    static u32 manage_get_##n(volatile u32 *h) { return manage_group(h)*MANAGE_GROUP_ROWS+n; } \
+    static void manage_set_##n(volatile u32 *h,u32 value) { manage_move(h,manage_group(h)*MANAGE_GROUP_ROWS+n,value); }
+MANAGE_ROW(0) MANAGE_ROW(1) MANAGE_ROW(2) MANAGE_ROW(3) MANAGE_ROW(4) MANAGE_ROW(5)
 static const Setting manage_settings[SETTING_ROWS]={
-    {manage_load_label,manage_load_values,manage_load_text,manage_load_get,manage_load_set},
-    {manage_position_label,manage_position_values,manage_position_text,manage_position_get,manage_position_set},
+    {manage_label_0,manage_values,manage_value_text,manage_get_0,manage_set_0},
+    {manage_label_1,manage_values,manage_value_text,manage_get_1,manage_set_1},
+    {manage_label_2,manage_values,manage_value_text,manage_get_2,manage_set_2},
+    {manage_label_3,manage_values,manage_value_text,manage_get_3,manage_set_3},
+    {manage_label_4,manage_values,manage_value_text,manage_get_4,manage_set_4},
+    {manage_label_5,manage_values,manage_value_text,manage_get_5,manage_set_5},
 };
 #define MANAGE_PAGE {manage_title,manage_summary,manage_rows,manage_label,manage_icon, \
     manage_checked,manage_apply,manage_committed,0,0,manage_settings}

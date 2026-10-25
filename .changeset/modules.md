@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Each feature is now a module file in `GRKIT/MODULES`, and the GRK menu has a Modules page that turns each module on or off and sets its place.
+Each feature is now a module, which you can add by copying its file to `GRKIT/MODULES` and turn on or off with its Enable row in the GRKit section of MENU.

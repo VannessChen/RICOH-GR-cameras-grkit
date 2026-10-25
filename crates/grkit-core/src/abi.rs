@@ -471,6 +471,14 @@ pub fn header() -> String {
             capability.key, capability.values
         )
         .unwrap();
+        // The bit in GRKIT_HOST_CAPABILITIES, without a suffix for assembly.
+        writeln!(
+            out,
+            "#define GRKIT_CORE_{}_BIT {:#x}",
+            capability.key,
+            1u32 << i
+        )
+        .unwrap();
     }
     let list = |values: Vec<String>| values.join(",");
     writeln!(

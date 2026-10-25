@@ -16,9 +16,27 @@ tiles = [
 ]
 uses = ["CORE.ASPECT"]
 
+# The mask outside the photo area: 0 dark (black at 50%), 1 black, 2 frame
+# lines only.
+[[settings]]
+key = "MASK"
+values = 3
+saved = true
+public = true
+
+# The ratio label: 0 on, 1 off.
+[[settings]]
+key = "LABEL"
+values = 2
+saved = true
+public = true
+
 [page]
 setting = "CORE.ASPECT"
 off_row = true
+settings = ["CORE.ASPECT", "MASK", "LABEL"]
+# The GRKit section of MENU turns each ratio on or off for ADJ.
+options = true
 
 # The mask stays in each display, because it shows the capture area.
 [[layers]]

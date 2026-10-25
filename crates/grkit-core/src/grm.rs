@@ -410,7 +410,7 @@ static const u16 full[4] = {{0, 0, 720, 480}};
 int main(void)
 {{
     Surface s = grkit_test_surface(full);
-    assert(SETTING_MODE == 0 && grkit_module.settings[0].values == 2);
+    assert(SETTING_MODE == GRKIT_SETTING(0) && grkit_module.settings[0].values == 2);
     grkit_test_clear();
     module_paint(&s, 1);
     assert(grkit_test_pixel(700, 20) == 0xffffffffU);

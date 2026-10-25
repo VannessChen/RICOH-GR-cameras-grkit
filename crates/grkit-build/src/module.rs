@@ -264,14 +264,15 @@ pub struct PageSpec {
     /// Row 0 shows the Off icon instead of tile 0.
     #[serde(default)]
     pub off_row: bool,
-    /// The rows of the native settings page: 2 to 5 keys of `settings`, the
+    /// The rows of the native settings page: 1 to 5 keys of `settings`, the
     /// first the page setting. The text names each in `[settings.<KEY>]`.
     #[serde(default)]
     pub settings: Vec<String>,
-    /// A row in the Customize tab of the native MENU that opens the native
-    /// settings page. The page needs `settings`.
+    /// The settings page of the module in MENU has an Options row, which turns
+    /// each value of the page on or off for ADJ; for a page of CORE.TONE, its
+    /// effects (`GRKIT_CHOICE_OPTIONS`).
     #[serde(default)]
-    pub menu: bool,
+    pub options: bool,
 }
 
 /// A `picture.plane` filter.
@@ -475,8 +476,8 @@ pub fn generate(directory: &Path) -> Result<(Manifest, String, String)> {
         // The core gives the rows: the page has only its title.
         let (setting, _) = setting_reference(&page.setting)?;
         ensure!(
-            !page.off_row && page.settings.is_empty() && !page.menu,
-            "A page of {} has no off_row, no settings, and no menu",
+            !page.off_row && page.settings.is_empty(),
+            "A page of {} has no off_row and no settings",
             page.setting
         );
         let mut titles = Vec::new();
@@ -502,7 +503,8 @@ pub fn generate(directory: &Path) -> Result<(Manifest, String, String)> {
         )?;
         writeln!(
             c,
-            "static const GrkitPage page = {{sizeof(GrkitPage), GRKIT_PAGE_CHOICE, {setting}, GRKIT_CHOICE_CORE_ROWS, page_title, 0, 0, 0, 0, 0}};"
+            "static const GrkitPage page = {{sizeof(GrkitPage), GRKIT_PAGE_CHOICE, {setting}, GRKIT_CHOICE_CORE_ROWS{}, page_title, 0, 0, 0, 0, 0}};",
+            if page.options { " | GRKIT_CHOICE_OPTIONS" } else { "" }
         )?;
         registrations.push("{GRKIT_POINT_MENU_PAGE, &page}".to_owned());
     }
@@ -527,36 +529,40 @@ pub fn generate(directory: &Path) -> Result<(Manifest, String, String)> {
             "A choice page needs a tile for each value"
         );
         ensure!(
-            !page.menu || !page.settings.is_empty(),
-            "A page with a MENU row needs the rows of a native settings page"
-        );
-        ensure!(
             page.settings.is_empty()
-                || (2..=grkit_core::runtime::NATIVE_SETTING_ROWS).contains(&page.settings.len()),
-            "A page has 0, or 2 to {} rows of a native settings page",
+                || page.settings.len() <= grkit_core::runtime::NATIVE_SETTING_ROWS,
+            "A page has at most {} rows of a native settings page",
             grkit_core::runtime::NATIVE_SETTING_ROWS
         );
+        // Row 0 is the page setting, also a used one such as CORE.ASPECT:
+        // its values are the rows of the page. The other rows are settings
+        // of the module. INSTALL writes the handle of each row.
         let mut setting_rows = Vec::new();
         for (i, key) in page.settings.iter().enumerate() {
-            let index = m
-                .settings
-                .iter()
-                .position(|s| &s.key == key)
-                .with_context(|| {
-                    format!(
-                        "A native settings row names {key}, which is not a setting of the module"
-                    )
-                })?;
+            let (reference, count) = if i == 0 {
+                ensure!(
+                    key == &page.setting,
+                    "The first native settings row is the page setting"
+                );
+                (setting.clone(), values)
+            } else {
+                let index = m
+                    .settings
+                    .iter()
+                    .position(|s| &s.key == key)
+                    .with_context(|| {
+                        format!(
+                            "A native settings row names {key}, which is not a setting of the module"
+                        )
+                    })?;
+                (index.to_string(), m.settings[index].values as usize)
+            };
             ensure!(
-                i > 0 || key == &page.setting,
-                "The first native settings row is the page setting"
-            );
-            ensure!(
-                m.settings[index].values as usize <= grkit_core::runtime::NATIVE_SETTING_VALUES,
+                count <= grkit_core::runtime::NATIVE_SETTING_VALUES,
                 "A native settings row has at most {} values",
                 grkit_core::runtime::NATIVE_SETTING_VALUES
             );
-            setting_rows.push((key.clone(), index, m.settings[index].values as usize));
+            setting_rows.push((key.clone(), reference, count));
         }
         let (mut titles, mut summaries, mut labels) = (Vec::new(), Vec::new(), Vec::new());
         let mut row_labels = vec![Vec::new(); setting_rows.len()];
@@ -645,7 +651,7 @@ pub fn generate(directory: &Path) -> Result<(Manifest, String, String)> {
             "static const u16 *const page_labels[] = {{{}}};",
             labels.join(",")
         )?;
-        for (r, (_, index, values)) in setting_rows.iter().enumerate() {
+        for (r, (_, reference, values)) in setting_rows.iter().enumerate() {
             writeln!(
                 c,
                 "static const u16 *const row_{r}_label[] = {{{}}};",
@@ -660,7 +666,7 @@ pub fn generate(directory: &Path) -> Result<(Manifest, String, String)> {
                 texts.join(",")
             )?;
             row_values[r].push(format!(
-                "{{sizeof(GrkitSettingRow), {index}, row_{r}_label, row_{r}_values}}"
+                "{{sizeof(GrkitSettingRow), {reference}, row_{r}_label, row_{r}_values}}"
             ));
         }
         let settings_field = if setting_rows.is_empty() {
@@ -673,15 +679,22 @@ pub fn generate(directory: &Path) -> Result<(Manifest, String, String)> {
             )?;
             format!("{}, page_settings", setting_rows.len())
         };
+        ensure!(
+            !page.options || page.off_row,
+            "A page with options has an Off row, which stays on"
+        );
+        ensure!(
+            !page.options || values <= 16,
+            "A page with options has at most 16 values"
+        );
+        let flags = match (page.off_row, page.options) {
+            (true, true) => "GRKIT_CHOICE_OFF_ROW | GRKIT_CHOICE_OPTIONS",
+            (true, false) => "GRKIT_CHOICE_OFF_ROW",
+            _ => "0",
+        };
         writeln!(
             c,
-            "static const GrkitPage page = {{sizeof(GrkitPage), GRKIT_PAGE_CHOICE, {setting}, {}, page_title, page_summaries, page_labels, {values}, {settings_field}}};",
-            match (page.off_row, page.menu) {
-                (false, false) => "0",
-                (true, false) => "GRKIT_CHOICE_OFF_ROW",
-                (false, true) => "GRKIT_PAGE_MENU_ROW",
-                (true, true) => "GRKIT_CHOICE_OFF_ROW | GRKIT_PAGE_MENU_ROW",
-            }
+            "static const GrkitPage page = {{sizeof(GrkitPage), GRKIT_PAGE_CHOICE, {setting}, {flags}, page_title, page_summaries, page_labels, {values}, {settings_field}}};"
         )?;
         registrations.push("{GRKIT_POINT_MENU_PAGE, &page}".to_owned());
     }

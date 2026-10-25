@@ -79,11 +79,17 @@ dirty_resume:
    the Grain level, and Off keeps the native value. The stage gate ignores grain
    for Standard, so the gate wrapper turns the stage on for any level. */
 #if defined(HOOK_GRAIN_ENABLE) || defined(HOOK_GRAIN_PARTICLE)
-// r3 = the level minus 1, or a value above 2 for Off. Flags change.
+// r3 = the level minus 1, or a value above 2 for Off. Flags change. Without
+// a module that uses CORE.GRAIN, as after a soft Off of Grain
+// (runtime/manage.h), the level is Off.
 grain_level:
     ldr r3, =GRKIT_HEADER_REFERENCE
-    ldr r3, [r3, #GRKIT_HOST_GRAIN]
-    sub r3, r3, #1
+    ldr r3, [r3, #GRKIT_HOST_CAPABILITIES]
+    tst r3, #GRKIT_CORE_GRAIN_BIT
+    ldrne r3, =GRKIT_HEADER_REFERENCE
+    ldrne r3, [r3, #GRKIT_HOST_GRAIN]
+    subne r3, r3, #1
+    moveq r3, #3
     cmp r3, #2
     bx lr
 

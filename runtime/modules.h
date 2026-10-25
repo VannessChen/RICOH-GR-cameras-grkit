@@ -10,10 +10,7 @@
 
 #define MODULE_PAGE(slot) (slot)
 #define MANAGE_MODULE MODULE_PAGE(GRKIT_MODULE_SLOTS)
-/* The Effects page opens from the last row of a page of CORE.TONE. It has
-   no root row. */
-#define EFFECTS_MODULE (MANAGE_MODULE+1U)
-#define ABOUT_MODULE (EFFECTS_MODULE+1U)
+#define ABOUT_MODULE (MANAGE_MODULE+1U)
 #define MODULE_TOTAL (ABOUT_MODULE+1U)
 
 static const Module about_module = ABOUT_PAGE;
@@ -32,7 +29,6 @@ static const Module about_module = ABOUT_PAGE;
 #define PAGE_SETTING_ROWS 32U
 #define PAGE_SETTING_LIST 36U
 #define CHOICE_OFF_ROW 1U
-#define CHOICE_MENU_ROW 4U
 /* GrkitSettingRow fields. */
 #define ROW_SETTING 4U
 #define ROW_LABEL 8U
@@ -44,17 +40,54 @@ static const Module about_module = ABOUT_PAGE;
 #endif
 #include "manage.h"
 static const Module manage_module_page = MANAGE_PAGE;
-static const Module effects_module_page = EFFECTS_PAGE;
 static u32 module_pages(volatile u32 *h) {
     u32 n=h[GRKIT_HOST_MODULE_PAGE_COUNT/4];
     return n<=GRKIT_MODULE_SLOTS ? n : 0;
 }
 static u32 choice_value(volatile u32 *h) { return setting_value(h,CHOICE_ENTRY(h)[1]); }
+/* Whether the page has options (GRKIT_CHOICE_OPTIONS). */
+#define CHOICE_OPTIONS 4U
+static u32 choice_options(volatile u32 *h) { return PAGE_WORD(CHOICE_ENTRY(h)[0],PAGE_FLAGS)&CHOICE_OPTIONS; }
+static u32 page_listed(volatile u32 *h,u32 slot);
+/* The values of the page that are off in ADJ: a bit each (CORE.ROWS of its
+   module, runtime/manage.h). Off stays on. */
+static u32 choice_hidden(volatile u32 *h) {
+    u32 listed;
+    if(!choice_options(h)) return 0;
+    listed=page_listed(h,h[GRKIT_HOST_MODULE_CHOICE/4]);
+    return listed<MANAGE_MODULES ? manage_hidden_values(h,listed)&~1U : 0;
+}
 /* The rows of a choice page are the values that the camera offers, in the
-   order of the setting (runtime/settings.h: setting_rows). */
-static u32 choice_rows(volatile u32 *h) { return setting_rows(h,CHOICE_ENTRY(h)[1]); }
-static u32 choice_row_value(volatile u32 *h,u32 row) { return setting_row_value(h,CHOICE_ENTRY(h)[1],row); }
-static u32 choice_value_row(volatile u32 *h,u32 value) { return setting_value_row(h,CHOICE_ENTRY(h)[1],value); }
+   order of the setting (runtime/settings.h: setting_rows), without the
+   values that are off in ADJ. */
+static u32 choice_rows(volatile u32 *h) {
+    u32 handle=CHOICE_ENTRY(h)[1], hidden=choice_hidden(h), n=setting_rows(h,handle), row, rows=0, value;
+    for(row=0;row<n;++row) {
+        value=setting_row_value(h,handle,row);
+        rows+=value>=32 || !(hidden>>value&1);
+    }
+    return rows;
+}
+static u32 choice_row_value(volatile u32 *h,u32 row) {
+    u32 handle=CHOICE_ENTRY(h)[1], hidden=choice_hidden(h), n=setting_rows(h,handle), base, value;
+    for(base=0;base<n;++base) {
+        value=setting_row_value(h,handle,base);
+        if(value<32 && hidden>>value&1) continue;
+        if(!row--) return value;
+    }
+    return 0;
+}
+/* The row of a value, or row 0 for a value that does not show. */
+static u32 choice_value_row(volatile u32 *h,u32 value) {
+    u32 handle=CHOICE_ENTRY(h)[1], hidden=choice_hidden(h), n=setting_rows(h,handle), base, row=0, v;
+    if(value<32 && hidden>>value&1) return 0;
+    for(base=0;base<n;++base) {
+        v=setting_row_value(h,handle,base);
+        if(v==value) return row;
+        row+=v>=32 || !(hidden>>v&1);
+    }
+    return 0;
+}
 /* Text `index` of a text list of the page, in the menu language. */
 static const u16 *choice_text(volatile u32 *h,u32 field,u32 index) {
     return MENU_TEXT(PAGE_WORD(PAGE_WORD(CHOICE_ENTRY(h)[0],field),(index*GRKIT_TEXT_LANGUAGES+menu_language())*4));
@@ -77,14 +110,16 @@ static u32 choice_committed(volatile u32 *h) { return choice_value_row(h,choice_
 static const Module choice_module={choice_title,choice_summary,choice_rows,choice_label,choice_icon,
     choice_checked,choice_apply,choice_committed,0,0,0};
 
-/* The rows of the native settings page of a module page. Each row is a
-   setting of the module, so its handle follows from the handle of the page
-   setting, which INSTALL gives. */
+/* The rows of the native settings page of a module page. INSTALL writes
+   the setting handle of each row into the row (runtime/installer.c). Row 0
+   is the page setting, which can be a used setting such as CORE.ASPECT: its
+   values are the rows of the page. The other rows are settings of the
+   module. */
 static u32 choice_row(volatile u32 *h,u32 row) {
     return PAGE_WORD(CHOICE_ENTRY(h)[0],PAGE_SETTING_LIST)+row*ROW_SIZE;
 }
 static u32 choice_row_handle(volatile u32 *h,u32 row) {
-    return CHOICE_ENTRY(h)[1]-PAGE_WORD(CHOICE_ENTRY(h)[0],PAGE_SETTING)+PAGE_WORD(choice_row(h,row),ROW_SETTING);
+    return PAGE_WORD(choice_row(h,row),ROW_SETTING);
 }
 static const u16 *choice_row_text(volatile u32 *h,u32 row,u32 field,u32 index) {
     return MENU_TEXT(PAGE_WORD(PAGE_WORD(choice_row(h,row),field),(index*GRKIT_TEXT_LANGUAGES+menu_language())*4));
@@ -95,17 +130,27 @@ static const u16 *choice_row_text(volatile u32 *h,u32 row,u32 field,u32 index) {
     static const u16 *choice_value_##row(volatile u32 *h,u32 value) { return choice_row_text(h,row,ROW_VALUES,value); } \
     static u32 choice_get_##row(volatile u32 *h) { return setting_value(h,choice_row_handle(h,row)); } \
     static void choice_set_##row(volatile u32 *h,u32 value) { setting_store(h,choice_row_handle(h,row),value); }
-CHOICE_SETTING(0)
+static const u16 *choice_label_0(volatile u32 *h) { return choice_row_text(h,0,ROW_LABEL,0); }
+static const u16 *choice_value_0(volatile u32 *h,u32 row) {
+    return choice_row_text(h,0,ROW_VALUES,choice_row_value(h,row));
+}
 CHOICE_SETTING(1)
 CHOICE_SETTING(2)
 CHOICE_SETTING(3)
 CHOICE_SETTING(4)
 static const Setting choice_settings[SETTING_ROWS]={
-    {choice_label_0,choice_values_0,choice_value_0,choice_get_0,choice_set_0},
+    {choice_label_0,choice_rows,choice_value_0,choice_committed,choice_apply},
     {choice_label_1,choice_values_1,choice_value_1,choice_get_1,choice_set_1},
     {choice_label_2,choice_values_2,choice_value_2,choice_get_2,choice_set_2},
     {choice_label_3,choice_values_3,choice_value_3,choice_get_3,choice_set_3},
     {choice_label_4,choice_values_4,choice_value_4,choice_get_4,choice_set_4},
+};
+/* The page setting as the one row of a native value page, for the MENU row
+   of a page without settings rows. Its values are the rows of the page. */
+static const u16 *choice_one_label(volatile u32 *h) { return choice_title(h); }
+static const u16 *choice_one_text(volatile u32 *h,u32 row) { return choice_label(h,row); }
+static const Setting choice_one[SETTING_ROWS]={
+    {choice_one_label,choice_rows,choice_one_text,choice_committed,choice_apply},
 };
 static const Module choice_settings_module={choice_title,choice_summary,choice_rows,choice_label,choice_icon,
     choice_checked,choice_apply,choice_committed,0,0,choice_settings};
@@ -113,13 +158,12 @@ static const Module choice_settings_module={choice_title,choice_summary,choice_r
 /* A page of CORE.TONE gets its rows from the core (runtime/tone.h), and its
    title from the module. */
 static const Module tone_module={choice_title,tone_summary,tone_rows,tone_label,tone_icon,
-    tone_checked,tone_apply,tone_value,tone_preview,tone_parameters,0};
+    tone_checked,tone_apply,tone_committed,tone_preview,tone_parameters,0};
 
 /* The page of module `index`. */
 static const Module *module_at(volatile u32 *h,u32 index) {
     if(index>=ABOUT_MODULE) return &about_module;
     if(index==MANAGE_MODULE) return &manage_module_page;
-    if(index==EFFECTS_MODULE) return &effects_module_page;
     h[GRKIT_HOST_MODULE_CHOICE/4]=index;
     /* Only a registered page has a GrkitPage to read. */
     if(index>=module_pages(h)) return &choice_module;
@@ -135,6 +179,7 @@ static u32 module_layers_on(volatile u32 *h) {
     u32 i, n=h[GRKIT_HOST_MODULE_LAYER_COUNT/4];
     for(i=0;i<n && i<GRKIT_MODULE_SLOTS;++i) {
         u32 handle=h[GRKIT_HOST_MODULE_LAYERS/4+i*3+1];
+        if(services_suspended(h,h[GRKIT_HOST_MODULE_LAYERS/4+i*3])) continue;
         if(handle==0xffffffffU || setting_value(h,handle)) return 1;
     }
     return 0;
@@ -165,33 +210,65 @@ static void frame_preview(volatile u32 *h,u32 canvas,u32 movie) {
     h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=canvas;
 }
 
-/* Visible modules as a bit mask in root order: each module page with two
-   rows or more, Modules with a listed module, then About, which always
-   shows. A page of CORE.TONE has rows only with effects. Without a listed
-   module, the installer installs no menu hook, so only an inconsistent
-   header shows About alone. */
+/* The listed module of page `slot` (runtime/manage.h), or MANAGE_MODULES. */
+static u32 page_listed(volatile u32 *h,u32 slot) {
+    u32 choice=h[GRKIT_HOST_MODULE_CHOICE/4], listed=MANAGE_MODULES;
+    if(slot<module_pages(h)) {
+        h[GRKIT_HOST_MODULE_CHOICE/4]=slot;
+        listed=manage_of_title(h,PAGE_WORD(CHOICE_ENTRY(h)[0],PAGE_TITLE));
+    }
+    h[GRKIT_HOST_MODULE_CHOICE/4]=choice;
+    return listed;
+}
+/* Visible modules as a bit mask: each module page with two rows or more,
+   unless a soft Off stopped its module. A page of CORE.TONE has
+   rows only with effects. Without such a page, About shows alone, so that
+   the root has a row. */
 static u32 visible_modules(volatile u32 *h) {
-    u32 choice=h[GRKIT_HOST_MODULE_CHOICE/4], mask=1U<<ABOUT_MODULE, slot;
-    for(slot=0;slot<module_pages(h);++slot)
+    u32 choice=h[GRKIT_HOST_MODULE_CHOICE/4], mask=0, slot, listed;
+    for(slot=0;slot<module_pages(h);++slot) {
+        listed=page_listed(h,slot);
+        if(listed<MANAGE_MODULES && manage_stopped(h,listed)) continue;
         if(module_at(h,MODULE_PAGE(slot))->rows(h)>=2) mask|=1U<<MODULE_PAGE(slot);
-    if(manage_count(h)) mask|=1U<<MANAGE_MODULE;
+    }
+    /* Module management and the version are in the native MENU (runtime/menu.c).
+       About shows only so that the root has a row. */
+    if(!mask) mask=1U<<ABOUT_MODULE;
     /* module_at selects a page: keep the page of the caller. */
     h[GRKIT_HOST_MODULE_CHOICE/4]=choice;
     return mask;
 }
+/* The root order in `order`, and its length: the module pages in the order
+   of their modules (CORE.POS, runtime/manage.h), which applies at once, then
+   the core rows. */
+static u32 root_order(volatile u32 *h,u32 *order) {
+    u32 n=module_pages(h), keys[GRKIT_MODULE_SLOTS], i, j, t;
+    for(i=0;i<n;++i) {
+        u32 listed=page_listed(h,i);
+        keys[i]=listed<MANAGE_MODULES ? manage_key(h,listed) : 2*MANAGE_DEFAULT_KEY+i;
+        order[i]=MODULE_PAGE(i);
+        for(j=i;j && keys[j-1]>keys[j];--j) {
+            t=keys[j]; keys[j]=keys[j-1]; keys[j-1]=t;
+            t=order[j]; order[j]=order[j-1]; order[j-1]=t;
+        }
+    }
+    order[n]=MANAGE_MODULE; order[n+1]=ABOUT_MODULE;
+    return n+2;
+}
 /* The module of a root row, or of the last row for a row past the end. */
 static u32 root_module(volatile u32 *h,u32 row) {
-    u32 mask=visible_modules(h), module=0, last=0;
-    for(;module<MODULE_TOTAL;++module) {
-        if(!(mask>>module&1)) continue;
-        if(!row--) return module;
-        last=module;
+    u32 mask=visible_modules(h), order[GRKIT_MODULE_SLOTS+3], n=root_order(h,order), i, last=0;
+    for(i=0;i<n;++i) {
+        if(!(mask>>order[i]&1)) continue;
+        if(!row--) return order[i];
+        last=order[i];
     }
     return last;
 }
+/* The root row of a module, or the number of root rows for MODULE_TOTAL. */
 static u32 root_row(volatile u32 *h,u32 module) {
-    u32 mask=visible_modules(h), row=0, i;
-    for(i=0;i<module && i<MODULE_TOTAL;++i) row+=mask>>i&1;
+    u32 mask=visible_modules(h), order[GRKIT_MODULE_SLOTS+3], n=root_order(h,order), row=0, i;
+    for(i=0;i<n && order[i]!=module;++i) row+=mask>>order[i]&1;
     return row;
 }
 static u32 root_count(volatile u32 *h) { return root_row(h,MODULE_TOTAL); }
@@ -246,33 +323,14 @@ static void menu_reopen(volatile u32 *h) {
     h[GRKIT_HOST_MENU_CURSOR/4]=module<MODULE_TOTAL && visible_modules(h)>>module&1 ? root_row(h,module) : 0;
     menu_normalize(h);
 }
-/* Whether a page can be open: a visible module, or the Effects page with an
-   effect. */
-static u32 page_reachable(volatile u32 *h,u32 module) {
-    return module==EFFECTS_MODULE ? effects_count(h)!=0 : visible_modules(h)>>module&1;
-}
+/* Whether a page can be open: a visible module. */
+static u32 page_reachable(volatile u32 *h,u32 module) { return visible_modules(h)>>module&1; }
 static void menu_normalize(volatile u32 *h) {
     u32 module=h[GRKIT_HOST_MODULE/4];
     if(h[GRKIT_HOST_MENU_LEVEL/4]<MENU_ROOT || h[GRKIT_HOST_MENU_LEVEL/4]>MENU_MODULE || module>=MODULE_TOTAL ||
        (h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && (!page_reachable(h,module) || !module_at(h,module)->rows(h))))
         menu_start(h);
     if(h[GRKIT_HOST_MENU_CURSOR/4]>=count(h)) h[GRKIT_HOST_MENU_CURSOR/4]=0;
-}
-/* The page slot of CORE.TONE, or GRKIT_MODULE_SLOTS without one. */
-static u32 tone_slot(volatile u32 *h) {
-    u32 slot, choice=h[GRKIT_HOST_MODULE_CHOICE/4];
-    for(slot=0;slot<module_pages(h);++slot) {
-        h[GRKIT_HOST_MODULE_CHOICE/4]=slot;
-        if(CHOICE_ENTRY(h)[1]==GRKIT_CORE_TONE) break;
-    }
-    h[GRKIT_HOST_MODULE_CHOICE/4]=choice;
-    return slot<module_pages(h) ? slot : GRKIT_MODULE_SLOTS;
-}
-/* Whether the cursor is on the Effects row of the open page. */
-static u32 effects_row_open(volatile u32 *h) {
-    u32 module=h[GRKIT_HOST_MODULE/4];
-    return h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && module<module_pages(h) && module_at(h,module)==&tone_module &&
-           tone_effects_row(h,h[GRKIT_HOST_MENU_CURSOR/4]);
 }
 /* OK on a root row opens its page. A row without a page, such as About, does nothing. */
 static void menu_confirm(volatile u32 *h) {
@@ -289,12 +347,6 @@ static u32 menu_back(volatile u32 *h) {
     h[GRKIT_HOST_PREVIEW/4]=0;
     menu_normalize(h);
     if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT) return 0;
-    /* The Effects page returns to its row of the page of CORE.TONE. */
-    if(h[GRKIT_HOST_MODULE/4]==EFFECTS_MODULE && tone_slot(h)<GRKIT_MODULE_SLOTS) {
-        menu_open(h,tone_slot(h));
-        h[GRKIT_HOST_MENU_CURSOR/4]=tone_values(h);
-        return 1;
-    }
     h[GRKIT_HOST_MENU_LEVEL/4]=MENU_ROOT;
     h[GRKIT_HOST_MENU_CURSOR/4]=root_row(h,h[GRKIT_HOST_MODULE/4]);
     return 1;

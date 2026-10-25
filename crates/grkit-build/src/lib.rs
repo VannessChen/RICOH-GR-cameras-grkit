@@ -356,10 +356,20 @@ fn build_image(
             let component = components::processing(&objects, &runtime, image, tools)?;
             built.push(("processing", component));
         }
-        let component = components::menu(&objects, &runtime, image, tools)?;
-        built.push(("menu", component));
-        let component = components::framing(&objects, &runtime, image, tools)?;
-        built.push(("framing", component));
+        let mut menu = components::menu(&objects, &runtime, image, tools)?;
+        let menu_base = menu.patches[0].address;
+        let framing = components::framing(
+            &objects,
+            &runtime,
+            image,
+            tools,
+            menu_base + menu.code_size as u32,
+        )?;
+        // The menu can grow by the space that Framing leaves free at the end
+        // of the tail.
+        menu.limit = menu.code_size + (framing.limit - framing.code_size);
+        built.push(("menu", menu));
+        built.push(("framing", framing));
     }
     let components: Vec<_> = built.iter().map(|(_, component)| component).collect();
     // The installer publishes every code payload before any firmware change.

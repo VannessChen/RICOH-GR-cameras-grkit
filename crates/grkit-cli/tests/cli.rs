@@ -11,8 +11,13 @@ fn official_modules() -> Vec<String> {
     grkit_core::modules::OFFICIAL
         .iter()
         .map(|official| {
+            // Tests run in parallel and share the directory: write each file
+            // under another name and rename it, so that no grkit process
+            // reads a file while a test rewrites it.
             let path = directory.join(format!("{}.GRM", official.id));
-            fs::write(&path, testing::module(official.id)).unwrap();
+            let mut file = tempfile::NamedTempFile::new_in(&directory).unwrap();
+            std::io::Write::write_all(&mut file, &testing::module(official.id)).unwrap();
+            file.persist(&path).unwrap();
             text(&path).to_owned()
         })
         .collect()
@@ -392,7 +397,7 @@ fn package_installs_the_given_modules() {
         fs::write(&path, testing::module(id)).unwrap();
         text(&path).to_owned()
     };
-    let (imgctl, date) = (module("IMGCTL"), module("DATE"));
+    let (imgctl, date) = (module("FILMLOOK"), module("DATE"));
     let zip = tmp.path().join("selected.zip");
     let packaged = success(&[
         "package",
@@ -410,9 +415,9 @@ fn package_installs_the_given_modules() {
         text(&zip),
     ]);
     assert_eq!(packaged["entries"], 13 + source_count());
-    assert_eq!(packaged["modules"], json!(["DATE", "IMGCTL"]));
+    assert_eq!(packaged["modules"], json!(["DATE", "FILMLOOK"]));
     let verified = success(&["verify", text(&zip)]);
-    assert_eq!(verified["modules"], json!(["DATE", "IMGCTL"]));
+    assert_eq!(verified["modules"], json!(["DATE", "FILMLOOK"]));
 
     // Without effects, Date Imprint alone shows a menu.
     let stamp_only = tmp.path().join("stamp.zip");

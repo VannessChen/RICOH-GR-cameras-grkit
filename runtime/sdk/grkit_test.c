@@ -9,8 +9,10 @@ GrkitDateTime grkit_test_time = {2026, 10, 25, 9, 5, 0, 0};
 u32 grkit_test_settings[GRKIT_TEST_SETTINGS];
 u32 grkit_test_labels;
 u32 grkit_test_label[3];
-/* The module settings start at handle 0, and no setting is used. */
-const GrkitContext grkit_self = {0, GRKIT_TEST_SETTINGS, 0};
+/* The module settings start at handle GRKIT_TEST_SETTING_BASE, as they
+   start at a handle above 0 on the camera, so a test finds a SETTING_<KEY>
+   that the code wraps in GRKIT_SETTING again. No setting is used. */
+const GrkitContext grkit_self = {GRKIT_TEST_SETTING_BASE, GRKIT_TEST_SETTINGS - GRKIT_TEST_SETTING_BASE, 0};
 
 volatile u32 *grkit_test_pixels(u32 address)
 {

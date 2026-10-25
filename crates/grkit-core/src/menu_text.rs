@@ -22,16 +22,21 @@ pub const TEXT_SETTINGS: usize = TEXT_PARAMETER_TITLE - 384;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).
-pub const STRINGS: usize = 18;
+pub const STRINGS: usize = 23;
+/// The project address that About GRKit shows.
+const PROJECT: &str = "github.com/ahonn/grkit";
 /// The longest effect name in a record.
 const NAME_UNITS: usize = 16;
 
 /// The words of one menu language. Each list follows the rows of its module
 /// after Off. The Chinese and Japanese words reuse the terms of the camera
-/// menus where they have them (影像控制, 关闭/關閉, 弱/中/强, 颗粒感/粒紋感;
-/// イメージコントロール, オフ, 粒状感, グリッド, 9分割, 画面中央, 弱/中/強).
-/// The Date Imprint names are those of the GR II menu (Date Imprint, 加印日期摄影,
-/// 加印日期攝像, 日付入れ撮影 in its firmware).
+/// menus where they have them (关闭/關閉, 弱/中/强, 颗粒感/粒紋感; オフ, 粒状感,
+/// 9分割, 画面中央, 弱/中/強). Guides avoids the name of the native grid
+/// (网格线, グリッド), as the camera has its own. The effects module has its own name
+/// (Film Look, 胶片风格, 底片風格, フィルムルック), so that it differs from the
+/// native Image Control.
+/// The Date Imprint names follow the GR II menu (Date Imprint, 日付入れ撮影 in
+/// its firmware), with the short Chinese name 加印日期.
 /// The camera's Chinese and Japanese fonts draw each of these characters only
 /// while the camera language is that language, which is when the menu shows
 /// them.
@@ -42,92 +47,113 @@ struct Words {
     /// Before the version in the About row.
     version: &'static str,
     off: &'static str,
-    /// The Modules page, which turns modules on or off and orders them.
+    /// The name in the summary of module management (runtime/manage.h).
     modules: &'static str,
     /// The Modules summary after a change that applies at the next start.
     restart: &'static str,
     safe_mode: &'static str,
-    /// The row that turns a module on or off, and its On value.
-    load: &'static str,
+    /// The row that turns a module or an effect on or off, and its On value.
+    enable: &'static str,
     on: &'static str,
-    /// The row that gives the place of a module in the GRKit root.
-    position: &'static str,
-    /// The Effects page, which turns effects on or off and orders them.
-    effects: &'static str,
-    /// The row that moves an effect, and its two values.
-    order: &'static str,
-    move_up: &'static str,
-    move_down: &'static str,
+    /// The MENU row that orders the module pages in the GRKit root of ADJ.
+    adj_order: &'static str,
+    /// The settings row that lists the options of a module page.
+    options: &'static str,
+    /// The MENU row of the GRKit switch, its version, and its project.
+    about: &'static str,
+    project: &'static str,
+    /// The settings row of Film Look that opens the Fn adjustments of
+    /// the effect.
+    adjustments: &'static str,
+    /// The settings row of Film Look that selects the effect.
+    film: &'static str,
+    /// The guides of an options page: OK turns the option on or off, MENU
+    /// goes back with the changes. The OK guide has the width of the native
+    /// word (OK, 确定, 決定): empty keeps the native word.
+    turn: &'static str,
+    back: &'static str,
 }
 
 const ENGLISH: Words = Words {
     separator: ": ",
-    image_control: "Image Control",
+    image_control: "Film Look",
     version: "Version",
     off: "Off",
     modules: "Modules",
     restart: "Restart to apply",
     safe_mode: "Safe mode",
-    load: "Load",
+    enable: "Enable",
     on: "On",
-    position: "Position",
-    effects: "Effects",
-    order: "Order",
-    move_up: "Move up",
-    move_down: "Move down",
+    adj_order: "ADJ Order",
+    options: "Options",
+    about: "About GRKit",
+    project: "Project",
+    adjustments: "Parameters",
+    film: "Film Stock",
+    turn: "",
+    back: "Back",
 };
 
 const SIMPLIFIED_CHINESE: Words = Words {
     separator: "：",
-    image_control: "影像控制",
+    image_control: "胶片风格",
     version: "版本",
     off: "关闭",
     modules: "模块",
     restart: "重新开机后生效",
     safe_mode: "安全模式",
-    load: "加载",
-    on: "开",
-    position: "位置",
-    effects: "效果",
-    order: "顺序",
-    move_up: "上移",
-    move_down: "下移",
+    enable: "启用",
+    on: "开启",
+    adj_order: "ADJ 菜单顺序",
+    options: "选项",
+    about: "关于 GRKit",
+    project: "项目地址",
+    adjustments: "效果参数",
+    film: "胶卷",
+    turn: "切换",
+    back: "返回",
 };
 
 const TRADITIONAL_CHINESE: Words = Words {
     separator: "：",
-    image_control: "影像控制",
+    image_control: "底片風格",
     version: "版本",
     off: "關閉",
     modules: "模組",
     restart: "重新開機後生效",
     safe_mode: "安全模式",
-    load: "載入",
-    on: "開",
-    position: "位置",
-    effects: "效果",
-    order: "順序",
-    move_up: "上移",
-    move_down: "下移",
+    enable: "啟用",
+    on: "開啟",
+    adj_order: "ADJ 選單順序",
+    options: "選項",
+    about: "關於 GRKit",
+    project: "專案網址",
+    adjustments: "效果參數",
+    film: "膠卷",
+    turn: "切換",
+    back: "返回",
 };
 
 const JAPANESE: Words = Words {
-    // A full-width colon would push "イメージコントロール：" and a 13-character
-    // effect name under the icon column. The half-width colon keeps them clear.
+    // A full-width colon would push a long name and a 13-character effect
+    // name under the icon column. The half-width colon keeps them clear.
     separator: ":",
-    image_control: "イメージコントロール",
+    image_control: "フィルムルック",
     version: "バージョン",
     off: "オフ",
     modules: "モジュール",
     restart: "再起動後に反映",
     safe_mode: "セーフモード",
-    load: "読み込み",
+    enable: "有効",
     on: "オン",
-    position: "位置",
-    effects: "エフェクト",
-    order: "順番",
-    move_up: "上へ",
-    move_down: "下へ",
+    adj_order: "ADJ メニューの順番",
+    options: "オプション",
+    about: "GRKit について",
+    project: "プロジェクト",
+    adjustments: "パラメーター",
+    film: "フィルム銘柄",
+    turn: "切替",
+    back: "戻る",
 };
 
 /// The text between a page title and its value in a root row summary, such
@@ -159,7 +185,6 @@ const fn run(name: &'static str, count: usize, doc: &'static str) -> Run {
 
 /// The string IDs in table order.
 pub const RUNS: &[Run] = &[
-    run("IMAGE_CONTROL", 1, ""),
     run("OFF", 1, ""),
     run("IMAGE_OFF_SUMMARY", 1, ""),
     run(
@@ -168,27 +193,53 @@ pub const RUNS: &[Run] = &[
         "The Image Control summary before an effect name, for the installer.",
     ),
     run("VERSION", 1, "The About row: the GRKit version."),
-    run("MODULES", 1, "The title of the Modules page."),
     run(
         "MODULES_SUMMARY",
         3,
         "The Modules root row: no change, a change for the next start, safe mode.",
     ),
-    run("LOAD", 1, "The settings row that turns a module on or off."),
-    run("ON", 1, ""),
     run(
-        "POSITION",
+        "ENABLE",
         1,
-        "The settings row of the place of a module in the root.",
+        "The settings row that turns a module or an effect on or off.",
     ),
-    run("EFFECTS", 1, "The title of the Effects page."),
+    run("ON", 1, ""),
+    run("SAFE_MODE", 1, "The GRKit row of MENU in safe mode."),
     run(
-        "EFFECTS_SUMMARY",
-        2,
-        "The last row of Image Control: no change, a change for the next start.",
+        "RESTART",
+        1,
+        "The GRKit row of MENU after a change for the next start.",
     ),
-    run("ORDER", 1, "The settings row that moves an effect."),
-    run("MOVE_UP", 2, "Move up, then Move down."),
+    run(
+        "ADJUSTMENTS",
+        1,
+        "The Image Control settings row that opens the Fn adjustments.",
+    ),
+    run(
+        "ADJ",
+        2,
+        "The ADJ Order rows of MENU: the first group of modules, then the second.",
+    ),
+    run(
+        "OPTIONS",
+        1,
+        "The settings row that lists the options of a module page.",
+    ),
+    run(
+        "ABOUT",
+        5,
+        "About GRKit: the title, the Version row and its value, the Project row and its value.",
+    ),
+    run(
+        "FILM",
+        1,
+        "The Film Look settings row that selects the effect.",
+    ),
+    run(
+        "GUIDE",
+        2,
+        "The guides of an options value page: OK turns an option on or off, MENU goes back.",
+    ),
 ];
 
 /// The first string ID of each run, in table order.
@@ -213,24 +264,31 @@ fn run_strings(w: &Words, name: &str, version: &str) -> Vec<String> {
     let summary = |module: &str, value: &str| format!("{module}{}{value}", w.separator);
     let words = |values: &[&str]| values.iter().map(|value| value.to_string()).collect();
     match name {
-        "IMAGE_CONTROL" => words(&[w.image_control]),
         "OFF" => words(&[w.off]),
         "IMAGE_OFF_SUMMARY" => vec![summary(w.image_control, w.off)],
         "IMAGE_PREFIX" => vec![format!("{}{}", w.image_control, w.separator)],
         "VERSION" => vec![format!("{} {version}", w.version)],
-        "MODULES" => words(&[w.modules]),
         "MODULES_SUMMARY" => vec![
             w.modules.to_string(),
             summary(w.modules, w.restart),
             summary(w.modules, w.safe_mode),
         ],
-        "LOAD" => words(&[w.load]),
+        "ENABLE" => words(&[w.enable]),
         "ON" => words(&[w.on]),
-        "POSITION" => words(&[w.position]),
-        "EFFECTS" => words(&[w.effects]),
-        "EFFECTS_SUMMARY" => vec![w.effects.to_string(), summary(w.effects, w.restart)],
-        "ORDER" => words(&[w.order]),
-        "MOVE_UP" => words(&[w.move_up, w.move_down]),
+        "SAFE_MODE" => words(&[w.safe_mode]),
+        "RESTART" => words(&[w.restart]),
+        "ADJUSTMENTS" => words(&[w.adjustments]),
+        "ADJ" => vec![w.adj_order.to_string(), format!("{} 2", w.adj_order)],
+        "OPTIONS" => words(&[w.options]),
+        "ABOUT" => vec![
+            w.about.to_string(),
+            w.version.to_string(),
+            version.to_string(),
+            w.project.to_string(),
+            PROJECT.to_string(),
+        ],
+        "FILM" => words(&[w.film]),
+        "GUIDE" => words(&[w.turn, w.back]),
         _ => unreachable!("Unknown menu text run {name}"),
     }
 }
@@ -334,10 +392,9 @@ mod tests {
     #[test]
     fn english_keeps_the_menu_text_of_earlier_builds() {
         let english = strings(Language::English, VERSION);
-        assert_eq!(english[id("IMAGE_CONTROL")], "Image Control");
         assert_eq!(english[id("OFF")], "Off");
-        assert_eq!(english[id("IMAGE_OFF_SUMMARY")], "Image Control: Off");
-        assert_eq!(english[id("IMAGE_PREFIX")], "Image Control: ");
+        assert_eq!(english[id("IMAGE_OFF_SUMMARY")], "Film Look: Off");
+        assert_eq!(english[id("IMAGE_PREFIX")], "Film Look: ");
     }
 
     #[test]

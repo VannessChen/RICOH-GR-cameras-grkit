@@ -1,16 +1,24 @@
 /* Guides: lines over the still live view, inside the photo area of the
-   capture area. The core calls guides_paint with the style, and not at Off
-   or while DISP hides the native information (module.toml). */
+   capture area. The core calls the two layers with the style, and not at
+   Off; guides_paint also not while DISP hides the native information
+   (module.toml). Each paints only for its value of DISP. */
 #include "grkit.h"
+#include "grkit_module.h"
 
 /* The native grid guide (GridView) writes palette entry 16, black at 50%
-   alpha, in 2-pixel lines. The value is the same with straight or
-   premultiplied alpha. */
-#define GUIDE_COLOR 0x80000000U
+   alpha, in 2-pixel lines: COLOR 0 and OPACITY 0. The other colors are white
+   and the yellow of the native highlight (red ff, green e1, blue 00). A
+   pixel holds red in its low byte and alpha in its high byte (grkit.h);
+   with 50% alpha, straight and premultiplied alpha give the same black
+   only, so the white and the yellow use straight alpha as the native
+   palette does. */
+static const u32 guide_rgb[3] = {0x000000U, 0xffffffU, 0x00e1ffU};
 #define GUIDE_ARM 20U
+/* The color of this paint. */
+static u32 guide_color;
 static void guide_pixel(u32 data, u32 stride, u32 x, u32 y)
 {
-    GRKIT_PIXELS(data + y * stride * 4)[x] = GUIDE_COLOR;
+    GRKIT_PIXELS(data + y * stride * 4)[x] = guide_color;
 }
 /* A 2-pixel vertical line on columns x - 1 and x, or a horizontal line on rows
    y - 1 and y, as the native grid draws on each side of a division. */
@@ -71,12 +79,24 @@ static void guide_cross(u32 data, u32 stride, const u16 *box)
 }
 /* Styles: 1 thirds, 2 center, 3 golden ratio, 4 diagonals, 5 thirds and
    center. The golden section is 0.381966, 25033/65536. */
-void guides_paint(const Surface *s, u32 style)
+static void guides_draw(const Surface *s, u32 style)
 {
     const u16 *box = s->box;
-    u32 data = s->data, stride = s->stride;
+    u32 data = s->data, stride = s->stride, color = setting_get(SETTING_COLOR);
+    guide_color = guide_rgb[color < 3 ? color : 0] |
+                  (setting_get(SETTING_OPACITY) ? 0xff000000U : 0x80000000U);
     if (style == 1 || style == 5) guide_thirds(data, stride, box);
     if (style == 3) guide_golden(data, stride, box);
     if (style == 4) guide_diagonals(data, stride, box);
     if (style == 2 || style == 5) guide_cross(data, stride, box);
+}
+/* The layer that follows DISP, for DISP 0, and the one that always shows,
+   for DISP 1. */
+void guides_paint(const Surface *s, u32 style)
+{
+    if (!setting_get(SETTING_DISP)) guides_draw(s, style);
+}
+void guides_paint_always(const Surface *s, u32 style)
+{
+    if (setting_get(SETTING_DISP)) guides_draw(s, style);
 }
