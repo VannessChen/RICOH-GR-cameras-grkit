@@ -88,20 +88,19 @@ void picture_post(u32 object,u32 context,u32 settings) {
 #error "The family header defines PICTURE_NATIVE_ID"
 #endif
 /* Visible-area id of the capture: 0 3:2, 1 4:3, 2 16:9, 3 1:1, 4 XPan,
-   5 2.35:1, 6 5:4. */
+   5 2.35:1, 6 5:4. By crop value: Off, XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
+static const u8 picture_area_ids[7]={0,4,2,1,5,3,6};
+#define PICTURE_CROP_AREA(ratio) ((ratio)<7 ? picture_area_ids[ratio] : 0)
 #ifdef FRAMING_XPAN_NATIVE
-/* XPan and 2.35:1 apply to native 3:2 and native FRAMING_XPAN_NATIVE photos,
-   and 5:4 to native 3:2 photos. Other native aspects ignore them. */
-#define PICTURE_AREA_ID(native,ratio) \
-    (((native)==0 || (native)==FRAMING_XPAN_NATIVE) && ((ratio)==1 || (ratio)==4) ? \
-     ((ratio)==1 ? 4 : 5) : (native)==0 && (ratio)==6 ? 6 : PICTURE_NATIVE_ID(native))
+/* Framing ratio values (runtime/firmware.h) apply to native 3:2 captures.
+   XPan and 2.35:1 also apply to native FRAMING_XPAN_NATIVE photos. Other
+   native aspects ignore them. */
+#define PICTURE_AREA_ID(native,ratio) ((native)==0 || \
+    ((native)==FRAMING_XPAN_NATIVE && ((ratio)==1 || (ratio)==4)) ? \
+    PICTURE_CROP_AREA(ratio) : PICTURE_NATIVE_ID(native))
 #else
 /* Framing ratio values (runtime/firmware.h) apply only to native 3:2 captures. */
-#define PICTURE_AREA_ID(native,ratio) ((native) ? PICTURE_NATIVE_ID(native) : \
-    (ratio)<7 ? picture_area_ids[ratio] : 0)
-/* By crop value: Off, XPan, 16:9, 4:3, 2.35:1, 1:1 (native on each camera,
-   so never a crop), 5:4. */
-static const u8 picture_area_ids[7]={0,4,2,1,5,0,6};
+#define PICTURE_AREA_ID(native,ratio) ((native) ? PICTURE_NATIVE_ID(native) : PICTURE_CROP_AREA(ratio))
 #endif
 #ifndef PICTURE_SCRATCH
 /* Stamp masks after the header and the records, inside the loader's registry array. */

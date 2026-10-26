@@ -20,15 +20,14 @@
    hold the type at the same offset as the settings payload. */
 #define SETTINGS_IC_TYPE 0x79c
 /* Framing: the rows of every family (runtime/firmware.h). GR IV has the
-   native aspects 3:2, 4:3, 16:9, and 1:1, so Framing sets the native aspect
-   for 16:9, 4:3, and 1:1. XPan and 2.35:1 use capture aspect id 2 with their
-   own heights, and 5:4 uses id 1 with its own widths. In native 3:2 the
-   capture request hook maps the 3:2 request to that id, and the live-view
-   hooks keep the live view in 3:2, as on GR III. In native 16:9, XPan and
-   2.35:1 also crop the native 16:9 photos. */
+   native aspects 3:2, 4:3, 16:9, and 1:1, but Framing crops each ratio from
+   native 3:2, as on GR III, so each ratio has the same live view. 16:9,
+   XPan, and 2.35:1 use capture aspect id 2, XPan and 2.35:1 with their own
+   heights. 4:3, 5:4, and 1:1 use id 1, 5:4 and 1:1 with their own widths.
+   The capture request hook maps the 3:2 request to that id, and the
+   live-view hooks keep the live view in 3:2. In a native 16:9 that the user
+   sets in the camera menu, XPan and 2.35:1 also crop the native 16:9 photos. */
 #define FRAMING_RATIO_ROWS 0,1,4,2,3,6,5
-/* The native aspect id of each ratio value, or 0xff for a Framing crop. */
-#define FRAMING_NATIVE_IDS 0,0xff,2,1,0xff,3,0xff
 #define FRAMING_XPAN_NATIVE 2
 /* FW_CAPTURE_ASPECT_GET reads the capture aspect (property 0xdf,
    CommonProperty +0x7da); the live-view mode function and the mode check call
@@ -57,12 +56,15 @@
 #define XPAN_HEIGHT_3 1080, 712, 816
 #define XPAN_SIZES 6192, 2288, 4944, 1824, 3504, 1296, 1920, 712
 #define SCOPE_SIZES 6192, 2632, 4944, 2104, 3504, 1488, 1920, 816
-/* GetResolution id 1: the stock 4:3 width and the 5:4 width (height x 5 / 4)
-   of each size. The pipeline crops the width from the center. */
-#define NARROW_WIDTH_0 5504, 5160
-#define NARROW_WIDTH_1 4400, 4120
-#define NARROW_WIDTH_2 3120, 2920
-#define NARROW_WIDTH_3 1920, 1800
+/* GetResolution id 1: the stock 4:3 width, the 5:4 width (height x 5 / 4),
+   and the 1:1 width of each size. The pipeline crops the width from the
+   center. The 1:1 sizes are the native 1:1 sizes, so the XS 1:1 also takes
+   its own height (NARROW_HEIGHT_3: the stock 4:3 and the 1:1 XS height). */
+#define NARROW_WIDTH_0 5504, 5160, 4128
+#define NARROW_WIDTH_1 4400, 4120, 3296
+#define NARROW_WIDTH_2 3120, 2920, 2336
+#define NARROW_WIDTH_3 1920, 1800, 1280
+#define NARROW_HEIGHT_3 1440, 1280
 /* The 5:4 sizes (width, height), largest first. */
 #define NARROW_SIZES 5160, 4128, 4120, 3296, 2920, 2336, 1800, 1440
 /* The size classifier at its aspect BL: the frame is {r3-r6,fp,ip,lr,pc},

@@ -703,9 +703,17 @@ A32_ENTRY void menu_native_touch(u32 controller,u32 slot) {
     if(BYTE(controller,ADJ_SLOT)!=slot) CALL2(FW_ADJ_SELECT_SLOT)(controller,slot);
     native_focus(controller);
 }
+/* GRKit leaves a page itself on OK, MENU, Fn, Left, Right, and touch. An
+   ADJ exit that GRKit did not start, such as a half-press of the shutter,
+   keeps the highlighted row of a page, as a native ADJ keeps the value under
+   its cursor. The Modules page opens settings on OK, so it commits nothing. */
+static void exit_commit(volatile u32 *h) {
+    if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && h[GRKIT_HOST_MODULE/4]!=MANAGE_MODULE) menu_confirm(h);
+}
 A32_ENTRY void menu_exit(u32 controller) {
     volatile u32 *h=menu_header();
     u32 in_grkit=private_mode(controller);
+    if(in_grkit) exit_commit(h);
     /* A box of the UI service closes with ADJ, and a native screen that
        waits to open does not open. */
     ui_close(h);
@@ -740,7 +748,11 @@ A32_ENTRY u32 menu_destroy(u32 controller) {
         CALL2(WORD(WORD(widget,0),0x2c))(widget,0);
         CALL2(FW_VIEW_SET_PARENT)(widget+0xf0,0);
     }
-    if(h[GRKIT_HOST_MENU_CONTROLLER/4]==controller) { h[GRKIT_HOST_MENU_CONTROLLER/4]=0; h[GRKIT_HOST_MENU_LEVEL/4]=0; }
+    if(h[GRKIT_HOST_MENU_CONTROLLER/4]==controller) {
+        /* A destroy without an exit keeps the highlighted row too. */
+        exit_commit(h);
+        h[GRKIT_HOST_MENU_CONTROLLER/4]=0; h[GRKIT_HOST_MENU_LEVEL/4]=0;
+    }
     h[GRKIT_HOST_PREVIEW/4]=0;
     h[GRKIT_HOST_FRAME_PREVIEW/4]=0;
     h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=0;

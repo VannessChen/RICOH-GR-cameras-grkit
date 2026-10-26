@@ -34,7 +34,7 @@ To keep the settings and the effects of GRKit 1.2, merge the files in step 2. Do
 Open ADJ and select the sixth entry, GRK. GRKit loads a few seconds after power-on, so the entry can appear late. When GRKit has loaded, the shooting screen shows **GRKit** at the top for a few seconds. This label needs the Framing or Guides module.
 
 - **Film Look:** highlight an effect to preview it. Press OK to keep it. Press Fn to adjust the Standard parameters of the effect. On the GRK menu, press Fn on the Film Look row to adjust the selected effect. Each effect keeps its own adjustments, and they do not change the camera's Image Control settings. The effects were made for GR III, so their colors can differ on GR IV.
-- **Framing:** select XPan, 2.35:1, 16:9, 4:3, 5:4, or 1:1. 16:9, 4:3, and 1:1 set the camera's own aspect ratio. XPan, 2.35:1, and 5:4 set the native aspect ratio to 3:2. The viewfinder then stays 3:2 and dims the area outside the photo. XPan and 2.35:1 also work when the native aspect ratio is 16:9. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
+- **Framing:** select XPan, 2.35:1, 16:9, 4:3, 5:4, or 1:1. Each ratio sets the native aspect ratio to 3:2. The viewfinder then stays 3:2 and dims the area outside the photo. XPan and 2.35:1 also work when the native aspect ratio is 16:9. Another aspect ratio in the camera menu pauses Framing. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
 - **Guides:** select a guide style. Press Fn to set the color, the opacity, and whether the lines also show while DISP hides the shooting information. The lines show only in the viewfinder.
 - **Date Imprint:** select a date style. Press Fn to set **Date Style** and **Date Font**, the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
 - **Grain:** select Weak, Medium, or Strong. Only photos get the grain.
@@ -50,7 +50,7 @@ All the settings of GRKit are also in the **GRKit** section at the end of the Cu
 
 `GRKIT/REPORT.TXT` gives the GRKit version.
 
-GRKit keeps the effects in the `GRKIT/EFFECTS` folder. A new package adds its effects there and replaces their earlier versions. It does not remove other effects. To add an effect, copy its file into `GRKIT/EFFECTS`. To remove one, turn the camera off and delete its file. A later package adds it again only when its file in the package changes. To add a module, copy its file into `GRKIT/MODULES`. **Options** of Film Look in the GRKit section of MENU lists each effect file and turns it on or off in Film Look at once. GRKit installs at most 40 effects, first those that are on. If you turn on an effect that did not install, it shows at the next power-on. `GRKIT/REPORT.TXT` lists the modules and the effects of the last power-on, and the reason when a module did not load.
+GRKit keeps the effects in the `GRKIT/EFFECTS` folder. A new package adds its effects there and replaces their earlier versions. It does not remove other effects. To add an effect, copy its file into `GRKIT/EFFECTS`. To remove one, turn the camera off and delete its file. A later package adds it again only when its file in the package changes. To add a module, copy its file into `GRKIT/MODULES`. **Options** of Film Look in the GRKit section of MENU lists each effect file and turns it on or off in Film Look at once. GRKit installs at most 20 effects, first those that are on. If you turn on an effect that did not install, it shows at the next power-on. `GRKIT/REPORT.TXT` lists the modules and the effects of the last power-on, and the reason when a module did not load.
 
 ## Troubleshooting
 
@@ -71,6 +71,14 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 4. Make sure that the card root has the `SCRIPT` folder. Copy all the contents of `SD_ROOT`, including `SCRIPT`.
 5. If the card has `SCRIPT/GRKIT/INSTALL.ERR`, GRKit did not install. Make sure that the camera shows a supported firmware version. To see the firmware version, open the camera menu. If the version is supported, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR` and `GRKIT/REPORT.TXT`.
 6. GRKit runs only on the official Ricoh firmware. It does not run on modified firmware.
+
+### GRKit stops working after you format the card
+
+A format of the card, in the camera or on a computer, deletes the `SCRIPT` and `GRKIT` folders. This removes GRKit, your GRKit settings, and your effects.
+
+1. Before you format the card, copy the `GRKIT` folder to a computer.
+2. After the format, copy the contents of `SD_ROOT` to the card root again.
+3. Copy your `GRKIT` folder back to the card root.
 
 ### GRKit starts in safe mode
 

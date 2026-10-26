@@ -64,9 +64,9 @@ pub const HOST_ICON_COUNT: usize = 4;
 const _: () = assert!(HOST_ICON_COUNT <= ICONS_PER_CHUNK);
 /// Product limit for private Image Control effects. Each effect takes a
 /// record of the registry array and an icon slot, about 10.5 KB of script
-/// memory. The registry holds only the header and the records, so 40
-/// records fit one array of 65536 words. The tail is an array of its own.
-pub const MAX_COUNT: usize = 40;
+/// memory. The registry holds only the header and the records, and they fit
+/// one array of 65536 words. The tail is an array of its own.
+pub const MAX_COUNT: usize = 20;
 /// The words of the tail array: the picture scratch, the menu text, and the
 /// live-view labels (`abi::TAIL_SIZE`).
 pub const TAIL_WORDS: usize = crate::abi::TAIL_SIZE / 4;

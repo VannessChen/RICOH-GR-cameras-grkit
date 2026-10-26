@@ -103,11 +103,11 @@ __attribute__((used)) void grkit_export_overlay_label(const Surface *s,u32 label
 __attribute__((used)) u32 grkit_export_setting_get(u32 handle) { return setting_value(framing_header(),handle); }
 
 /* The capture aspect id of the crop: 0 = 3:2, 1 = 4:3, 2 = 16:9. XPan and
-   2.35:1 use id 2 with their own heights, and 5:4 uses id 1 with its own
-   widths (runtime/framing.S). GR III hides ids 1 and 2 from its menu, but its
-   capture and playback code support them. 1:1 is native on each camera. */
+   2.35:1 use id 2 with their own heights, and 5:4 and 1:1 use id 1 with their
+   own widths (runtime/framing.S). GR III hides ids 1 and 2 from its menu, but
+   its capture and playback code support them. */
 static __attribute__((unused)) u32 framing_capture_id(volatile u32 *h) {
-    static const u8 ids[]={0,2,2,1,2,0,1};
+    static const u8 ids[]={0,2,2,1,2,1,1};
     return ids[framing_crop(h)];
 }
 /* ---- Load cue -----------------------------------------------------------
@@ -257,12 +257,17 @@ static void bind_canvas(volatile u32 *h,u32 controller) {
     /* Shooting: id 2 geometry follows the Framing ratio again. */
     ((volatile u8 *)h)[GRKIT_HOST_FRAME_FILE]=0;
     capture_sync(controller);
-    /* A selection that has not drawn on this canvas yet, such as one restored
-       at power-on, needs a redraw: nothing else invalidates a still live view.
-       A cue that starts or ends needs one too. */
-    if(h[GRKIT_HOST_FRAME_CANVAS/4] &&
-       (cue_update(h,controller) || (!h[GRKIT_HOST_FRAME_BITMAP/4] && overlay_active(h))))
-        FRAMING_INVALIDATE(h[GRKIT_HOST_FRAME_CANVAS/4]);
+    /* Nothing else invalidates a still live view, so these need a redraw: a
+       selection that has not drawn on this canvas yet, such as one restored
+       at power-on, a cue that starts or ends, and a setting that changed
+       since the last redraw, such as a ratio or a mask style from ADJ or a
+       native settings page. A crop does not restart the live view. */
+    if(h[GRKIT_HOST_FRAME_CANVAS/4]) {
+        u32 changes=h[GRKIT_HOST_STATE_CHANGES/4], changed=h[GRKIT_HOST_FRAME_CHANGES/4]!=changes;
+        h[GRKIT_HOST_FRAME_CHANGES/4]=changes;
+        if(cue_update(h,controller) || changed || (!h[GRKIT_HOST_FRAME_BITMAP/4] && overlay_active(h)))
+            FRAMING_INVALIDATE(h[GRKIT_HOST_FRAME_CANVAS/4]);
+    }
     /* The first shooting screen after INSTALL: the modules are ready. This
        hook runs in the App task. */
     if(h[GRKIT_HOST_FRAME_CANVAS/4]) services_ready(h);

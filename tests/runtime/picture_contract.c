@@ -370,8 +370,8 @@ int main(void)
         struct box b = changes(0, 0);
         assert(b.lighter && b.lift <= 15 && dark_lift >= 100);
     }
-#ifndef FRAMING_XPAN_NATIVE
-    /* 16:9 Framing: the screennail stamp stays above the bottom bar. */
+    /* 16:9 Framing (a crop also where the camera has 16:9): the screennail
+       stamp stays above the bottom bar. */
     encode_setup();
     fill_planes(40, 128, 128);
     STAMP_STYLE = 3;
@@ -381,6 +381,7 @@ int main(void)
         struct box b = changes(1, 0);
         assert(b.lit && b.bottom <= 480 - 38 && b.top > 240);
     }
+#ifndef FRAMING_XPAN_NATIVE
     /* 2.35:1 Framing: above its bar, which is lower than the XPan bar. */
     encode_setup();
     fill_planes(40, 128, 128);
@@ -432,8 +433,8 @@ int main(void)
     }
 #endif
     /* 5:4 Framing (native 3:2 on each camera): left of its right bar, which
-       is narrower than the 1:1 bar. A 1:1 value is native on each camera, so
-       it is no crop: its stamp stays where Off puts it. */
+       is narrower than the 1:1 bar. 1:1 is a crop too: its stamp stays left
+       of the wider 1:1 bar. */
     {
         struct box crop, off, square;
         encode_setup();
@@ -459,7 +460,12 @@ int main(void)
         header[GRKIT_HOST_FRAME_RATIO / 4] = 5;
         picture_encode(0, MESSAGE);
         square = changes(1, 0);
-        assert(!memcmp(&square, &off, sizeof(struct box)));
+        {
+            struct box th = changes(2, 0);
+            assert(th.lit && th.right <= 160 - 20 && th.left > 80);
+        }
+        assert(square.lit && square.right <= 720 - 120 && square.left > 360 && square.top > 240);
+        assert(square.right < crop.right);
     }
     /* A monochrome GRKit effect keeps neutral chroma: the stamp lights only Y. */
     encode_setup();

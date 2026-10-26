@@ -81,7 +81,7 @@ A package holds only `SCRIPT`. `GRKIT` at the card root is the data folder: no p
 
 A package module loads only if `PACKAGE.TXT` names it, so a merge copy gives the same result as a replace copy. A module in `GRKIT/MODULES` replaces the package module with the same name.
 
-When a package is new, SCAN copies its effects into the library. `GRKIT/IMPORTED.TXT` records the package that the library has, so an effect that a person deleted stays deleted until a package brings a different file. At the first boot after GRKit 1.2, SCAN also copies the effects of `SCRIPT/PLUGINS/EFFECTS`. GRKit installs at most 40 effects.
+When a package is new, SCAN copies its effects into the library. `GRKIT/IMPORTED.TXT` records the package that the library has, so an effect that a person deleted stays deleted until a package brings a different file. At the first boot after GRKit 1.2, SCAN also copies the effects of `SCRIPT/PLUGINS/EFFECTS`. GRKit installs at most 20 effects.
 
 The installer never renames or deletes a file in the data folder. On the camera's Linux, a rename does not replace a file. On GR IV exFAT, a delete makes later lookups fail.
 
@@ -162,7 +162,7 @@ Each effect has its own Fn adjustments. Fn opens the native parameter page, and 
 
 ## Framing
 
-The capability `CORE.ASPECT` holds the aspect of still pictures (`runtime/aspect.h`). Framing lists the same ratios on each camera. A ratio that the camera has natively sets the native aspect. The core crops the other ratios through a hidden capture aspect, while the live view stays 3:2 and DNG files keep the full sensor data. The camera saves a crop as a value, so a release can add ratios.
+The capability `CORE.ASPECT` holds the aspect of still pictures (`runtime/aspect.h`). Framing lists the same ratios on each camera. The core crops each ratio through a hidden capture aspect, also a ratio that the camera has natively, so the live view stays 3:2 for each ratio and DNG files keep the full sensor data. A native aspect other than 3:2 from the camera menu pauses the crop. The camera saves a crop as a value, so a release can add ratios.
 
 The live-view labels are rendered at build time in the style of the native live-view text (`grkit_core::artwork::overlay_labels`). After INSTALL, the first still live view shows a short "GRKit" label.
 

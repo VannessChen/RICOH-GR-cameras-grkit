@@ -1,5 +1,5 @@
 # Framing: the aspect of still pictures. The page sets CORE.ASPECT, and the
-# core sets the native aspect or crops. The layers show the crop in the
+# core crops each ratio from the native 3:2. The layers show the crop in the
 # live view.
 id = "FRAMING"
 version = 1

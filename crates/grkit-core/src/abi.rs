@@ -88,8 +88,9 @@ fields!(HEADER_FIELDS {
     HOST_SETTINGS = 72, 4;
     /// Number of ADJ events. GRKIT_HOST_MENU_EVENT_RING holds the last ones.
     HOST_MENU_EVENTS = 76, 4;
-    /// Number of Image Control selections. A diagnostic.
-    HOST_MENU_APPLIES = 80, 4;
+    /// GRKIT_HOST_STATE_CHANGES when the live view last took a redraw for
+    /// it. A changed setting redraws the live view once (runtime/framing.c).
+    HOST_FRAME_CHANGES = 80, 4;
     /// Icon of Off, or 0 for the native icon.
     HOST_OFF_ICON = 84, 4;
     /// How the private menu opened: 1 or 2 across an edge of the native slots,

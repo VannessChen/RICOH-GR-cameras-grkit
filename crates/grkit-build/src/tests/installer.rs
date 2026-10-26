@@ -59,7 +59,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
     assert_eq!(
         sha256(header.as_bytes()),
-        "118609639a2bfab25af9cc158cbd8a912bdb8ee263db364d26c4f87c0688b43c"
+        "613d8f080fcbb424ff900ee221cd1893bfd78b8474a8a79aeeee20741120c514"
     );
     Ok(())
 }
@@ -152,7 +152,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/GRKIT/LOADER.TTL",
-            "2229c5e8455dc7597822ddbbbdad0cb5bbd9ebe5814be7b4a011eb1e036b7597",
+            "cc064295d8d05469602c700a8febfb3fb441bb228393e46c7e597dcafdc53174",
         ),
         (
             "SCRIPT/GRKIT/CORE.BIN",

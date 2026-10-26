@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Framing can show a black mask or frame lines instead of the dark mask, and can hide the ratio label.
+Framing keeps a 3:2 viewfinder for every ratio, and can show a black mask or frame lines and hide its label.

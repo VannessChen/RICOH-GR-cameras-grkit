@@ -1,7 +1,8 @@
 /* Framing: the mask and the ratio label of the crop in the live view. The
    core sets the crop from CORE.ASPECT and gives it as the capture area of
-   the surface (Surface.area). A ratio that the camera has natively has the
-   native viewfinder, so its area is 0 and the layers draw nothing. */
+   the surface (Surface.area). The core crops each ratio from the native 3:2,
+   so the layers draw the same mask for each ratio. Off has area 0, and the
+   layers draw nothing. */
 #include "grkit.h"
 #include "grkit_module.h"
 

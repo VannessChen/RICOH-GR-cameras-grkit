@@ -160,7 +160,7 @@ The capabilities are public settings of the core. A module uses one by its name 
 | `CORE.GRAIN` | 4: 0 Off, 1 weak, 2 medium, 3 strong | The grain of recorded pictures, in the native grain stage. The live view and DNG files have no grain. |
 
 - `CORE.TONE`: a page gives only its title, and the core gives the rows: the effects, their icons, the preview, and the Fn adjustments. The value of an effect is valid only during one start, because the effects and their order can change. Keep no value across a restart.
-- `CORE.ASPECT`: a page shows only the ratios that the camera offers. A native ratio sets the native aspect, and the core crops the others. A layer gets the crop in `Surface.area` and `Surface.box`. `setting_set` with a ratio that the camera does not offer does nothing.
+- `CORE.ASPECT`: a page shows only the ratios that the camera offers. The core crops each ratio from the native 3:2, also a ratio that the camera has natively. A layer gets the crop in `Surface.area` and `Surface.box`. `setting_set` with a ratio that the camera does not offer does nothing.
 
 ## Registrations
 

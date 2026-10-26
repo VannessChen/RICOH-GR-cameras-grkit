@@ -126,6 +126,8 @@ static int view_called(unsigned fn) { return view_index(fn) >= 0; }
 #define MENU_VIEW2(fn,a,b) view_record((fn), (a), (b), 0, 0)
 #define MENU_VIEW3(fn,a,b,c) view_record((fn), (a), (b), (c), 0)
 #define MENU_VIEW4(fn,a,b,c,d) view_record((fn), (a), (b), (c), (d))
+static unsigned preview_invalidations, preview_invalidated;
+#define MENU_PREVIEW_INVALIDATE(view) (++preview_invalidations, preview_invalidated = (view))
 #include "menu.c"
 _Static_assert(SERVICES_SIZE <= sizeof(services_memory), "The test maps the services block");
 /* The firmware side of the checkbox page (runtime/menu_settings.h): the
@@ -682,20 +684,15 @@ static void the_framing_page_sets_the_ratios_of_the_target(void)
     assert(count(test_header) == ROW_COUNT && ROW_COUNT == 7);
     assert(same(current_module(test_header)->title(test_header), "Framing"));
     for (u32 row = 0; row < ROW_COUNT; ++row) {
-        u32 value = ratio_rows[row], native = framing_native(value);
+        u32 value = ratio_rows[row];
         u32 requests = framing_requests, sets = native_sets, stops = live_view_stops;
         test_header[GRKIT_HOST_MENU_CURSOR / 4] = row;
         menu_confirm(test_header);
         assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE);
-        if (native != FRAMING_CROP) {
-            /* A ratio that the camera has sets its native aspect and no crop. */
-            assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 0 && native_aspect_value == native);
-            assert(framing_requests - requests + native_sets - sets == 1);
-        } else {
-            /* A crop needs native 3:2, then resends the request. */
-            assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == value && native_aspect_value == 0);
-            assert(framing_requests == requests + 1);
-        }
+        /* Each ratio, also one that the camera has, is a crop of native 3:2.
+           Off clears the crop. Each choice sends one request. */
+        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == value && native_aspect_value == 0);
+        assert(native_sets == sets && framing_requests == requests + 1);
         /* Each native aspect change stops the live view first. */
         assert(live_view_stops - stops == native_sets - sets);
         assert(setting_value(test_header, GRKIT_CORE_ASPECT) == value);
@@ -706,27 +703,38 @@ static void the_framing_page_sets_the_ratios_of_the_target(void)
         assert(same(current_module(test_header)->summary(test_header), ratio_summaries[value]));
         assert(test_header[GRKIT_HOST_ACTIVE / 4] == 0x59005000);
     }
-    /* 1:1 is native on each camera, and the last row. */
-    assert(framing_native(ratio_rows[ROW_COUNT - 1]) == 3 && native_aspect_value == 3);
-    /* A native aspect from the camera menu shows on the page. A crop applies
-       only in native 3:2, except XPan and 2.35:1 in GR IV native 16:9. */
+    /* 1:1 is the last row, and a crop. */
+    assert(ratio_rows[ROW_COUNT - 1] == 5 && test_header[GRKIT_HOST_FRAME_RATIO / 4] == 5);
+    /* A native aspect from the camera menu is not a Framing ratio, so the
+       page shows Off. A crop applies only in native 3:2, except XPan and
+       2.35:1 in GR IV native 16:9. */
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = CROP_RATIO;
-    assert(current_module(test_header)->committed(test_header) == ROW_COUNT - 1);
+    native_aspect_value = 3;
+    assert(current_module(test_header)->committed(test_header) == 0);
 #ifdef FRAMING_XPAN_NATIVE
     native_aspect_value = FRAMING_XPAN_NATIVE;
     assert(current_module(test_header)->committed(test_header) == CROP_ROW);
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 6;
-    assert(current_module(test_header)->committed(test_header) == framing_row(2));
+    assert(current_module(test_header)->committed(test_header) == 0);
     native_aspect_value = 1;
-    assert(current_module(test_header)->committed(test_header) == framing_row(3));
+    assert(current_module(test_header)->committed(test_header) == 0);
 #endif
     native_aspect_value = 0;
+    /* Off from a native aspect sets the native 3:2 again. */
+    {
+        u32 sets = native_sets;
+        native_aspect_value = 3;
+        test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
+        menu_confirm(test_header);
+        assert(native_sets == sets + 1 && native_aspect_value == 0);
+        assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 0);
+    }
     /* A saved value that the target does not offer reads as Off. */
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = UNKNOWN_RATIO;
     assert(current_module(test_header)->committed(test_header) == 0);
-    /* A saved native value is not a crop. */
+    /* A saved 1:1 is a crop. */
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 5;
-    assert(current_module(test_header)->committed(test_header) == 0);
+    assert(current_module(test_header)->committed(test_header) == framing_row(5));
     /* A module sets only a value that the target offers. */
     setting_store(test_header, GRKIT_CORE_ASPECT, UNKNOWN_RATIO);
     assert(test_header[GRKIT_HOST_FRAME_RATIO / 4] == 5);
@@ -734,19 +742,28 @@ static void the_framing_page_sets_the_ratios_of_the_target(void)
     /* The Framing page shows its highlighted row on the ADJ canvas: the area
        of the ratio, and the ratio as the value of the CORE.ASPECT layers. */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
+    preview_invalidations = 0;
     frame_preview(test_header, 0x5a000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 2);
     assert(test_header[GRKIT_HOST_MODULE_PREVIEW / 4] == GRKIT_CORE_ASPECT + 1 && test_header[GRKIT_HOST_MODULE_PREVIEW / 4 + 1] == 1);
+    /* A new preview redraws the ADJ canvas once. The same preview does not. */
+    assert(preview_invalidations == 1 && preview_invalidated == 0x5a000000);
+    frame_preview(test_header, 0x5a000000, 0);
+    assert(preview_invalidations == 1);
     /* The preview holds the value of the row: row 2 is 2.35:1 (value 4). */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
     frame_preview(test_header, 0x5a000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 5 && test_header[GRKIT_HOST_MODULE_PREVIEW / 4 + 1] == 4);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5a000000);
+    assert(preview_invalidations == 2);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
     frame_preview(test_header, 0x5a000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 1);
+    assert(preview_invalidations == 3);
+    /* The movie ADJ has no preview and no redraw for it. */
     frame_preview(test_header, 0x5a000000, 1);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 0);
+    assert(preview_invalidations == 3);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = CROP_ROW;
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == FRAMING_ROW);
@@ -754,6 +771,16 @@ static void the_framing_page_sets_the_ratios_of_the_target(void)
     frame_preview(test_header, 0x5b000000, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5b000000);
+    assert(preview_invalidated == 0x5b000000);
+    /* An ADJ that opens again, also after a native settings page, has drawn
+       its canvas before the preview: the exit cleared the preview, so the
+       canvas redraws with the crop. */
+    {
+        unsigned before = preview_invalidations;
+        test_header[GRKIT_HOST_FRAME_PREVIEW / 4] = 0;
+        frame_preview(test_header, 0x5b000000, 0);
+        assert(preview_invalidations == before + 1 && test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1);
+    }
     /* A committed Off ends the mask but keeps the canvas for one erasing
        draw. The Guides layer is off too. */
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 0;
@@ -765,6 +792,31 @@ static void the_framing_page_sets_the_ratios_of_the_target(void)
     assert(!menu_back(test_header));
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = FRAMING_ROW;
     assert(same(current_module(test_header)->summary(test_header), ratio_summaries[CROP_RATIO]));
+}
+
+/* An ADJ exit that GRKit did not start, such as a half-press of the
+   shutter, commits the highlighted row of a page, as native ADJ keeps the
+   value under its cursor. An exit from the root commits nothing. */
+static void an_exit_from_a_page_commits_the_highlighted_row(void)
+{
+    u32 value;
+    adj_pages_start(0);
+    test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = GUIDES_ROW;
+    GUIDE_STYLE = 1;
+    menu_confirm(test_header);
+    assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == GUIDES_MODULE);
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = 3;
+    value = choice_row_value(test_header, 3);
+    assert(value != 1);
+    exit_commit(test_header);
+    assert(GUIDE_STYLE == value);
+    /* From the root, the exit keeps the committed values. */
+    GUIDE_STYLE = 1;
+    test_header[GRKIT_HOST_MENU_LEVEL / 4] = MENU_ROOT;
+    test_header[GRKIT_HOST_MENU_CURSOR / 4] = GUIDES_ROW;
+    exit_commit(test_header);
+    assert(GUIDE_STYLE == 1);
 }
 
 static void the_guides_page_commits_only_its_style(void)
@@ -1923,6 +1975,7 @@ int main(void)
     module_tiles_follow_the_effect_icons();
     the_framing_page_sets_the_ratios_of_the_target();
     the_guides_page_commits_only_its_style();
+    an_exit_from_a_page_commits_the_highlighted_row();
     the_date_imprint_page_lists_its_styles();
     the_grain_page_changes_only_the_grain_word();
     invalid_cursors_form_no_effect_pointer();

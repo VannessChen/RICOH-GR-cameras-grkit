@@ -45,7 +45,6 @@ static __attribute__((unused)) u32 tone_record(volatile u32 *h,u32 value) {
 static __attribute__((unused)) void tone_store(volatile u32 *h,u32 value) {
     h[GRKIT_HOST_ACTIVE/4]=tone_record(h,value);
     h[GRKIT_HOST_PREVIEW/4]=0;
-    ++h[GRKIT_HOST_MENU_APPLIES/4];
     GRKIT_STATE_CHANGED(h);
 }
 

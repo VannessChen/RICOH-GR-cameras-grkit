@@ -138,14 +138,12 @@ static void register_layers(u32 framing)
 }
 /* 5:4: a crop on every camera, and the last crop row. */
 #define LAST_RATIO 6U
-/* Off, and each ratio value that the target crops. A ratio that the camera
-   has natively (FRAMING_NATIVE_IDS) is a native setting: Framing draws and
-   crops nothing for it. */
-static u32 cropped(u32 value) { return value == 0 || (framing_row(value) && framing_native(value) == FRAMING_CROP); }
+/* Off, and each ratio value that the target offers. The core crops each
+   ratio, also one that the camera has natively. */
+static u32 cropped(u32 value) { return value == 0 || framing_row(value); }
 /* The capture aspect id of each crop value: 3:2, then 16:9 for XPan and
-   16:9, 4:3, 16:9 for 2.35:1, none for 1:1 (native on each camera), and 4:3
-   for 5:4. */
-static const u32 capture_ids[] = {0, 2, 2, 1, 2, 0, 1};
+   16:9, 4:3, 16:9 for 2.35:1, and 4:3 for 1:1 and 5:4. */
+static const u32 capture_ids[] = {0, 2, 2, 1, 2, 1, 1};
 
 static void reset(void)
 {
@@ -499,11 +497,6 @@ int main(void)
             assert(framing_capture_request(3)==3);
             assert(framing_capture_request(1)==1);
         }
-        /* A native ratio value is not a crop. */
-        for(u32 ratio=1; ratio<RATIO_VALUES; ++ratio) if(!cropped(ratio)) {
-            header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
-            assert(framing_capture_request(0)==0);
-        }
         header[GRKIT_HOST_FRAME_RATIO/4]=RATIO_VALUES;
         assert(framing_capture_request(0)==0);
         header[GRKIT_HOST_FRAME_RATIO/4]=999;
@@ -525,6 +518,22 @@ int main(void)
     GUIDE_STYLE=2;
     framing_bind(TEST_OWNER);
     assert(invalidations == 2);
+    /* A setting that changed since the last redraw, for example on a native
+       settings page, redraws a canvas that has drawn once. */
+    framing_paint(TEST_CANVAS, TEST_BITMAP);
+    framing_bind(TEST_OWNER);
+    assert(invalidations == 2);
+    header[GRKIT_HOST_FRAME_RATIO/4] = 5;
+    ++header[GRKIT_HOST_STATE_CHANGES/4];
+    framing_bind(TEST_OWNER);
+    assert(invalidations == 3 && invalidated == TEST_CANVAS);
+    framing_bind(TEST_OWNER);
+    assert(invalidations == 3);
+    /* Off redraws too, so the next draw erases the mask. */
+    header[GRKIT_HOST_FRAME_RATIO/4] = 0; GUIDE_STYLE=0;
+    ++header[GRKIT_HOST_STATE_CHANGES/4];
+    framing_bind(TEST_OWNER);
+    assert(invalidations == 4);
     /* Returning to the live view ends the playback 65:24 variant. */
     reset();
     ((volatile u8 *)header)[GRKIT_HOST_FRAME_FILE]=2;
@@ -569,7 +578,9 @@ int main(void)
     reset(); WORD(TEST_BITMAP,8)=0x80000000-TEST_STRIDE*480*4+4; assert_rejected();
     reset(); WORD(TEST_BITMAP,8)=TEST_PIXELS+1; assert_rejected();
     reset(); WORD(TEST_BITMAP,4)=TEST_STRIDE*480*4-1; assert_rejected();
-    reset(); native_aspect=3; assert_rejected();
+    /* A native 1:1 from the camera menu is no Framing ratio, so only the
+       guides want to draw there, and the layers skip that live view. */
+    reset(); native_aspect=3; GUIDE_STYLE=1; assert_rejected();
 #ifdef FRAMING_XPAN_NATIVE
     /* GR IV: XPan also crops native FRAMING_XPAN_NATIVE photos, so its mask
        shows there. Other layers do not show in that live view. */

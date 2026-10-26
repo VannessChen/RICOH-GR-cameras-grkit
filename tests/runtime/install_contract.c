@@ -1,3 +1,6 @@
+/* -std=c11 hides POSIX declarations on glibc, and the test needs
+   pthread_attr_setstack. */
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -19,7 +22,7 @@ typedef unsigned int u32;
    (crates/grkit-build/src/loader.rs). The target has no Image Control, so
    discover lists no effect. */
 #define GRKIT_NO_IMAGE_CONTROL 1
-#define MAX_COUNT 40U
+#define MAX_COUNT 20U
 #define ICONS_PER_CHUNK 40U
 #define ICON_STRIDE 0x1908U
 #define HOST_ICON_COUNT 4U

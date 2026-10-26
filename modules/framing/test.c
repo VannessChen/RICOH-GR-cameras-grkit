@@ -33,8 +33,8 @@ int main(void)
     /* The mask covers each pixel outside the photo area, and no other. */
     check_mask(xpan, 1);
     check_mask(four_three, 3);
-    /* A surface of the full 3:2 area, such as for a native ratio, gets no
-       mask and no label. */
+    /* A surface of the full 3:2 area, such as for Off, gets no mask and no
+       label. */
     {
         static const u16 full[4] = {0, 0, 720, 480};
         Surface s = grkit_test_surface(full);

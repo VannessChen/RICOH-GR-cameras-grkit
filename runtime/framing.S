@@ -130,17 +130,20 @@ HEIGHT framing_height_3, XPAN_HEIGHT_3
 INSET framing_screennail_inset, 38, 107, 87
 INSET framing_thumbnail_inset, 16, 30, 26
 #ifdef HOOK_FRAMING_WIDTH_0
-/* 5:4 narrows capture aspect id 1 (4:3). These hooks switch the id 1
+/* 5:4 and 1:1 narrow capture aspect id 1 (4:3). These hooks switch the id 1
    geometry like the id 2 hooks above. The family header gives the widths
-   (NARROW_WIDTH_<n>: the stock 4:3 and the 5:4 width of GetResolution id 1)
-   and the 5:4 sizes. */
+   (NARROW_WIDTH_<n>: the stock 4:3, the 5:4, and the 1:1 width of
+   GetResolution id 1), the XS height (NARROW_HEIGHT_3: the stock 4:3 and the
+   1:1 height), and the 5:4 sizes. Each 1:1 size is a native 1:1 size, so a
+   1:1 photo plays back as a native one and needs no playback geometry. */
 #if !defined(NARROW_WIDTH_0) || !defined(NARROW_WIDTH_1) || !defined(NARROW_WIDTH_2) || \
-    !defined(NARROW_WIDTH_3) || !defined(NARROW_SIZES)
-#error "The family header defines the 5:4 sizes"
+    !defined(NARROW_WIDTH_3) || !defined(NARROW_HEIGHT_3) || !defined(NARROW_SIZES)
+#error "The family header defines the 5:4 and 1:1 sizes"
 #endif
-/* r12 = 1 for the 5:4 geometry of id 1, else 0. Shooting follows the Framing
-   ratio (value 6), playback the photo that the classifier saw last
-   (GRKIT_HOST_FRAME_FILE 4). Clobbers only r12 and the flags. */
+/* The id 1 geometry in r12: 0 = 4:3, 1 = 5:4, 2 = 1:1. Shooting follows the
+   Framing ratio (value 6 for 5:4, 5 for 1:1), playback the photo that the
+   classifier saw last (GRKIT_HOST_FRAME_FILE 4 for 5:4). Clobbers only r12
+   and the flags. */
 narrow_mode:
     ldr r12, =GRKIT_HEADER_REFERENCE
     ldrb r12, [r12, #GRKIT_HOST_FRAME_FILE]
@@ -154,11 +157,14 @@ narrow_mode:
     ldr r12, [r12, #GRKIT_HOST_FRAME_RATIO]
     cmp r12, #6
     moveq r12, #1
+    bxeq lr
+    cmp r12, #5
+    moveq r12, #2
     movne r12, #0
     bx lr
 /* GetResolution id 1 widths replace `mov r2, #width` before the height, two
    stores, and a branch to the epilogue, so r12 and the flags are dead. */
-.macro WIDTH name, stock, five
+.macro WIDTH name, stock, five, square
 .global \name
 \name:
     push {lr}
@@ -167,12 +173,28 @@ narrow_mode:
     movw r2, #\stock
     cmp r12, #1
     movweq r2, #\five
+    cmp r12, #2
+    movweq r2, #\square
     bx lr
 .endm
 WIDTH framing_width_0, NARROW_WIDTH_0
 WIDTH framing_width_1, NARROW_WIDTH_1
 WIDTH framing_width_2, NARROW_WIDTH_2
 WIDTH framing_width_3, NARROW_WIDTH_3
+/* The id 1 XS height replaces `mov r3, #height` after the XS width. The
+   native 1:1 XS is smaller than the 4:3 XS height. */
+.macro HEIGHT_XS name, stock, square
+.global \name
+\name:
+    push {lr}
+    bl narrow_mode
+    pop {lr}
+    movw r3, #\stock
+    cmp r12, #2
+    movweq r3, #\square
+    bx lr
+.endm
+HEIGHT_XS framing_narrow_height_3, NARROW_HEIGHT_3
 /* The id 1 left inset of the 720x480 screennail replaces `mov r0, #40`. */
 .global framing_narrow_screennail
 framing_narrow_screennail:
@@ -182,12 +204,14 @@ framing_narrow_screennail:
     mov r0, #40
     cmp r12, #1
     moveq r0, #60
+    cmp r12, #2
+    moveq r0, #120
     bx lr
 /* The id 1 thumbnail inset: the stock code stores 0 (r1) at the left inset
    [r2], then at the top inset [r3]. This replaces the second store and
    writes the left inset of the 160x120 thumbnail again. The IIP stores a
    picture with chroma pairs only from an even column, so 5:4 takes 6
-   (148 x 120) instead of 5. */
+   (148 x 120) instead of 5. 1:1 takes 20 (120 x 120). */
 .global framing_narrow_thumbnail
 framing_narrow_thumbnail:
     push {r0,lr}
@@ -195,6 +219,8 @@ framing_narrow_thumbnail:
     mov r0, #0
     cmp r12, #1
     moveq r0, #6
+    cmp r12, #2
+    moveq r0, #20
     strh r0, [r2]
     strh r1, [r3]
     pop {r0,pc}

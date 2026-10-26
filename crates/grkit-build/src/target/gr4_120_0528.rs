@@ -182,6 +182,7 @@ const SITES: &[Site] = &[
     ("framing_width_1", 0x538f0f6c, "302101e3"),
     ("framing_width_2", 0x538f0f58, "c32ea0e3"),
     ("framing_width_3", 0x538f0f44, "1e2da0e3"),
+    ("framing_narrow_height_3", 0x538f0f48, "5a3ea0e3"),
     ("framing_narrow_screennail", 0x538f1168, "2800a0e3"),
     ("framing_narrow_thumbnail", 0x538f1228, "b010c3e1"),
     ("framing_classify", 0x533b0174, "53fcffeb"),

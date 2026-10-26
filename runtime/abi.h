@@ -73,8 +73,9 @@
 #define GRKIT_HOST_SETTINGS 72
 /* Number of ADJ events. GRKIT_HOST_MENU_EVENT_RING holds the last ones. */
 #define GRKIT_HOST_MENU_EVENTS 76
-/* Number of Image Control selections. A diagnostic. */
-#define GRKIT_HOST_MENU_APPLIES 80
+/* GRKIT_HOST_STATE_CHANGES when the live view last took a redraw for it. A
+   changed setting redraws the live view once (runtime/framing.c). */
+#define GRKIT_HOST_FRAME_CHANGES 80
 /* Icon of Off, or 0 for the native icon. */
 #define GRKIT_HOST_OFF_ICON 84
 /* How the private menu opened: 1 or 2 across an edge of the native slots, 3 by
@@ -387,7 +388,7 @@
    show settings (runtime/menu.c). */
 #define GRKIT_TEXT_SETTINGS 24176
 #define GRKIT_TEXT_LANGUAGES 4
-#define GRKIT_TEXT_RECORDS 40
+#define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_TAIL/4]+GRKIT_PICTURE_SCRATCH)
 #define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)
 #define GRKIT_LABEL_COUNT 7
