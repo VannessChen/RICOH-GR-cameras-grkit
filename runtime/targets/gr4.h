@@ -221,6 +221,9 @@
 #define LIVEVIEW_MOVIE 0x2d6
 #define LIVEVIEW_CANVAS 0x15c
 
+/* LiveViewController: the byte that makes UpdateLevelAlarm set the
+   highlight warning again (FW_LIVEVIEW_LEVEL_UPDATE). */
+#define LIVEVIEW_LEVEL_PENDING 0x4e3
 /* Picture processing. GAMMA_BUILT: the word of the gamma object that is 1
    after the native curves are built. */
 #define GAMMA_BUILT 0x382c

@@ -40,6 +40,11 @@
 #define FW_VIEW_SET_TOUCHABLE FIRMWARE(0x533ac1b4)
 #define FW_VIEW_SET_X FIRMWARE(0x533ac568)
 #define FW_VIEW_INVALIDATE FIRMWARE(0x533ad308)
+/* ScreenDevice::OnSetLevelAlarm(screen, mode): sets the live-view highlight warning. */
+#define FW_LEVEL_ALARM FIRMWARE(0x536ce030)
+/* LiveViewController::UpdateLevelAlarm(controller, 1): sets the warning again
+   while LIVEVIEW_LEVEL_PENDING is set. */
+#define FW_LIVEVIEW_LEVEL_UPDATE FIRMWARE(0x5317645c)
 #define FW_VIEW_SET_VISIBLE FIRMWARE(0x533ad3c0)
 #define FW_LINE_VIEW_INIT FIRMWARE(0x53393d84)
 #define FW_LINE_VIEW_SET_STYLE FIRMWARE(0x53393e00)
@@ -249,6 +254,9 @@
 #define LIVEVIEW_MOVIE 0x2d2
 #define LIVEVIEW_CANVAS 0x15c
 
+/* LiveViewController: the byte that makes UpdateLevelAlarm set the
+   highlight warning again (FW_LIVEVIEW_LEVEL_UPDATE). */
+#define LIVEVIEW_LEVEL_PENDING 0x4df
 /* Picture processing. GAMMA_BUILT: the word of the gamma object that is 1
    after the native curves are built. */
 #define GAMMA_BUILT 0x3230

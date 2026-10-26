@@ -46,14 +46,16 @@ fields!(HEADER_FIELDS {
     HOST_RECORDS = 4, 4;
     /// Selected record, or 0 for native processing.
     HOST_ACTIVE = 8, 4;
-    /// Record of the last private processing packet. A diagnostic.
-    HOST_LAST_APPLIED = 12, 4;
+    /// The ScreenDevice of the last highlight warning setting
+    /// (ScreenDevice::OnSetLevelAlarm), or 0 (runtime/framing.c).
+    HOST_LEVEL_SCREEN = 12, 4;
     /// GRKIT_HOST_MAGIC_VALUE after the installer writes the header.
     HOST_MAGIC = 16, 4;
     /// GRKIT_HOST_VERSION_VALUE.
     HOST_VERSION = 20, 4;
-    /// Context word (+0x2ac) of the last parameter build. A diagnostic.
-    HOST_PROCESSING_CONTEXT = 24, 4;
+    /// The mode of that setting: 0 while the warning is off. A change of the
+    /// effect sets the warning again with this mode.
+    HOST_LEVEL_MODE = 24, 4;
     /// Number of parameter builds. A diagnostic.
     HOST_PROCESSING_CALLS = 28, 4;
     /// ADJ controller that shows the private menu, or 0.

@@ -180,6 +180,11 @@ pub const PICTURE: &[HookSpec] = &[
     b("picture_encode_entry", Framing, PictureEncode),
     bl("picture_capture_tone", Framing, Tuning),
     bl("picture_capture_parameters", Framing, Tuning),
+    // ScreenDevice::OnSetLevelAlarm, which sets the live-view highlight
+    // warning: the `mov r5, #0xfe00` of its threshold, and the `mov r1, r6`
+    // before its tail call, where r4 is the screen and r6 the mode.
+    bl("framing_level_threshold", Framing, Tuning),
+    bl("framing_level_mode", Framing, Tuning),
 ];
 
 /// The number of hooks in `groups`.

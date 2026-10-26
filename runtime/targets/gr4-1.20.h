@@ -45,6 +45,11 @@
 #define FW_VIEW_SET_TOUCHABLE FIRMWARE(0x535abb78)
 #define FW_VIEW_SET_X FIRMWARE(0x535abf2c)
 #define FW_VIEW_INVALIDATE FIRMWARE(0x535acccc)
+/* ScreenDevice::OnSetLevelAlarm(screen, mode): sets the live-view highlight warning. */
+#define FW_LEVEL_ALARM FIRMWARE(0x5392afe4)
+/* LiveViewController::UpdateLevelAlarm(controller, 1): sets the warning again
+   while LIVEVIEW_LEVEL_PENDING is set. */
+#define FW_LIVEVIEW_LEVEL_UPDATE FIRMWARE(0x5318f1a4)
 #define FW_VIEW_SET_VISIBLE FIRMWARE(0x535acd84)
 #define FW_LINE_VIEW_INIT FIRMWARE(0x53593388)
 #define FW_LINE_VIEW_SET_STYLE FIRMWARE(0x53593404)

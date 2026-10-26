@@ -140,8 +140,6 @@ shot_done:
 module_parameters:
     push {r0-r3, r12, lr}
     ldr r0, =GRKIT_HEADER_REFERENCE
-    ldr r2, [PROCESSING_CONTEXT, #0x2ac]
-    str r2, [r0, #GRKIT_HOST_PROCESSING_CONTEXT]
     ldr r3, [r0, #GRKIT_HOST_PROCESSING_CALLS]
     add r3, r3, #1
     str r3, [r0, #GRKIT_HOST_PROCESSING_CALLS]

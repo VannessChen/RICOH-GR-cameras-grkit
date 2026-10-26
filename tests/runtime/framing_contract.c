@@ -8,22 +8,28 @@
 #define TEST_PIXELS 0x60000000U
 #define TEST_STRIDE 736U
 #define SENTINEL 0x76543210U
-static uint32_t owner_memory[256], canvas_memory[256], bitmap_memory[256];
+/* The live view controller reaches LIVEVIEW_LEVEL_PENDING (below 0x800). */
+static uint32_t owner_memory[512], canvas_memory[256], bitmap_memory[256];
+/* One effect record for the highlight warning (GRKIT_RECORD_SIZE bytes). */
+#define TEST_RECORD 0x5d000000U
+static uint32_t record_memory[0x1100 / 4];
 static uint32_t pixels[1024 * 480 + 2];
 static uint32_t native_aspect, capture_aspect, capture_requests;
 
 static void *mapped(uint32_t address, uint32_t bytes)
 {
-    uint32_t *object;
+    uint32_t *object, size = sizeof(canvas_memory);
     if (address >= TEST_OWNER && address < TEST_OWNER + sizeof(owner_memory)) {
-        object = owner_memory; address -= TEST_OWNER;
+        object = owner_memory; address -= TEST_OWNER; size = sizeof(owner_memory);
     } else if (address >= TEST_CANVAS && address < TEST_CANVAS + sizeof(canvas_memory)) {
         object = canvas_memory; address -= TEST_CANVAS;
+    } else if (address >= TEST_RECORD && address < TEST_RECORD + sizeof(record_memory)) {
+        object = record_memory; address -= TEST_RECORD; size = sizeof(record_memory);
     } else {
         assert(address >= TEST_BITMAP && address < TEST_BITMAP + sizeof(bitmap_memory));
         object = bitmap_memory; address -= TEST_BITMAP;
     }
-    assert(address + bytes <= sizeof(owner_memory));
+    assert(address + bytes <= size);
     assert(address % bytes == 0);
     return (uint8_t *)object + address;
 }
@@ -95,6 +101,8 @@ static uint32_t profile_core_id;
 #define TEST_BADGE_PAINT 0x5e000021U
 static void test_module_paint(uint32_t address, const void *surface, uint32_t value);
 #define MODULE_PAINT(address,surface,value) test_module_paint(address,surface,value)
+static uint32_t level_updates, level_updated;
+#define FRAMING_LEVEL_UPDATE(controller) (++level_updates, level_updated = (controller))
 #include "framing.c"
 #define GRKIT_PIXELS(address) mapped_pixels(address)
 #include "../../modules/framing/framing.c"
@@ -294,8 +302,71 @@ static void assert_guides(u32 ratio,u32 style,u32 badge)
         assert(pixels[1+y*TEST_STRIDE+x]==expected);
     }
 }
+/* The white of each record curve: R, G, B at input 255. */
+static void record_white(u32 r, u32 g, u32 b)
+{
+    HALF(TEST_RECORD, 0x68 + 255 * 2) = (u16)r;
+    HALF(TEST_RECORD, 0x268 + 255 * 2) = (u16)g;
+    HALF(TEST_RECORD, 0x468 + 255 * 2) = (u16)b;
+}
+/* The live-view highlight warning: the threshold follows the white of the
+   active effect, and each setting of the camera records its screen and mode. */
+static void the_highlight_warning_follows_the_effect_white(void)
+{
+    reset();
+    header[GRKIT_HOST_CAPABILITIES/4] |= GRKIT_CORE_TONE_BIT;
+    /* Native processing keeps the native threshold, luma 254. */
+    header[GRKIT_HOST_ACTIVE/4] = 0;
+    assert(framing_level_value() == 0xfe00);
+    /* A white of 13000 of 16383 is luma 203 (rounded up): the threshold is 202. */
+    header[GRKIT_HOST_ACTIVE/4] = TEST_RECORD;
+    record_white(13000, 13000, 13000);
+    assert(framing_level_value() == 202 << 8);
+    /* A full white keeps the native threshold. */
+    record_white(16383, 16383, 16383);
+    assert(framing_level_value() == 0xfe00);
+    /* The luma weights: a red white weighs 77 of 256. */
+    record_white(16383, 0, 0);
+    assert(framing_level_value() == 76 << 8);
+    /* The post matrix applies before the luma: half of each channel. */
+    WORD(TEST_RECORD, GRKIT_RECORD_FEATURES) = GRKIT_FEATURE_POST;
+    for (u32 i = 0; i < 9; ++i) HALF(TEST_RECORD, GRKIT_RECORD_POST + i * 2) = i % 4 ? 0 : 4096;
+    record_white(16383, 16383, 16383);
+    assert(framing_level_value() == 127 << 8);
+    WORD(TEST_RECORD, GRKIT_RECORD_FEATURES) = 0;
+    /* Without a module that uses CORE.TONE, the processing is native. */
+    header[GRKIT_HOST_CAPABILITIES/4] &= ~GRKIT_CORE_TONE_BIT;
+    record_white(13000, 13000, 13000);
+    assert(framing_level_value() == 0xfe00);
+    header[GRKIT_HOST_ACTIVE/4] = 0;
+    framing_level_record(0x5c001000, 3);
+    assert(header[GRKIT_HOST_LEVEL_SCREEN/4] == 0x5c001000 && header[GRKIT_HOST_LEVEL_MODE/4] == 3);
+    framing_level_record(0x5c001000, 0);
+    assert(header[GRKIT_HOST_LEVEL_MODE/4] == 0);
+    /* The first live view update after INSTALL marks the warning as changed
+       once, when the effect has its own threshold, so that the update sets
+       the warning again. A setting then records the screen. */
+    header[GRKIT_HOST_CAPABILITIES/4] |= GRKIT_CORE_TONE_BIT;
+    header[GRKIT_HOST_ACTIVE/4] = TEST_RECORD;
+    header[GRKIT_HOST_LEVEL_SCREEN/4] = 0;
+    BYTE(TEST_OWNER, LIVEVIEW_LEVEL_PENDING) = 0;
+    level_updates = 0;
+    framing_bind(TEST_OWNER);
+    assert(BYTE(TEST_OWNER, LIVEVIEW_LEVEL_PENDING) == 1 && header[GRKIT_HOST_LEVEL_SCREEN/4] == 1);
+    assert(level_updates == 1 && level_updated == TEST_OWNER);
+    BYTE(TEST_OWNER, LIVEVIEW_LEVEL_PENDING) = 0;
+    framing_bind(TEST_OWNER);
+    assert(BYTE(TEST_OWNER, LIVEVIEW_LEVEL_PENDING) == 0 && level_updates == 1);
+    /* With the native threshold, nothing changes. */
+    header[GRKIT_HOST_LEVEL_SCREEN/4] = 0;
+    header[GRKIT_HOST_ACTIVE/4] = 0;
+    framing_bind(TEST_OWNER);
+    assert(BYTE(TEST_OWNER, LIVEVIEW_LEVEL_PENDING) == 0 && header[GRKIT_HOST_LEVEL_SCREEN/4] == 0);
+    assert(level_updates == 1);
+}
 int main(void)
 {
+    the_highlight_warning_follows_the_effect_white();
     /* Fixed rectangles are independent expected output, not a second renderer. */
     const u32 rectangles[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
                                {0,87,720,393},{120,0,600,480},{60,0,660,480}};

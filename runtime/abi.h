@@ -30,14 +30,16 @@
 #define GRKIT_HOST_RECORDS 4
 /* Selected record, or 0 for native processing. */
 #define GRKIT_HOST_ACTIVE 8
-/* Record of the last private processing packet. A diagnostic. */
-#define GRKIT_HOST_LAST_APPLIED 12
+/* The ScreenDevice of the last highlight warning setting
+   (ScreenDevice::OnSetLevelAlarm), or 0 (runtime/framing.c). */
+#define GRKIT_HOST_LEVEL_SCREEN 12
 /* GRKIT_HOST_MAGIC_VALUE after the installer writes the header. */
 #define GRKIT_HOST_MAGIC 16
 /* GRKIT_HOST_VERSION_VALUE. */
 #define GRKIT_HOST_VERSION 20
-/* Context word (+0x2ac) of the last parameter build. A diagnostic. */
-#define GRKIT_HOST_PROCESSING_CONTEXT 24
+/* The mode of that setting: 0 while the warning is off. A change of the effect
+   sets the warning again with this mode. */
+#define GRKIT_HOST_LEVEL_MODE 24
 /* Number of parameter builds. A diagnostic. */
 #define GRKIT_HOST_PROCESSING_CALLS 28
 /* ADJ controller that shows the private menu, or 0. */

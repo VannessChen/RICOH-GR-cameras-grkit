@@ -81,8 +81,6 @@ module_packet:
     ldr r0, [r4, #8]
     .word 0xeb000000 | (((.Lowned_record - . - 8) >> 2) & 0x00ffffff)
     bne packet_done
-    ldr r1, =GRKIT_HEADER_REFERENCE
-    str r0, [r1, #GRKIT_HOST_LAST_APPLIED]
     ldr r1, [r0, #GRKIT_RECORD_MONOCHROME]
     and r1, r1, #1
     strb r1, [r4, #0x79]

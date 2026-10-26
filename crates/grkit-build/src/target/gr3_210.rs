@@ -180,6 +180,8 @@ const SITES: &[Site] = &[
     // the BL to the adjustments fill of tag 0x247 (handler 0x536078e8).
     ("picture_capture_tone", 0x53608080, "e1fdfeeb"),
     ("picture_capture_parameters", 0x536078f4, "3302ffeb"),
+    ("framing_level_threshold", 0x536ce194, "fe5ca0e3"),
+    ("framing_level_mode", 0x536ce080, "0610a0e1"),
     // DigitalFilterProcess SetEffectParameter (0x5350304c), and its stage
     // gate (0x535131c0, plan +0x24).
     ("grain_particle", 0x535031b0, "9537d5e5"),

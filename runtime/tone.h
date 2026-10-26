@@ -41,11 +41,16 @@ static __attribute__((unused)) u32 tone_values(volatile u32 *h) {
 static __attribute__((unused)) u32 tone_record(volatile u32 *h,u32 value) {
     return value ? h[GRKIT_HOST_RECORDS/4]+(value-1)*GRKIT_RECORD_SIZE : 0;
 }
+#ifndef TONE_STORED
+/* The includer can act on a committed effect (runtime/menu.c). */
+#define TONE_STORED(h) ((void)(h))
+#endif
 /* Commit a value and end its live-view preview. */
 static __attribute__((unused)) void tone_store(volatile u32 *h,u32 value) {
     h[GRKIT_HOST_ACTIVE/4]=tone_record(h,value);
     h[GRKIT_HOST_PREVIEW/4]=0;
     GRKIT_STATE_CHANGED(h);
+    TONE_STORED(h);
 }
 
 #endif

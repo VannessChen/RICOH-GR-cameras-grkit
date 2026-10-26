@@ -299,4 +299,26 @@ framing_image_aspect:
     bx lr
 6:  ldr pc, =HOOK_FRAMING_IMAGE_ASPECT_TARGET
 #endif
+#ifdef HOOK_FRAMING_LEVEL_THRESHOLD
+/* ScreenDevice::OnSetLevelAlarm (runtime/framing.c: highlight warning).
+   This replaces `mov r5, #0xfe00`: r5 gets the threshold of the effect. The
+   next call reads r0 to r2. */
+.global framing_level_threshold
+framing_level_threshold:
+    push {r0-r3,r12,lr}
+    bl framing_level_value
+    mov r5, r0
+    pop {r0-r3,r12,pc}
+/* This replaces `mov r1, r6` before the tail call. r4 is the screen and r6
+   the mode, 0 for off. */
+.global framing_level_mode
+framing_level_mode:
+    push {r0-r3,r12,lr}
+    mov r0, r4
+    mov r1, r6
+    bl framing_level_record
+    pop {r0-r3,r12,lr}
+    mov r1, r6
+    bx lr
+#endif
 .ltorg

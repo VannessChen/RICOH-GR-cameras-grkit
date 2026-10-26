@@ -158,6 +158,8 @@ The capability `CORE.TONE` selects an effect for still pictures and the live vie
 
 An effect (GRF) replaces the Standard color matrix and tone curves. An optional extension adds a post matrix and selective color. An effect can also drive the camera's hue-sector stage (`grkit_core::hue`), for which the installer writes a parameter set and a second set for highlight correction.
 
+The live-view highlight warning compares the shown luma with a threshold of the display. With an effect, the threshold is the luma of the effect's white, less 1, because the curves of a color effect end below the native threshold (`runtime/framing.c`).
+
 Each effect has its own Fn adjustments. Fn opens the native parameter page, and hooks redirect its model to the effect record, so native settings and effect settings stay separate. Photos record the effect and its adjustments in the maker note.
 
 ## Framing

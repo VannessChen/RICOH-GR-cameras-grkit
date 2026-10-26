@@ -164,6 +164,18 @@ static u32 after_adj_press(volatile u32 *h) {
 static u32 native_action_release(u32 action,u32 active) {
     return action==10 && active;
 }
+#ifndef MENU_LEVEL_ALARM
+#define MENU_LEVEL_ALARM(screen,mode) CALL2(FW_LEVEL_ALARM)(screen,mode)
+#endif
+/* The live-view highlight warning takes its threshold from the effect when
+   the camera sets the warning (runtime/framing.c: framing_level_value). A
+   change of the effect sets the warning again with its last screen and mode,
+   while the warning is on. */
+static void level_reapply(volatile u32 *h) {
+    if(h[GRKIT_HOST_LEVEL_SCREEN/4] && h[GRKIT_HOST_LEVEL_MODE/4])
+        MENU_LEVEL_ALARM(h[GRKIT_HOST_LEVEL_SCREEN/4],h[GRKIT_HOST_LEVEL_MODE/4]);
+}
+#define TONE_STORED(h) level_reapply(h)
 #include "tone.h"
 static u32 selected_icon(volatile u32 *h) {
     u32 i=record_index(h,h[GRKIT_HOST_ACTIVE/4]);
@@ -816,6 +828,7 @@ A32_ENTRY u32 menu_event(u32 controller,const u16 *event) {
            CALL2(FW_ADJ_SLOT_TYPE)(controller,BYTE(controller,ADJ_SLOT))==ADJ_IC_SLOT_TYPE) {
             h[GRKIT_HOST_ACTIVE/4]=0;
             GRKIT_STATE_CHANGED(h);
+            level_reapply(h);
         }
         if(ADJ_MOVIE(controller)!=1 &&
            ((kind==EV_RIGHT && BYTE(controller,ADJ_SLOT)==4) ||

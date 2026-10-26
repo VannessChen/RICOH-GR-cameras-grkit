@@ -126,6 +126,8 @@ static int view_called(unsigned fn) { return view_index(fn) >= 0; }
 #define MENU_VIEW2(fn,a,b) view_record((fn), (a), (b), 0, 0)
 #define MENU_VIEW3(fn,a,b,c) view_record((fn), (a), (b), (c), 0)
 #define MENU_VIEW4(fn,a,b,c,d) view_record((fn), (a), (b), (c), (d))
+static unsigned level_calls, level_screen, level_mode;
+#define MENU_LEVEL_ALARM(screen,mode) (++level_calls, level_screen = (screen), level_mode = (mode))
 static unsigned preview_invalidations, preview_invalidated;
 #define MENU_PREVIEW_INVALIDATE(view) (++preview_invalidations, preview_invalidated = (view))
 #include "menu.c"
@@ -1841,6 +1843,17 @@ static void each_selection_change_counts_once(void)
     assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
     tone_store(h, 0);
     assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
+    /* While the highlight warning is on, a committed effect sets it again
+       with its screen and mode, so its threshold follows the effect. */
+    level_calls = 0;
+    h[GRKIT_HOST_LEVEL_SCREEN / 4] = 0x5c001000; h[GRKIT_HOST_LEVEL_MODE / 4] = 0;
+    tone_store(h, 1);
+    assert(level_calls == 0);
+    h[GRKIT_HOST_LEVEL_MODE / 4] = 2;
+    tone_store(h, 0);
+    assert(level_calls == 1 && level_screen == 0x5c001000 && level_mode == 2);
+    h[GRKIT_HOST_LEVEL_SCREEN / 4] = h[GRKIT_HOST_LEVEL_MODE / 4] = 0;
+    n = h[GRKIT_HOST_STATE_CHANGES / 4];
     setting_store(h, 0, style == 1 ? 2 : 1);
     assert(h[GRKIT_HOST_STATE_CHANGES / 4] == ++n);
     setting_store(h, 0, setting_value(h, 0));

@@ -192,6 +192,8 @@ const SITES: &[Site] = &[
     // of tag 0x247 (handler 0x53810074).
     ("picture_capture_tone", 0x53810804, "1a37ffeb"),
     ("picture_capture_parameters", 0x53810080, "6a3bffeb"),
+    ("framing_level_threshold", 0x539033f8, "fe5ca0e3"),
+    ("framing_level_mode", 0x539032e4, "0610a0e1"),
     // DigitalFilterProcess SetEffectParameter (0x53701c40), and its stage
     // gate (0x537150fc, plan +0x25).
     ("grain_enable", 0x53701e14, "b537d4e5"),
