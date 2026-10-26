@@ -6,7 +6,7 @@ This file gives the licenses of the files in this package.
 
 The files in `SD_ROOT/` are GRKit software, except the effect files. GRKit is licensed under the MIT License. The license text is in "GRKit license" below.
 
-`INSTALL.BIN` also contains some bytes of the official RICOH firmware. GRKit uses them to identify the firmware before it changes the camera memory. These bytes are not GRKit software, and the MIT License does not apply to them.
+Each `CORE.BIN` file (`CORE1.BIN` and on, in a package for several firmware builds) also contains some bytes of the official RICOH firmware. GRKit uses them to identify the firmware before it changes the camera memory. These bytes are not GRKit software, and the MIT License does not apply to them.
 
 The text in the menu icons and in the live view uses the [Roboto Condensed](https://github.com/googlefonts/roboto-classic) typeface, which is licensed under the SIL Open Font License 1.1. GRKit uses its Light, Bold, and Black weights, with only the ASCII characters.
 
@@ -16,7 +16,7 @@ The screenshot in the installation guide shows the photo [Snow in Akihabara](htt
 
 ## Effects
 
-Each file in `SD_ROOT/SCRIPT/PLUGINS/EFFECTS/` is one Image Control effect. Each effect of the GRKit catalog is a fit of one film simulation LUT. GRKit contributors made the fits. The files contain the fitted parameters, not the LUTs. "Changes to the LUTs" below describes the changes.
+Each file in `SD_ROOT/GRKIT/EFFECTS/` is one Film Look effect. Each effect of the GRKit catalog is a fit of one film simulation LUT. GRKit contributors made the fits. The files contain the fitted parameters, not the LUTs. "Changes to the LUTs" below describes the changes.
 
 If an effect is not in the GRKit catalog, its author gives its license.
 

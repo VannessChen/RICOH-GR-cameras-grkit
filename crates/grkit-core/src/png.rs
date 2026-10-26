@@ -30,6 +30,55 @@ fn paeth(a: u8, b: u8, c: u8) -> u8 {
 }
 
 pub fn decode(bytes: &[u8]) -> Result<Image> {
+    let rows = decode_rows(bytes)?;
+    let (depth, channels) = (rows.depth, rows.channels);
+    let sample = |pixel: &[u8], channel: usize| {
+        if depth == 8 {
+            pixel[channel] as f32 / 255.0
+        } else {
+            u16::from_be_bytes([pixel[channel * 2], pixel[channel * 2 + 1]]) as f32 / 65535.0
+        }
+    };
+    let pixels = rows
+        .data
+        .chunks_exact(channels * depth as usize / 8)
+        .map(|pixel| std::array::from_fn(|c| sample(pixel, if channels < 3 { 0 } else { c })))
+        .collect();
+    Ok(Image {
+        width: rows.width,
+        height: rows.height,
+        pixels,
+    })
+}
+
+/// Decodes a PNG image into 8-bit RGBA samples: its width, its height, and
+/// four bytes for each pixel. A 16-bit image keeps the high byte of each
+/// sample, and an image without alpha is opaque.
+pub fn decode_rgba8(bytes: &[u8]) -> Result<(usize, usize, Vec<u8>)> {
+    let rows = decode_rows(bytes)?;
+    let (depth, channels) = (rows.depth as usize, rows.channels);
+    let mut rgba = Vec::with_capacity(rows.width * rows.height * 4);
+    for pixel in rows.data.chunks_exact(channels * depth / 8) {
+        let sample = |channel: usize| pixel[channel * depth / 8];
+        let (gray, alpha) = (channels < 3, channels == 2 || channels == 4);
+        for c in 0..3 {
+            rgba.push(sample(if gray { 0 } else { c }));
+        }
+        rgba.push(if alpha { sample(channels - 1) } else { 255 });
+    }
+    Ok((rows.width, rows.height, rgba))
+}
+
+/// The unfiltered rows of a PNG image.
+struct Rows {
+    width: usize,
+    height: usize,
+    depth: u8,
+    channels: usize,
+    data: Vec<u8>,
+}
+
+fn decode_rows(bytes: &[u8]) -> Result<Rows> {
     ensure!(bytes.starts_with(SIGNATURE), "Expected a PNG image");
     let mut at = SIGNATURE.len();
     let mut header = None;
@@ -126,21 +175,12 @@ pub fn decode(bytes: &[u8]) -> Result<Image> {
         }
     }
 
-    let sample = |pixel: &[u8], channel: usize| {
-        if depth == 8 {
-            pixel[channel] as f32 / 255.0
-        } else {
-            u16::from_be_bytes([pixel[channel * 2], pixel[channel * 2 + 1]]) as f32 / 65535.0
-        }
-    };
-    let pixels = rows
-        .chunks_exact(bytes_per_pixel)
-        .map(|pixel| std::array::from_fn(|c| sample(pixel, if channels < 3 { 0 } else { c })))
-        .collect();
-    Ok(Image {
+    Ok(Rows {
         width,
         height,
-        pixels,
+        depth,
+        channels,
+        data: rows,
     })
 }
 
@@ -150,17 +190,33 @@ pub fn encode_rgb16(width: usize, height: usize, samples: &[u16]) -> Result<Vec<
         samples.len() == width * height * 3,
         "Expected {width} x {height} RGB samples"
     );
-    let mut raw = Vec::with_capacity(height * (1 + width * 6));
-    for row in samples.chunks_exact(width * 3) {
+    let bytes: Vec<u8> = samples.iter().flat_map(|v| v.to_be_bytes()).collect();
+    encode(width, height, 16, 2, &bytes)
+}
+
+/// Encodes 8-bit RGBA samples as a PNG image without filters.
+pub fn encode_rgba8(width: usize, height: usize, rgba: &[u8]) -> Result<Vec<u8>> {
+    ensure!(
+        rgba.len() == width * height * 4,
+        "Expected {width} x {height} RGBA samples"
+    );
+    encode(width, height, 8, 6, rgba)
+}
+
+/// A PNG image of `samples`, rows in order, of the given depth and color type.
+fn encode(width: usize, height: usize, depth: u8, color: u8, samples: &[u8]) -> Result<Vec<u8>> {
+    let stride = samples.len() / height.max(1);
+    let mut raw = Vec::with_capacity(height * (1 + stride));
+    for row in samples.chunks_exact(stride.max(1)) {
         raw.push(0);
-        raw.extend(row.iter().flat_map(|v| v.to_be_bytes()));
+        raw.extend_from_slice(row);
     }
     let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
     encoder.write_all(&raw)?;
     let mut header = Vec::with_capacity(13);
     header.extend((width as u32).to_be_bytes());
     header.extend((height as u32).to_be_bytes());
-    header.extend([16, 2, 0, 0, 0]);
+    header.extend([depth, color, 0, 0, 0]);
     let mut bytes = SIGNATURE.to_vec();
     for (kind, body) in [
         (b"IHDR", header),
@@ -175,4 +231,22 @@ pub fn encode_rgb16(width: usize, height: usize, samples: &[u16]) -> Result<Vec<
         bytes.extend(crc.to_be_bytes());
     }
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rgba8_round_trips() {
+        let rgba: Vec<u8> = (0..3 * 2 * 4).map(|i| (i * 37) as u8).collect();
+        let png = encode_rgba8(3, 2, &rgba).unwrap();
+        assert_eq!(decode_rgba8(&png).unwrap(), (3, 2, rgba));
+        // An RGB image is opaque.
+        let rgb = encode_rgb16(1, 1, &[0x1234, 0x5678, 0x9abc]).unwrap();
+        assert_eq!(
+            decode_rgba8(&rgb).unwrap(),
+            (1, 1, vec![0x12, 0x56, 0x9a, 255])
+        );
+    }
 }

@@ -23,6 +23,7 @@ import { forget, preview, type PreviewEffect, type Source } from '../preview/ren
 import { DEFAULT_SAMPLE } from '../preview/samples';
 import { PhotoLoader } from '../preview/raw';
 import { resolveSelection, selectImport, type Selection } from '../selection';
+import { saveImported } from '../package';
 import { STOCKS } from '../stocks';
 import { EffectIcon } from './EffectIcon';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -272,6 +273,7 @@ export function EffectsSection({
           </button>
         </div>
       </div>
+      <p className="note">{t.libraryNote}</p>
 
       <div className="table-box">
         <table>
@@ -339,6 +341,25 @@ export function EffectsSection({
                     >
                       {t.preview}
                     </button>
+                    {effect.imported ? (
+                      <button
+                        type="button"
+                        className="button small"
+                        aria-label={t.fileOf(effect.name)}
+                        onClick={() => void saveImported(effect)}
+                      >
+                        {t.file}
+                      </button>
+                    ) : (
+                      <a
+                        className="button small"
+                        href={effectUrl(PREVIEW_TARGET, effect.file)}
+                        download={effect.file}
+                        aria-label={t.fileOf(effect.name)}
+                      >
+                        {t.file}
+                      </a>
+                    )}
                     {effect.imported && (
                       <button
                         type="button"

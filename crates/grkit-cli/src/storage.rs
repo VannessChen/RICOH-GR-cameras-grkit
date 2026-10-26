@@ -202,7 +202,7 @@ pub fn export_runtime(build: &Path, site: &Path) -> Result<(String, usize)> {
 pub fn validate_output(output: &Path) -> Result<()> {
     ensure!(
         fs::symlink_metadata(output).is_err(),
-        "Output directory already exists: {}",
+        "Output already exists: {}",
         output.display()
     );
     Ok(())

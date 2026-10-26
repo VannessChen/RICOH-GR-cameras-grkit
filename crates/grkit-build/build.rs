@@ -1,5 +1,5 @@
-//! Lists every file under `runtime/` as `RUNTIME_SOURCES`, so a new runtime or
-//! plugin file needs no entry in the build crate.
+//! Lists every file under `runtime/` as `RUNTIME_SOURCES`, so a new runtime
+//! file needs no entry in the build crate.
 
 use std::{
     env, fs,

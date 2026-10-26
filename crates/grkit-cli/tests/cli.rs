@@ -4,9 +4,37 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+/// The module files of the official modules, for the packages of the tests.
+fn official_modules() -> Vec<String> {
+    let directory = Path::new(env!("CARGO_TARGET_TMPDIR")).join("official-modules");
+    fs::create_dir_all(&directory).unwrap();
+    grkit_core::modules::OFFICIAL
+        .iter()
+        .map(|official| {
+            // Tests run in parallel and share the directory: write each file
+            // under another name and rename it, so that no grkit process
+            // reads a file while a test rewrites it.
+            let path = directory.join(format!("{}.GRM", official.id));
+            let mut file = tempfile::NamedTempFile::new_in(&directory).unwrap();
+            std::io::Write::write_all(&mut file, &testing::module(official.id)).unwrap();
+            file.persist(&path).unwrap();
+            text(&path).to_owned()
+        })
+        .collect()
+}
+
+/// Run grkit. A `package` command without `--module` gets the official modules.
 fn run(args: &[&str]) -> Output {
+    let mut args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+    if args.first().is_some_and(|command| command == "package")
+        && !args.iter().any(|arg| arg == "--module")
+    {
+        for module in official_modules() {
+            args.extend(["--module".to_owned(), module]);
+        }
+    }
     Command::new(env!("CARGO_BIN_EXE_grkit"))
-        .args(args)
+        .args(&args)
         .output()
         .unwrap()
 }
@@ -113,7 +141,7 @@ fn effect_compilation_is_independent_of_target_capacity() {
     let empty = tmp.path().join("empty");
     assert!(compile(&input, &empty).status.success());
     assert_eq!(fs::read_dir(empty).unwrap().count(), 0);
-    for index in 0..21 {
+    for index in 0..41 {
         write_definition(&input, &format!("custom-{index:04}"));
     }
     let output = tmp.path().join("compiled");
@@ -125,9 +153,9 @@ fn effect_compilation_is_independent_of_target_capacity() {
     );
     assert_eq!(
         serde_json::from_slice::<Value>(&result.stdout).unwrap()["effects"],
-        21
+        41
     );
-    assert_eq!(fs::read_dir(&output).unwrap().count(), 21);
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 41);
 
     let (build, _) = fixture(&tmp.path().join("package-input"));
     let archive = tmp.path().join("overflow.zip");
@@ -143,7 +171,7 @@ fn effect_compilation_is_independent_of_target_capacity() {
         text(&archive),
     ]);
     assert!(!result.status.success());
-    assert!(String::from_utf8_lossy(&result.stderr).contains("at most 20"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("at most 40"));
     assert!(!archive.exists());
 }
 
@@ -266,8 +294,9 @@ fn package_roundtrip_and_output_ownership() {
         text(&zip),
     ];
     let packaged = success(&args);
-    // Ten runtime and document entries, then one per effect.
-    assert_eq!(packaged["entries"], 10 + source_count());
+    // Eleven runtime, package list, and document entries, the five official
+    // modules, then one per effect.
+    assert_eq!(packaged["entries"], 16 + source_count());
     assert_eq!(success(&["verify", text(&zip)])["effects"], source_count());
     let before = fs::read(&zip).unwrap();
     assert!(!run(&args).status.success());
@@ -358,9 +387,17 @@ fn package_targets_the_selected_camera() {
 }
 
 #[test]
-fn package_selects_plugins_and_may_omit_effects() {
+fn package_installs_the_given_modules() {
     let tmp = tempfile::tempdir().unwrap();
     let (build, effects) = fixture(tmp.path());
+    let modules = tmp.path().join("modules");
+    fs::create_dir(&modules).unwrap();
+    let module = |id: &str| {
+        let path = modules.join(format!("{id}.GRM"));
+        fs::write(&path, testing::module(id)).unwrap();
+        text(&path).to_owned()
+    };
+    let (imgctl, date) = (module("FILMLOOK"), module("DATE"));
     let zip = tmp.path().join("selected.zip");
     let packaged = success(&[
         "package",
@@ -370,53 +407,57 @@ fn package_selects_plugins_and_may_omit_effects() {
         text(&build),
         "--effects",
         text(&effects),
-        "--plugins",
-        "image-control,framing,grain",
+        "--module",
+        &imgctl,
+        "--module",
+        &date,
         "--out",
         text(&zip),
     ]);
-    // The plugin file is one more entry.
-    assert_eq!(packaged["entries"], 11 + source_count());
-    assert_eq!(
-        packaged["plugins"],
-        json!(["image-control", "framing", "grain"])
-    );
+    assert_eq!(packaged["entries"], 13 + source_count());
+    assert_eq!(packaged["modules"], json!(["DATE", "FILMLOOK"]));
     let verified = success(&["verify", text(&zip)]);
-    assert_eq!(
-        verified["plugins"],
-        json!(["image-control", "framing", "grain"])
-    );
+    assert_eq!(verified["modules"], json!(["DATE", "FILMLOOK"]));
 
-    // Without effects, Image Control has nothing to show, so another plugin must stay.
-    let framing_only = tmp.path().join("framing.zip");
+    // Without effects, Date Imprint alone shows a menu.
+    let stamp_only = tmp.path().join("stamp.zip");
     let packaged = success(&[
         "package",
         "--guide",
         GUIDE,
         "--build",
         text(&build),
-        "--plugins",
-        "framing",
+        "--module",
+        &date,
         "--out",
-        text(&framing_only),
+        text(&stamp_only),
     ]);
-    assert_eq!(packaged["entries"], 11);
-    assert_eq!(success(&["verify", text(&framing_only)])["effects"], 0);
-    for plugins in ["image-control", "hdr", "guides,guides"] {
+    assert_eq!(packaged["entries"], 12);
+    assert_eq!(success(&["verify", text(&stamp_only)])["effects"], 0);
+    // Image Control alone without effects, effects without Image Control, a
+    // module twice, and a missing module file show nothing or fail.
+    let missing = text(&modules.join("NONE.GRM")).to_owned();
+    let effects = text(&effects).to_owned();
+    for case in [
+        vec!["--module", imgctl.as_str()],
+        vec!["--module", date.as_str(), "--effects", effects.as_str()],
+        vec!["--module", date.as_str(), "--module", date.as_str()],
+        vec!["--module", missing.as_str()],
+    ] {
         let rejected = tmp.path().join("rejected.zip");
-        let output = run(&[
+        let mut args = vec![
             "package",
             "--guide",
             GUIDE,
             "--build",
             text(&build),
-            "--plugins",
-            plugins,
             "--out",
             text(&rejected),
-        ]);
-        assert!(!output.status.success(), "{plugins}");
-        assert!(!rejected.exists(), "{plugins}");
+        ];
+        args.extend(&case);
+        let output = run(&args);
+        assert!(!output.status.success(), "{case:?}");
+        assert!(!rejected.exists(), "{case:?}");
     }
 }
 

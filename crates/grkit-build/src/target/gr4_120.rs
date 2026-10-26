@@ -1,4 +1,4 @@
-//! GR IV and GR IV HDF 1.20, with the plugins of 1.11. Its addresses come
+//! GR IV and GR IV HDF 1.20, with the hooks of 1.11. Its addresses come
 //! from 1.11 through the code that uses them; not tested on a camera.
 
 use super::{gr4, Download, ImageControl, Source, Target};
@@ -29,7 +29,7 @@ pub const TARGET: Target = Target {
     pixel_base_slot: 0x55083038,
     pixel_base_indirect: true,
     native_tone_page: Some(0x81),
-    layout: Some(&LAYOUT),
+    layout: &LAYOUT,
     image_control: Some(&IMAGE_CONTROL),
     // As on 1.11: the settings domain follows the vtable of the capture
     // property singleton, and the icon drawer is +0x10 in the icon manager.
@@ -54,7 +54,7 @@ pub const IMAGE_CONTROL: ImageControl = ImageControl {
 /// 1.11.
 pub const LAYOUT: Layout = Layout {
     define: "-DGRKIT_TARGET_GR4_120",
-    tail: (0x5440c000, 0x54415000),
+    tail: (0x5440c000, 0x54419000),
     contexts: CONTEXTS,
     sites: SITES,
     instruction_patches: INSTRUCTION_PATCHES,
@@ -126,11 +126,19 @@ const SITES: &[Site] = &[
     ("menu_parameter_row_7", 0x533aab08, "3c4a0feb"),
     ("menu_parameter_row_8", 0x533aac24, "064a0feb"),
     ("menu_settings_change", 0x5318408c, "0dc0a0e1"),
+    ("menu_info_update", 0x531fe318, "0dc0a0e1"),
+    ("menu_check_factory", 0x531871bc, "2e3100e3"),
+    ("menu_check_lines", 0x531d87f8, "05ed0eeb"),
+    ("menu_check_dot", 0x531dc500, "c1060feb"),
     ("menu_settings_kinds_r3_0", 0x531e3ab8, "dd3345e3"),
     ("menu_settings_kinds_r2", 0x531e3b20, "dd2345e3"),
     ("menu_settings_kinds_r8", 0x531e3e90, "dd8345e3"),
     ("menu_settings_kinds_r5", 0x531e40b8, "dd5345e3"),
     ("menu_settings_kinds_r3_1", 0x531e418c, "dd3345e3"),
+    ("menu_settings_build", 0x531e3e4c, "1cc04be5"),
+    ("menu_settings_hide_first", 0x531e3ee0, "040057e3"),
+    ("menu_settings_hide_next", 0x531e3f04, "040054e3"),
+    ("menu_settings_row_kind", 0x531e3ffc, "031198e7"),
     ("menu_settings_count_0", 0x531d0cb8, "0600a0e3"),
     ("menu_settings_draw_0", 0x531d3578, "0dc0a0e1"),
     ("menu_settings_apply_0", 0x531d52e8, "0dc0a0e1"),
@@ -139,6 +147,18 @@ const SITES: &[Site] = &[
     ("menu_settings_draw_1", 0x531d35bc, "0dc0a0e1"),
     ("menu_settings_apply_1", 0x531d5318, "0dc0a0e1"),
     ("menu_settings_current_1", 0x531d6d38, "0dc0a0e1"),
+    ("menu_settings_count_2", 0x531d0cc8, "0200a0e3"),
+    ("menu_settings_draw_2", 0x531d3600, "0dc0a0e1"),
+    ("menu_settings_apply_2", 0x531d5348, "0dc0a0e1"),
+    ("menu_settings_current_2", 0x531d6d6c, "0dc0a0e1"),
+    ("menu_settings_count_3", 0x531d0cd0, "0400a0e3"),
+    ("menu_settings_draw_3", 0x531d3644, "0dc0a0e1"),
+    ("menu_settings_apply_3", 0x531d5378, "0dc0a0e1"),
+    ("menu_settings_current_3", 0x531d6da0, "0dc0a0e1"),
+    ("menu_settings_count_4", 0x531d0cd8, "0200a0e3"),
+    ("menu_settings_draw_4", 0x531d3688, "0dc0a0e1"),
+    ("menu_settings_apply_4", 0x531d53a8, "0dc0a0e1"),
+    ("menu_settings_current_4", 0x531d6dd4, "0dc0a0e1"),
     ("framing_update", 0x5318f5a8, "0dc0a0e1"),
     ("framing_exit", 0x5318fbdc, "0dc0a0e1"),
     ("framing_destroy", 0x53188c30, "0dc0a0e1"),

@@ -9,9 +9,9 @@ use anyhow::{bail, ensure, Context, Result};
 use std::{collections::BTreeMap, fs, path::Path};
 
 /// The RTOS maps its tail read-only and executable up to here.
-const RTOS_EXECUTABLE_END: u32 = 0x55000000;
+pub const RTOS_EXECUTABLE_END: u32 = 0x55000000;
 
-pub use grkit_core::plugins::Point;
+pub use grkit_core::capabilities::Point;
 
 /// The code component that holds the code of a hook and installs it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,9 +69,7 @@ pub struct Hook {
 /// Each hook of a target in installation order. The layout gives exactly one
 /// site for each hook of the family.
 pub fn hooks(target: &Target) -> Result<Vec<Hook>> {
-    let Some(layout) = target.layout else {
-        return Ok(Vec::new());
-    };
+    let layout = target.layout;
     let family = target.family;
     let hooks = family
         .hooks
@@ -109,10 +107,12 @@ pub fn hooks(target: &Target) -> Result<Vec<Hook>> {
 }
 
 /// The offsets of the code regions in the tail. The first 256 bytes stay
-/// unused. Framing extends to the end of the tail.
+/// unused. The menu starts at a fixed offset; Framing starts after the menu
+/// code, at the next REGION_ALIGN boundary, and extends to the end of the
+/// tail. So the menu and Framing share the space after MENU_START.
 const PROCESSING_START: u32 = 0x100;
 const MENU_START: u32 = 0x500;
-const FRAMING_START: u32 = 0x3800;
+const REGION_ALIGN: u32 = 0x100;
 
 /// Where a target's components live and where they hook the firmware.
 #[derive(Debug, PartialEq, Eq)]
@@ -148,14 +148,17 @@ impl Layout {
         (self.tail.0 + PROCESSING_START, self.tail.0 + MENU_START)
     }
 
-    /// The region of the private menu.
+    /// The region that the private menu can use: to the end of the tail.
+    /// Framing then takes the space after the menu code.
     pub fn menu(&self) -> (u32, u32) {
-        (self.tail.0 + MENU_START, self.tail.0 + FRAMING_START)
+        (self.tail.0 + MENU_START, self.tail.1)
     }
 
-    /// The region of Framing, Guides, and picture code.
-    pub fn framing(&self) -> (u32, u32) {
-        (self.tail.0 + FRAMING_START, self.tail.1)
+    /// The region of Framing, Guides, and picture code after a menu whose
+    /// code ends at `menu_end`.
+    pub fn framing(&self, menu_end: u32) -> (u32, u32) {
+        let start = menu_end.max(self.tail.0 + MENU_START);
+        (start.next_multiple_of(REGION_ALIGN), self.tail.1)
     }
 }
 
@@ -241,13 +244,6 @@ fn code_component(
     })
 }
 
-/// The layout of the target of `body`.
-fn layout(body: &FirmwareImage) -> Result<&'static Layout> {
-    body.target
-        .layout
-        .with_context(|| format!("{} has no layout", body.target.name))
-}
-
 /// The hooks of the target of `body` whose code `part` holds.
 fn part_hooks(body: &FirmwareImage, part: Part) -> Result<Vec<Hook>> {
     Ok(hooks(body.target)?
@@ -262,7 +258,7 @@ pub fn processing(
     body: &FirmwareImage,
     tools: &Toolchain,
 ) -> Result<Component> {
-    let layout = layout(body)?;
+    let layout = body.target.layout;
     let assembly = body
         .target
         .family
@@ -319,7 +315,7 @@ pub fn menu(
     body: &FirmwareImage,
     tools: &Toolchain,
 ) -> Result<Component> {
-    let layout = layout(body)?;
+    let layout = body.target.layout;
     let (base, end) = layout.menu();
     let source = directory.join("module-menu.S");
     let object = directory.join("module-menu.o");
@@ -382,14 +378,16 @@ pub fn menu(
     Ok(component)
 }
 
+/// Framing, linked after a menu whose code ends at `menu_end`.
 pub fn framing(
     directory: &Path,
     runtime: &Path,
     body: &FirmwareImage,
     tools: &Toolchain,
+    menu_end: u32,
 ) -> Result<Component> {
-    let layout = layout(body)?;
-    let (base, end) = layout.framing();
+    let layout = body.target.layout;
+    let (base, end) = layout.framing(menu_end);
     let object = directory.join("framing.o");
     let assembly_object = directory.join("framing-asm.o");
     let picture = directory.join("picture.o");

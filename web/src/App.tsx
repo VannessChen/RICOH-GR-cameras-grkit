@@ -8,7 +8,7 @@ import { RichText } from './components/RichText';
 import { loadFonts } from './fonts';
 import { applyLanguage, initialLanguage, LANGUAGES, STRINGS, type Language } from './i18n';
 import { ALL_MODULES, MODULES, planModules, type ModuleKey } from './modules';
-import { buildPackage, buildScriptsOff, prefetchPackage, save } from './package';
+import { buildPackage, buildScriptsOff, moduleUrl, prefetchPackage, save } from './package';
 import { resolveSelection, type Selection } from './selection';
 
 const REPOSITORY = 'https://github.com/ahonn/grkit';
@@ -49,7 +49,7 @@ export function App() {
   const targets = support?.targets;
   const available = support?.modules ?? [];
   // Before the first change, every catalog effect is checked, so the count is not 0.
-  const plan = planModules(enabled, selection?.size ?? 1, available, support?.excluded);
+  const plan = planModules(enabled, selection?.size ?? 1, available);
 
   function prefetch() {
     if (targets) prefetchPackage(targets, camera.id, language);
@@ -158,7 +158,7 @@ export function App() {
         targets,
         camera.id,
         effects,
-        plan.omitted,
+        plan.modules,
         language,
         (received) => {
           if (run === buildRun.current) setBuild({ state: 'building', received });
@@ -262,7 +262,7 @@ export function App() {
                             ? t.experimental
                             : t.supported}
                       </span>
-                      {item.support?.excluded?.includes('imageControl') && (
+                      {item.support?.noEffects && (
                         <span className="camera-firmware">{t.noEffects}</span>
                       )}
                     </span>
@@ -280,6 +280,7 @@ export function App() {
           <h2 id="modules-label">{t.modules}</h2>
           <div className="section-body">
             <p className="note">{t.modulesNote}</p>
+            <p className="note">{t.fileNote}</p>
             <div role="group" aria-labelledby="modules-label" className="modules">
               {MODULES.filter((module) => available.includes(module.key)).map((module) => (
                 <label key={module.key} className="module">
@@ -293,12 +294,20 @@ export function App() {
                     <span className="module-description">
                       {t.modulesText[module.key]}
                     </span>
-                    {module.key === 'imageControl' &&
-                      enabled.has('imageControl') &&
+                    {module.key === 'filmLook' &&
+                      enabled.has('filmLook') &&
                       selection?.size === 0 && (
-                        <span className="module-warning">{t.imageControlEmpty}</span>
+                        <span className="module-warning">{t.filmLookEmpty}</span>
                       )}
                   </span>
+                  <a
+                    className="button small module-file"
+                    href={moduleUrl(module.id)}
+                    download={`${module.id}.GRM`}
+                    aria-label={t.fileOf(t.moduleNames[module.key])}
+                  >
+                    {t.file}
+                  </a>
                 </label>
               ))}
             </div>
@@ -307,7 +316,7 @@ export function App() {
 
         <section className="section" aria-labelledby="effects-label" ref={prefetchInView}>
           <h2 id="effects-label">{t.effects}</h2>
-          {!available.includes('imageControl') ? (
+          {!available.includes('filmLook') ? (
             <p className="status section-body">{t.effectsUnavailable(camera.name)}</p>
           ) : plan.includeEffects ? (
             <ErrorBoundary
@@ -419,6 +428,9 @@ export function App() {
               </li>
             ))}
           </ol>
+          <p className="note">
+            <RichText parts={t.updateNote} />
+          </p>
         </section>
 
         <section className="section" aria-labelledby="remove-label">

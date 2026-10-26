@@ -67,6 +67,12 @@
 #define CLASSIFY_CLASS r6
 #define CLASSIFY_RETURN ldm sp, {r4,r5,r6,r7,fp,sp,pc}
 
+/* The size of SelectMenuController, and the view type and the text view of
+   CheckBoxListLineView (runtime/menu_settings.h). */
+#define SELECT_MENU_SIZE 0x1d4U
+#define CHECK_LINE_TYPE 0x2aU
+#define CHECK_TEXT_VIEW 0xf0
+
 /* Visible-area id of a native aspect. GR III offers only 3:2 (0) and 1:1 (3). */
 #define PICTURE_NATIVE_ID(native) ((native)==3 ? 3 : 0)
 

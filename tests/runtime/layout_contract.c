@@ -1,0 +1,102 @@
+/* The module descriptor of the SDK (runtime/sdk/grkit.h) as the installer
+   reads it (runtime/module_link.h). A test compiles this file for 32-bit ARM
+   with -fsyntax-only, so each check holds for the layout of the camera. */
+typedef unsigned char u8;
+typedef unsigned int u32;
+#include "module_link.h"
+#include "grkit.h"
+
+#define AT(type, field, offset) \
+    _Static_assert(__builtin_offsetof(type, field) == (offset), #type "." #field " moved")
+#define SIZE(type, size) _Static_assert(sizeof(type) == (size), #type " changed its size")
+
+SIZE(GrkitModule, GRM_DESCRIPTOR);
+AT(GrkitModule, size, 0);
+AT(GrkitModule, abi, GRM_DESCRIPTOR_ABI_AT);
+AT(GrkitModule, registrations, GRM_DESCRIPTOR_REGISTRATIONS_AT);
+AT(GrkitModule, registration_count, GRM_DESCRIPTOR_REGISTRATION_COUNT_AT);
+AT(GrkitModule, settings, GRM_DESCRIPTOR_SETTINGS_AT);
+AT(GrkitModule, setting_count, GRM_DESCRIPTOR_SETTING_COUNT_AT);
+AT(GrkitModule, uses, GRM_DESCRIPTOR_USES_AT);
+AT(GrkitModule, use_count, GRM_DESCRIPTOR_USE_COUNT_AT);
+AT(GrkitModule, tiles, GRM_DESCRIPTOR_TILES_AT);
+AT(GrkitModule, tile_count, GRM_DESCRIPTOR_TILE_COUNT_AT);
+
+SIZE(GrkitRegistration, GRM_REGISTRATION);
+AT(GrkitRegistration, point, 0);
+AT(GrkitRegistration, impl, GRM_REGISTRATION_IMPL_AT);
+
+SIZE(GrkitSetting, GRM_SETTING);
+AT(GrkitSetting, size, 0);
+AT(GrkitSetting, key, GRM_SETTING_KEY_AT);
+AT(GrkitSetting, values, GRM_SETTING_VALUES_AT);
+AT(GrkitSetting, flags, GRM_SETTING_FLAGS_AT);
+
+SIZE(GrkitLayer, GRM_LAYER);
+AT(GrkitLayer, size, 0);
+AT(GrkitLayer, flags, GRM_LAYER_FLAGS_AT);
+AT(GrkitLayer, paint, GRM_LAYER_PAINT_AT);
+AT(GrkitLayer, setting, GRM_LAYER_SETTING_AT);
+AT(GrkitLayer, order, GRM_LAYER_ORDER_AT);
+
+SIZE(GrkitPage, GRM_PAGE);
+AT(GrkitPage, size, 0);
+AT(GrkitPage, kind, GRM_PAGE_KIND_AT);
+AT(GrkitPage, setting, GRM_PAGE_SETTING_AT);
+AT(GrkitPage, flags, GRM_PAGE_FLAGS_AT);
+AT(GrkitPage, title, GRM_PAGE_TITLE_AT);
+AT(GrkitPage, summaries, GRM_PAGE_SUMMARIES_AT);
+AT(GrkitPage, labels, GRM_PAGE_LABELS_AT);
+AT(GrkitPage, rows, GRM_PAGE_ROWS_AT);
+AT(GrkitPage, setting_rows, GRM_PAGE_SETTING_ROWS_AT);
+AT(GrkitPage, settings, GRM_PAGE_SETTINGS_AT);
+
+SIZE(GrkitSettingRow, GRM_ROW);
+AT(GrkitSettingRow, size, 0);
+AT(GrkitSettingRow, setting, GRM_ROW_SETTING_AT);
+AT(GrkitSettingRow, label, GRM_ROW_LABEL_AT);
+AT(GrkitSettingRow, values, GRM_ROW_VALUES_AT);
+
+SIZE(GrkitPlaneFilter, GRM_FILTER);
+AT(GrkitPlaneFilter, size, 0);
+AT(GrkitPlaneFilter, stage, GRM_FILTER_STAGE_AT);
+AT(GrkitPlaneFilter, setting, GRM_FILTER_SETTING_AT);
+AT(GrkitPlaneFilter, apply, GRM_FILTER_APPLY_AT);
+
+SIZE(GrkitSubscriber, GRM_SUBSCRIBER);
+AT(GrkitSubscriber, size, 0);
+AT(GrkitSubscriber, events, GRM_SUBSCRIBER_EVENTS_AT);
+AT(GrkitSubscriber, handle, GRM_SUBSCRIBER_HANDLE_AT);
+
+/* The context that the installer writes: the words before `uses`
+   (CONTEXT_WORDS of the installer). */
+AT(GrkitContext, settings, 0);
+AT(GrkitContext, setting_count, 4);
+AT(GrkitContext, tiles, 8);
+AT(GrkitContext, uses, 12);
+
+#define SAME(a, b) _Static_assert((a) == (b), #a " differs from " #b)
+SAME(GRKIT_ABI_MAJOR, GRM_ABI_MAJOR);
+SAME(GRKIT_ABI_MINOR, GRM_ABI_MINOR);
+SAME(GRKIT_POINT_OVERLAY_LAYER, GRM_POINT_OVERLAY_LAYER);
+SAME(GRKIT_POINT_MENU_PAGE, GRM_POINT_MENU_PAGE);
+SAME(GRKIT_POINT_PICTURE_PLANE, GRM_POINT_PICTURE_PLANE);
+SAME(GRKIT_POINT_EVENT, GRM_POINT_EVENT);
+SAME(GRKIT_EVENT_SYSTEM_READY | GRKIT_EVENT_SETTING_CHANGED, GRM_EVENTS);
+SAME(GRKIT_PAGE_CHOICE, GRM_PAGE_CHOICE);
+SAME(GRKIT_CHOICE_OFF_ROW, GRM_CHOICE_OFF_ROW);
+SAME(GRKIT_CHOICE_CORE_ROWS, GRM_CHOICE_CORE_ROWS);
+SAME(GRKIT_CHOICE_OPTIONS, GRM_CHOICE_OPTIONS);
+SAME(GRKIT_LAYER_FOLLOW_DISP, GRM_LAYER_FOLLOW_DISP);
+SAME(GRKIT_LAYER_FULL_DISP, GRM_LAYER_FULL_DISP);
+SAME(GRKIT_LAYER_LIVE_ONLY, GRM_LAYER_LIVE_ONLY);
+SAME(GRKIT_STAGE_FRAME, GRM_STAGE_FRAME);
+SAME(GRKIT_STAGE_MARK, GRM_STAGE_MARK);
+SAME(GRKIT_SETTING_PUBLIC, GRM_SETTING_PUBLIC);
+SAME(GRKIT_SETTING_SAVED, GRM_SETTING_SAVED);
+SAME(GRKIT_NO_SETTING, GRM_NO_SETTING);
+SAME(GRKIT_USE(0), GRM_USED);
+SAME(GRKIT_LANGUAGES, GRM_LANGUAGES);
+SAME(GRKIT_TILE_BYTES, GRM_TILE_BYTES);
+SAME(GRKIT_SETTING_ROWS, GRM_SETTING_ROWS);
+SAME(GRKIT_SETTING_ROW_VALUES, GRM_SETTING_ROW_VALUES);

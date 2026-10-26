@@ -1,0 +1,9 @@
+title = "加印日期"
+rows = ["關閉", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"]
+
+[settings.STYLE]
+label = "日期樣式"
+
+[settings.LOOK]
+label = "日期字體"
+values = ["經典", "GR1s", "GR II"]

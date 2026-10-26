@@ -80,6 +80,10 @@
    Standard parameter page (still mode). */
 #define ADJ_IC_SLOT_TYPE 15
 #define IC_PARAMETERS_CONTROLLER 0x2000017
+/* The native screens of ui_open_native (runtime/ui.h): the targets of the
+   MENU rows White Balance (still) and LCD, the same on each GR IV build. */
+#define UI_NATIVE_WHITE_BALANCE 0x2000064U
+#define UI_NATIVE_LCD 0x200001dU
 /* ImageControlDetailController, as on GR III with other fields: the type
    (+0x19c), the set kind (+0x19d), and the base kind of its row table
    (+0x19e, 0 Standard). The model snapshot holds one byte for each row kind
@@ -94,18 +98,68 @@
 #define PARAMETER_KINDS {0,1,2,3,4,5,6,14,15}
 #define DETAIL_EV_SUBPAGE 0x8c
 /* The native settings page of a GRKit root row, as on GR III: the MENU
-   submenu Instant Review (0x20000d4, entry 11 of FW_SUBMENU_KINDS) and its
-   value pages Display Time (0x20000d9) and Zoom Review (0x20000da). The text
-   IDs of the title and the rows are in the build header. */
+   submenu Instant Review (0x20000d4, entry 11 of FW_SUBMENU_KINDS), its three
+   value pages (0x20000d9 Display Time, 0x20000da Zoom Review, 0x20000db), and
+   two plain value pages of the MENU Setup tab (0x20000b5, 0x20000b6), whose
+   records follow those of Instant Review. The text IDs of the title and the
+   rows are in the build header. */
 #define SUBMENU_KIND_SIZE 0x64
 #define SUBMENU_KIND_ROWS 6
+#define SUBMENU_KIND_LABELS 8
 #define SUBMENU_KIND_CONTROLLERS 0x14
+#define SUBMENU_KIND_ROW_KINDS 0x28
 #define SUBMENU_KIND_VALUES 0x3c
 #define SETTINGS_SUBMENU 0x20000d4U
 #define SETTINGS_SUBMENU_KIND 11
-#define SETTINGS_PAGES {0x20000d9U,0x20000daU}
+#define SETTINGS_PAGES {0x20000d9U,0x20000daU,0x20000dbU,0x20000b5U,0x20000b6U}
 #define ROW_TEXT_VIEW 0xf8
+/* The size of SelectMenuController, and the view type and the text view of
+   CheckBoxListLineView (runtime/menu_settings.h). */
+#define SELECT_MENU_SIZE 0x1e4U
+#define CHECK_LINE_TYPE 0x2aU
+#define CHECK_TEXT_VIEW 0xf0
 #define ROW_VALUE_VIEW 0xfc
+/* Rows of modules in the native MENU (runtime/menu_section.h). MENU builds its
+   tabs at the first MENU of a start from the tab descriptors in the RAM
+   table FW_MENU_TABS of the build header; entry MENU_TAB_GRKIT is the
+   Customize tab. A descriptor holds the row count (u8) at MENU_TAB_ROWS, then for each of
+   MENU_TAB_MAX_ROWS rows its filler (a C++ member pointer), its target
+   controller, and its predicate (a member pointer, 0 for a row that always
+   shows). A filler gets the row view and sets its label view (+0xec) and
+   value view with the row setters. */
+/* The MENU tab of the GRKit section (Customize, C), and the sections of a
+   tab descriptor: their count, title text IDs, and first rows. The Setup
+   tab has all MENU_TAB_MAX_SECTIONS sections; Customize has 3. */
+#define MENU_TAB_GRKIT 3
+/* The camera information page (Setup tab, Camera Information), which About
+   GRKit opens: its controller, and three rows of a label (a text ID of the
+   build, INFO_LABEL_TEXTS) and a value, an ASCII string view that the page
+   update sets (menu_info_update) with FW_STRING_VIEW_SET_ASCII(view, text).
+   About GRKit shows the version and the project address in the first two
+   rows, and hides the third. */
+#define INFO_CONTROLLER 0x200010bU
+#define INFO_LABELS {0x164,0x16c,0x174}
+#define INFO_VALUES {0x168,0x170,0x178}
+#define MENU_TAB_SECTIONS 0x68
+#define MENU_TAB_TITLES 0x6a
+#define MENU_TAB_STARTS 0x80
+#define MENU_TAB_MAX_SECTIONS 11
+/* The TopMenu instance in the controller factory (FW_CONTROLLER_FACTORY). */
+#define MENU_TOP_SLOT 0x80
+#define MENU_TAB_SIZE 0x384
+#define MENU_TAB_ROWS 0x8b
+#define MENU_TAB_FILLERS 0x8c
+#define MENU_TAB_TARGETS 0x1bc
+#define MENU_TAB_PREDICATES 0x254
+#define MENU_TAB_MAX_ROWS 38
+#define MENU_ROW_LABEL_VIEW 0xec
+#define MENU_ROW_VALUE_VIEW 0xfc
+/* A native view keeps its frame {x, y, width, height} at VIEW_FRAME, and its
+   vtable sets it at VIEW_SET_FRAME. The value of a MENU or submenu row shows
+   in a column of VALUE_COLUMN pixels from the x of the view. */
+#define VIEW_FRAME 0x20
+#define VIEW_SET_FRAME 0x18
+#define VALUE_COLUMN 140
 /* AdjModeController fields. GR IV adds two FunctionGuideViews before the list,
    which moves the list and the slot byte by 8. */
 #define ADJ_CANVAS 0x4

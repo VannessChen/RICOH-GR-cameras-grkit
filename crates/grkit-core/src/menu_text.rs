@@ -9,29 +9,34 @@ use anyhow::{ensure, Result};
 use crate::packaging::Language;
 
 /// The size of the text area after the picture scratch.
-pub const TEXT_SIZE: usize = 16384;
+pub const TEXT_SIZE: usize = 24576;
 /// Where the Image Control summaries start in the text area. The label table
 /// must end before it.
 pub const TEXT_SUMMARY: usize = 8192;
 /// The last 16 bytes of the text area: the parameter page title of a GRKit
 /// session. Words: the page, its vtable, then the descriptor of the effect name.
 pub const TEXT_PARAMETER_TITLE: usize = TEXT_SIZE - 16;
-/// The 256 bytes before the parameter page title: the native settings page of
+/// The 384 bytes before the parameter page title: the native settings page of
 /// a GRKit session (`runtime/menu.c`).
-pub const TEXT_SETTINGS: usize = TEXT_PARAMETER_TITLE - 256;
+pub const TEXT_SETTINGS: usize = TEXT_PARAMETER_TITLE - 384;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).
-pub const STRINGS: usize = 56;
+pub const STRINGS: usize = 23;
+/// The project address that About GRKit shows.
+const PROJECT: &str = "github.com/ahonn/grkit";
 /// The longest effect name in a record.
 const NAME_UNITS: usize = 16;
 
 /// The words of one menu language. Each list follows the rows of its module
 /// after Off. The Chinese and Japanese words reuse the terms of the camera
-/// menus where they have them (影像控制, 关闭/關閉, 弱/中/强, 颗粒感/粒紋感;
-/// イメージコントロール, オフ, 粒状感, グリッド, 9分割, 画面中央, 弱/中/強).
-/// The Date Imprint names are those of the GR II menu (Date Imprint, 加印日期摄影,
-/// 加印日期攝像, 日付入れ撮影 in its firmware).
+/// menus where they have them (关闭/關閉, 弱/中/强, 颗粒感/粒紋感; オフ, 粒状感,
+/// 9分割, 画面中央, 弱/中/強). Guides avoids the name of the native grid
+/// (网格线, グリッド), as the camera has its own. The effects module has its own name
+/// (Film Look, 胶片风格, 底片風格, フィルムルック), so that it differs from the
+/// native Image Control.
+/// The Date Imprint names follow the GR II menu (Date Imprint, 日付入れ撮影 in
+/// its firmware), with the short Chinese name 加印日期.
 /// The camera's Chinese and Japanese fonts draw each of these characters only
 /// while the camera language is that language, which is when the menu shows
 /// them.
@@ -39,133 +44,123 @@ struct Words {
     /// Between a module name and its value in a summary.
     separator: &'static str,
     image_control: &'static str,
-    framing: &'static str,
-    guides: &'static str,
-    date_stamp: &'static str,
-    /// The Date Imprint settings: the date style and the look of the digits
-    /// (classic, GR1s, GR II).
-    date_style: &'static str,
-    date_look: &'static str,
-    grain: &'static str,
     /// Before the version in the About row.
     version: &'static str,
     off: &'static str,
-    ratios: [&'static str; 6],
-    /// The ratios in a summary, which has less room than a row.
-    ratio_values: [&'static str; 6],
-    guide_styles: [&'static str; 5],
-    stamp_styles: [&'static str; 5],
-    looks: [&'static str; 3],
-    grain_levels: [&'static str; 3],
+    /// The name in the summary of module management (runtime/manage.h).
+    modules: &'static str,
+    /// The Modules summary after a change that applies at the next start.
+    restart: &'static str,
+    safe_mode: &'static str,
+    /// The row that turns a module or an effect on or off, and its On value.
+    enable: &'static str,
+    on: &'static str,
+    /// The MENU row that orders the module pages in the GRKit root of ADJ.
+    adj_order: &'static str,
+    /// The settings row that lists the options of a module page.
+    options: &'static str,
+    /// The MENU row of the GRKit switch, its version, and its project.
+    about: &'static str,
+    project: &'static str,
+    /// The settings row of Film Look that opens the Fn adjustments of
+    /// the effect.
+    adjustments: &'static str,
+    /// The settings row of Film Look that selects the effect.
+    film: &'static str,
+    /// The guides of an options page: OK turns the option on or off, MENU
+    /// goes back with the changes. The OK guide has the width of the native
+    /// word (OK, 确定, 決定): empty keeps the native word.
+    turn: &'static str,
+    back: &'static str,
 }
 
 const ENGLISH: Words = Words {
     separator: ": ",
-    image_control: "Image Control",
-    framing: "Framing",
-    guides: "Guides",
-    date_stamp: "Date Imprint",
-    date_style: "Date Style",
-    date_look: "Date Look",
-    grain: "Grain",
+    image_control: "Film Look",
     version: "Version",
     off: "Off",
-    ratios: ["XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
-    ratio_values: ["XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
-    guide_styles: [
-        "Thirds",
-        "Center",
-        "Golden Ratio",
-        "Diagonals",
-        "Thirds + Center",
-    ],
-    stamp_styles: [
-        "'YY M D",
-        "'YY M D H:MM",
-        "M D 'YY",
-        "D M 'YY",
-        "D M 'YY H:MM",
-    ],
-    looks: ["Classic", "GR1s", "GR II"],
-    grain_levels: ["Weak", "Medium", "Strong"],
+    modules: "Modules",
+    restart: "Restart to apply",
+    safe_mode: "Safe mode",
+    enable: "Enable",
+    on: "On",
+    adj_order: "ADJ Order",
+    options: "Options",
+    about: "About GRKit",
+    project: "Project",
+    adjustments: "Parameters",
+    film: "Film Stock",
+    turn: "",
+    back: "Back",
 };
 
 const SIMPLIFIED_CHINESE: Words = Words {
     separator: "：",
-    image_control: "影像控制",
-    framing: "画幅",
-    guides: "辅助线",
-    date_stamp: "加印日期摄影",
-    date_style: "日期样式",
-    date_look: "日期字体",
-    grain: "颗粒感",
+    image_control: "胶片风格",
     version: "版本",
     off: "关闭",
-    ratios: ["XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
-    ratio_values: ["XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
-    guide_styles: ["三分法", "中心", "黄金分割", "对角线", "三分法+中心"],
-    stamp_styles: [
-        "'YY M D",
-        "'YY M D H:MM",
-        "M D 'YY",
-        "D M 'YY",
-        "D M 'YY H:MM",
-    ],
-    looks: ["经典", "GR1s", "GR II"],
-    grain_levels: ["弱", "中", "强"],
+    modules: "模块",
+    restart: "重新开机后生效",
+    safe_mode: "安全模式",
+    enable: "启用",
+    on: "开启",
+    adj_order: "ADJ 菜单顺序",
+    options: "可选项",
+    about: "关于 GRKit",
+    project: "项目地址",
+    adjustments: "效果参数",
+    film: "胶卷",
+    turn: "切换",
+    back: "返回",
 };
 
 const TRADITIONAL_CHINESE: Words = Words {
     separator: "：",
-    image_control: "影像控制",
-    framing: "畫幅",
-    guides: "輔助線",
-    date_stamp: "加印日期攝像",
-    date_style: "日期樣式",
-    date_look: "日期字體",
-    grain: "粒紋感",
+    image_control: "底片風格",
     version: "版本",
     off: "關閉",
-    ratios: ["XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
-    ratio_values: ["XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
-    guide_styles: ["三分法", "中心", "黃金分割", "對角線", "三分法+中心"],
-    stamp_styles: [
-        "'YY M D",
-        "'YY M D H:MM",
-        "M D 'YY",
-        "D M 'YY",
-        "D M 'YY H:MM",
-    ],
-    looks: ["經典", "GR1s", "GR II"],
-    grain_levels: ["弱", "中", "強"],
+    modules: "模組",
+    restart: "重新開機後生效",
+    safe_mode: "安全模式",
+    enable: "啟用",
+    on: "開啟",
+    adj_order: "ADJ 選單順序",
+    options: "可選項",
+    about: "關於 GRKit",
+    project: "專案網址",
+    adjustments: "效果參數",
+    film: "膠卷",
+    turn: "切換",
+    back: "返回",
 };
 
 const JAPANESE: Words = Words {
-    // A full-width colon would push "イメージコントロール：" and a 13-character
-    // effect name under the icon column. The half-width colon keeps them clear.
+    // A full-width colon would push a long name and a 13-character effect
+    // name under the icon column. The half-width colon keeps them clear.
     separator: ":",
-    image_control: "イメージコントロール",
-    framing: "フレーミング",
-    guides: "グリッド",
-    date_stamp: "日付入れ撮影",
-    date_style: "日付のスタイル",
-    date_look: "日付の書体",
-    grain: "粒状感",
+    image_control: "フィルムルック",
     version: "バージョン",
     off: "オフ",
-    ratios: ["XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
-    ratio_values: ["XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"],
-    guide_styles: ["9分割", "画面中央", "黄金比", "対角線", "9分割+画面中央"],
-    stamp_styles: [
-        "'YY M D",
-        "'YY M D H:MM",
-        "M D 'YY",
-        "D M 'YY",
-        "D M 'YY H:MM",
-    ],
-    looks: ["クラシック", "GR1s", "GR II"],
-    grain_levels: ["弱", "中", "強"],
+    modules: "モジュール",
+    restart: "再起動後に反映",
+    safe_mode: "セーフモード",
+    enable: "有効",
+    on: "オン",
+    adj_order: "ADJ メニューの順番",
+    options: "オプション",
+    about: "GRKit について",
+    project: "プロジェクト",
+    adjustments: "パラメーター",
+    film: "フィルム銘柄",
+    turn: "切替",
+    back: "戻る",
 };
+
+/// The text between a page title and its value in a root row summary, such
+/// as "Guides: Thirds".
+pub fn separator(language: Language) -> &'static str {
+    words(language).separator
+}
 
 fn words(language: Language) -> &'static Words {
     match language {
@@ -190,38 +185,61 @@ const fn run(name: &'static str, count: usize, doc: &'static str) -> Run {
 
 /// The string IDs in table order.
 pub const RUNS: &[Run] = &[
-    run("IMAGE_CONTROL", 1, ""),
-    run("FRAMING", 1, ""),
-    run("GUIDES", 1, ""),
-    run("DATE_STAMP", 1, ""),
-    run("DATE_STYLE", 1, ""),
-    run("DATE_LOOK", 1, ""),
-    run("GRAIN", 1, ""),
     run("OFF", 1, ""),
-    run(
-        "RATIO",
-        6,
-        "Framing values 1..6: XPan 65:24, 16:9, 4:3, 2.35:1, 1:1, 5:4.",
-    ),
-    run(
-        "GUIDE",
-        5,
-        "Guides rows 1..5: thirds, center, golden ratio, diagonals, thirds and center.",
-    ),
-    run("STAMP", 5, "Date Stamp rows 1..5: the date styles."),
-    run("LOOK", 3, "Date Look values 0..2: classic, GR1s, GR II."),
-    run("GRAIN_LEVEL", 3, "Grain rows 1..3: weak, medium, strong."),
     run("IMAGE_OFF_SUMMARY", 1, ""),
-    run("FRAMING_SUMMARY", 7, "Summaries for each value, Off first."),
-    run("GUIDES_SUMMARY", 6, ""),
-    run("STAMP_SUMMARY", 6, ""),
-    run("GRAIN_SUMMARY", 4, ""),
     run(
         "IMAGE_PREFIX",
         1,
         "The Image Control summary before an effect name, for the installer.",
     ),
     run("VERSION", 1, "The About row: the GRKit version."),
+    run(
+        "MODULES_SUMMARY",
+        3,
+        "The Modules root row: no change, a change for the next start, safe mode.",
+    ),
+    run(
+        "ENABLE",
+        1,
+        "The settings row that turns a module or an effect on or off.",
+    ),
+    run("ON", 1, ""),
+    run("SAFE_MODE", 1, "The GRKit row of MENU in safe mode."),
+    run(
+        "RESTART",
+        1,
+        "The GRKit row of MENU after a change for the next start.",
+    ),
+    run(
+        "ADJUSTMENTS",
+        1,
+        "The Image Control settings row that opens the Fn adjustments.",
+    ),
+    run(
+        "ADJ",
+        2,
+        "The ADJ Order rows of MENU: the first group of modules, then the second.",
+    ),
+    run(
+        "OPTIONS",
+        1,
+        "The settings row that lists the options of a module page.",
+    ),
+    run(
+        "ABOUT",
+        5,
+        "About GRKit: the title, the Version row and its value, the Project row and its value.",
+    ),
+    run(
+        "FILM",
+        1,
+        "The Film Look settings row that selects the effect.",
+    ),
+    run(
+        "GUIDE",
+        2,
+        "The guides of an options value page: OK turns an option on or off, MENU goes back.",
+    ),
 ];
 
 /// The first string ID of each run, in table order.
@@ -244,34 +262,33 @@ fn id(name: &str) -> usize {
 /// The strings of one run in one language. `version` is the GRKit version.
 fn run_strings(w: &Words, name: &str, version: &str) -> Vec<String> {
     let summary = |module: &str, value: &str| format!("{module}{}{value}", w.separator);
-    let summaries = |module: &str, values: &[&str]| {
-        std::iter::once(w.off)
-            .chain(values.iter().copied())
-            .map(|value| summary(module, value))
-            .collect::<Vec<_>>()
-    };
     let words = |values: &[&str]| values.iter().map(|value| value.to_string()).collect();
     match name {
-        "IMAGE_CONTROL" => words(&[w.image_control]),
-        "FRAMING" => words(&[w.framing]),
-        "GUIDES" => words(&[w.guides]),
-        "DATE_STAMP" => words(&[w.date_stamp]),
-        "DATE_STYLE" => words(&[w.date_style]),
-        "DATE_LOOK" => words(&[w.date_look]),
-        "GRAIN" => words(&[w.grain]),
         "OFF" => words(&[w.off]),
-        "RATIO" => words(&w.ratios),
-        "GUIDE" => words(&w.guide_styles),
-        "STAMP" => words(&w.stamp_styles),
-        "LOOK" => words(&w.looks),
-        "GRAIN_LEVEL" => words(&w.grain_levels),
         "IMAGE_OFF_SUMMARY" => vec![summary(w.image_control, w.off)],
-        "FRAMING_SUMMARY" => summaries(w.framing, &w.ratio_values),
-        "GUIDES_SUMMARY" => summaries(w.guides, &w.guide_styles),
-        "STAMP_SUMMARY" => summaries(w.date_stamp, &w.stamp_styles),
-        "GRAIN_SUMMARY" => summaries(w.grain, &w.grain_levels),
         "IMAGE_PREFIX" => vec![format!("{}{}", w.image_control, w.separator)],
         "VERSION" => vec![format!("{} {version}", w.version)],
+        "MODULES_SUMMARY" => vec![
+            w.modules.to_string(),
+            summary(w.modules, w.restart),
+            summary(w.modules, w.safe_mode),
+        ],
+        "ENABLE" => words(&[w.enable]),
+        "ON" => words(&[w.on]),
+        "SAFE_MODE" => words(&[w.safe_mode]),
+        "RESTART" => words(&[w.restart]),
+        "ADJUSTMENTS" => words(&[w.adjustments]),
+        "ADJ" => vec![w.adj_order.to_string(), format!("{} 2", w.adj_order)],
+        "OPTIONS" => words(&[w.options]),
+        "ABOUT" => vec![
+            w.about.to_string(),
+            w.version.to_string(),
+            version.to_string(),
+            w.project.to_string(),
+            PROJECT.to_string(),
+        ],
+        "FILM" => words(&[w.film]),
+        "GUIDE" => words(&[w.turn, w.back]),
         _ => unreachable!("Unknown menu text run {name}"),
     }
 }
@@ -375,10 +392,9 @@ mod tests {
     #[test]
     fn english_keeps_the_menu_text_of_earlier_builds() {
         let english = strings(Language::English, VERSION);
-        assert_eq!(english[id("FRAMING")], "Framing");
-        assert_eq!(english[id("FRAMING_SUMMARY") + 1], "Framing: XPan");
-        assert_eq!(english[id("IMAGE_OFF_SUMMARY")], "Image Control: Off");
-        assert_eq!(english[id("IMAGE_PREFIX")], "Image Control: ");
+        assert_eq!(english[id("OFF")], "Off");
+        assert_eq!(english[id("IMAGE_OFF_SUMMARY")], "Film Look: Off");
+        assert_eq!(english[id("IMAGE_PREFIX")], "Film Look: ");
     }
 
     #[test]

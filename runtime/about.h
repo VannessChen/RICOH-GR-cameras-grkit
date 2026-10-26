@@ -1,12 +1,12 @@
 #ifndef GRKIT_ABOUT_H
 #define GRKIT_ABOUT_H
-/* About: the last root row, after the plugin rows. It is part of the core, not
-   a plugin, so it always shows and PLUGINS.TXT does not select it. Its summary
-   gives the GRKit version. It has no rows, so OK on it opens no page. */
-#include "plugin.h"
+/* About: the last root row, after the module pages. It is part of the core,
+   so it always shows. Its summary gives the GRKit version. It has no rows, so
+   OK on it opens no page. */
+#include "core.h"
 
 /* The About tile reads VER, so the GRKit root shows one GRK tile. It follows
-   the GRKit tile in chunk 0, and the plugin tiles end below its ID. */
+   the GRKit tile in chunk 0. */
 #define GRKIT_ICON_VERSION 0x7ffdU
 
 static const u16 *about_text(volatile u32 *h) { return text(h,TEXT_VERSION); }

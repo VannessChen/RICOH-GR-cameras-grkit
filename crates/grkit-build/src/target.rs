@@ -5,8 +5,9 @@
 //! `RTOS_BASE`, and its startup code copies the data section from `data_source`
 //! to `data_start` and clears the BSS up to `heap_min`.
 //!
-//! Each family has a module here with its hooks, and each target a module with
-//! its data and the sites of the hooks in its build (`Target::module`).
+//! Each family has a module here with its hooks, which joins the hooks that the
+//! families share (`common`) and its own, and each target a module with its
+//! data and the sites of the hooks in its build (`Target::module`).
 //! `grkit port` drafts the module of a new build.
 
 use anyhow::{bail, Result};
@@ -15,6 +16,7 @@ use crate::components::{HookSpec, Layout};
 
 pub use grkit_core::runtime::HEADER_REFERENCE;
 
+pub mod common;
 pub mod gr3;
 pub mod gr3_210;
 pub mod gr4;
@@ -36,6 +38,7 @@ pub const TARGETS: [&Target; 4] = [&GR3_210, &GR4_111, &GR4_120, &GR4_120_0528];
 
 /// The Rust source of each family and target module, for the build manifest.
 pub(crate) const SOURCES: &[(&str, &[u8])] = &[
+    ("common.rs", include_bytes!("target/common.rs")),
     ("gr3.rs", include_bytes!("target/gr3.rs")),
     ("gr3_210.rs", include_bytes!("target/gr3_210.rs")),
     ("gr4.rs", include_bytes!("target/gr4.rs")),
@@ -103,9 +106,8 @@ pub struct Target {
     /// The high byte of the native ImageTone values that photos record
     /// besides the GR III values, if any: 0x81 on GR IV (0x8100 and up).
     pub native_tone_page: Option<u32>,
-    /// The runtime components and their hooks. Without a layout, the runtime has
-    /// the loader and the installer only.
-    pub layout: Option<&'static Layout>,
+    /// The runtime components and their hooks.
+    pub layout: &'static Layout,
     /// Native Image Control data, if the family has processing hooks.
     pub image_control: Option<&'static ImageControl>,
     /// The installer data that no firmware code

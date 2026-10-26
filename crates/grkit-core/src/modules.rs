@@ -1,107 +1,104 @@
-//! Package-time plugin selection.
+//! The official modules: the module folders in `modules/` that each release
+//! builds (`grkit module build`) and that the site offers.
 //!
-//! `SCRIPT/PLUGINS/PLUGINS.TXT` names the plugins that the installer installs,
-//! separated by ASCII whitespace. The installer parses it with the same rules
-//! (`runtime/selection.h`). A package without the file installs every plugin,
-//! and an empty file installs none. The installer changes no firmware for a
-//! plugin that is not installed. Image Control also needs effects: without
-//! them, the installer treats it as not installed.
+//! The default order of the modules in ADJ and in MENU is the `order` of
+//! each manifest (`grkit_core::grm`), not this list.
 
-use anyhow::{bail, ensure, Result};
+use std::fmt::Write;
 
-/// The path of the file in the SD tree.
-pub const PATH: &str = "SCRIPT/PLUGINS/PLUGINS.TXT";
-/// The largest file that the installer reads.
-pub const MAX_FILE_SIZE: usize = 256;
-/// The plugins in menu order (`plugins::PLUGINS`).
-pub use crate::plugins::NAMES;
+use crate::camera;
 
-/// A set of plugins. Bit n is plugin n of `NAMES`, as the installer stores it
-/// in the private header (`GRKIT_HOST_PLUGINS`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Selection(u32);
-
-impl Default for Selection {
-    fn default() -> Self {
-        Self::ALL
-    }
+pub struct Official {
+    /// The module ID (`grkit_core::grm`), which is also its file name.
+    pub id: &'static str,
+    /// The folder in `modules/`.
+    pub folder: &'static str,
+    /// The site key, in camel case.
+    pub key: &'static str,
+    /// The module shows only with effects (`CORE.TONE`), so the site adds the
+    /// selected effects only with it.
+    pub needs_effects: bool,
 }
 
-impl Selection {
-    pub const ALL: Self = Self((1 << NAMES.len()) - 1);
-    pub const NONE: Self = Self(0);
+/// The official modules, in the order that the site shows them.
+pub const OFFICIAL: [Official; 5] = [
+    Official {
+        id: "FILMLOOK",
+        folder: "film-look",
+        key: "filmLook",
+        needs_effects: true,
+    },
+    Official {
+        id: "FRAMING",
+        folder: "framing",
+        key: "framing",
+        needs_effects: false,
+    },
+    Official {
+        id: "GUIDES",
+        folder: "guides",
+        key: "guides",
+        needs_effects: false,
+    },
+    Official {
+        id: "DATE",
+        folder: "date",
+        key: "dateStamp",
+        needs_effects: false,
+    },
+    Official {
+        id: "GRAIN",
+        folder: "grain",
+        key: "grain",
+        needs_effects: false,
+    },
+];
 
-    /// Selects the named plugins. Unknown and repeated names are errors.
-    pub fn from_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Result<Self> {
-        let mut mask = 0;
-        for name in names {
-            let Some(index) = NAMES.iter().position(|known| *known == name) else {
-                bail!(
-                    "Unknown plugin {name:?}. Expected one of: {}",
-                    NAMES.join(", ")
-                );
-            };
-            let bit = 1 << index;
-            ensure!(mask & bit == 0, "Plugin listed twice: {name}");
-            mask |= bit;
-        }
-        Ok(Self(mask))
+/// The official module of an ID.
+pub fn official(id: &str) -> Option<&'static Official> {
+    OFFICIAL.iter().find(|module| module.id == id)
+}
+
+/// `web/src/generated/modules.ts`: the official modules and the modules of
+/// each camera.
+fn site_module() -> String {
+    let mut out = String::new();
+    out.push_str(
+        "// Generated from crates/grkit-core/src/modules.rs. Do not edit: change the\n\
+         // list there, then run\n\
+         // GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated.\n\n",
+    );
+    out.push_str(
+        "/** The official modules in menu order. `needsEffects`: the module shows only with effects. */\n",
+    );
+    out.push_str("export const OFFICIAL_MODULES = [\n");
+    for module in &OFFICIAL {
+        writeln!(
+            out,
+            "  {{ key: '{}', id: '{}', needsEffects: {} }},",
+            module.key, module.id, module.needs_effects
+        )
+        .unwrap();
     }
-
-    /// Reads the contents of `PLUGINS.TXT`.
-    pub fn parse(file: &[u8]) -> Result<Self> {
-        ensure!(
-            file.len() <= MAX_FILE_SIZE,
-            "PLUGINS.TXT exceeds {MAX_FILE_SIZE} bytes"
-        );
-        let names = file
-            .split(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
-            .filter(|token| !token.is_empty())
-            .map(|token| std::str::from_utf8(token).unwrap_or("\u{fffd}"));
-        Self::from_names(names)
-    }
-
-    /// The contents of `PLUGINS.TXT`, one name for each line, or `None` when
-    /// every plugin is selected. A package then omits the file.
-    pub fn file(self) -> Option<Vec<u8>> {
-        (self != Self::ALL).then(|| {
-            self.names()
-                .iter()
-                .map(|name| format!("{name}\n"))
-                .collect::<String>()
-                .into_bytes()
-        })
-    }
-
-    /// The selected plugin names, in menu order.
-    pub fn names(self) -> Vec<&'static str> {
-        NAMES
+    out.push_str("] as const;\n\n");
+    out.push_str("export type ModuleKey = (typeof OFFICIAL_MODULES)[number]['key'];\n\n");
+    out.push_str("/** The official modules that each camera can install, in menu order. */\n");
+    out.push_str("export const CAMERA_MODULES = {\n");
+    for camera in camera::CAMERAS {
+        let keys: Vec<String> = OFFICIAL
             .iter()
-            .enumerate()
-            .filter(|(index, _)| self.0 & 1 << index != 0)
-            .map(|(_, name)| *name)
-            .collect()
+            .filter(|module| camera.effects || !module.needs_effects)
+            .map(|module| format!("'{}'", module.key))
+            .collect();
+        writeln!(out, "  {}: [{}],", camera.id, keys.join(", ")).unwrap();
     }
+    out.push_str("} as const satisfies Readonly<Record<string, readonly ModuleKey[]>>;\n");
+    out
+}
 
-    /// The selection without the named plugin. Unknown names are errors.
-    pub fn without(self, name: &str) -> Result<Self> {
-        let Self(bit) = Self::from_names([name])?;
-        Ok(Self(self.0 & !bit))
-    }
-
-    pub fn mask(self) -> u32 {
-        self.0
-    }
-
-    /// True when the camera menu would show no plugin for this many effects.
-    /// `available` names the plugins that the runtime has.
-    pub fn shows_nothing(self, effects: usize, available: &[&str]) -> bool {
-        NAMES
-            .iter()
-            .enumerate()
-            .filter(|(index, name)| self.0 & 1 << index != 0 && available.contains(name))
-            .all(|(index, _)| crate::plugins::NEEDS_EFFECTS & 1 << index != 0 && effects == 0)
-    }
+/// The generated files, as paths from the repository root and contents.
+pub fn generated() -> Vec<(&'static str, String)> {
+    vec![("web/src/generated/modules.ts", site_module())]
 }
 
 #[cfg(test)]
@@ -109,32 +106,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_missing_file_selects_everything_and_an_empty_file_nothing() {
-        assert_eq!(Selection::default(), Selection::ALL);
-        assert_eq!(Selection::ALL.file(), None);
-        assert_eq!(Selection::parse(b"").unwrap(), Selection::NONE);
-        assert_eq!(Selection::NONE.file(), Some(Vec::new()));
-        let selection = Selection::parse(b" grain\r\nframing\t").unwrap();
-        assert_eq!(selection.names(), ["framing", "grain"]);
-        assert_eq!(selection.file().unwrap(), b"framing\ngrain\n");
-        assert_eq!(selection.mask(), 0b10010);
-        assert!(Selection::parse(b"framing framing").is_err());
-        assert!(Selection::parse(b"hdr").is_err());
-        assert!(Selection::parse(&[b' '; MAX_FILE_SIZE + 1]).is_err());
-        assert_eq!(
-            Selection::ALL.without("guides").unwrap().names(),
-            ["image-control", "framing", "date-stamp", "grain"]
-        );
-    }
-
-    #[test]
-    fn image_control_alone_shows_nothing_without_effects() {
-        let image_control = Selection::from_names(["image-control"]).unwrap();
-        assert!(image_control.shows_nothing(0, &NAMES));
-        assert!(!image_control.shows_nothing(1, &NAMES));
-        assert!(Selection::NONE.shows_nothing(3, &NAMES));
-        assert!(!Selection::ALL.shows_nothing(0, &NAMES));
-        let grain = Selection::from_names(["grain"]).unwrap();
-        assert!(grain.shows_nothing(0, &NAMES[..4]));
+    fn official_modules_have_folders_and_valid_ids() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../modules");
+        for (i, module) in OFFICIAL.iter().enumerate() {
+            assert!(crate::grm::valid_id(module.id));
+            assert!(OFFICIAL[..i].iter().all(|other| other.id != module.id));
+            let manifest = std::fs::read_to_string(root.join(module.folder).join("module.toml"))
+                .unwrap_or_else(|_| panic!("modules/{} has no module.toml", module.folder));
+            assert!(
+                manifest.contains(&format!("id = \"{}\"", module.id)),
+                "modules/{} is not {}",
+                module.folder,
+                module.id
+            );
+        }
+        // Each module folder is official.
+        let folders = std::fs::read_dir(&root).unwrap().count();
+        assert_eq!(folders, OFFICIAL.len());
     }
 }

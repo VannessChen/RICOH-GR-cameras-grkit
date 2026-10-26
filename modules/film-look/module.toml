@@ -1,0 +1,14 @@
+# Film Look: the effect of still pictures and the live view. The page sets
+# CORE.TONE, and the core gives its rows: the installed effects, with their
+# names, icons, live-view preview, and Fn adjustments. The core applies the
+# color of the effect, selective color included.
+id = "FILMLOOK"
+version = 1
+# The default place in ADJ and in MENU: Film Look, Framing, Guides, Date, Grain.
+order = 10
+uses = ["CORE.TONE"]
+
+[page]
+setting = "CORE.TONE"
+# The GRKit section of MENU turns each effect on or off for ADJ.
+options = true

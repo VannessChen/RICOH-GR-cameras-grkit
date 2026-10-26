@@ -10,6 +10,9 @@
 #if defined(SETTINGS_SUBMENU) != defined(HOOK_MENU_SETTINGS_CHANGE)
 #error "SETTINGS_SUBMENU and the menu_settings_* hooks go together"
 #endif
+#if defined(FW_CHECK_ITEM) != defined(HOOK_MENU_CHECK_FACTORY)
+#error "The checkbox options page needs its hooks and its firmware definitions together"
+#endif
 .syntax unified
 .arm
 .text
@@ -229,6 +232,10 @@ menu_native_page_event:
     moveq r2, #0
     streq r2, [r0, #GRKIT_HOST_ACTIVE]
     streq r2, [r0, #GRKIT_HOST_PREVIEW]
+    /* A change of the saved effect (GRKIT_STATE_CHANGED). */
+    ldreq r2, [r0, #GRKIT_HOST_STATE_CHANGES]
+    addeq r2, r2, #1
+    streq r2, [r0, #GRKIT_HOST_STATE_CHANGES]
     pop {r0, r2}
     mov r12, sp
     ldr pc, =HOOK_MENU_NATIVE_PAGE_EVENT_RESUME
@@ -526,9 +533,57 @@ menu_settings_change:
     push {r0-r3, r12, lr}
     mov r0, r1
     bl menu_settings_controller
+    /* The C function gives the controller to change to, in r1, or 0: no
+       change happens. */
+    cmp r0, #0
+    beq 1f
+    str r0, [sp, #4]
     pop {r0-r3, r12, lr}
     .inst HOOK_MENU_SETTINGS_CHANGE_STOCK
     ldr pc, =HOOK_MENU_SETTINGS_CHANGE_RESUME
+1:
+    pop {r0-r3, r12, lr}
+    bx lr
+
+#ifdef HOOK_MENU_CHECK_FACTORY
+/* The entry of the controller factory (r0 the factory, r1 the controller
+   ID): the checkbox page of an options page (menu_check_controller), else
+   the native factory. */
+.global menu_check_factory
+.type menu_check_factory, %function
+menu_check_factory:
+    push {r0-r3, r12, lr}
+    bl menu_check_controller
+    cmp r0, #0
+    beq 1f
+    add sp, sp, #4
+    pop {r1-r3, r12, lr}
+    bx lr
+1:
+    pop {r0-r3, r12, lr}
+    .inst HOOK_MENU_CHECK_FACTORY_STOCK
+    ldr pc, =HOOK_MENU_CHECK_FACTORY_RESUME
+#endif
+
+#ifdef HOOK_MENU_INFO_UPDATE
+/* The update of the camera information page (menu.c: menu_info_fill). The
+   entry hook keeps r0 (the controller) and lr, and returns into
+   menu_info_after: the stock prologue copies sp, so its epilogue restores
+   this frame and returns here. */
+.global menu_info_update
+.type menu_info_update, %function
+menu_info_update:
+    push {r0, lr}
+    ldr lr, =menu_info_after
+    .inst HOOK_MENU_INFO_UPDATE_STOCK
+    ldr pc, =HOOK_MENU_INFO_UPDATE_RESUME
+menu_info_after:
+    pop {r0, lr}
+    push {r4, lr}
+    bl menu_info_fill
+    pop {r4, pc}
+.ltorg
+#endif
 
 /* Each replaces the MOVT of the submenu kind table base with a BL, after the
    function has saved lr. The register gets the whole base. Other registers and
@@ -565,6 +620,42 @@ SETTINGS_KINDS_REGISTER menu_settings_kinds_r8, r8
 SETTINGS_KINDS_REGISTER menu_settings_kinds_r5, r5
 SETTINGS_KINDS_SAVED menu_settings_kinds_r3_1, 3
 
+/* The submenu has six row views instead of five (SETTING_ROWS): each native
+   submenu has five rows or fewer, and a GRKit settings page has six. Its
+   constructor builds the list from five row types on the stack: the stub
+   replaces the store of the fifth, stores a sixth after it (the stack guard
+   follows at fp - 0x18), and sets the count. */
+.global menu_settings_build
+.type menu_settings_build, %function
+menu_settings_build:
+    strb ip, [fp, #-0x1c]
+    strb ip, [fp, #-0x1b]
+    mov r2, #6
+    bx lr
+/* The draw hides the rows from the row count to the last view, the sixth:
+   the two compares with the last row. */
+.global menu_settings_hide_first
+.type menu_settings_hide_first, %function
+menu_settings_hide_first:
+    cmp r7, #5
+    bx lr
+.global menu_settings_hide_next
+.type menu_settings_hide_next, %function
+menu_settings_hide_next:
+    cmp r4, #5
+    bx lr
+/* The kind of row r4 from the kind table (r8 its base, r3 the word index of
+   the kind). The entry has room for the kinds of five rows: the sixth takes
+   the kind of the first, whose word index is r3 - r4. */
+.global menu_settings_row_kind
+.type menu_settings_row_kind, %function
+menu_settings_row_kind:
+    cmp r4, #5
+    ldrlo r1, [r8, r3, lsl #2]
+    subhs r1, r3, r4
+    ldrhs r1, [r8, r1, lsl #2]
+    bx lr
+
 /* The entry of a value page method: r0 is the page, r1 and r2 the arguments.
    The C function gets r1, r2, and the row of the setting. It returns 0 for
    the native method, else the result + 1. */
@@ -596,5 +687,20 @@ SETTINGS_METHOD menu_settings_count_1, menu_settings_count, 1, HOOK_MENU_SETTING
 SETTINGS_METHOD menu_settings_draw_1, menu_settings_draw, 1, HOOK_MENU_SETTINGS_DRAW_1_STOCK, HOOK_MENU_SETTINGS_DRAW_1_RESUME
 SETTINGS_METHOD menu_settings_apply_1, menu_settings_apply, 1, HOOK_MENU_SETTINGS_APPLY_1_STOCK, HOOK_MENU_SETTINGS_APPLY_1_RESUME
 SETTINGS_METHOD menu_settings_current_1, menu_settings_current, 1, HOOK_MENU_SETTINGS_CURRENT_1_STOCK, HOOK_MENU_SETTINGS_CURRENT_1_RESUME
+.ltorg
+SETTINGS_METHOD menu_settings_count_2, menu_settings_count, 2, HOOK_MENU_SETTINGS_COUNT_2_STOCK, HOOK_MENU_SETTINGS_COUNT_2_RESUME
+SETTINGS_METHOD menu_settings_draw_2, menu_settings_draw, 2, HOOK_MENU_SETTINGS_DRAW_2_STOCK, HOOK_MENU_SETTINGS_DRAW_2_RESUME
+SETTINGS_METHOD menu_settings_apply_2, menu_settings_apply, 2, HOOK_MENU_SETTINGS_APPLY_2_STOCK, HOOK_MENU_SETTINGS_APPLY_2_RESUME
+SETTINGS_METHOD menu_settings_current_2, menu_settings_current, 2, HOOK_MENU_SETTINGS_CURRENT_2_STOCK, HOOK_MENU_SETTINGS_CURRENT_2_RESUME
+.ltorg
+SETTINGS_METHOD menu_settings_count_3, menu_settings_count, 3, HOOK_MENU_SETTINGS_COUNT_3_STOCK, HOOK_MENU_SETTINGS_COUNT_3_RESUME
+SETTINGS_METHOD menu_settings_draw_3, menu_settings_draw, 3, HOOK_MENU_SETTINGS_DRAW_3_STOCK, HOOK_MENU_SETTINGS_DRAW_3_RESUME
+SETTINGS_METHOD menu_settings_apply_3, menu_settings_apply, 3, HOOK_MENU_SETTINGS_APPLY_3_STOCK, HOOK_MENU_SETTINGS_APPLY_3_RESUME
+SETTINGS_METHOD menu_settings_current_3, menu_settings_current, 3, HOOK_MENU_SETTINGS_CURRENT_3_STOCK, HOOK_MENU_SETTINGS_CURRENT_3_RESUME
+.ltorg
+SETTINGS_METHOD menu_settings_count_4, menu_settings_count, 4, HOOK_MENU_SETTINGS_COUNT_4_STOCK, HOOK_MENU_SETTINGS_COUNT_4_RESUME
+SETTINGS_METHOD menu_settings_draw_4, menu_settings_draw, 4, HOOK_MENU_SETTINGS_DRAW_4_STOCK, HOOK_MENU_SETTINGS_DRAW_4_RESUME
+SETTINGS_METHOD menu_settings_apply_4, menu_settings_apply, 4, HOOK_MENU_SETTINGS_APPLY_4_STOCK, HOOK_MENU_SETTINGS_APPLY_4_RESUME
+SETTINGS_METHOD menu_settings_current_4, menu_settings_current, 4, HOOK_MENU_SETTINGS_CURRENT_4_STOCK, HOOK_MENU_SETTINGS_CURRENT_4_RESUME
 .ltorg
 #endif

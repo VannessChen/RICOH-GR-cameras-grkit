@@ -648,6 +648,12 @@ td input[type='checkbox'] {
   cursor: pointer;
 }
 
+/* The download link of the module file, at the end of the row. */
+.module-file {
+  margin-left: auto;
+  flex: none;
+}
+
 .module input {
   width: 20px;
   height: 20px;

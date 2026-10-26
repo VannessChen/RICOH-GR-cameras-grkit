@@ -1,0 +1,17 @@
+title = "輔助線"
+rows = ["關閉", "三分法", "中心", "黃金分割", "對角線", "三分法+中心"]
+
+[settings.STYLE]
+label = "樣式"
+
+[settings.COLOR]
+label = "顏色"
+values = ["黑色", "白色", "黃色"]
+
+[settings.OPACITY]
+label = "不透明度"
+values = ["50%", "100%"]
+
+[settings.DISP]
+label = "隨 DISP 隱藏"
+values = ["開啟", "關閉"]

@@ -65,10 +65,77 @@ static const volatile uint8_t *mapped_labels(uint32_t address)
     return overlay_labels;
 }
 #define LABEL_MAP(address) mapped_labels(address)
+/* The module settings table of the harness: one setting, the Guides style. */
+#define TEST_SETTINGS 0x5f000000U
+static uint32_t settings_memory[2 + 3];
+static volatile uint32_t *mapped_settings(uint32_t address)
+{
+    assert(address == TEST_SETTINGS);
+    return settings_memory;
+}
+#define MODULE_SETTINGS_MAP(address) mapped_settings(address)
+/* The profile table of the harness, and a cycle counter that advances 100
+   cycles at each read. */
+#define TEST_PROFILE 0x5d000000U
+static uint32_t profile_memory[GRKIT_PROFILE_SIZE / 4], profile_clock;
+static volatile uint32_t *mapped_profile(uint32_t address)
+{
+    assert(address >= TEST_PROFILE && address < TEST_PROFILE + sizeof(profile_memory) && (address & 3) == 0);
+    return profile_memory + (address - TEST_PROFILE) / 4;
+}
+#define PROFILE_MAP(address) mapped_profile(address)
+#define PROFILE_START() (profile_clock += 100)
+#define PROFILE_NOW() (profile_clock += 100)
+static uint32_t profile_core_id;
+#define PROFILE_CORE() profile_core_id
+/* Module layers: the harness maps each paint address to a function of the
+   Framing (modules/framing) and Guides (modules/guides) modules. */
+#define TEST_MASK_PAINT 0x5e000011U
+#define TEST_GUIDES_PAINT 0x5e000001U
+#define TEST_BADGE_PAINT 0x5e000021U
+static void test_module_paint(uint32_t address, const void *surface, uint32_t value);
+#define MODULE_PAINT(address,surface,value) test_module_paint(address,surface,value)
 #include "framing.c"
+#define GRKIT_PIXELS(address) mapped_pixels(address)
+#include "../../modules/framing/framing.c"
+#include "../../modules/guides/guides.c"
+#define GUIDES_STYLE_MAX 5U
+static void test_module_paint(uint32_t address, const void *surface, uint32_t value)
+{
+    if (address == TEST_MASK_PAINT) framing_mask(surface, value);
+    else if (address == TEST_BADGE_PAINT) framing_badge(surface, value);
+    else {
+        assert(address == TEST_GUIDES_PAINT);
+        guides_paint(surface, value);
+    }
+}
+/* The committed Guides style. */
+#define GUIDE_STYLE settings_memory[3]
 
 static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
 volatile u32 *framing_header(void) { return header; }
+#define ASPECT_BIT (1U << (GRKIT_CORE_ASPECT - GRKIT_CORE_SETTING_BASE))
+/* Register the module layers as INSTALL does, in painting order: with
+   Framing, its mask (order 10) and its ratio label (order 30, full display,
+   live view only) of CORE.ASPECT, around the Guides layer (order 20, DISP)
+   of its STYLE setting (handle 0, 6 values). Without Framing, no module uses
+   CORE.ASPECT. */
+static void register_layers(u32 framing)
+{
+    const u32 layers[3][3] = {
+        {TEST_MASK_PAINT, GRKIT_CORE_ASPECT, 10U << 16},
+        {TEST_GUIDES_PAINT, 0, 20U << 16 | MODULE_LAYER_FOLLOW_DISP},
+        {TEST_BADGE_PAINT, GRKIT_CORE_ASPECT, 30U << 16 | MODULE_LAYER_FULL_DISP | MODULE_LAYER_LIVE_ONLY},
+    };
+    u32 n = 0;
+    for (u32 i = 0; i < 3; ++i) {
+        if (!framing && i != 1) continue;
+        for (u32 w = 0; w < 3; ++w) header[GRKIT_HOST_MODULE_LAYERS/4 + n*3 + w] = layers[i][w];
+        ++n;
+    }
+    header[GRKIT_HOST_MODULE_LAYER_COUNT/4] = n;
+    header[GRKIT_HOST_CAPABILITIES/4] = framing ? ASPECT_BIT : 0;
+}
 /* 5:4: a crop on every camera, and the last crop row. */
 #define LAST_RATIO 6U
 /* Off, and each ratio value that the target crops. A ratio that the camera
@@ -99,10 +166,14 @@ static void reset(void)
     HALF(TEST_BITMAP, 0x1e)=480;
     WORD(TEST_BITMAP, 4)=TEST_STRIDE*480*4;
     WORD(TEST_BITMAP, 8)=TEST_PIXELS;
-    /* Every plugin is installed. */
-    header[GRKIT_HOST_PLUGINS/4]=(1U<<PLUGIN_COUNT)-1;
+    /* The Framing and Guides modules are loaded. */
+    settings_memory[0]=1; settings_memory[1]=0; settings_memory[2]=1; settings_memory[3]=0; settings_memory[4]=6;
+    header[GRKIT_HOST_MODULE_SETTINGS/4]=TEST_SETTINGS;
+    register_layers(1);
     header[GRKIT_HOST_ACTIVE/4]=0x59001000;
     header[GRKIT_HOST_RECORDS/4]=TEST_RECORDS;
+    /* The tail holds the labels (runtime/abi.h: GRKIT_LABELS). */
+    header[GRKIT_HOST_TAIL/4]=TEST_RECORDS;
     header[GRKIT_HOST_FRAME_RATIO/4]=1;
     native_aspect=0;
     display_mode=0;
@@ -135,9 +206,18 @@ static u32 table_field(u32 at,u32 bytes)
    canvas where the label is transparent, else an opaque gray. */
 static u32 expected_label(u32 label,u32 left,u32 top,u32 x,u32 y,u32 background)
 {
-    u32 width=table_field(label*8,2), height=table_field(label*8+2,2);
+    u32 width=table_field(label*8,2), height=table_field(label*8+2,2), at=table_field(label*8+4,4), value=0;
     if(x<left || x>=left+width || y<top || y>=top+height) return background;
-    u32 value=overlay_labels[table_field(label*8+4,4)+(y-top)*width+(x-left)];
+    /* The rows hold spans of drawn pixels: a count, then for each a u16 first
+       column, a u16 length, and its pixels. */
+    for(u32 row=0; row<=y-top; ++row) {
+        u32 spans=overlay_labels[at++];
+        for(u32 i=0; i<spans; ++i) {
+            u32 first=table_field(at,2), length=table_field(at+2,2);
+            if(row==y-top && x-left>=first && x-left<first+length) value=overlay_labels[at+4+x-left-first];
+            at+=4+length;
+        }
+    }
     return value ? 0xff000000U|value*0x010101U : background;
 }
 static u32 expected_badge(u32 ratio,u32 x,u32 y,u32 background)
@@ -210,7 +290,7 @@ static void assert_guides(u32 ratio,u32 style,u32 badge)
         u32 expected=SENTINEL;
         if(x<720) {
             if(ratio && (x<box[0] || x>=box[2] || y<box[1] || y>=box[3])) expected=0x80000000;
-            if(expected_guide(ratio,style,x,y)) expected=GUIDE_COLOR;
+            if(expected_guide(ratio,style,x,y)) expected=0x80000000U;
             if(badge) expected=expected_badge(ratio,x,y,expected);
         }
         assert(pixels[1+y*TEST_STRIDE+x]==expected);
@@ -240,17 +320,19 @@ int main(void)
         assert(header[GRKIT_HOST_FRAME_DRAWS/4]==(ratio!=0));
         assert(header[GRKIT_HOST_ACTIVE/4]==0x59001000);
     }
-    /* A plugin that PLUGINS.TXT does not install paints nothing. Without
-       Framing, the guides use the full 3:2 area. */
+    /* Without a module that uses CORE.ASPECT, a stored crop does nothing,
+       and the guides use the full 3:2 area. */
     reset();
     header[GRKIT_HOST_FRAME_RATIO/4]=2;
-    header[GRKIT_HOST_GUIDE/4]=1;
-    header[GRKIT_HOST_PLUGINS/4]&=~(1U<<PLUGIN_FRAMING);
+    GUIDE_STYLE=1;
+    register_layers(0);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_guides(0,1,0);
+    assert(framing_capture_request(0)==0);
+    /* Without module layers, nothing paints. */
     reset();
-    header[GRKIT_HOST_GUIDE/4]=1;
-    header[GRKIT_HOST_PLUGINS/4]=0;
+    GUIDE_STYLE=1;
+    header[GRKIT_HOST_MODULE_LAYER_COUNT/4]=0;
     framing_prepare(TEST_CANVAS);
     assert(BYTE(TEST_CANVAS,0xa0)==0);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
@@ -276,10 +358,12 @@ int main(void)
         }
         assert(header[GRKIT_HOST_FRAME_DRAWS/4]==++draws);
     }
-    /* The ADJ preview canvas shows the highlighted ratio's mask without a badge. */
+    /* The ADJ preview canvas shows the highlighted ratio of the Framing page
+       (runtime/modules.h: frame_preview) with its mask, without a label. */
     reset();
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
     header[GRKIT_HOST_FRAME_PREVIEW/4]=3;
+    header[GRKIT_HOST_MODULE_PREVIEW/4]=GRKIT_CORE_ASPECT+1; header[GRKIT_HOST_MODULE_PREVIEW/4+1]=2;
     header[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=TEST_CANVAS;
     framing_prepare(TEST_CANVAS);
     assert(BYTE(TEST_CANVAS,0xa0)==1);
@@ -291,6 +375,7 @@ int main(void)
     assert(header[GRKIT_HOST_FRAME_DRAWS/4]==0);
     /* Off previews no mask but keeps forcing full draws. */
     header[GRKIT_HOST_FRAME_PREVIEW/4]=1;
+    header[GRKIT_HOST_MODULE_PREVIEW/4+1]=0;
     for(u32 i=0; i<sizeof(pixels)/sizeof(pixels[0]); ++i) pixels[i]=SENTINEL;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
@@ -315,7 +400,7 @@ int main(void)
         if(!cropped(ratio)) continue;
         reset();
         header[GRKIT_HOST_FRAME_RATIO/4]=ratio;
-        header[GRKIT_HOST_GUIDE/4]=style;
+        GUIDE_STYLE=style;
         framing_prepare(TEST_CANVAS);
         assert(BYTE(TEST_CANVAS,0xa0)==1);
         framing_paint(TEST_CANVAS,TEST_BITMAP);
@@ -331,7 +416,7 @@ int main(void)
     }
     /* Turning the guides off requests one more full clear. */
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
-    header[GRKIT_HOST_GUIDE/4]=0;
+    GUIDE_STYLE=0;
     BYTE(TEST_CANVAS,0xa0)=0;
     framing_prepare(TEST_CANVAS);
     assert(BYTE(TEST_CANVAS,0xa0)==1);
@@ -345,7 +430,7 @@ int main(void)
     for (u32 mode=0; mode<4; ++mode) {
         reset();
         header[GRKIT_HOST_FRAME_RATIO/4]=0;
-        header[GRKIT_HOST_GUIDE/4]=1;
+        GUIDE_STYLE=1;
         framing_paint(TEST_CANVAS,TEST_BITMAP);
         display_mode=mode;
         BYTE(TEST_CANVAS,0xa0)=0;
@@ -367,7 +452,7 @@ int main(void)
     for (u32 mode=0; mode<4; ++mode) {
         reset();
         header[GRKIT_HOST_FRAME_RATIO/4]=LAST_RATIO;
-        header[GRKIT_HOST_GUIDE/4]=1;
+        GUIDE_STYLE=1;
         display_mode=mode;
         framing_paint(TEST_CANVAS,TEST_BITMAP);
         assert_guides(LAST_RATIO,mode<2,mode==0);
@@ -375,7 +460,7 @@ int main(void)
     /* Unknown styles draw nothing. */
     reset();
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
-    header[GRKIT_HOST_GUIDE/4]=GUIDES_STYLE_MAX+1;
+    GUIDE_STYLE=GUIDES_STYLE_MAX+1;
     framing_prepare(TEST_CANVAS);
     assert(BYTE(TEST_CANVAS,0xa0)==0);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
@@ -384,20 +469,26 @@ int main(void)
     reset();
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
     header[GRKIT_HOST_FRAME_PREVIEW/4]=1;
-    header[GRKIT_HOST_GUIDE_PREVIEW/4]=1;
+    header[GRKIT_HOST_MODULE_PREVIEW/4]=1; header[GRKIT_HOST_MODULE_PREVIEW/4+1]=1;
     header[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=TEST_CANVAS;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_guides(0,1,0);
+    /* The Guides page with the committed XPan crop, which each camera
+       crops. */
     for(u32 i=0; i<sizeof(pixels)/sizeof(pixels[0]); ++i) pixels[i]=SENTINEL;
-    header[GRKIT_HOST_FRAME_PREVIEW/4]=3;
-    header[GRKIT_HOST_GUIDE_PREVIEW/4]=4;
+    header[GRKIT_HOST_FRAME_RATIO/4]=1;
+    header[GRKIT_HOST_FRAME_PREVIEW/4]=2;
+    header[GRKIT_HOST_MODULE_PREVIEW/4]=1; header[GRKIT_HOST_MODULE_PREVIEW/4+1]=4;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
-    assert_guides(2,4,0);
+    assert_guides(1,4,0);
     assert(header[GRKIT_HOST_FRAME_DRAWS/4]==0);
     for(u32 i=0; i<sizeof(pixels)/sizeof(pixels[0]); ++i) pixels[i]=SENTINEL;
-    header[GRKIT_HOST_GUIDE_PREVIEW/4]=GUIDES_STYLE_MAX+1;
+    /* A highlighted value out of range paints that layer at Off; the mask
+       stays. */
+    header[GRKIT_HOST_MODULE_PREVIEW/4]=1; header[GRKIT_HOST_MODULE_PREVIEW/4+1]=GUIDES_STYLE_MAX+1;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
-    assert_untouched();
+    assert_guides(1,0,0);
+    assert(header[GRKIT_HOST_FRAME_DRAWS/4]==0);
     /* Native 3:2 requests record the Framing ratio; other native ratios pass.
        XPan and 2.35:1 use id 2. */
     {
@@ -431,7 +522,7 @@ int main(void)
     header[GRKIT_HOST_FRAME_BITMAP/4] = 0;
     framing_bind(TEST_OWNER);
     assert(invalidations == 1);
-    header[GRKIT_HOST_GUIDE/4] = 2;
+    GUIDE_STYLE=2;
     framing_bind(TEST_OWNER);
     assert(invalidations == 2);
     /* Returning to the live view ends the playback 65:24 variant. */
@@ -486,11 +577,13 @@ int main(void)
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert(header[GRKIT_HOST_FRAME_DRAWS/4]==1 && pixels[1]==0x80000000);
     reset(); native_aspect=FRAMING_XPAN_NATIVE;
-    header[GRKIT_HOST_FRAME_RATIO/4]=0; header[GRKIT_HOST_GUIDE/4]=1;
+    header[GRKIT_HOST_FRAME_RATIO/4]=0; GUIDE_STYLE=1;
     assert_rejected();
 #else
-    /* GR III: the live view shows the layers only in native 3:2. */
-    reset(); native_aspect=2; assert_rejected();
+    /* GR III: the live view shows the layers only in native 3:2. A native
+       aspect without a ratio of its own leaves CORE.ASPECT at 0, so only the
+       guides want to draw there. */
+    reset(); native_aspect=2; GUIDE_STYLE=1; assert_rejected();
 #endif
     reset(); header[GRKIT_HOST_FRAME_RATIO/4]=RATIO_VALUES;
     framing_paint(TEST_CANVAS,TEST_BITMAP); assert_untouched();
@@ -607,5 +700,49 @@ int main(void)
     WORD(TEST_OWNER,LIVEVIEW_CANVAS)=0;
     framing_bind(TEST_OWNER);
     assert(header[GRKIT_HOST_LOAD_CUE/4]==CUE_PENDING && invalidations==0);
+
+    /* Without the profile, no point reads the counter. */
+    assert(profile_clock==0);
+    /* The development profile counts each point, and each module layer in
+       the slot of the module whose code holds its paint function: Guides is
+       module 0, Framing (the mask and the label) module 1. */
+    reset();
+    header[GRKIT_HOST_FRAME_RATIO/4]=1;
+    GUIDE_STYLE=1;
+    profile_memory[0]=0x5e000000; profile_memory[1]=0x5e000010;
+    profile_memory[4]=0x5e000010; profile_memory[5]=0x5e000030;
+    header[GRKIT_HOST_PROFILE/4]=TEST_PROFILE;
+    framing_bind(TEST_OWNER);
+    framing_prepare(TEST_CANVAS);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    {
+        const uint32_t *slots=profile_memory+GRKIT_PROFILE_SLOTS/4;
+#define SLOT(n,w) slots[(n)*GRKIT_PROFILE_SLOT_SIZE/4+(w)]
+#define MODULE_SLOT(m,kind) (GRKIT_PROFILE_MODULE_BASE+(m)*GRKIT_PROFILE_KINDS+(kind))
+        assert(SLOT(GRKIT_PROFILE_FRAME_BIND,0)==1 && SLOT(GRKIT_PROFILE_FRAME_BIND,1)==100);
+        assert(SLOT(GRKIT_PROFILE_FRAME_PREPARE,0)==1 && SLOT(GRKIT_PROFILE_FRAME_PREPARE,2)==100);
+        /* The paint holds its three layers: 100 cycles each, and 100 of its own. */
+        assert(SLOT(GRKIT_PROFILE_FRAME_PAINT,0)==1 && SLOT(GRKIT_PROFILE_FRAME_PAINT,1)==700);
+        assert(SLOT(MODULE_SLOT(0,GRKIT_PROFILE_PAINT),0)==1 && SLOT(MODULE_SLOT(0,GRKIT_PROFILE_PAINT),1)==100);
+        assert(SLOT(MODULE_SLOT(1,GRKIT_PROFILE_PAINT),0)==2 && SLOT(MODULE_SLOT(1,GRKIT_PROFILE_PAINT),1)==200);
+        assert(SLOT(MODULE_SLOT(1,GRKIT_PROFILE_PAINT),2)==100);
+        /* A call of another core counter, and code outside each module, count nothing. */
+        profile_add(TEST_PROFILE,GRKIT_PROFILE_FRAME_BIND,PROFILE_DISCARD);
+        assert(SLOT(GRKIT_PROFILE_FRAME_BIND,0)==1);
+        {
+            u32 start=profile_begin(header);
+            profile_core_id=1;
+            profile_end(header,start,GRKIT_PROFILE_FRAME_BIND);
+            profile_core_id=0;
+            assert(SLOT(GRKIT_PROFILE_FRAME_BIND,0)==1);
+        }
+        profile_memory[1]=0x5e000000;
+        framing_paint(TEST_CANVAS,TEST_BITMAP);
+        assert(SLOT(MODULE_SLOT(0,GRKIT_PROFILE_PAINT),0)==1);
+        assert(SLOT(MODULE_SLOT(1,GRKIT_PROFILE_PAINT),0)==4);
+        assert(SLOT(GRKIT_PROFILE_FRAME_PAINT,0)==2);
+#undef SLOT
+#undef MODULE_SLOT
+    }
     return 0;
 }

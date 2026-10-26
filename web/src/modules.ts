@@ -1,49 +1,43 @@
-import { PLUGINS, type PluginKey } from './generated/plugins';
+import { OFFICIAL_MODULES, type ModuleKey } from './generated/modules';
 
 /**
- * The plugins of the ADJ menu and the package rules for them. A plugin that the
- * package omits (`PLUGINS.TXT`, through `Package.omitPlugin`) is not installed
- * and changes no firmware. A plugin that needs effects (Image Control) is not
- * installed without them. `generated/plugins.ts` comes from the registry in
- * `crates/grkit-core/src/plugins.rs`.
+ * The official modules of the ADJ menu and the package rules for them. The package holds the
+ * module file of each selected module (`Package.addModule`), and the camera installs only those.
+ * A module that needs effects (Image Control) shows nothing without them, so the package leaves
+ * it out then. `generated/modules.ts` comes from `crates/grkit-core/src/modules.rs`.
  */
-export const MODULES = PLUGINS;
+export const MODULES = OFFICIAL_MODULES;
 
-export type ModuleKey = PluginKey;
+export type { ModuleKey };
 
 export const ALL_MODULES: ReadonlySet<ModuleKey> = new Set(MODULES.map((module) => module.key));
 
 export interface ModulePlan {
   /** The package includes the selected effects only when Image Control is on. */
   includeEffects: boolean;
-  /** Names for `Package.omitPlugin`. */
-  omitted: string[];
-  /** The plugins that the camera menu shows, in menu order. */
+  /** The IDs of the module files that the package holds (`Package.addModule`), in menu order. */
+  modules: string[];
+  /** The modules that the camera menu shows, in menu order. */
   visible: ModuleKey[];
 }
 
 /**
- * `available` names the plugins that the site offers for the camera, in menu order.
- * Plugins outside it are not shown. Of those, the package omits only the
- * `excluded` plugins, which the runtime has but the camera must not install.
+ * `available` names the modules that the site offers for the camera, in menu order. The package
+ * holds the enabled ones among them that show something.
  */
 export function planModules(
   enabled: ReadonlySet<ModuleKey>,
   effectCount: number,
   available: readonly ModuleKey[] = MODULES.map((module) => module.key),
-  excluded: readonly ModuleKey[] = [],
 ): ModulePlan {
   const offered = MODULES.filter((module) => available.includes(module.key));
   const includeEffects = offered.some((module) => module.needsEffects && enabled.has(module.key));
+  const shown = offered.filter(
+    (module) => enabled.has(module.key) && (!module.needsEffects || effectCount > 0),
+  );
   return {
     includeEffects,
-    omitted: MODULES.flatMap((module) =>
-      excluded.includes(module.key) || (offered.includes(module) && !enabled.has(module.key))
-        ? [module.plugin]
-        : [],
-    ),
-    visible: offered
-      .filter((module) => enabled.has(module.key) && (!module.needsEffects || effectCount > 0))
-      .map((module) => module.key),
+    modules: shown.map((module) => module.id),
+    visible: shown.map((module) => module.key),
   };
 }

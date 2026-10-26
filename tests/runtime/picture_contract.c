@@ -46,10 +46,47 @@ static unsigned flushes, native_aspect;
 static uint32_t ifd_entry, ifd_writes, ifd_values[32];
 #define PICTURE_IFD_SET_SHORT(entry,index,value) do { assert((index) < 32 && !((value) >> 16)); \
     ifd_entry = (entry); ifd_values[(index)] = (value); ++ifd_writes; } while (0)
+/* The module settings: those of Date Imprint, STYLE (handle 0, 6 values) and
+   LOOK (handle 1, 3 values). */
+#define TEST_SETTINGS 0x5f000000U
+static uint32_t settings_memory[2 + 2 * 3];
+static volatile uint32_t *mapped_settings(uint32_t address)
+{
+    assert(address == TEST_SETTINGS);
+    return settings_memory;
+}
+#define MODULE_SETTINGS_MAP(address) mapped_settings(address)
+#define STAMP_STYLE settings_memory[3]
+#define STAMP_LOOK settings_memory[6]
+#define DATE_STAMP_STYLE_MAX 5U
+/* The plane filter of Date Imprint (modules/date): the harness maps its
+   apply address to the module function. */
+#define TEST_DATE_APPLY 0x5e000031U
+static void test_apply(uint32_t address, void *set, uint32_t value);
+#define MODULE_APPLY(address,set,value) test_apply(address,set,value)
 #include "picture.c"
 
 static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
 volatile u32 *framing_header(void) { return header; }
+/* The services of the core that the module calls (runtime/sdk/grkit.h). */
+#define GRKIT_BYTES(address) ((volatile u8 *)mapped((address), 1))
+#include "../../modules/date/stamp.c"
+const GrkitContext grkit_self = {0, 2, 0};
+u32 setting_get(u32 handle) { return setting_value(header, handle); }
+void local_time(GrkitDateTime *out) { PICTURE_DATE(out); }
+u32 divide(u32 n, u32 d) { return core_divide(n, d); }
+static void test_apply(uint32_t address, void *set, uint32_t value)
+{
+    assert(address == TEST_DATE_APPLY);
+    date_apply(set, value);
+}
+/* Register the plane filter of Date Imprint, as INSTALL does, or none. */
+static void date_module(int loaded)
+{
+    header[GRKIT_HOST_MODULE_FILTER_COUNT / 4] = loaded ? 1 : 0;
+    header[GRKIT_HOST_MODULE_FILTERS / 4] = TEST_DATE_APPLY;
+    header[GRKIT_HOST_MODULE_FILTERS / 4 + 1] = GRKIT_STAGE_MARK << 16 | 0;
+}
 
 #define RECORDS (ARENA + 0x100)
 #define OBJECT (ARENA + 0x8000)
@@ -64,8 +101,13 @@ static void reset(void)
     memset((void *)header, 0, sizeof(header));
     header[GRKIT_HOST_COUNT / 4] = 3;
     header[GRKIT_HOST_RECORDS / 4] = RECORDS;
-    /* Every plugin is installed. */
-    header[GRKIT_HOST_PLUGINS / 4] = (1U << PLUGIN_COUNT) - 1;
+    /* Date Imprint is loaded, and its settings are 0. */
+    memset(settings_memory, 0, sizeof(settings_memory));
+    settings_memory[0] = 2; settings_memory[4] = 6; settings_memory[7] = 3;
+    header[GRKIT_HOST_MODULE_SETTINGS / 4] = TEST_SETTINGS;
+    date_module(1);
+    /* The Framing module uses CORE.ASPECT, so a stored crop applies. */
+    header[GRKIT_HOST_CAPABILITIES / 4] = 1U << (GRKIT_CORE_ASPECT - GRKIT_CORE_SETTING_BASE);
 }
 static uint32_t record(uint32_t index) { return RECORDS + index * GRKIT_RECORD_SIZE; }
 static void post(uint32_t r, const short *matrix)
@@ -277,7 +319,7 @@ int main(void)
     for (u32 style = 1; style <= DATE_STAMP_STYLE_MAX; ++style) {
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = style;
+        STAMP_STYLE = style;
         picture_encode(0, MESSAGE);
         assert(flushes == 12);
         for (u32 i = 0; i < 3; ++i) {
@@ -293,12 +335,12 @@ int main(void)
     /* Longer styles reach further left. */
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 1;
+    STAMP_STYLE = 1;
     picture_encode(0, MESSAGE);
     u32 short_left = changes(0, 0).left;
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 2;
+    STAMP_STYLE = 2;
     picture_encode(0, MESSAGE);
     struct box long_box = changes(0, 0);
     assert(long_box.left < short_left);
@@ -307,7 +349,7 @@ int main(void)
        differs: an apostrophe for style 2, a digit for style 5. */
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 5;
+    STAMP_STYLE = 5;
     picture_encode(0, MESSAGE);
     {
         struct box b = changes(0, 0);
@@ -317,12 +359,12 @@ int main(void)
     /* A screen blend fades on bright areas, as an exposure on film does. */
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 1;
+    STAMP_STYLE = 1;
     picture_encode(0, MESSAGE);
     u32 dark_lift = changes(0, 0).lift;
     encode_setup();
     fill_planes(240, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 1;
+    STAMP_STYLE = 1;
     picture_encode(0, MESSAGE);
     {
         struct box b = changes(0, 0);
@@ -332,7 +374,7 @@ int main(void)
     /* 16:9 Framing: the screennail stamp stays above the bottom bar. */
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 3;
+    STAMP_STYLE = 3;
     header[GRKIT_HOST_FRAME_RATIO / 4] = 2;
     picture_encode(0, MESSAGE);
     {
@@ -342,7 +384,7 @@ int main(void)
     /* 2.35:1 Framing: above its bar, which is lower than the XPan bar. */
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 3;
+    STAMP_STYLE = 3;
     header[GRKIT_HOST_FRAME_RATIO / 4] = 4;
     picture_encode(0, MESSAGE);
     {
@@ -359,7 +401,7 @@ int main(void)
             for (u32 ratio = 0; ratio <= 1; ++ratio) {
                 encode_setup();
                 fill_planes(40, 128, 128);
-                header[GRKIT_HOST_STAMP / 4] = 3;
+                STAMP_STYLE = 3;
                 header[GRKIT_HOST_FRAME_RATIO / 4] = ratio;
                 native_aspect = native;
                 picture_encode(0, MESSAGE);
@@ -378,7 +420,7 @@ int main(void)
         for (u32 native = 0; native <= 2; native += 2) {
             encode_setup();
             fill_planes(40, 128, 128);
-            header[GRKIT_HOST_STAMP / 4] = 3;
+            STAMP_STYLE = 3;
             header[GRKIT_HOST_FRAME_RATIO / 4] = 4;
             native_aspect = native;
             picture_encode(0, MESSAGE);
@@ -396,12 +438,12 @@ int main(void)
         struct box crop, off, square;
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 3;
+        STAMP_STYLE = 3;
         picture_encode(0, MESSAGE);
         off = changes(1, 0);
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 3;
+        STAMP_STYLE = 3;
         header[GRKIT_HOST_FRAME_RATIO / 4] = 6;
         picture_encode(0, MESSAGE);
         crop = changes(1, 0);
@@ -413,7 +455,7 @@ int main(void)
         assert(crop.right < off.right);
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 3;
+        STAMP_STYLE = 3;
         header[GRKIT_HOST_FRAME_RATIO / 4] = 5;
         picture_encode(0, MESSAGE);
         square = changes(1, 0);
@@ -422,7 +464,7 @@ int main(void)
     /* A monochrome GRKit effect keeps neutral chroma: the stamp lights only Y. */
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 1;
+    STAMP_STYLE = 1;
     still(record(2));
     WORD(record(2), GRKIT_RECORD_MONOCHROME) = 1;
     picture_encode(0, MESSAGE);
@@ -448,7 +490,7 @@ int main(void)
         for (u32 i = 0; i < sizeof(mono); ++i) {
             encode_setup();
             fill_planes(40, 128, 128);
-            header[GRKIT_HOST_STAMP / 4] = 1;
+            STAMP_STYLE = 1;
             BYTE(SHOT, SETTINGS_IC_TYPE) = mono[i];
             picture_encode(0, MESSAGE);
             for (u32 j = 0; j < 3; ++j) { struct box b = changes(j, 1); assert(b.lit && b.lighter && !b.orange); }
@@ -456,14 +498,14 @@ int main(void)
         for (u32 i = 0; i < sizeof(color); ++i) {
             encode_setup();
             fill_planes(40, 128, 128);
-            header[GRKIT_HOST_STAMP / 4] = 1;
+            STAMP_STYLE = 1;
             BYTE(SHOT, SETTINGS_IC_TYPE) = color[i];
             picture_encode(0, MESSAGE);
             assert(changes(0, 0).orange);
         }
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 1;
+        STAMP_STYLE = 1;
         BYTE(SHOT, SETTINGS_IC_TYPE) = 13;
         still(record(2));
         picture_encode(0, MESSAGE);
@@ -474,15 +516,15 @@ int main(void)
     {
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 1;
-        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 1;
+        STAMP_STYLE = 1;
+        STAMP_LOOK = 1;
         picture_encode(0, MESSAGE);
         struct box b = changes(0, 0);
         assert(b.lit && b.lighter && b.yellow && !b.orange && b.left > planes[0].width / 3);
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 1;
-        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 1;
+        STAMP_STYLE = 1;
+        STAMP_LOOK = 1;
         BYTE(SHOT, SETTINGS_IC_TYPE) = 13;
         picture_encode(0, MESSAGE);
         for (u32 j = 0; j < 3; ++j) { struct box m = changes(j, 1); assert(m.lit && m.lighter && !m.orange); }
@@ -504,8 +546,8 @@ int main(void)
     {
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 1;
-        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 2;
+        STAMP_STYLE = 1;
+        STAMP_LOOK = 2;
         picture_encode(0, MESSAGE);
         const struct test_plane *p = &planes[1];
         struct box b = changes(1, 0);
@@ -527,8 +569,8 @@ int main(void)
         assert(changes(0, 0).lit && changes(2, 0).lit);
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 1;
-        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 2;
+        STAMP_STYLE = 1;
+        STAMP_LOOK = 2;
         BYTE(SHOT, SETTINGS_IC_TYPE) = 13;
         picture_encode(0, MESSAGE);
         for (u32 j = 0; j < 3; ++j) { struct box m = changes(j, 1); assert(m.lit && m.lighter && !m.orange); }
@@ -551,15 +593,15 @@ int main(void)
         /* An unknown look prints the classic digits. */
         encode_setup();
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = 1;
-        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 7;
+        STAMP_STYLE = 1;
+        STAMP_LOOK = 7;
         picture_encode(0, MESSAGE);
         assert(changes(0, 0).orange);
-        header[GRKIT_PLUGIN_DATE_STAMP_LOOK / 4] = 0;
+        STAMP_LOOK = 0;
     }
     /* Unusable descriptors are skipped. */
     encode_setup();
-    header[GRKIT_HOST_STAMP / 4] = 1;
+    STAMP_STYLE = 1;
     HALF(WORD(CONFIG, 0x3c), 0x14) = 500;
     WORD(CONFIG, 0x40) = 0;
     HALF(WORD(CONFIG, 0x44), 0x10) = 161;
@@ -579,7 +621,7 @@ int main(void)
         WORD(CONFIG, 0x48) = WORD(CONFIG, 0x3c); WORD(CONFIG, 0x58) = WORD(CONFIG, 0x4c);
         flushes = 0; native_aspect = 0;
         fill_planes(40, 128, 128);
-        header[GRKIT_HOST_STAMP / 4] = style;
+        STAMP_STYLE = style;
         picture_encode(0, MESSAGE);
         struct box big = changes(0, 0), sn = changes(1, 0), th = changes(2, 0);
         assert(big.lit && big.lighter && big.orange && sn.lit && sn.lighter && th.lit && th.lighter);
@@ -640,7 +682,7 @@ int main(void)
     /* The stamp draws after selective color, so it keeps its orange. */
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 1;
+    STAMP_STYLE = 1;
     still(record(0));
     keep_red(record(0));
     picture_encode(0, MESSAGE);
@@ -676,11 +718,11 @@ int main(void)
         picture_encode(0, MESSAGE);
         assert((changes(0, 0).lit != 0) == (k < 2));
     }
-    /* A plugin that PLUGINS.TXT does not install encodes nothing. */
+    /* Without the Date Imprint module, a stored style encodes nothing. */
     encode_setup();
     fill_planes(40, 128, 128);
-    header[GRKIT_HOST_STAMP / 4] = 1;
-    header[GRKIT_HOST_PLUGINS / 4] &= ~(1U << PLUGIN_DATE_STAMP);
+    STAMP_STYLE = 1;
+    date_module(0);
     picture_encode(0, MESSAGE);
     assert(flushes == 0);
     for (u32 i = 0; i < 3; ++i) assert(changes(i, 0).lit == 0);

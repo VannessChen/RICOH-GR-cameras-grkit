@@ -10,18 +10,19 @@ This document describes how the parts fit together. The source code and its comm
  developer computer / browser            camera
  ────────────────────────────            ──────────────────────────────────────────
  grkit build    ──► runtime build        Linux:  loader script ──► INSTALL
- grkit effects  ──► GRF effects                     │  checks firmware, writes code,
- grkit package  ──► GRKit.zip  ── SD card ──►       │  records, icons, and hooks
- site (wasm)    ──► GRKit.zip                       ▼
-                                         RTOS:   hooks ──► menu, Image Control,
-                                                 Framing, picture encode
+ grkit module   ──► GRM modules                     │  checks firmware, links modules,
+ grkit effects  ──► GRF effects                     │  writes records, icons, hooks
+ grkit package  ──► GRKit.zip  ── SD card ──►       ▼
+ site (wasm)    ──► GRKit.zip                RTOS:   hooks ──► core ──► modules
 ```
+
+The core is per target. It owns the firmware hooks, the state of each capability, and the hot paths. A module is the same file on each camera. It gives data, such as settings, pages, text, and tiles, and callbacks that the core calls. A module reaches the firmware only through services and capabilities of the core.
 
 There are three execution domains:
 
 - Rust tools run on the developer computer or, through WebAssembly, in the browser.
 - The installer runs in the camera's Linux, started by an SD script.
-- The hooks and plugins run in the camera's RTOS.
+- The hooks, the core, and the modules run in the camera's RTOS.
 
 | Path | Contents |
 | --- | --- |
@@ -29,7 +30,8 @@ There are three execution domains:
 | `crates/grkit-build` | Firmware checks, patch generation, Clang and LLD invocation. |
 | `crates/grkit-cli` | The `grkit` command and its filesystem rules. |
 | `crates/grkit-wasm` | Package assembly in the browser, with the same checks as the CLI. |
-| `runtime/` | Native C and assembly: installer, hooks, menu host, plugins. |
+| `runtime/` | Native C and assembly: the installer, the hooks, and the core. `runtime/sdk/` is the module SDK. |
+| `modules/` | The official modules. |
 | `resources/` | Installation guides (Markdown, compiled to PDF by the release). |
 | `effects/` | Built-in effect definitions. See [effects/README.md](../effects/README.md). |
 | `web/` | The static site: package builder and effect preview. See [web/README.md](../web/README.md). |
@@ -38,13 +40,9 @@ The CLI embeds `runtime/` and `resources/`, so it works outside the checkout.
 
 ## Targets
 
-A target is one firmware build. Its module in `crates/grkit-build/src/target/` holds its data, the private tail, and the site of each hook in its build.
+A target is one firmware build. Its module in `crates/grkit-build/src/target/` gives the address and the stock instruction of each hook site, and `runtime/targets/<target>.h` gives its firmware addresses.
 
-The targets of one camera line form a family, such as the GR IV builds. They share the runtime code and the hooks. The family module in `crates/grkit-build/src/target/` lists each hook once: its symbol, the code component that holds it, its extension point, and whether its site gets a B or a BL. A build gives only the address and the stock instruction of each hook, so the builds of a family have the same hooks.
-Each family has the header `runtime/targets/<family>.h`, which each build header of the family includes. It holds the object layouts, events, and constants of the family. It also holds the values that the shared code takes from each family, such as the icon slot and the Framing ratios. The shared code has no default for them, so a new family that does not define one does not build.
-The build header `runtime/targets/<target>.h` holds the firmware addresses and the values that differ in that build.
-
-Tests require each build of a family to have a site for each hook of the family and the same header definitions. A build declares the definitions that only it has in `BUILD_ONLY_DEFINITIONS`. A change for one build therefore fails the tests until it reaches each build of the family.
+The targets of one camera line form a family, such as the GR IV builds. A family lists its hooks once, with the extension point of each, and shares the runtime code and the header `runtime/targets/<family>.h`. Tests require each build of a family to have each hook and each header definition of the family. A change for one build therefore fails until it reaches each build.
 
 | Target | Cameras |
 | --- | --- |
@@ -53,153 +51,152 @@ Tests require each build of a family to have a site for each hook of the family 
 | `gr4-1.20` | GR IV 1.20 and GR IV HDF 1.20, GR IV Monochrome 1.10 |
 | `gr4-1.20-0528` | GR IV 1.20, the factory build of GR IV 30th Anniversary Edition cameras |
 
-GR IIIx 1.60 runs the RTOS code of GR III 2.10, so both cameras use one runtime. They differ only in the ModeSet file that enables SD scripts.
-GR III 2.20 and GR IIIx 1.70 change only the end screen. Their code moves by less than the relocation radius, so INSTALL [relocates](#relocation) the `gr3-2.10` runtime to them. `camera.rs` lists the releases of each camera and the runtime build of each release.
-GR IV 1.20 changes the code around several hooks and adds the monochrome Image Control types 31 and 32. It therefore has its own target (see [Porting](#porting)). Its hooks are those of 1.11.
-GR IV 30th Anniversary Edition cameras have an earlier 1.20 build from the factory, with code of both 1.11 and 1.20, so it has its own target. Ricoh does not publish it, so the target builds from a dump of a camera (`Source::Dump`).
-An HDF camera runs the firmware of its base camera and uses the package of that camera.
-GR IV has its own layout and all plugins.
+GR IIIx 1.60 runs the RTOS code of GR III 2.10. GR III 2.20 and GR IIIx 1.70 move their code by less than the relocation radius, so INSTALL [relocates](#relocation) the `gr3-2.10` runtime to them. GR IV 1.20 changed the code around several hooks, so it has its own target. An HDF camera runs the firmware of its base camera. `camera.rs` lists the releases of each camera and the runtime build of each release.
 
 ## Installation
 
 At power-on, the loader script waits until Linux mounts the card. Then it runs two steps:
 
-1. SCAN selects the effects and writes an allocation plan. The startup script allocates the arrays and stays resident, so the arrays stay allocated.
-2. INSTALL writes records and icons, publishes the code, and installs the hooks last. It writes `INSTALL.OK`, or `INSTALL.ERR` with a status.
+1. SCAN lists the modules and the effects, and writes an allocation plan. The loader allocates the arrays and stays resident, so the arrays stay allocated.
+2. INSTALL links the modules, writes the effect records and the icons, restores the saved state, and installs the hooks last. It writes `INSTALL.OK`, or `INSTALL.ERR` with a status, and then `GRKIT/REPORT.TXT`.
 
-A camera has one package. When the camera has several targets, the package holds the installer of each, and `INSTALL.SH` selects one at each power-on: first by the identity word of the running build, then by [relocation](#relocation) for a build that no target names (`runtime::package_runtime_files`).
+When a camera has several targets, its package holds the installer of each, and `INSTALL.SH` selects one by the identity of the running build, or by [relocation](#relocation).
 
-INSTALL changes nothing on a firmware that it does not expect. Each firmware address must resolve in the running image (see [Relocation](#relocation)), and each hook site must hold its stock instruction.
+INSTALL changes nothing on a firmware that it does not expect. Each firmware address must resolve in the running image, and each hook site must hold its stock instruction. Each hook belongs to one extension point, and INSTALL installs only the points that the loaded modules need.
 
-Each hook belongs to one extension point. INSTALL installs only the points of the selected plugins, so a plugin that is not selected changes no firmware.
-`SCRIPT/PLUGINS/PLUGINS.TXT` selects the plugins.
+### Card layout
 
-`grkit_core::abi` defines the shared header, the effect records, and the picture scratch. It generates `runtime/abi.h`.
+A package holds only `SCRIPT`. `GRKIT` at the card root is the data folder: no package holds it, so a copy of a new package, by replace or by merge, keeps it.
 
-The resident loader saves the plugin selections and the Fn adjustments in `SCRIPT/PLUGINS/STATE.TXT`. It writes only after a change, and only through the camera's own file system.
+| Path | Contents |
+| --- | --- |
+| `SCRIPT/GRKIT` | the loader, the installers, and the package list `PACKAGE.TXT` |
+| `SCRIPT/GRKIT/MODULES` | the modules of the package, `<ID>.GRM` |
+| `SCRIPT/GRKIT/EFFECTS` | the effects of the package, `.GRF` files |
+| `GRKIT/EFFECTS` | the effects library |
+| `GRKIT/MODULES` | the modules that a person adds |
+| `GRKIT/STATE.TXT` | the saved settings |
+| `GRKIT/REPORT.TXT` | the result of the last boot |
+| `GRKIT/SAFE`, `GRKIT/PROFILE` | files that start the safe mode or the development profile; each can also end in `.TXT` |
+
+A package module loads only if `PACKAGE.TXT` names it, so a merge copy gives the same result as a replace copy. A module in `GRKIT/MODULES` replaces the package module with the same name.
+
+When a package is new, SCAN copies its effects into the library. `GRKIT/IMPORTED.TXT` records the package that the library has, so an effect that a person deleted stays deleted until a package brings a different file. At the first boot after GRKit 1.2, SCAN also copies the effects of `SCRIPT/PLUGINS/EFFECTS`. GRKit installs at most 40 effects.
+
+The installer never renames or deletes a file in the data folder. On the camera's Linux, a rename does not replace a file. On GR IV exFAT, a delete makes later lookups fail.
+
+### Report and safe mode
+
+INSTALL writes `GRKIT/REPORT.TXT` when its text changes. It gives the GRKit version and target, the result of each module, and the installed effects.
+
+While `GRKIT/SAFE` exists, no module loads. INSTALL then applies only the menu patches for module management, so the GRKit section of MENU can turn off the module that stopped the camera. The safe mode does not start by itself, because a count of unfinished boots also counts each quick power-off.
+
+### Development profile
+
+While `GRKIT/PROFILE` exists, the core counts the calls and the CPU cycles of its hook points and of each call of module code (`runtime/profile.h`). It reads the PMU cycle counter, which the firmware lets each task read and does not use. The counter is per core, so a call that moved to another core is not counted. Every 10 seconds, the resident loader appends the counts to `GRKIT/PROFILE.LOG` and clears them. Without the file, each point reads one header word, and the loader polls as usual.
+
+### State
+
+`grkit_core::abi` defines the shared header, the effect records, and the tail. It generates `runtime/abi.h`.
+
+The resident loader saves the capabilities, the saved module settings, and the Fn adjustments in `GRKIT/STATE.TXT`. The core counts each change in one header word, which the loader polls. The loader writes only after the count settles, and only through the camera's own file system. INSTALL restores the file before it installs the hooks, so the first frame has the saved values. Without the file, INSTALL reads the state file of GRKit 1.2 and maps its keys (`runtime::LEGACY_STATE_KEYS`).
+
 A script error frees the arrays that the hooks use, so the resident script checks each array index and divides only by constants.
 
-## Plugins
+## Modules
 
-The core is in `runtime/`: hooks, installer, menu host, and the hosts of the extension points. Each feature is a plugin in `runtime/plugins/<id>/`, linked statically into the core.
-A plugin includes only `runtime/plugin.h`, and a test checks that no plugin names a firmware symbol or address.
+Each feature is a module, `<ID>.GRM`. The same file runs on each camera, because a module calls the firmware only through the core. A test checks that no module source names a firmware symbol or address.
 
-| Plugin | Extension points |
+| Module | Contents |
 | --- | --- |
-| Image Control | `menu.page`, `tuning`, `picture.encode` |
-| Framing | `menu.page`, `viewfinder.overlay`, `capture.aspect` |
-| Guides | `menu.page`, `viewfinder.overlay` |
-| Date Stamp | `menu.page`, `picture.encode` |
-| Grain | `menu.page`, `pipeline.grain` |
+| `FILMLOOK` | a page of `CORE.TONE` |
+| `FRAMING` | a page of `CORE.ASPECT`, the mask, and the ratio label |
+| `GUIDES` | its style, a page, and the guides |
+| `DATE` | its style and look, a page with a native settings page, and the date |
+| `GRAIN` | a page of `CORE.GRAIN` |
 
-A point with several plugins calls their handlers in registry order.
+At power-on, INSTALL links each module (`runtime/module_link.h`). It copies the code after the tail, in an area that no firmware code uses, and the data into a script array. It relocates the module, fills each import with a core service, and registers the page, the layers, and the plane filters. A module that does not link is skipped, and the others load.
 
-`grkit_core::plugins::PLUGINS` is the only list of plugins. Its order is the menu order.
-The generated files (`runtime/generated/*.h`, `web/src/generated/plugins.ts`) come from the registry, and a test fails if one differs.
+The core keeps the value of each module setting (`runtime/settings.h`). The capabilities are settings of the core, `CORE.<KEY>`. The core keeps a capability in a header word, and its hooks read that word, so module code never runs in a hot path. INSTALL applies the patches of a capability only when a loaded module uses it.
 
-### Add a plugin
+| Capability | Values |
+| --- | --- |
+| `CORE.TONE` | the effect (see [Film Look](#film-look)) |
+| `CORE.ASPECT` | the aspect of still pictures (see [Framing](#framing)) |
+| `CORE.GRAIN` | the grain level of recorded pictures |
 
-1. Add the C code in `runtime/plugins/<id>/`: `page.h`, and a handler file if the plugin has layers or encoders. Include only `runtime/plugin.h`.
-2. In `page.h`, define `<ID>_PAGE`, with `<ID>_TILES` as its tile count.
-3. Add the entry to `PLUGINS` in `crates/grkit-core/src/plugins.rs`. Declare its header words in `words`. A saved key refers to one of them with `Slot::Own`.
-4. Add its tiles to `grkit_core::artwork`, its menu text to `grkit_core::menu_text`, and its site text to `web/src/i18n.ts`.
-5. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
-6. Run the tests. They fail if a tile count, a handler order, or an extension point does not agree with the code.
+The core calls module code at these points:
+
+- A page gives the rows of a setting in ADJ and in MENU.
+- A layer paints on the live view, in the order of the layers.
+- A plane filter changes each recorded picture, after the color of the effect.
+- Events, timers, and UI callbacks run in the App task (`runtime/services.h`, `runtime/ui.h`). The timer and UI services refuse a call from another task.
+
+[Writing a module](modules.md) is the guide for module authors, and [the module reference](module-reference.md) gives the keys, services, limits, and error numbers.
 
 ## Menu
 
-GRKit adds a private entry to the ADJ toolbar, drawn like the native entries. The root lists the installed plugins, then About. Each plugin page owns its rows.
-The private menu reuses the native ADJ value list, so it behaves like a native entry.
+GRKit adds an entry to the ADJ toolbar. It lists the module pages and reuses the native ADJ value list, so it behaves like a native entry. OK on a row makes a quick change, and Fn opens the native settings page of the module.
 
-The menu text follows the camera language. It is data, not code, because the menu region is small.
+### GRKit section of MENU
 
-## Image Control
+The native MENU has a section titled GRKit at the end of the Customize tab. At the first controller change after INSTALL, the core copies the Customize tab descriptor and adds the section. The section has:
 
-Image Control selects an effect for still pictures and the live view by changing a private active-record pointer. Off keeps the native processing.
+- A row for each module file, also for a module that did not load (`runtime/manage.h`). It opens **Enable**, then the settings of the module page. The native settings pages that the rows open are borrowed from the camera (`runtime/menu_settings.h`).
+- **ADJ Order**, which moves a module page in ADJ.
+- **About GRKit**, which shows the version and the project address on the native camera information page.
 
-An effect (GRFX0001) replaces the Standard color matrix and tone curves. An optional extension adds a post matrix and selective color.
+The rows of the section follow the default order: the `order` of each module, then its ID. ADJ Order changes only the order in ADJ. The choices are settings, so the loader saves them, and they apply at once. Off stops a module: its page leaves ADJ, the core calls none of its code, and the capabilities that only it uses count as unused. Only On of a module that did not load waits for the next start.
 
-An effect can also drive the camera's hue-sector stage, which changes colors by hue and by luminance in still pictures and the live view. The installer writes a parameter set for each effect with sectors, and hooks point the stage at it. Effects without sectors keep the native set.
-Highlight correction halves the input of the stage. The installer therefore writes a second set for that case, and the hooks pick it by the camera's flag for the capture. `grkit_core::hue` describes the stage.
+A page can have options (`options = true`). Its **Options** row turns each value of the page on or off in ADJ, or each effect for a page of `CORE.TONE` (`runtime/effects.h`). SCAN installs the effects that are on first. The options page shows native checkboxes. Each native list shares one SelectMenuController with radio rows, so the controller factory gives the options page a second one, built with checkbox rows (`runtime/menu_settings.h`).
 
-After the color stages, the camera reduces the chroma of very dark and very light areas. The fit model and the site previews include this reduction, so the previews show no more tint than the photos.
+The menu text follows the camera language. It is data in the tail, not code, because the menu region is small.
 
-Each effect record has its own Fn adjustments. Fn opens the native parameter page, and hooks redirect its model to the record, so native settings and effect settings stay separate.
-Photos record the effect and its adjustments in the maker note, so playback shows them.
+## Film Look
+
+The capability `CORE.TONE` selects an effect for still pictures and the live view through a private active-record pointer (`runtime/tone.h`). Off keeps the native processing.
+
+An effect (GRF) replaces the Standard color matrix and tone curves. An optional extension adds a post matrix and selective color. An effect can also drive the camera's hue-sector stage (`grkit_core::hue`), for which the installer writes a parameter set and a second set for highlight correction.
+
+Each effect has its own Fn adjustments. Fn opens the native parameter page, and hooks redirect its model to the effect record, so native settings and effect settings stay separate. Photos record the effect and its adjustments in the maker note.
 
 ## Framing
 
-Framing draws a mask and a ratio badge into the viewfinder overlay. Guides draws its lines in the same path, inside the photo area of the selected ratio.
+The capability `CORE.ASPECT` holds the aspect of still pictures (`runtime/aspect.h`). Framing lists the same ratios on each camera. A ratio that the camera has natively sets the native aspect. The core crops the other ratios through a hidden capture aspect, while the live view stays 3:2 and DNG files keep the full sensor data. The camera saves a crop as a value, so a release can add ratios.
 
-After INSTALL, the overlay core also shows a short "GRKit" label in the first still live view, so the user sees that GRKit has loaded. The label uses the overlay hooks, so it shows only when Framing or Guides is installed.
-
-The live-view labels, the load cue and the Framing ratios, are rendered in Roboto Condensed Light at build time, in the size and style of the native live-view text (`grkit_core::artwork::overlay_labels`). The installer copies them after the menu text, because the code region has no room for them.
-
-Framing lists the same ratios on every camera. A ratio that the camera has natively sets the native aspect, so the native viewfinder, photo, and DNG apply it: 1:1 on GR III, and 16:9, 4:3, and 1:1 on GR IV. The page shows the ratio that the camera applies, so a change of the native aspect in the camera menu shows there too.
-Framing crops the other ratios. A crop sets the native aspect to 3:2 and captures through a hidden capture aspect. The live view stays 3:2, and DNG files keep the full sensor data and describe the crop.
-XPan and 2.35:1 share the 16:9 capture aspect with their own heights. 5:4 shares the 4:3 capture aspect with its own widths, which the pipeline crops from the center. Playback finds the geometry of a photo from its size.
-GR IV has a live-view mode for each capture aspect, so its live-view hooks keep the 3:2 mode for a crop. In native 16:9, XPan and 2.35:1 also crop the native photos.
-The camera saves a crop as a value, not as a menu row, so a release can add ratios without changing the meaning of a saved value.
+The live-view labels are rendered at build time in the style of the native live-view text (`grkit_core::artwork::overlay_labels`). After INSTALL, the first still live view shows a short "GRKit" label.
 
 ## Recorded pictures
 
-A hook on the JPEG encode processes each picture plane before encoding: the main picture, the screennail, and the thumbnail. It applies selective color, then the date stamp.
-Each still build stores its effect record with its shot settings, so continuous shooting keeps the effect of each shot.
-Grain sets the native grain stage of recorded pictures. The live view and DNG files do not have grain.
+A hook on the JPEG encode processes the main picture, the screennail, and the thumbnail. It applies the selective color of the effect, then the plane filters of the modules. Each still build stores its effect with its shot settings, so continuous shooting keeps the effect of each shot. `CORE.GRAIN` sets the native grain stage, so the live view and DNG files have no grain.
 
 ## Relocation
 
-Some cameras show a supported version but run another build of it. Each runtime is built from one published image, the pinned build. INSTALL finds each firmware address in the running image and moves each reference to it.
-
-- Each firmware address in the source is a symbol (`FIRMWARE(address)`). `grkit_build::relocation` turns the link relocations into tables.
-- For each address, the build stores a window of the pinned image around it that is unique.
-- INSTALL (`runtime/relocation.h`) searches each window in the running image. Each window must match once.
-
-A failure stops INSTALL with status 47 before it changes the firmware. `INSTALL.ERR` then lists the addresses that failed. `runtime/relocation.h` gives the reason codes.
+Some cameras show a supported version but run another build of it. Each runtime is built from one pinned image. For each firmware address (`FIRMWARE(address)`), the build stores a window of the pinned image that is unique. INSTALL (`runtime/relocation.h`) finds each window once in the running image and moves each reference. A failure stops INSTALL with status 47 before it changes the firmware, and `INSTALL.ERR` lists the addresses that failed.
 
 ## Porting
 
-A new firmware version needs one of two changes:
+If the code of a new firmware version moves by less than the relocation radius, the existing target runs on it: add the release to `camera.rs`. Otherwise, the version needs a new target in the family of the existing one.
 
-- If its code moves by less than the relocation radius, the existing target runs on it. Add the release to `camera.rs` with the existing target.
-- If its code moves farther, or code at a hook changed, it needs a new target in the family of the existing one. The package of the camera then holds the installer of each target (see [Installation](#installation)).
-
-`grkit port` finds each address of an existing target in another build. It uses the windows of [Relocation](#relocation), within a larger radius. It takes the hook and patch sites of the target module, the `FIRMWARE()` addresses of the build header, and the data addresses of `Target`. It writes drafts of the build header and of the target module for the new build.
-The port cannot find an address whose code or data changed. It also does not check values that are not addresses, such as object offsets, text IDs, and enum values.
-
-A data address that code loads gets that code as a second source, and the sources must agree. A port whose sources are all in windows of mostly addresses needs a review, because a table that grew can match at another start.
-`"relocatable": true` means that the plan of the installer resolves each address of the target in the other build. A build has more symbols than the target names, so a test of the target on the new firmware must still confirm it.
-The family header has no firmware addresses, because the port reads only the build header.
-
-To add a target for a new firmware build:
+`grkit port` finds each address of an existing target in another build, and writes drafts of the build header and of the target module. It cannot find an address whose code changed, and it does not check values that are not addresses, such as object offsets and text IDs.
 
 1. Run `grkit port --target <target> --firmware <its firmware> --to <new firmware> --out <directory>`. Use `--to-rtos` for an RTOS image, such as a GRDUMP capture.
-2. If the output gives `"relocatable": true`, add the release to the existing target instead. Test the existing target on the new firmware.
-3. Make `runtime/targets/<new target>.h` from `header.h` of the output. Resolve each `PORT` comment: port the address by hand, or check the offset that an expression adds. Check each value that is not an address.
-4. Save `target.rs` of the output as `crates/grkit-build/src/target/<module>.rs`. The module name is the target name with `_` for `-` and without `.`. Resolve each `PORT` comment. Give the name, the firmware, its SHA-256 values, its download, its identity word, and the header definition of the new target. Port each address that has no port, and check each value that is not an address. Add the module to `crates/grkit-build/src/target.rs`, to `TARGETS`, and to `SOURCES`.
-5. If the code at a site changed, change the hook of the family so that it fits the code of each build. The runtime tests a definition that only the new build has with `#ifdef`. Add that definition to `BUILD_ONLY_DEFINITIONS`.
-6. Select the header in `runtime/firmware.h`. Add the release to `camera.rs` as experimental.
-7. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`. The site packages each target of a camera, so `web/src/cameras.ts` changes only for a new camera.
-8. Add the firmware zip, or the zip of the dump, to the private firmware backup (`docs/releasing.md`). The release workflow builds each target of `grkit release-plan`, so it needs no change.
-9. Run `grkit port` again with `--check <new target>`. No address may differ without a review.
-10. Run the tests, build the target from the official firmware, and test it on the new firmware. Set the release to not experimental only after a test on a camera.
+2. If the output gives `"relocatable": true`, add the release to the existing target instead, and test it on the new firmware.
+3. Make `runtime/targets/<new target>.h` from `header.h`, and `crates/grkit-build/src/target/<module>.rs` from `target.rs`. Resolve each `PORT` comment, and check each value that is not an address.
+4. Add the target to `crates/grkit-build/src/target.rs`, to `runtime/firmware.h`, and to `camera.rs` as experimental. If the code at a hook site changed, change the hook of the family so that it fits each build.
+5. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
+6. Add the firmware zip to the private firmware backup (`docs/releasing.md`).
+7. Run `grkit port` again with `--check <new target>`, then the tests. Mark the release as not experimental only after a test on a camera.
 
-If a step is missing, a test names it, except steps 8 and 10.
-
-A firmware update that cannot be undone moves each camera to the new build, so the old build gets fewer users over time.
-A maintainer can freeze such a build when keeping it current costs more than it gives. A frozen build still builds and gets fixes, but a new feature does not have to reach it.
-
-To freeze a build, let `components::hooks` leave out the hooks that the build does not get. Exempt the build in the family test for the definitions that it does not get. The runtime must then leave the feature out on that build, as the settings page does without `SETTINGS_SUBMENU`.
-The C code gates a feature on a header definition, and the assembly and INSTALL follow the hooks of the build. If a build has one of them without the other, the assembly stops the build.
+A maintainer can freeze an old build when keeping it current costs more than it gives. A frozen build still builds and gets fixes, but its hooks leave out new features (`components::hooks`).
 
 ## Code areas
 
-All private code is in the reservation after the RTOS image. GRKit changes no byte of the image except the hook sites and a few in-place patches.
-`build.json` gives the address, size, and limit of each code component. The builder rejects overflow, code outside the reservation, changed hook instructions, and overlapping patches.
+All private code is in the reservation after the RTOS image. GRKit changes no byte of the image except the hook sites and a few in-place patches. `build.json` gives the address, size, and limit of each code component, and the builder rejects an overflow, a changed hook instruction, and overlapping patches.
 
 ## Testing
 
 - Rust tests pin the GRF bytes, the artwork, the generated headers, and the loader scripts.
-- Host C tests check the GRF parser, the effect catalog, the menu, Framing, and the picture code. The menu, Framing, and picture tests run for each target, with the expectations of its family where the behavior differs.
-- `--ignored` tests build the runtime with an ARM toolchain and a local firmware. See [CONTRIBUTING.md](../CONTRIBUTING.md).
-- The synthetic `--ignored` tests need no firmware. They build a target of each family on a pseudo-random image, as the release builds them, and resolve the relocation tables of INSTALL against that image.
+- Host C tests compile parts of the runtime with a host compiler. They cover the GRF parser, the state parser, the module linker, the menu, Framing, and the picture code of each family.
+- `grkit module test` runs the host test of a module against a fake core (`runtime/sdk/grkit_test.h`).
+- `--ignored` tests build the runtime with an ARM toolchain, from a local firmware or from a pseudo-random image. See [CONTRIBUTING.md](../CONTRIBUTING.md).

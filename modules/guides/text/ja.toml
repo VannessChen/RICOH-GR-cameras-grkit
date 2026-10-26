@@ -1,0 +1,17 @@
+title = "構図ガイド"
+rows = ["オフ", "9分割", "画面中央", "黄金比", "対角線", "9分割+画面中央"]
+
+[settings.STYLE]
+label = "種類"
+
+[settings.COLOR]
+label = "色"
+values = ["ブラック", "ホワイト", "イエロー"]
+
+[settings.OPACITY]
+label = "不透明度"
+values = ["50%", "100%"]
+
+[settings.DISP]
+label = "DISPで非表示"
+values = ["オン", "オフ"]

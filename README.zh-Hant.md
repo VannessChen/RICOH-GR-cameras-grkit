@@ -15,15 +15,15 @@ GRKit 為 RICOH GR 相機加入底片風格與拍攝輔助功能。它從記憶�
 
 GRKit 在 ADJ 模式中加入第 6 個功能 GRK，包含五個模組：
 
-- **影像控制（Image Control）**：底片風格，例如 Portra 400、Velvia 100 與 Tri-X 400。可以在實時顯示中預覽效果。
+- **底片風格（Film Look）**：Portra 400、Velvia 100 與 Tri-X 400 等底片的色彩。可以在實時顯示中預覽效果。
 - **畫幅（Framing）**：在所有機型上拍攝 XPan（65:24）、2.35:1、16:9、4:3、5:4 或 1:1 照片。相機內建的畫幅使用相機的 [長寬比]。其他畫幅在顯示屏上把照片以外的區域變暗。
 - **輔助線（Guides）**：三分法、中心、黃金分割或對角線。
-- **加印日期攝像（Date Imprint）**：在照片上加印橘色日期，效果類似底片相機的資料背蓋。
+- **加印日期（Date Imprint）**：在照片上加印橘色日期，效果類似底片相機的資料背蓋。
 - **粒紋感（Grain）**：為照片加入底片粒紋感，有弱、中、強三檔。
 
-最後一行顯示 GRKit 的版本號。
+MENU 自訂頁最後的 GRKit 小節包含全部設定：每個模組的設定和啟用開關、模組在 ADJ 中的順序，以及顯示版本和專案網址的「關於 GRKit」。
 
-製作安裝包時，你可以選擇包含哪些模組。功能表只會顯示這些模組。
+製作安裝包時，你可以選擇包含哪些模組。功能表只會顯示這些模組。要編寫模組，請參閱 [Writing a module](docs/modules.md)。
 
 ## 支援的機型
 
@@ -41,8 +41,8 @@ GRKit 在 ADJ 模式中加入第 6 個功能 GRK，包含五個模組：
 | RICOH GR IV | 1.20 | 實驗性 |
 | RICOH GR IV HDF | 1.11 | 已支援 |
 | RICOH GR IV HDF | 1.20 | 實驗性 |
-| RICOH GR IV Monochrome | 1.00 | 已支援，不含影像控制 |
-| RICOH GR IV Monochrome | 1.10 | 實驗性，不含影像控制 |
+| RICOH GR IV Monochrome | 1.00 | 已支援，不含底片風格 |
+| RICOH GR IV Monochrome | 1.10 | 實驗性，不含底片風格 |
 
 「已支援」表示該機型與經過實機測試的機型使用同一個執行環境，但本身未經實機測試。「實驗性」表示該韌體版本未經實機測試。
 
@@ -64,7 +64,8 @@ GR III 2.20 與 GR IIIx 1.70 使用與 2.10 和 1.60 相同的套件。GR IV 1.1
 - [GR III、GR IIIx 及其 HDF 機型](resources/INSTALLATION.zh-Hant.md)
 - [GR IV、GR IV HDF 與 GR IV Monochrome](resources/INSTALLATION-GR4.zh-Hant.md)
 
-要移除 GRKit，請先關閉相機，再刪除記憶卡中的 `SCRIPT` 資料夾。
+要更新 GRKit，把新安裝包中 `SD_ROOT` 的內容複製到記憶卡，覆蓋舊檔案。設定和效果保存在 `GRKIT` 中，不會遺失。
+要移除 GRKit，請先關閉相機，再刪除記憶卡中的 `SCRIPT` 和 `GRKIT` 資料夾。`GRKIT` 保存 GRKit 的設定。
 要關閉 SD 腳本設定，請使用 [grkit.app](https://grkit.app) 安裝步驟下方提供的檔案。具體步驟見安裝指南。
 
 ## 從原始碼建置
@@ -91,6 +92,7 @@ grkit verify dist/GRKit.zip
 ## 文件（英文）
 
 - [架構](docs/architecture.md)
+- [撰寫模組](docs/modules.md)和[模組參考](docs/module-reference.md)
 - [發布流程](docs/releasing.md)
 - [效果](effects/README.md)
 - [網站](web/README.md)
@@ -100,7 +102,7 @@ grkit verify dist/GRKit.zip
 程式碼採用 [MIT 授權條款](LICENSE)。每個安裝包都包含 `LICENSES.md`，列出包內檔案的授權。
 
 - 效果採用 CC BY-SA 4.0 或 MIT 授權。[effects/NOTICE.md](effects/NOTICE.md) 列出每個效果的授權。
-- 圖示文字使用 [Inter](https://github.com/rsms/inter) 字型，採用 [SIL Open Font License 1.1](crates/grkit-core/assets/Inter-LICENSE.txt)。
+- 選單圖示和取景畫面中的文字使用 [Roboto Condensed](https://github.com/googlefonts/roboto-classic) 字型，採用 [SIL Open Font License 1.1](crates/grkit-core/assets/RobotoCondensed-LICENSE.txt)。
 - 效果擬合方法移植自 [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods)，採用 [MIT 授權條款](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)。
 
 RICOH 與 GR 是 Ricoh Company, Ltd. 的商標。底片名稱是其所有者的商標。GRKit 是獨立專案，與 Ricoh 及任何底片廠商無關，也未獲得它們的認可或支援。

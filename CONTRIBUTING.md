@@ -16,8 +16,8 @@ The [README](README.md#build-from-source) builds a GR III package. For other pac
 - GR IIIx: package with `--camera gr3x` and `--guide build/guides/gr3x/en.pdf`. The runtime is the same as for GR III.
 - HDF models: package for the base camera, for example `--camera gr3` for GR III HDF.
 - GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4` and `--guide build/guides/gr4/en.pdf`.
-- GR IV Monochrome: package as for GR IV, with `--plugins framing,guides,date-stamp,grain` and without `--effects`.
-- Fewer plugins: add `--plugins` with the plugins to install, for example `--plugins framing,guides`. Without `--effects`, the package has no Image Control.
+- GR IV Monochrome: package as for GR IV, without the Film Look module (`FILMLOOK.GRM`) and without `--effects`.
+- Fewer modules: give `--module` only for the modules to install. Effects need the Film Look module.
 - Guide language: add `--language zh-Hans`, `--language zh-Hant`, or `--language ja`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
 
 ## Test
@@ -59,9 +59,9 @@ For the web site, see [web/README.md](web/README.md).
 
 - Keep filesystem and process access out of `grkit-core`.
 - Put target addresses in the target definition or its native adapter. Check the hook bytes before you patch them.
-- Do not edit `runtime/abi.h`, `runtime/generated/`, or `web/src/generated/`. Change the layout tables in `crates/grkit-core/src/abi.rs` or the plugin registry in `crates/grkit-core/src/plugins.rs`. Then run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
-- To add a plugin, follow [Add a plugin](docs/architecture.md#add-a-plugin).
-- Keep firmware details in the core. A plugin under `runtime/plugins/<id>/` includes only `runtime/plugin.h`. If a plugin needs a firmware function, add a core service to `runtime/plugin.h`.
+- Do not edit `runtime/abi.h` or `web/src/generated/`. Change the layout tables in `crates/grkit-core/src/abi.rs`, the capabilities in `crates/grkit-core/src/capabilities.rs`, or the official modules in `crates/grkit-core/src/modules.rs`. Then run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
+- To add a module, follow [Writing a module](docs/modules.md). [docs/module-reference.md](docs/module-reference.md) gives the keys, services, limits, and error numbers.
+- Keep firmware details in the core. A module under `modules/<folder>/` includes only `runtime/sdk/grkit.h`. If a module needs a firmware function, add a core service: an export of `grkit_core::grm::EXPORTS`, or a capability.
 - Add each new hook to the hooks of its family in `crates/grkit-build/src/target/<family>.rs`, with its extension point, and give its site in each target module of the family. A build without a site for a hook of its family fails.
 - Keep processing records valid while camera tasks use them.
 - Do not change persistent native camera settings.

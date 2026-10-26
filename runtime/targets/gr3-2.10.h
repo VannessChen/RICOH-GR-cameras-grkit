@@ -48,6 +48,8 @@
 #define FW_ICON_VIEW_SET_ICON FIRMWARE(0x5339a9a0)
 #define FW_ICON_VIEW_DESTROY FIRMWARE(0x5339a874)
 #define FW_STRING_VIEW_RESET FIRMWARE(0x53396f80)
+/* The width of the text of a string view, in pixels. */
+#define FW_STRING_VIEW_WIDTH FIRMWARE(0x53396dc8)
 #define FW_LIST_SET_COUNT FIRMWARE(0x53394e8c)
 #define FW_LIST_ROW FIRMWARE(0x53394758)
 #define FW_LIST_SAVE FIRMWARE(0x533947f0)
@@ -71,6 +73,10 @@
    Standard parameter page (still mode). */
 #define ADJ_IC_SLOT_TYPE 12
 #define IC_PARAMETERS_CONTROLLER 0x2000014
+/* The native screens of ui_open_native (runtime/ui.h): the targets of the
+   MENU rows White Balance (still) and LCD. */
+#define UI_NATIVE_WHITE_BALANCE 0x200004eU
+#define UI_NATIVE_LCD 0x2000018U
 /* ImageControlDetailController, the parameter page. Its start method sets the
    type (+0x198), the set kind (+0x199: 0 the base set, 1 and 2 Custom), and
    the base kind of its row table (+0x19a: 0 Standard). The Image Control
@@ -86,34 +92,102 @@
 #define PARAMETER_KINDS {0,1,2,3,4,5,6,13,14}
 /* The page event that opens another controller (0x2000015) from the page. */
 #define DETAIL_EV_SUBPAGE 0x88
-/* The native settings page of a GRKit root row (runtime/menu.c). It borrows
+/* The native settings page of a GRKit root row (runtime/menu_settings.h). It borrows
    the MENU submenu Instant Review (controller 0x20000be, entry 10 of the
-   submenu kind table) and its value pages Display Time (0x20000c3) and Zoom
-   Review (0x20000c4). A kind table entry holds the row count at +6, the row
-   label IDs (u16) at +8, the row controllers (u32) at +0x14, and the row value
-   methods (C++ member pointers, 8 bytes) at +0x3c. A value method gets the
-   submenu and the row. */
+   submenu kind table), its three value pages (0x20000c3 Display Time,
+   0x20000c4 Zoom Review, 0x20000c5), and two value pages of the MENU Setup
+   tab (0x200009f, 0x20000a0), one for each row. Each is a plain SelectMenu
+   page: its record has one title and no description. A switch in the
+   SelectMenu start maps the page to its record; records 83, 84, 85, 87, 88. A kind table entry holds the row
+   count at +6, the row label IDs (u16) at +8, the row controllers (u32) at
+   +0x14, a kind for each row (u32, 0x21c for a row with a value page) at
+   +0x28, and the row value methods (C++ member pointers, 8 bytes) at +0x3c.
+   A row without its kind draws its value over its label.
+   A value method gets the submenu and the row. A value page shows the label
+   ID of its SelectMenu record as title, which is the label of its row. */
 #define FW_SUBMENU_KINDS FIRMWARE(0x53b3fb10)
 #define SUBMENU_KIND_SIZE 0x64
 #define SUBMENU_KIND_ROWS 6
+#define SUBMENU_KIND_LABELS 8
 #define SUBMENU_KIND_CONTROLLERS 0x14
+#define SUBMENU_KIND_ROW_KINDS 0x28
 #define SUBMENU_KIND_VALUES 0x3c
 #define SETTINGS_SUBMENU 0x20000beU
 #define SETTINGS_SUBMENU_KIND 10
-#define SETTINGS_PAGES {0x20000c3U,0x20000c4U}
-/* The text IDs of the submenu title and of its two rows. The value pages show
-   the label of their row as title. */
+#define SETTINGS_PAGES {0x20000c3U,0x20000c4U,0x20000c5U,0x200009fU,0x20000a0U}
+/* The text IDs of the submenu title and of the title of each value page,
+   which are also the row labels. The sixth row, which has no value page of
+   its own, shows a label of another submenu. */
 #define SETTINGS_TITLE_TEXT 0x1e7
-#define SETTINGS_ROW_TEXTS {0x1e9,0x1eb}
+#define SETTINGS_ROW_TEXTS {0x1e9,0x1eb,0x16e,0x194,0x1ed,0x1b0}
+/* The guides of a SelectMenu value page: OK and MENU. */
+#define SELECT_GUIDE_OK_TEXT 0x301
+#define SELECT_GUIDE_BACK_TEXT 0x302
 /* Row text setters: a value page row sets the string view at +0xf8, and a
    submenu row its value view at +0xfc. Each sets a text ID. */
 #define FW_ROW_TEXT FIRMWARE(0x5339e7a0)
+/* Options pages show checkboxes (runtime/menu_settings.h): the constructor of
+   SelectMenuController, the vtable and SetItem of CheckBoxListLineView, the
+   ScrollListView init, the radio dot of a SelectMenuLineView, and the checked
+   and unchecked images. */
+#define FW_SELECT_MENU_NEW FIRMWARE(0x531be784)
+#define CHECK_LINE_VTABLE FIRMWARE(0x53c0bb60)
+#define FW_CHECK_ITEM FIRMWARE(0x533a8938)
+#define FW_LIST_INIT FIRMWARE(0x53394610)
+#define FW_ROW_DOT FIRMWARE(0x5339e738)
+#define CHECK_IMAGE_ON 0x10fU
+#define CHECK_IMAGE_OFF 0x10eU
 #define ROW_TEXT_VIEW 0xf8
 #define FW_ROW_VALUE FIRMWARE(0x533a6ad0)
 #define ROW_VALUE_VIEW 0xfc
+/* Rows of modules in the native MENU (runtime/menu_section.h). MENU builds its
+   tabs at the first MENU of a start from the tab descriptors in the RAM
+   table FW_MENU_TABS; entry MENU_TAB_GRKIT is the Customize tab. A
+   descriptor holds the row count (u8) at MENU_TAB_ROWS, then for each of
+   MENU_TAB_MAX_ROWS rows its filler (a C++ member pointer), its target
+   controller, and its predicate (a member pointer, 0 for a row that always
+   shows). A filler gets the row view and sets its label view (+0xec) and
+   value view with the row setters. */
+/* The MENU tab of the GRKit section (Customize, C), and the sections of a
+   tab descriptor: their count, title text IDs, and first rows. The Setup
+   tab has all MENU_TAB_MAX_SECTIONS sections; Customize has 3. */
+#define MENU_TAB_GRKIT 3
+#define MENU_TAB_SECTIONS 0x68
+#define MENU_TAB_TITLES 0x6a
+#define MENU_TAB_STARTS 0x80
+#define MENU_TAB_MAX_SECTIONS 11
+/* The TopMenu instance in the controller factory (FW_CONTROLLER_FACTORY). */
+#define MENU_TOP_SLOT 0x74
+#define MENU_TAB_SIZE 0x384
+#define MENU_TAB_ROWS 0x8b
+#define MENU_TAB_FILLERS 0x8c
+#define MENU_TAB_TARGETS 0x1bc
+#define MENU_TAB_PREDICATES 0x254
+#define MENU_TAB_MAX_ROWS 38
+#define MENU_ROW_LABEL_VIEW 0xec
+#define FW_MENU_TABS FIRMWARE(0x55001eb8)
+#define FW_MENU_ROW_LABEL FIRMWARE(0x5339dc70)
+#define FW_MENU_ROW_VALUE FIRMWARE(0x5339de6c)
+#define MENU_ROW_VALUE_VIEW 0xf8
+/* A native view keeps its frame {x, y, width, height} at VIEW_FRAME, and its
+   vtable sets it at VIEW_SET_FRAME. The value of a MENU or submenu row shows
+   in a column of VALUE_COLUMN pixels from the x of the view. */
+#define VIEW_FRAME 0x20
+#define VIEW_SET_FRAME 0x18
+#define VALUE_COLUMN 140
 #define FW_ADJ_REFRESH FIRMWARE(0x531a4114)
 #define FW_ADJ_SELECT_SLOT FIRMWARE(0x531a4864)
 #define FW_CHANGE_CONTROLLER FIRMWARE(0x5316c9d8)
+/* The controller factory singleton, which holds one instance of each controller. */
+/* The camera information page (Setup tab, Firmware Info/Options), which
+   About GRKit opens: its controller, the text ID of its title, and its two
+   lines, ASCII string views that the page update sets (menu_info_update)
+   with FW_STRING_VIEW_SET_ASCII(view, text). */
+#define INFO_CONTROLLER 0x200011aU
+#define INFO_TITLE_TEXT 0x28d
+#define INFO_LINES {0x168,0x16c}
+#define FW_STRING_VIEW_SET_ASCII FIRMWARE(0x53390ef8)
+#define FW_CONTROLLER_FACTORY FIRMWARE(0x5316f350)
 /* AdjModeController fields. */
 #define ADJ_CANVAS 0x4
 /* The current UI settings object is at this slot, +4 in the object
@@ -141,7 +215,8 @@
 #define ADJ_LIST 0x1f0
 #define ADJ_SLOT 0x1f4
 /* 1 in movie mode. */
-#define ADJ_MOVIE(controller) BYTE(controller,0x270)
+#define ADJ_MOVIE_FIELD 0x270
+#define ADJ_MOVIE(controller) BYTE(controller,ADJ_MOVIE_FIELD)
 #define ADJ_ACTION 0x279
 
 /* AdjModeController events (the first halfword of an event). */
@@ -186,5 +261,29 @@
 #define FW_CACHE_FLUSH FIRMWARE(0x5383c8a8)
 #define FW_CLOCK FIRMWARE(0x536bd838)
 #define FW_LOCAL_TIME FIRMWARE(0x536b6510)
+
+/* The UI service (runtime/ui.h): the view factory, the App task timers,
+   the message box, its progress bar, and the texts of its buttons. */
+#define FW_VIEW_FACTORY FIRMWARE(0x533ad7f0)
+#define FW_TIMER_SERVICE FIRMWARE(0x5320b01c)
+#define FW_TIMER_START FIRMWARE(0x5322b468)
+#define FW_TIMER_CANCEL FIRMWARE(0x5322b1ec)
+#define FW_MESSAGE_BACKGROUND FIRMWARE(0x5339c71c)
+#define FW_MESSAGE_SET FIRMWARE(0x5339c844)
+#define FW_MESSAGE_BUTTONS FIRMWARE(0x5339ca54)
+#define FW_MESSAGE_ENABLE_BUTTONS FIRMWARE(0x5339cbd8)
+#define FW_MESSAGE_CURSOR FIRMWARE(0x5339cad0)
+#define FW_MESSAGE_GET_CURSOR FIRMWARE(0x5339d190)
+#define FW_PROGRESS_PERCENT FIRMWARE(0x5339a2d8)
+#define UI_EXECUTE_TEXT 0x2a9
+#define UI_CANCEL_TEXT 0x2aa
+/* The slider of ui_slider: the setters of a slider configuration (init,
+   range, and one flag) and its apply to a SliderView, and the icons that the
+   native sliders use. */
+#define FW_SLIDER_INIT FIRMWARE(0x5339f194)
+#define FW_SLIDER_RANGE FIRMWARE(0x5339f1f0)
+#define FW_SLIDER_FLAG FIRMWARE(0x5339f210)
+#define FW_SLIDER_APPLY FIRMWARE(0x5339f328)
+#define UI_SLIDER_ICONS {0x230,0x40,0xc7,0x240}
 
 #endif

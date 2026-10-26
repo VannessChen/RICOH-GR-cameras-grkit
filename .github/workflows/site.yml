@@ -8,8 +8,9 @@ name: Site
 # not released yet, the type check fails and the site stays as it is. The page
 # loads the packager with a dynamic import, so the Vite build alone does not
 # find a missing export. If a camera entry of web/ on main needs a runtime build
-# that the release does not have, the run deploys nothing; the release that has
-# it deploys the page.
+# that the release does not have, or web/ names an official module that the
+# release does not have, the run deploys nothing; the release that has it
+# deploys the page.
 on:
   push:
     branches: [main]
@@ -59,6 +60,18 @@ jobs:
           missing=$(comm -23 <(echo "$targets") <(echo "$released") | tr '\n' ' ')
           if [ -n "${missing// /}" ]; then
             echo "::notice::$tag has no runtime for ${missing% }, which web/ of main names. The site stays as it is until a release has it."
+            tag=
+          fi
+          # Each official module of web/ on main needs its module file in the
+          # release. Releases before 1.3.0 have no modules/.
+          modules=$(gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$GITHUB_REPOSITORY/contents/web/src/generated/modules.ts?ref=$GITHUB_SHA" 2>/dev/null \
+            | grep -o "id: '[A-Z0-9_]*'" | cut -d "'" -f 2 | sort -u || true)
+          shipped=$(tar -tzf "$RUNNER_TEMP/release-check/$archive" \
+            | sed -n 's#^\(\./\)\{0,1\}modules/\([A-Z0-9_]*\)\.GRM$#\2#p' | sort -u)
+          missing=$(comm -23 <(echo "$modules") <(echo "$shipped") | tr '\n' ' ')
+          if [ -n "$tag" ] && [ -n "${missing// /}" ]; then
+            echo "::notice::$tag has no module ${missing% }, which web/ of main names. The site stays as it is until a release has it."
             tag=
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -128,6 +141,11 @@ jobs:
             fi
             cp -R "$RUNNER_TEMP/release/$data" "$RUNNER_TEMP/site/"
           done
+          # The official modules. The release job checked that the release has
+          # each one that web/ names.
+          if [ -d "$RUNNER_TEMP/release/modules" ]; then
+            cp -R "$RUNNER_TEMP/release/modules" "$RUNNER_TEMP/site/"
+          fi
           for path in web/dist/* web/dist/.[!.]*; do
             [ -e "$path" ] || continue
             if [ -e "$RUNNER_TEMP/site/${path#web/dist/}" ]; then

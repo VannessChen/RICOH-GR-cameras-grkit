@@ -1,7 +1,8 @@
 //! Browser entry points that assemble a GRKit SD package and import LUTs as effects.
 //!
 //! The site serves a runtime build as CI publishes it: `build.json` and the files under `sd/`.
-//! The page fetches those files and the selected effects, then builds the ZIP locally.
+//! It also serves each official module file. The page fetches those files, the selected
+//! modules, and the selected effects, then builds the ZIP locally.
 //! `Builder` holds the logic so that native tests cover it. `Package` only adapts it for JS.
 //! `import_lut` fits a LUT as `grkit effects import` does, over the base gamma of the catalog.
 
@@ -10,7 +11,6 @@ use grkit_core::{
     camera::{self, Camera},
     cube::Cube,
     effects, fit, lut_image,
-    modules::Selection,
     packaging::{self, EffectSet},
     site, Files,
 };
@@ -137,7 +137,7 @@ impl Build {
 pub struct Builder {
     builds: Vec<Build>,
     effects: EffectSet,
-    plugins: Selection,
+    modules: Vec<Vec<u8>>,
     camera: &'static Camera,
     language: packaging::Language,
     guide: Option<Vec<u8>>,
@@ -150,7 +150,7 @@ impl Builder {
         Ok(Self {
             builds: vec![Build::new(manifest)?],
             effects: EffectSet::default(),
-            plugins: Selection::ALL,
+            modules: Vec::new(),
             camera: &camera::GR3,
             language: packaging::Language::English,
             guide: None,
@@ -200,14 +200,18 @@ impl Builder {
         self.effects.insert(blob.to_vec())
     }
 
-    /// Leaves one plugin out of the package, by its name in `grkit_core::plugins::NAMES`.
-    /// The installer changes no firmware for it.
-    /// Without effects, the installer leaves out Image Control by itself.
-    pub fn omit_plugin(&mut self, name: &str) -> Result<()> {
-        let plugins = self.plugins.without(name)?;
-        ensure!(plugins != self.plugins, "Plugin omitted twice: {name}");
-        self.plugins = plugins;
-        Ok(())
+    /// Adds one module file (`grkit_core::grm`) and returns its ID. The
+    /// installer installs each module of the package.
+    pub fn add_module(&mut self, bytes: &[u8]) -> Result<String> {
+        let id = grkit_core::grm::Module::decode(bytes)?.id;
+        for other in &self.modules {
+            ensure!(
+                grkit_core::grm::Module::decode(other)?.id != id,
+                "Module added twice: {id}"
+            );
+        }
+        self.modules.push(bytes.to_vec());
+        Ok(id)
     }
 
     /// Selects the camera by its ID in `grkit_core::camera::CAMERAS`, GR III by default.
@@ -241,7 +245,7 @@ impl Builder {
         let package = packaging::assemble(
             &runtimes,
             &self.effects,
-            self.plugins,
+            &self.modules,
             self.camera,
             &packaging::Guide {
                 language: self.language,
@@ -306,11 +310,10 @@ impl Package {
         self.0.add_effect(blob).map_err(js_error)
     }
 
-    /// Leaves one plugin out of the package, by its `plugin` name in `PLUGINS`
-    /// (`generated/plugins.ts`).
-    #[wasm_bindgen(js_name = omitPlugin)]
-    pub fn omit_plugin(&mut self, name: &str) -> Result<(), JsError> {
-        self.0.omit_plugin(name).map_err(js_error)
+    /// Adds one module file (`.GRM`) and returns its module ID.
+    #[wasm_bindgen(js_name = addModule)]
+    pub fn add_module(&mut self, bytes: &[u8]) -> Result<String, JsError> {
+        self.0.add_module(bytes).map_err(js_error)
     }
 
     /// Selects the camera by its key in `CAMERA_RELEASES` (`generated/cameras.ts`), `gr3`

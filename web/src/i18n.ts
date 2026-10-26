@@ -32,7 +32,7 @@ const en = {
   listSeparator: ', ',
   /** Module names as the camera menu shows them in this language. */
   moduleNames: {
-    imageControl: 'Image Control',
+    filmLook: 'Film Look',
     framing: 'Framing',
     guides: 'Guides',
     dateStamp: 'Date Imprint',
@@ -52,6 +52,8 @@ const en = {
   retryPreview: 'Retry preview',
   uploadNote: 'DNG only. Your photo stays in this browser.',
   previewNote: 'The preview is approximate. Color and exposure can differ from the camera.',
+  libraryNote:
+    'Effects stay on the card after an update. To remove one, delete its file from GRKIT/EFFECTS. GRKIT/REPORT.TXT lists the installed effects.',
   compare: 'Compare',
   original: 'Base development',
   preview: 'Preview',
@@ -117,6 +119,12 @@ const en = {
   close: 'Close',
   removeEffect: 'Remove',
   removeOf: (name: string) => `Remove ${name}`,
+  /** A link that downloads one module or effect file. */
+  file: 'File',
+  fileOf: (name: string) => `Download the file of ${name}`,
+  /** How to add one file to a card that has GRKit. */
+  fileNote:
+    'To add one module or effect to a card that has GRKit, download its file. Copy a module to GRKIT/MODULES, or an effect to GRKIT/EFFECTS.',
   haldSummary: 'Importing a Lightroom preset?',
   haldNote:
     'Download the HALD image and open it in the editor. Apply the preset with grain, sharpening, and vignette off. Export it at full size as a 16-bit TIFF or PNG in sRGB, then import the export with Standard input.',
@@ -141,12 +149,12 @@ const en = {
   featureRequest: 'Request a feature',
   donate: 'Buy me a coffee',
   modulesNote: 'The camera menu shows only the modules that you select.',
-  effectsOff: 'Image Control is off. The package has no effects.',
-  effectsUnavailable: (name: string) => `GRKit has no Image Control for ${name} yet.`,
-  imageControlEmpty: 'Select at least one effect. Without effects, the camera hides Image Control.',
+  effectsOff: 'Film Look is off. The package has no effects.',
+  effectsUnavailable: (name: string) => `GRKit has no Film Look for ${name} yet.`,
+  filmLookEmpty: 'Select at least one effect. Without effects, the camera hides Film Look.',
   noModules: 'Select at least one module.',
   modulesText: {
-    imageControl: 'The effects below, with live-view preview.',
+    filmLook: 'The effects below, with live-view preview.',
     framing: 'XPan 65:24, 2.35:1, 16:9, 4:3, 5:4, or 1:1 photos. A ratio that the camera has uses its own aspect ratio. Otherwise the viewfinder stays 3:2 and dims the rest.',
     guides: 'Thirds, center, golden ratio, or diagonals inside the Framing area.',
     dateStamp: 'A date at the bottom right of photos, with classic, GR1s dot-matrix, or GR II digits: orange on color photos, white on black-and-white photos.',
@@ -161,9 +169,16 @@ const en = {
     ['Turn the camera on. GRKit loads a few seconds after power-on. Then, in ADJ, select the sixth entry, GRK.'],
     ['Optional: remove ', '`{modeset}', ' and ', '`DEVELOP.MOD', ' from the card root.'],
   ] as readonly RichText[],
+  updateNote: [
+    'To update GRKit, copy the contents of ',
+    '`SD_ROOT',
+    ' of the new package to the card root, over the old files. Your settings, effects, and added modules stay in ',
+    '`GRKIT',
+    '.',
+  ] as RichText,
   remove: 'Remove GRKit',
   removeSteps: [
-    ['Turn the camera off. Delete the ', '`SCRIPT', ' folder from the card.'],
+    ['Turn the camera off. Delete the ', '`SCRIPT', ' and ', '`GRKIT', ' folders from the card. ', '`GRKIT', ' holds your GRKit settings.'],
     [
       'To turn SD scripts off too, download the files below. Copy the contents of ',
       '`SD_ROOT',
@@ -214,10 +229,10 @@ const zhHans: Strings = {
   listSeparator: '、',
   /** Module names as the camera menu shows them in this language. */
   moduleNames: {
-    imageControl: '影像控制',
+    filmLook: '胶片风格',
     framing: '画幅',
     guides: '辅助线',
-    dateStamp: '加印日期摄影',
+    dateStamp: '加印日期',
     grain: '颗粒感',
   },
   package: '安装包',
@@ -234,6 +249,7 @@ const zhHans: Strings = {
   retryPreview: '重试预览',
   uploadNote: '仅支持 DNG。照片只在本浏览器中处理。',
   previewNote: '预览为近似效果，颜色和曝光可能与机内成片不同。',
+  libraryNote: '更新后效果仍保留在存储卡上。要移除一个效果，从 GRKIT/EFFECTS 删除它的文件。GRKIT/REPORT.TXT 列出已安装的效果。',
   compare: '对比',
   original: '基础显影',
   preview: '预览',
@@ -295,6 +311,9 @@ const zhHans: Strings = {
   close: '关闭',
   removeEffect: '移除',
   removeOf: (name) => `移除 ${name}`,
+  file: '文件',
+  fileOf: (name) => `下载 ${name} 的文件`,
+  fileNote: '要给已有 GRKit 的存储卡加入一个模块或效果，下载它的文件。把模块复制到 GRKIT/MODULES，或把效果复制到 GRKIT/EFFECTS。',
   haldSummary: '要导入 Lightroom 预设？',
   haldNote:
     '下载 HALD 图像并在软件中打开，关闭颗粒、锐化和暗角后应用预设。以原尺寸导出为 sRGB 的 16 位 TIFF 或 PNG，再选择 Standard 输入导入。',
@@ -319,12 +338,12 @@ const zhHans: Strings = {
   featureRequest: '功能建议',
   donate: '请我喝杯咖啡',
   modulesNote: '相机菜单只显示你选择的模块。',
-  effectsOff: '影像控制已关闭，安装包中不包含效果。',
-  effectsUnavailable: (name) => `GRKit 暂不支持 ${name} 的影像控制。`,
-  imageControlEmpty: '请至少选择一个效果。没有效果时，相机会隐藏影像控制。',
+  effectsOff: '胶片风格已关闭，安装包中不包含效果。',
+  effectsUnavailable: (name) => `GRKit 暂不支持 ${name} 的胶片风格。`,
+  filmLookEmpty: '请至少选择一个效果。没有效果时，相机会隐藏胶片风格。',
   noModules: '请至少选择一个模块。',
   modulesText: {
-    imageControl: '使用下方选择的效果，可在实时显示中预览。',
+    filmLook: '使用下方选择的效果，可在实时显示中预览。',
     framing: '拍摄 XPan 65:24、2.35:1、16:9、4:3、5:4 或 1:1 照片。相机自带的画幅使用相机的长宽比。其他画幅时显示屏仍为 3:2，画幅外的区域变暗。',
     guides: '在画幅内显示三分法、中心、黄金分割或对角线。',
     dateStamp: '在照片右下角加印日期，字体可选经典、GR1s 点阵或 GR II：彩色照片为橙色，黑白照片为白色。',
@@ -337,9 +356,10 @@ const zhHans: Strings = {
     ['正常开机。GRKit 在开机几秒后才加载，之后在 ADJ 模式中选择第 6 个功能 GRK。'],
     ['可选：从存储卡根目录删除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
   ],
+  updateNote: ['要更新 GRKit，把新安装包中 ', '`SD_ROOT', ' 的内容复制到存储卡根目录，覆盖旧文件。设置、效果和你加入的模块保存在 ', '`GRKIT', ' 中，不会丢失。'] as RichText,
   remove: '移除 GRKit',
   removeSteps: [
-    ['关闭相机。从存储卡删除 ', '`SCRIPT', ' 文件夹。'],
+    ['关闭相机。从存储卡删除 ', '`SCRIPT', ' 和 ', '`GRKIT', ' 文件夹。', '`GRKIT', ' 保存 GRKit 的设置。'],
     ['如需同时关闭 SD 脚本，下载下面的文件，把 ', '`SD_ROOT', ' 中的内容复制到存储卡根目录。'],
     ['插入存储卡。按住 MENU 按钮开机，等待相机自动关机。'],
     ['从存储卡根目录删除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
@@ -384,10 +404,10 @@ const zhHant: Strings = {
   listSeparator: '、',
   /** Module names as the camera menu shows them in this language. */
   moduleNames: {
-    imageControl: '影像控制',
+    filmLook: '底片風格',
     framing: '畫幅',
     guides: '輔助線',
-    dateStamp: '加印日期攝像',
+    dateStamp: '加印日期',
     grain: '粒紋感',
   },
   package: '安裝包',
@@ -404,6 +424,7 @@ const zhHant: Strings = {
   retryPreview: '重試預覽',
   uploadNote: '僅支援 DNG。照片只在此瀏覽器中處理。',
   previewNote: '預覽為近似效果，顏色與曝光可能與機內成片不同。',
+  libraryNote: '更新後效果仍保留在記憶卡上。要移除一個效果，從 GRKIT/EFFECTS 刪除它的檔案。GRKIT/REPORT.TXT 列出已安裝的效果。',
   compare: '對比',
   original: '基礎顯影',
   preview: '預覽',
@@ -465,6 +486,9 @@ const zhHant: Strings = {
   close: '關閉',
   removeEffect: '移除',
   removeOf: (name) => `移除 ${name}`,
+  file: '檔案',
+  fileOf: (name) => `下載 ${name} 的檔案`,
+  fileNote: '要為已有 GRKit 的記憶卡加入一個模組或效果，下載它的檔案。把模組複製到 GRKIT/MODULES，或把效果複製到 GRKIT/EFFECTS。',
   haldSummary: '要匯入 Lightroom 預設？',
   haldNote:
     '下載 HALD 影像並在軟體中開啟，關閉顆粒、銳利化和暗角後套用預設。以原尺寸匯出為 sRGB 的 16 位元 TIFF 或 PNG，再選擇 Standard 輸入匯入。',
@@ -489,12 +513,12 @@ const zhHant: Strings = {
   featureRequest: '功能建議',
   donate: '請我喝杯咖啡',
   modulesNote: '相機功能表只顯示你選擇的模組。',
-  effectsOff: '影像控制已關閉，安裝包中不包含效果。',
-  effectsUnavailable: (name) => `GRKit 暫不支援 ${name} 的影像控制。`,
-  imageControlEmpty: '請至少選擇一個效果。沒有效果時，相機會隱藏影像控制。',
+  effectsOff: '底片風格已關閉，安裝包中不包含效果。',
+  effectsUnavailable: (name) => `GRKit 暫不支援 ${name} 的底片風格。`,
+  filmLookEmpty: '請至少選擇一個效果。沒有效果時，相機會隱藏底片風格。',
   noModules: '請至少選擇一個模組。',
   modulesText: {
-    imageControl: '使用下方選擇的效果，可在實時顯示中預覽。',
+    filmLook: '使用下方選擇的效果，可在實時顯示中預覽。',
     framing: '拍攝 XPan 65:24、2.35:1、16:9、4:3、5:4 或 1:1 照片。相機內建的畫幅使用相機的長寬比。其他畫幅時顯示屏仍為 3:2，畫幅外的區域變暗。',
     guides: '在畫幅內顯示三分法、中心、黃金分割或對角線。',
     dateStamp: '在照片右下角加印日期，字體可選經典、GR1s 點陣或 GR II：彩色照片為橙色，黑白照片為白色。',
@@ -507,9 +531,10 @@ const zhHant: Strings = {
     ['正常開機。GRKit 在開機幾秒後才載入，之後在 ADJ 模式中選擇第 6 個功能 GRK。'],
     ['選用：從記憶卡根目錄刪除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
   ],
+  updateNote: ['要更新 GRKit，把新安裝包中 ', '`SD_ROOT', ' 的內容複製到記憶卡根目錄，覆蓋舊檔案。設定、效果和你加入的模組保存在 ', '`GRKIT', ' 中，不會遺失。'] as RichText,
   remove: '移除 GRKit',
   removeSteps: [
-    ['關閉相機。從記憶卡刪除 ', '`SCRIPT', ' 資料夾。'],
+    ['關閉相機。從記憶卡刪除 ', '`SCRIPT', ' 和 ', '`GRKIT', ' 資料夾。', '`GRKIT', ' 保存 GRKit 的設定。'],
     ['如需同時關閉 SD 腳本，下載下方的檔案，把 ', '`SD_ROOT', ' 中的內容複製到記憶卡根目錄。'],
     ['插入記憶卡。按住 MENU 按鈕開機，等待相機自動關機。'],
     ['從記憶卡根目錄刪除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
@@ -554,9 +579,9 @@ const ja: Strings = {
   listSeparator: '、',
   /** Module names as the camera menu shows them in this language. */
   moduleNames: {
-    imageControl: 'イメージコントロール',
+    filmLook: 'フィルムルック',
     framing: 'フレーミング',
-    guides: 'グリッド',
+    guides: '構図ガイド',
     dateStamp: '日付入れ撮影',
     grain: '粒状感',
   },
@@ -574,6 +599,8 @@ const ja: Strings = {
   retryPreview: 'プレビューを再試行',
   uploadNote: 'DNG のみ。写真はこのブラウザー内だけで処理されます。',
   previewNote: 'プレビューは目安です。色や露出はカメラで撮った写真と異なる場合があります。',
+  libraryNote:
+    'エフェクトはアップデート後もカードに残ります。削除するには、GRKIT/EFFECTS からそのファイルを削除します。GRKIT/REPORT.TXT にインストールされたエフェクトの一覧があります。',
   compare: '比較',
   original: '基本現像',
   preview: 'プレビュー',
@@ -636,6 +663,10 @@ const ja: Strings = {
   close: '閉じる',
   removeEffect: '削除',
   removeOf: (name) => `${name} を削除`,
+  file: 'ファイル',
+  fileOf: (name) => `${name} のファイルをダウンロード`,
+  fileNote:
+    'GRKit が入ったカードにモジュールやエフェクトを 1 つ追加するには、そのファイルをダウンロードします。モジュールは GRKIT/MODULES に、エフェクトは GRKIT/EFFECTS にコピーします。',
   haldSummary: 'Lightroom のプリセットを読み込む場合',
   haldNote:
     'HALD 画像をダウンロードしてソフトで開き、粒子、シャープ、周辺光量補正をオフにしてプリセットを適用します。原寸の sRGB 16 ビット TIFF または PNG で書き出し、Standard 入力で読み込みます。',
@@ -660,13 +691,13 @@ const ja: Strings = {
   featureRequest: '機能リクエスト',
   donate: 'コーヒーをおごる',
   modulesNote: 'カメラのメニューには、選択したモジュールだけが表示されます。',
-  effectsOff: 'イメージコントロールがオフです。パッケージにエフェクトは含まれません。',
-  effectsUnavailable: (name) => `GRKit には、${name} 用のイメージコントロールはまだありません。`,
-  imageControlEmpty:
-    'エフェクトを 1 つ以上選択してください。エフェクトがないと、カメラはイメージコントロールを表示しません。',
+  effectsOff: 'フィルムルックがオフです。パッケージにエフェクトは含まれません。',
+  effectsUnavailable: (name) => `GRKit には、${name} 用のフィルムルックはまだありません。`,
+  filmLookEmpty:
+    'エフェクトを 1 つ以上選択してください。エフェクトがないと、カメラはフィルムルックを表示しません。',
   noModules: 'モジュールを 1 つ以上選択してください。',
   modulesText: {
-    imageControl: '下で選んだエフェクトを使います。ライブビューでプレビューできます。',
+    filmLook: '下で選んだエフェクトを使います。ライブビューでプレビューできます。',
     framing: 'XPan 65:24、2.35:1、16:9、4:3、5:4、1:1 の写真を撮影します。カメラにある比率はカメラのアスペクト比を使います。ほかの比率では撮影画面は 3:2 のままで、範囲外が暗くなります。',
     guides: 'フレーミングの範囲内に、9 分割、画面中央、黄金比、対角線のいずれかを表示します。',
     dateStamp: '写真の右下に日付を入れます。書体はクラシック、GR1s のドットマトリクス、GR II から選べます。カラー写真ではオレンジ色、白黒写真では白になります。',
@@ -679,9 +710,16 @@ const ja: Strings = {
     ['電源を入れます。GRKit は電源を入れてから数秒後に読み込まれます。その後、撮影モードで ADJ レバーを押し込んで ADJ モードにし、6 番目の項目「GRK」を選びます。'],
     ['任意：カードのルートから ', '`{modeset}', ' と ', '`DEVELOP.MOD', ' を削除します。'],
   ],
+  updateNote: [
+    'GRKit をアップデートするには、新しいパッケージの ',
+    '`SD_ROOT',
+    ' の中身をカードのルートにコピーし、古いファイルを上書きします。設定、エフェクト、追加したモジュールは ',
+    '`GRKIT',
+    ' に残ります。',
+  ] as RichText,
   remove: 'GRKit の削除',
   removeSteps: [
-    ['カメラの電源を切ります。カードから ', '`SCRIPT', ' フォルダを削除します。'],
+    ['カメラの電源を切ります。カードから ', '`SCRIPT', ' フォルダと ', '`GRKIT', ' フォルダを削除します。', '`GRKIT', ' には GRKit の設定が入っています。'],
     ['SD スクリプトもオフにする場合は、下のファイルをダウンロードし、', '`SD_ROOT', ' の中身をカードのルートにコピーします。'],
     ['カードを入れます。MENU ボタンを押したまま電源を入れ、電源が自動で切れるまで待ちます。'],
     ['カードのルートから ', '`{modeset}', ' と ', '`DEVELOP.MOD', ' を削除します。'],

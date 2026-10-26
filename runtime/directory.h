@@ -20,6 +20,9 @@
    type (1), then the NUL-terminated name. */
 #define DIRECTORY_NAME 19U
 #define DIRECTORY_LINK 10U
+/* The results of a listing that fails (runtime/install_status.h). */
+#define DIRECTORY_UNREADABLE 30
+#define DIRECTORY_BAD_RECORD 31
 
 struct directory_calls {
     /* getdents64: a byte count, 0 at the end, or a negative error. */
@@ -32,32 +35,32 @@ struct directory_calls {
 /* Call `visit` for each entry of the open directory `fd`, except symbolic
    links. The listing runs two times: the first pass ends any listing that an
    earlier reader left open, and only the second pass calls `visit`.
-   Return 0, 30 for a read error that a skip does not clear, or 31 for a bad
-   record. */
+   Return 0, DIRECTORY_UNREADABLE for a read error that a skip does not
+   clear, or DIRECTORY_BAD_RECORD for a bad record. */
 static int directory_list(long fd, u8 *buffer, u32 size, const struct directory_calls *calls,
                           void (*visit)(const char *name, u32 length, void *context),
                           void *context)
 {
     u32 skips=0;
     for(u32 pass=0;pass<2;++pass) {
-        if(calls->seek(fd,0,0)<0) return 30;
+        if(calls->seek(fd,0,0)<0) return DIRECTORY_UNREADABLE;
         for(;;) {
             long got=calls->read(fd,buffer,size);
             if(!got) break;
             if(got<0) {
                 long position=calls->seek(fd,0,1);
                 if(position<0 || ++skips>DIRECTORY_SKIPS || calls->seek(fd,position+1,0)<0)
-                    return 30;
+                    return DIRECTORY_UNREADABLE;
                 continue;
             }
             for(u32 offset=0;offset<(u32)got;) {
                 const u8 *entry=buffer+offset;
-                if((u32)got-offset<DIRECTORY_NAME+1) return 31;
+                if((u32)got-offset<DIRECTORY_NAME+1) return DIRECTORY_BAD_RECORD;
                 u32 record=(u32)entry[16]|entry[17]<<8;
-                if(record<DIRECTORY_NAME+1 || record>(u32)got-offset) return 31;
+                if(record<DIRECTORY_NAME+1 || record>(u32)got-offset) return DIRECTORY_BAD_RECORD;
                 u32 n=0;
                 while(n<record-DIRECTORY_NAME && entry[DIRECTORY_NAME+n]) ++n;
-                if(n==record-DIRECTORY_NAME) return 31;
+                if(n==record-DIRECTORY_NAME) return DIRECTORY_BAD_RECORD;
                 if(pass && entry[18]!=DIRECTORY_LINK)
                     visit((const char *)entry+DIRECTORY_NAME,n,context);
                 offset+=record;

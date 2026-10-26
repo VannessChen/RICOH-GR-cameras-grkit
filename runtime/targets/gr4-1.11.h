@@ -44,6 +44,8 @@
 #define FW_ICON_VIEW_SET_ICON FIRMWARE(0x53576e38)
 #define FW_ICON_VIEW_DESTROY FIRMWARE(0x53576d0c)
 #define FW_STRING_VIEW_RESET FIRMWARE(0x5357338c)
+/* The width of the text of a string view, in pixels. */
+#define FW_STRING_VIEW_WIDTH FIRMWARE(0x535731d4)
 #define FW_LIST_SET_COUNT FIRMWARE(0x535711e4)
 #define FW_LIST_ROW FIRMWARE(0x53570a9c)
 #define FW_LIST_SAVE FIRMWARE(0x53570b3c)
@@ -61,15 +63,40 @@
 #define FW_ADJ_SLOT_TYPE FIRMWARE(0x531bd580)
 #define FW_ADJ_SNAPSHOT FIRMWARE(0x531bcdf0)
 /* The settings page: the MENU submenu kind table, the text IDs of Instant
-   Review, Display Time, and Zoom Review, and the row text setters. */
+   Review, of the five value pages and of the sixth row (a label of another
+   submenu), the row text setters, and the OK and MENU guides of a value
+   page. */
 #define FW_SUBMENU_KINDS FIRMWARE(0x53da6718)
 #define SETTINGS_TITLE_TEXT 0x204
-#define SETTINGS_ROW_TEXTS {0x206,0x208}
+#define SETTINGS_ROW_TEXTS {0x206,0x208,0x188,0x1a8,0x1ae,0x1ce}
+#define SELECT_GUIDE_OK_TEXT 0x338
+#define SELECT_GUIDE_BACK_TEXT 0x339
 #define FW_ROW_TEXT FIRMWARE(0x5357ade0)
+/* Options pages show checkboxes (runtime/menu_settings.h): the constructor of
+   SelectMenuController, the vtable and SetItem of CheckBoxListLineView, the
+   ScrollListView init, the radio dot of a SelectMenuLineView, and the checked
+   and unchecked images. */
+#define FW_SELECT_MENU_NEW FIRMWARE(0x531db284)
+#define CHECK_LINE_VTABLE FIRMWARE(0x53e99d60)
+#define FW_CHECK_ITEM FIRMWARE(0x53585030)
+#define FW_LIST_INIT FIRMWARE(0x5357094c)
+#define FW_ROW_DOT FIRMWARE(0x5357ad40)
+#define CHECK_IMAGE_ON 0xfeU
+#define CHECK_IMAGE_OFF 0xfdU
 #define FW_ROW_VALUE FIRMWARE(0x535831e8)
+/* The RAM table of the MENU tab descriptors, and the MENU row setters of
+   the label and of the value text. */
+#define FW_MENU_TABS FIRMWARE(0x55001e78)
+#define FW_MENU_ROW_LABEL FIRMWARE(0x5357a1c0)
+#define FW_MENU_ROW_VALUE FIRMWARE(0x5357a474)
 #define FW_ADJ_REFRESH FIRMWARE(0x531bf3c8)
 #define FW_ADJ_SELECT_SLOT FIRMWARE(0x531bf94c)
 #define FW_CHANGE_CONTROLLER FIRMWARE(0x53182e4c)
+/* The controller factory singleton, which holds one instance of each controller. */
+#define INFO_TITLE_TEXT 0x2ab
+#define INFO_LABEL_TEXTS {0x2ad,0x2af,0x2b1}
+#define FW_STRING_VIEW_SET_ASCII FIRMWARE(0x5356d1c8)
+#define FW_CONTROLLER_FACTORY FIRMWARE(0x53185f14)
 /* The UI language byte of the static settings object 0x55084dd8 (reader
    0x5329b068, +0x1497), with the GR III values. Not confirmed on a camera. */
 #define LANGUAGE_SETTING_BYTE (FIRMWARE(0x55084dd8) + 0x1497)
@@ -102,5 +129,29 @@
 #define FW_CACHE_FLUSH FIRMWARE(0x53a95804)
 #define FW_CLOCK FIRMWARE(0x538f21a0)
 #define FW_LOCAL_TIME FIRMWARE(0x538ea9b0)
+
+/* The UI service (runtime/ui.h): the view factory, the App task timers,
+   the message box, its progress bar, and the texts of its buttons. */
+#define FW_VIEW_FACTORY FIRMWARE(0x53589ee4)
+#define FW_TIMER_SERVICE FIRMWARE(0x5323ed18)
+#define FW_TIMER_START FIRMWARE(0x5325f59c)
+#define FW_TIMER_CANCEL FIRMWARE(0x5325f320)
+#define FW_MESSAGE_BACKGROUND FIRMWARE(0x53578bcc)
+#define FW_MESSAGE_SET FIRMWARE(0x53578c74)
+#define FW_MESSAGE_BUTTONS FIRMWARE(0x53578fc0)
+#define FW_MESSAGE_ENABLE_BUTTONS FIRMWARE(0x53579144)
+#define FW_MESSAGE_CURSOR FIRMWARE(0x5357903c)
+#define FW_MESSAGE_GET_CURSOR FIRMWARE(0x5357972c)
+#define FW_PROGRESS_PERCENT FIRMWARE(0x53576770)
+#define UI_EXECUTE_TEXT 0x2d8
+#define UI_CANCEL_TEXT 0x2d9
+/* The slider of ui_slider: the setters of a slider configuration (init,
+   range, and one flag) and its apply to a SliderView, and the icons that the
+   native sliders use. */
+#define FW_SLIDER_INIT FIRMWARE(0x5357b7d4)
+#define FW_SLIDER_RANGE FIRMWARE(0x5357b830)
+#define FW_SLIDER_FLAG FIRMWARE(0x5357b850)
+#define FW_SLIDER_APPLY FIRMWARE(0x5357b968)
+#define UI_SLIDER_ICONS {0x23a,0x4a,0xb9,0x248}
 
 #endif

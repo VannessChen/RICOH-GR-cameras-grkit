@@ -7,11 +7,15 @@ use serde_json::{json, Value};
 use crate::{camera::Camera, Files};
 
 pub use crate::abi::{
-    HEADER_REFERENCE, HOST_ACTIVE, HOST_COUNT, HOST_FRAME_RATIO, HOST_GUIDE,
-    HOST_HEADER_SIZE as HEADER_SIZE, HOST_PARAMETER_CHANGES, HOST_PLUGINS, HOST_RECORDS,
-    HOST_STAMP, PICTURE_SCRATCH, RECORD_CODE, RECORD_PARAMETERS, RECORD_SIZE, TAIL_SIZE,
+    HEADER_REFERENCE, HOST_ACTIVE, HOST_CAPABILITIES, HOST_COUNT, HOST_FRAME_RATIO,
+    HOST_HEADER_SIZE as HEADER_SIZE, HOST_RECORDS, HOST_STATE_CHANGES, PICTURE_SCRATCH,
+    RECORD_CODE, RECORD_PARAMETERS, RECORD_SIZE, TAIL_SIZE,
 };
-use crate::plugins;
+use crate::abi::{
+    HOST_PROCESSING_CALLS, HOST_PROFILE, MODULE_SLOTS, PROFILE, PROFILE_KINDS, PROFILE_MODULE_SIZE,
+    PROFILE_POINTS, PROFILE_SLOTS, PROFILE_SLOT_SIZE,
+};
+use crate::capabilities::{self, StateFile};
 
 /// The icon slot of GR III: an 8-byte native descriptor, then 40 x 40 RGBA.
 pub const ICON_STRIDE: usize = 6408;
@@ -32,47 +36,93 @@ pub fn icon_stride(target: &str) -> Result<usize> {
     }
 }
 pub const ICONS_PER_CHUNK: usize = 40;
-/// Off, GRKit, Version, then the tiles of each plugin (`plugins::TILES`).
-/// The menu addresses the Version icon and the plugin tiles by offset, so the
-/// host icons come first in chunk 0, and they must fit in it. The effect icons
-/// follow them.
-pub const HOST_ICON_COUNT: usize = 3 + plugins::TILES;
+/// The largest script array in words, which holds the modules.
+pub const MODULE_ARRAY_WORDS: usize = 65536;
+/// The most modules that GRKit lists at a start, from the package and from
+/// `GRKIT/MODULES` together. It lists the first ones in their default order.
+pub const MODULES_MAX: usize = 8;
+/// The most settings of all modules (`runtime/settings.h`).
+pub const MODULE_SETTINGS_MAX: usize = 160;
+/// The most values of a module setting.
+pub const MODULE_SETTING_VALUES: usize = 65536;
+/// The most values of a row of a native settings page (`SETTING_VALUES` in
+/// runtime/core.h): one for each module that the Modules page lists.
+pub const NATIVE_SETTING_VALUES: usize = 8;
+/// The most settings rows of a module page (`GRM_SETTING_ROWS`). A page has 0,
+/// or 2 to this many rows. The native settings page shows one row more
+/// (`SETTING_ROWS` in `runtime/core.h`): in MENU, the Enable row of the
+/// module comes first.
+pub const NATIVE_SETTING_ROWS: usize = 5;
+/// The most artwork tiles of all modules. The installer puts them in the
+/// icon chunks after the effect icons.
+pub const MODULE_TILES_MAX: usize = 64;
+/// Off, GRKit, Version, and Modules.
+/// The menu addresses the Version and Modules icons by their offset from the
+/// GRKit icon, so the host icons come first in chunk 0, and they must fit in
+/// it. The effect icons follow them.
+pub const HOST_ICON_COUNT: usize = 4;
 const _: () = assert!(HOST_ICON_COUNT <= ICONS_PER_CHUNK);
-/// Product limit for private Image Control effects.
-pub const MAX_COUNT: usize = 20;
+/// Product limit for private Image Control effects. Each effect takes a
+/// record of the registry array and an icon slot, about 10.5 KB of script
+/// memory. The registry holds only the header and the records, so 40
+/// records fit one array of 65536 words. The tail is an array of its own.
+pub const MAX_COUNT: usize = 40;
+/// The words of the tail array: the picture scratch, the menu text, and the
+/// live-view labels (`abi::TAIL_SIZE`).
+pub const TAIL_WORDS: usize = crate::abi::TAIL_SIZE / 4;
 // One script array holds the header, every record, the scratch, and the text: at most 65536 words.
-const _: () = assert!(HEADER_SIZE + MAX_COUNT * RECORD_SIZE + TAIL_SIZE <= 65536 * 4);
+const _: () = assert!(HEADER_SIZE + MAX_COUNT * RECORD_SIZE <= 65536 * 4);
+const _: () = assert!(TAIL_SIZE <= 65536 * 4);
 const _: () = assert!(PICTURE_SCRATCH.is_multiple_of(4) && TAIL_SIZE.is_multiple_of(4));
 /// One script array holds one icon chunk: 40 slots of at most 6412 bytes stay
 /// below 65536 words.
-pub const MAX_CHUNKS: usize = (MAX_COUNT + HOST_ICON_COUNT).div_ceil(ICONS_PER_CHUNK);
+pub const MAX_CHUNKS: usize =
+    (MAX_COUNT + HOST_ICON_COUNT + MODULE_TILES_MAX).div_ceil(ICONS_PER_CHUNK);
 /// The chunk addresses that the header holds (`GRKIT_HOST_ICON_CHUNKS`).
 pub const ICON_CHUNK_SLOTS: usize = 5;
 const _: () = assert!(MAX_CHUNKS <= ICON_CHUNK_SLOTS);
 const _: () = assert!(ICONS_PER_CHUNK * 6412 <= 65536 * 4);
-/// Selections kept across power-off, written by the resident loader through the
-/// camera's own file system, never from Linux while the camera may write photos.
-pub const STATE_FILE: &str = "STATE.TXT";
-/// The new state file before it replaces `STATE_FILE`.
-pub const STATE_TEMPORARY: &str = "STATE.TMP";
-/// The largest state file that the loader reads.
-pub const STATE_MAX_BYTES: usize = 1024;
+/// The data folder of GRKit on the card (`GRKIT`): the state files
+/// (`capabilities::StateFile`), `REPORT.TXT`, the effects library in
+/// `EFFECTS`, and the modules that a person adds in `MODULES`. No package
+/// holds it, so a copy of a new package, by replace or by merge, keeps it.
+/// The resident loader writes the state files through the camera's own file
+/// system, never from Linux while the camera may write photos.
+pub const DATA_FOLDER: &str = "C:\\GRKIT";
+/// The package folder on the card: the loader, the core, the package list,
+/// the package modules in `MODULES`, and the inbox of the package effects in
+/// `EFFECTS`, which SCAN copies into the effects library.
+pub const PACKAGE_FOLDER: &str = "SCRIPT/GRKIT";
+/// The largest main state file that INSTALL reads (`STATE_TEXT_MAX` in
+/// runtime/installer.c). It leaves room for keys of a later release.
+pub const STATE_MAX_BYTES: usize = 16384;
 /// The resident loader reads the selections at this interval. It writes the
 /// state file when two reads in a row agree, so a change reaches the card
 /// one to two intervals after the last change.
 pub const STATE_POLL_MS: u32 = 2000;
+/// In the development profile (runtime/profile.h), the resident loader
+/// writes the counts of the core to `PROFILE.LOG` in the data folder after
+/// this many polls, and clears them.
+pub const PROFILE_POLLS: u32 = 5;
 
-/// `STATE.TXT` keeps the state keys of the plugins (`plugins::state_keys`).
-/// The file holds two lines for each key: the key ID (`state_key_id`), then
-/// the value, both in decimal. A plugin that is not installed restores 0.
+/// A state file keeps the state keys of the capabilities
+/// (`capabilities::state_keys`) and the saved module settings.
+/// The file holds two lines for each key with a value other than 0: the key
+/// ID (`state_key_id`), then the value, both in decimal. A missing key and a
+/// module that is not installed restore 0.
 /// The most digits of a number in the state file. The loader parses the digits
 /// itself, and 9 digits cannot overflow its 32-bit integers.
 pub const STATE_DIGITS: usize = 9;
 
-/// The ID of a state key in the file: the CRC-32 of its name, modulo 10^9, so
-/// it has at most `STATE_DIGITS` digits.
+/// The ID of a state key in the file, as for a module setting
+/// (`grm::state_id`): the CRC-32 of its name, modulo 10^9, so it has at most
+/// `STATE_DIGITS` digits, out of the range of the Fn adjustments and not 0.
 pub fn state_key_id(name: &str) -> u32 {
-    crc32fast::hash(name.as_bytes()) % 1_000_000_000
+    let mut id = crc32fast::hash(name.as_bytes()) % 1_000_000_000;
+    if id >= PARAMETER_KEY_BASE {
+        id -= 10_000_000;
+    }
+    id.max(1)
 }
 
 /// The Fn adjustments of an effect are a state entry of their own: the key ID
@@ -85,7 +135,41 @@ pub const PARAMETER_VALUE_MAX: u32 = 387_420_488;
 /// The number of adjustments of an effect.
 pub const PARAMETER_COUNT: usize = 9;
 
-pub const LINUX_DIRECTORY: &str = "/media/storage1/SCRIPT/PLUGINS";
+/// The package folder on Linux: the installers, their scripts, the package
+/// files, and the files of each boot.
+pub const LINUX_DIRECTORY: &str = "/media/storage1/SCRIPT/GRKIT";
+/// `DATA_FOLDER` on Linux.
+pub const LINUX_DATA_DIRECTORY: &str = "/media/storage1/GRKIT";
+/// The folder of GRKit 1.2 and earlier on Linux: its state file and its
+/// effects. INSTALL reads them once, when `DATA_FOLDER` has no state file or
+/// no effects library.
+pub const LINUX_LEGACY_DIRECTORY: &str = "/media/storage1/SCRIPT/PLUGINS";
+
+/// The state keys of GRKit 1.2 and the keys that now hold the same values.
+/// The values keep their meaning, and the Fn adjustment entries keep their
+/// key IDs.
+pub const LEGACY_STATE_KEYS: [(&str, &str); 6] = [
+    ("image-control.effect", "CORE.TONE"),
+    ("framing.ratio", "CORE.ASPECT"),
+    ("guides.style", "GUIDES.STYLE"),
+    ("date-stamp.style", "DATE.STYLE"),
+    ("date-stamp.look", "DATE.LOOK"),
+    ("grain.level", "CORE.GRAIN"),
+];
+
+/// The ID of a GRKit 1.2 state key in its state file: the CRC-32 of its
+/// name, modulo 10^9.
+pub fn legacy_state_key_id(name: &str) -> u32 {
+    crc32fast::hash(name.as_bytes()) % 1_000_000_000
+}
+
+/// The pairs of (GRKit 1.2 key ID, current key ID) of `LEGACY_STATE_KEYS`.
+pub fn legacy_state_ids() -> Vec<(u32, u32)> {
+    LEGACY_STATE_KEYS
+        .iter()
+        .map(|(old, new)| (legacy_state_key_id(old), state_key_id(new)))
+        .collect()
+}
 
 pub fn layout(count: usize) -> Result<Value> {
     ensure!(count <= MAX_COUNT, "Expected 0..{MAX_COUNT} effects");
@@ -94,7 +178,7 @@ pub fn layout(count: usize) -> Result<Value> {
         .map(|start| ICONS_PER_CHUNK.min(count + HOST_ICON_COUNT - start) * ICON_STRIDE / 4)
         .collect();
     Ok(
-        json!({"words": (HEADER_SIZE + count * RECORD_SIZE + TAIL_SIZE) / 4, "icon_words": icon_words}),
+        json!({"words": (HEADER_SIZE + count * RECORD_SIZE) / 4, "tail_words": TAIL_WORDS, "icon_words": icon_words}),
     )
 }
 
@@ -136,13 +220,13 @@ pub fn loader() -> Vec<u8> {
 
 /// The loader for a target with `icon_stride`-byte icon slots.
 pub fn loader_for(icon_stride: usize) -> Vec<u8> {
-    let path = |name: &str| format!("C:\\SCRIPT\\PLUGINS\\{name}");
-    let (plan, done, failed) = (path("MODULE.BIN"), path("INSTALL.OK"), path("INSTALL.ERR"));
+    let path = core_path;
+    let (plan, done, failed) = (path("PLAN.BIN"), path("INSTALL.OK"), path("INSTALL.ERR"));
     // Wait for the host command tables of the RTOS before lcmd_resp.
     let mut lines: Vec<String> = vec!["mpause 2000".into(), "sendln 'lcmd_resp on'".into()];
     for name in [
-        "MODULE.BIN",
-        "MODULE.TMP",
+        "PLAN.BIN",
+        "PLAN.TMP",
         "INSTALL.OK",
         "INSTALL.ERR",
         "INSTALL.LCK",
@@ -168,7 +252,11 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         format!("fileopen fh '{plan}' 0"),
         "if fh < 0 goto reject".into(),
         "call readword".into(),
-        "if value != 827150919 goto reject_close".into(),
+        // The words of the plan header in order (`abi::PLAN_FIELDS`).
+        format!(
+            "if value != {} goto reject_close",
+            crate::abi::PLAN_MAGIC_VALUE
+        ),
         "call readword".into(),
         "count = value".into(),
         "if count < 0 goto reject_close".into(),
@@ -177,15 +265,25 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         "words = value".into(),
         "call readword".into(),
         "chunks = value".into(),
+        // The plan size, then the script words of the modules.
+        "call readword".into(),
+        "call readword".into(),
+        "modulewords = value".into(),
+        "if modulewords < 0 goto reject_close".into(),
+        format!("if modulewords > {MODULE_ARRAY_WORDS} goto reject_close"),
+        "call readword".into(),
+        "moduletiles = value".into(),
+        "if moduletiles < 0 goto reject_close".into(),
+        format!("if moduletiles > {MODULE_TILES_MAX} goto reject_close"),
         "fileclose fh".into(),
         format!(
             "expected = {} + count * {}",
-            (HEADER_SIZE + TAIL_SIZE) / 4,
+            HEADER_SIZE / 4,
             RECORD_SIZE / 4
         ),
         "if words != expected goto reject".into(),
         format!(
-            "expectedchunks = (count + {}) / {ICONS_PER_CHUNK}",
+            "expectedchunks = (count + moduletiles + {}) / {ICONS_PER_CHUNK}",
             HOST_ICON_COUNT + ICONS_PER_CHUNK - 1
         ),
         "if chunks != expectedchunks goto reject".into(),
@@ -195,7 +293,7 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         lines.extend([
             format!("if chunks <= {i} goto icons_ready"),
             format!(
-                "items = count + {HOST_ICON_COUNT} - {}",
+                "items = count + moduletiles + {HOST_ICON_COUNT} - {}",
                 i * ICONS_PER_CHUNK
             ),
             format!("if items > {ICONS_PER_CHUNK} items = {ICONS_PER_CHUNK}"),
@@ -205,6 +303,12 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
     }
     lines.extend([
         ":icons_ready".into(),
+        // The modules (runtime/module_link.h) follow the icon chunks.
+        "if modulewords <= 0 goto modules_ready".into(),
+        "intdim modulecode modulewords".into(),
+        ":modules_ready".into(),
+        // The tail: the picture scratch, the menu text, and the labels.
+        format!("intdim tailarea {TAIL_WORDS}"),
         // Not-ready attempts release the install lock. Retry every 0.5 s for about
         // 30 s, then every 10 s, so a later shooting-mode start can still install.
         "attempts = 0".into(),
@@ -220,6 +324,7 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         "goto install".into(),
     ]);
     lines.extend(state_script());
+    lines.extend(profile_script());
     lines.extend(
         [
             ":reject_close",
@@ -252,8 +357,6 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
 /// the arrays that the hooks use. So each array index is checked before use,
 /// and no expression divides by a value from the card or from the header.
 fn state_script() -> Vec<String> {
-    let state = format!("C:\\SCRIPT\\PLUGINS\\{STATE_FILE}");
-    let temporary = format!("C:\\SCRIPT\\PLUGINS\\{STATE_TEMPORARY}");
     let word = |offset: usize| format!("registry[{}]", offset / 4);
     let code_word = |index: &str| {
         format!(
@@ -279,102 +382,170 @@ fn state_script() -> Vec<String> {
         "if pcount < 0 pcount = 0".to_string(),
         format!("if pcount > {MAX_COUNT} pcount = 0"),
     ];
-    let state_keys = plugins::state_keys();
+    // The module settings (runtime/settings.h) in the `modulecode` array that
+    // the loader allocates for the modules: the count, or 0 if it is out of
+    // range for the array. Entry i has its ID at 2 + 3i, its value at 3 + 3i,
+    // and its number of values at 4 + 3i.
+    let module_count = [
+        "mcount = 0".to_string(),
+        "if modulewords < 2 goto module_count_end".into(),
+        "mcount = modulecode[0]".into(),
+        "mmax = (modulewords - 2) / 3".into(),
+        "if mcount < 0 mcount = 0".into(),
+        "if mcount > mmax mcount = 0".into(),
+        format!("if mcount > {MODULE_SETTINGS_MAX} mcount = 0"),
+        ":module_count_end".into(),
+    ];
+    let state_keys = capabilities::state_keys();
     let keys = state_keys.iter().enumerate();
-    let mut lines: Vec<String> = vec![":resident".into(), "call restore".into()];
 
-    // Save after a change, when two polls in a row read the same selections.
-    // A series of changes, such as Fn adjustments, then writes the card once
-    // after its last change. `filerename` cannot replace a file, and its
-    // result is 0 for success and failure, so each step checks the files. If
-    // power fails between the steps, the restore reads STATE.TMP.
-    lines.extend([
+    // INSTALL has restored the saved values (runtime/installer.c), so the
+    // values at the start are those of the file. The loader writes only after
+    // the next change: a value that the camera could not restore, such as
+    // the effect of a missing file, keeps its entry until then. Without a
+    // state file in the data folder, as at the first start after an update
+    // from GRKit 1.2, INSTALL restored the old file, and the loader saves at
+    // the first poll.
+    //
+    // The core counts each change of a saved selection in one header word
+    // (GRKIT_STATE_CHANGED), so each poll reads that word only: the
+    // interpreter spends thousands of instructions on each line, more with
+    // each variable of the script. The loader saves when two polls in a row
+    // read the same count and the file does not have it yet. A series of
+    // changes, such as Fn adjustments, then writes the card once after its
+    // last change.
+    let changes = word(HOST_STATE_CHANGES);
+    let mut lines: Vec<String> = vec![
+        ":resident".into(),
+        "stateok = 1".into(),
+        format!("foldersearch '{DATA_FOLDER}'"),
+        format!("if result = 0 foldercreate '{DATA_FOLDER}'"),
+        format!("foldersearch '{DATA_FOLDER}'"),
+        "if result = 0 stateok = 0".into(),
+        format!("changes = {changes}"),
+        "saved = changes".into(),
+        "last = changes".into(),
+        format!("filesearch '{}'", state_path(StateFile::Main, "TXT")),
+        "if result = 0 saved = changes - 1".into(),
+        // The development profile has its own loop, so the usual poll
+        // reads no other word.
+        format!("profile = {}", word(HOST_PROFILE)),
+        "if profile <> 0 goto profile_watch".into(),
         ":watch".into(),
         format!("mpause {STATE_POLL_MS}"),
-        "call snapshot".into(),
-        "call save".into(),
+        format!("changes = {changes}"),
+        "if changes <> last goto watch_moved".into(),
+        "if changes = saved goto watch".into(),
+        "stamp = changes".into(),
+    ];
+    for file in StateFile::ALL {
+        lines.push(format!("call save_{}", label(file)));
+    }
+    lines.extend([
         "goto watch".into(),
-        ":save".into(),
-        "stable = 1".into(),
+        ":watch_moved".into(),
+        "last = changes".into(),
+        "goto watch".into(),
     ]);
-    for (i, _) in keys.clone() {
+
+    // Save each file after a change of one of its keys. `filerename` cannot
+    // replace a file, and its result is 0 for success and failure, so each
+    // step checks the files. If power fails between the steps, the restore
+    // reads the temporary file. A key with the value 0 has no entry.
+    for file in StateFile::ALL {
+        let name = label(file);
+        let (state, temporary) = (state_path(file, "TXT"), state_path(file, "TMP"));
+        let main = file == StateFile::Main;
+        let end = format!("save_{name}_end");
+        let own: Vec<_> = keys.clone().filter(|(_, key)| key.file == file).collect();
         lines.extend([
-            format!("if value{i} <> last{i} stable = 0"),
-            format!("last{i} = value{i}"),
+            format!(":save_{name}"),
+            format!("if stateok = 0 goto {end}"),
+            "call snapshot".into(),
+            format!("filedelete '{temporary}'"),
+            format!("filecreate sfh '{temporary}'"),
+            format!("if sfh < 0 goto {end}"),
         ]);
-    }
-    lines.extend([
-        "if pchanges <> plast stable = 0".into(),
-        "plast = pchanges".into(),
-        "if stable = 0 goto save_end".into(),
-        "changed = 0".into(),
-    ]);
-    for (i, _) in keys.clone() {
-        lines.push(format!("if value{i} <> saved{i} changed = 1"));
-    }
-    lines.push("if pchanges <> psaved changed = 1".into());
-    lines.extend([
-        "if changed = 0 goto save_end".into(),
-        format!("filedelete '{temporary}'"),
-        format!("filecreate sfh '{temporary}'"),
-        "if sfh < 0 goto save_end".into(),
-    ]);
-    for (i, key) in keys.clone() {
+        for (i, key) in &own {
+            lines.extend([
+                format!("if value{i} = 0 goto save_key{i}"),
+                format!("filewriteln sfh '{}'", state_key_id(&key.name)),
+                format!("int2str line value{i}"),
+                "filewriteln sfh line".into(),
+                format!(":save_key{i}"),
+            ]);
+        }
+        if main {
+            // The adjustments of each effect that has a non-neutral one.
+            lines.extend(parameter_count.clone());
+            lines.extend([
+                "pindex = 0".into(),
+                ":save_parameters".into(),
+                "if pindex >= pcount goto save_parameters_end".into(),
+                format!("pw0 = {}", parameter_word("pindex", 0)),
+                format!("pw1 = {}", parameter_word("pindex", 1)),
+                format!("pw2 = {}", parameter_word("pindex", 2)),
+                "pvalue = 0".into(),
+            ]);
+            for digit in (0..PARAMETER_COUNT).rev() {
+                lines.extend([
+                    format!("pdigit = (pw{} >> {}) and 255", digit / 4, digit % 4 * 8),
+                    "if pdigit > 8 pdigit = 0".into(),
+                    "pvalue = pvalue * 9 + pdigit".into(),
+                ]);
+            }
+            lines.extend([
+                "if pvalue = 0 goto save_parameters_next".into(),
+                format!(
+                    "pkey = {PARAMETER_KEY_BASE} + ({} and 32767)",
+                    code_word("pindex")
+                ),
+                "int2str line pkey".into(),
+                "filewriteln sfh line".into(),
+                "int2str line pvalue".into(),
+                "filewriteln sfh line".into(),
+                ":save_parameters_next".into(),
+                "pindex = pindex + 1".into(),
+                "goto save_parameters".into(),
+                ":save_parameters_end".into(),
+            ]);
+            // The saved module settings that are not 0.
+            lines.extend(
+                module_count
+                    .iter()
+                    .map(|line| line.replace("module_count_end", "save_module_count_end")),
+            );
+            lines.extend([
+                "mindex = 0".into(),
+                ":save_modules".into(),
+                "if mindex >= mcount goto save_modules_end".into(),
+                "mid = modulecode[2 + mindex * 3]".into(),
+                "mvalue = modulecode[3 + mindex * 3]".into(),
+                "if mid <= 0 goto save_modules_next".into(),
+                "if mvalue <= 0 goto save_modules_next".into(),
+                "int2str line mid".into(),
+                "filewriteln sfh line".into(),
+                "int2str line mvalue".into(),
+                "filewriteln sfh line".into(),
+                ":save_modules_next".into(),
+                "mindex = mindex + 1".into(),
+                "goto save_modules".into(),
+                ":save_modules_end".into(),
+            ]);
+        }
         lines.extend([
-            format!("filewriteln sfh '{}'", state_key_id(&key.name)),
-            format!("int2str line value{i}"),
-            "filewriteln sfh line".into(),
+            "fileclose sfh".into(),
+            format!("filesearch '{temporary}'"),
+            format!("if result = 0 goto {end}"),
+            format!("filedelete '{state}'"),
+            format!("filesearch '{state}'"),
+            format!("if result != 0 goto {end}"),
+            format!("filerename '{temporary}' '{state}'"),
+            format!("filesearch '{state}'"),
+            format!("if result = 0 goto {end}"),
         ]);
+        lines.extend(["saved = stamp".into(), format!(":{end}"), "return".into()]);
     }
-    // The adjustments of each effect that has a non-neutral one.
-    lines.extend(parameter_count.clone());
-    lines.extend([
-        "pindex = 0".into(),
-        ":save_parameters".into(),
-        "if pindex >= pcount goto save_parameters_end".into(),
-        format!("pw0 = {}", parameter_word("pindex", 0)),
-        format!("pw1 = {}", parameter_word("pindex", 1)),
-        format!("pw2 = {}", parameter_word("pindex", 2)),
-        "pvalue = 0".into(),
-    ]);
-    for digit in (0..PARAMETER_COUNT).rev() {
-        lines.extend([
-            format!("pdigit = (pw{} >> {}) and 255", digit / 4, digit % 4 * 8),
-            "if pdigit > 8 pdigit = 0".into(),
-            "pvalue = pvalue * 9 + pdigit".into(),
-        ]);
-    }
-    lines.extend([
-        "if pvalue = 0 goto save_parameters_next".into(),
-        format!(
-            "pkey = {PARAMETER_KEY_BASE} + ({} and 32767)",
-            code_word("pindex")
-        ),
-        "int2str line pkey".into(),
-        "filewriteln sfh line".into(),
-        "int2str line pvalue".into(),
-        "filewriteln sfh line".into(),
-        ":save_parameters_next".into(),
-        "pindex = pindex + 1".into(),
-        "goto save_parameters".into(),
-        ":save_parameters_end".into(),
-    ]);
-    lines.extend([
-        "fileclose sfh".into(),
-        format!("filesearch '{temporary}'"),
-        "if result = 0 goto save_end".into(),
-        format!("filedelete '{state}'"),
-        format!("filesearch '{state}'"),
-        "if result != 0 goto save_end".into(),
-        format!("filerename '{temporary}' '{state}'"),
-        format!("filesearch '{state}'"),
-        "if result = 0 goto save_end".into(),
-    ]);
-    for (i, _) in keys.clone() {
-        lines.push(format!("saved{i} = value{i}"));
-    }
-    lines.push("psaved = pchanges".into());
-    lines.extend([":save_end".into(), "return".into()]);
 
     // The current selections. The effect is the ImageTone code of the active
     // record, or 0 for Off and for any pointer that is not a record.
@@ -398,188 +569,175 @@ fn state_script() -> Vec<String> {
             lines.push(format!("value{i} = {}", word(offset)));
         }
     }
-    // The menu counts each adjustment change.
-    lines.push(format!("pchanges = {}", word(HOST_PARAMETER_CHANGES)));
     lines.push("return".into());
 
-    // Restore. A missing, empty, or too large file restores nothing. `fileopen`
-    // creates a missing file, so the loader searches for it first.
-    //
-    // A read past the end of the file blocks the interpreter, and so does a
-    // `filereadln` of a last line without a newline. The loader therefore reads
-    // the file byte by byte, up to the size that `filestat` gives, and parses
-    // the decimal lines itself. CR and LF end a line. A line with another
-    // character, or with more than 9 digits, is invalid. Lines form key and
-    // value pairs. A pair with an invalid line, an unknown key, or an
-    // out-of-range value is skipped.
-    lines.push(":restore".into());
-    for (i, _) in keys.clone() {
-        lines.push(format!("stored{i} = 0"));
+    lines
+}
+
+/// The loader path of the profile file.
+fn profile_path() -> String {
+    format!("{DATA_FOLDER}\\PROFILE.LOG")
+}
+
+/// The development profile of the resident loader (runtime/profile.h). The
+/// watch loop of the profile saves the state as the usual one does, and after
+/// each `PROFILE_POLLS` polls appends a period to `PROFILE.LOG`: a line with
+/// its number and the live-view frames, then a line for each counter slot
+/// with calls: its name, the calls, the cycles, and the cycles of the largest
+/// call. The loader clears each slot that it writes. The module names come
+/// from the profile table, 8 ASCII bytes each.
+fn profile_script() -> Vec<String> {
+    let table = PROFILE / 4;
+    let path = profile_path();
+    let mut lines: Vec<String> = vec![
+        ":profile_watch".into(),
+        "ppolls = 0".into(),
+        "pperiod = 0".into(),
+        format!("pframes = registry[{}]", HOST_PROCESSING_CALLS / 4),
+    ];
+    // The module names: the bytes up to the first 0.
+    for module in 0..MODULE_SLOTS {
+        let base = table + module * PROFILE_MODULE_SIZE / 4 + 2;
+        let end = format!("profile_name{module}_end");
+        lines.push(format!("pname{module} = ''"));
+        for byte in 0..8 {
+            lines.extend([
+                format!(
+                    "pc = (tailarea[{}] >> {}) and 255",
+                    base + byte / 4,
+                    byte % 4 * 8
+                ),
+                format!("if pc = 0 goto {end}"),
+                "code2str ps pc".into(),
+                format!("strconcat pname{module} ps"),
+            ]);
+        }
+        lines.push(format!(":{end}"));
     }
-    lines.extend(parameter_count);
     lines.extend([
-        format!("statefile = '{state}'"),
-        "filesearch statefile".into(),
-        "if result != 0 goto restore_open".into(),
-        format!("statefile = '{temporary}'"),
-        "filesearch statefile".into(),
-        "if result = 0 goto restore_apply".into(),
-        ":restore_open".into(),
-        "size = 0".into(),
-        "filestat statefile size".into(),
-        "if size < 1 goto restore_apply".into(),
-        format!("if size > {STATE_MAX_BYTES} goto restore_apply"),
-        "fileopen sfh statefile 0".into(),
-        "if sfh < 0 goto restore_apply".into(),
-        "position = 0".into(),
-        "ended = 0".into(),
-        "expecting = 0".into(),
-        "key = 0".into(),
-        "keyinvalid = 0".into(),
-        "token = 0".into(),
-        "digits = 0".into(),
-        "invalid = 0".into(),
-        ":restore_byte".into(),
-        "if position >= size goto restore_last".into(),
-        "fileread sfh 1 octet".into(),
-        "if result != 0 goto restore_close".into(),
-        "position = position + 1".into(),
-        "str2code character octet".into(),
-        "if character = 13 goto restore_token".into(),
-        "if character = 10 goto restore_token".into(),
-        "if character < 48 invalid = 1".into(),
-        "if character > 57 invalid = 1".into(),
-        format!("if digits >= {STATE_DIGITS} invalid = 1"),
-        "if invalid = 1 goto restore_byte".into(),
-        "token = token * 10 + character - 48".into(),
-        "digits = digits + 1".into(),
-        "goto restore_byte".into(),
-        ":restore_last".into(),
-        "ended = 1".into(),
-        // A line ends. Empty lines, as between CR and LF, are not tokens.
-        ":restore_token".into(),
-        "filled = digits + invalid".into(),
-        "if filled = 0 goto restore_continue".into(),
-        "if expecting = 1 goto restore_value".into(),
-        "key = token".into(),
-        "keyinvalid = invalid".into(),
-        "expecting = 1".into(),
-        "goto restore_reset".into(),
-        ":restore_value".into(),
-        "expecting = 0".into(),
-        "bad = keyinvalid + invalid".into(),
-        "if bad != 0 goto restore_reset".into(),
+        // A new file, or the end of the file of an earlier start.
+        format!("filesearch '{path}'"),
+        "if result != 0 goto profile_append".into(),
+        format!("filecreate pfh '{path}'"),
+        "goto profile_opened".into(),
+        ":profile_append".into(),
+        format!("fileopen pfh '{path}' 1"),
+        ":profile_opened".into(),
+        "if pfh < 0 goto profile_poll".into(),
+        "filewriteln pfh 'GRKit profile: for each period, the live-view frames; for each point, calls, CPU cycles, and the cycles of the largest call'".into(),
+        "fileclose pfh".into(),
+        ":profile_poll".into(),
+        format!("mpause {STATE_POLL_MS}"),
+        "ppolls = ppolls + 1".into(),
+        format!("if ppolls >= {PROFILE_POLLS} call profile_write"),
+        format!("changes = registry[{}]", HOST_STATE_CHANGES / 4),
+        "if changes <> last goto profile_moved".into(),
+        "if changes = saved goto profile_poll".into(),
+        "stamp = changes".into(),
     ]);
-    for (i, key) in keys.clone() {
-        lines.push(format!(
-            "if key = {} goto restore_key{i}",
-            state_key_id(&key.name)
-        ));
+    for file in StateFile::ALL {
+        lines.push(format!("call save_{}", label(file)));
     }
-    // An adjustment entry applies to each installed effect with its code. An
-    // effect that is not installed keeps nothing.
     lines.extend([
-        format!("if key < {PARAMETER_KEY_BASE} goto restore_reset"),
-        format!("if key > {} goto restore_reset", PARAMETER_KEY_BASE + 32767),
-        format!("if token > {PARAMETER_VALUE_MAX} goto restore_reset"),
-        format!("pcode = key - {PARAMETER_KEY_BASE}"),
-        "pindex = 0".into(),
-        ":restore_parameters".into(),
-        "if pindex >= pcount goto restore_reset".into(),
-        format!("pkey = {} and 32767", code_word("pindex")),
-        "if pkey != pcode goto restore_parameters_next".into(),
-        "pvalue = token".into(),
+        "goto profile_poll".into(),
+        ":profile_moved".into(),
+        "last = changes".into(),
+        "goto profile_poll".into(),
+        ":profile_write".into(),
+        "ppolls = 0".into(),
+        "pperiod = pperiod + 1".into(),
+        format!("pf = registry[{}]", HOST_PROCESSING_CALLS / 4),
+        "pframe = pf - pframes".into(),
+        "pframes = pf".into(),
+        format!("fileopen pfh '{path}' 1"),
+        "if pfh < 0 goto profile_write_end".into(),
+        "filewrite pfh 'period '".into(),
+        "int2str ps pperiod".into(),
+        "filewrite pfh ps".into(),
+        "filewrite pfh ' frames '".into(),
+        "int2str ps pframe".into(),
+        "filewriteln pfh ps".into(),
     ]);
-    for digit in 0..PARAMETER_COUNT {
+    let mut slot_lines = |slot: usize, name: Vec<String>| {
+        let at = table + (PROFILE_SLOTS + slot * PROFILE_SLOT_SIZE) / 4;
+        let end = format!("profile_slot{slot}");
         lines.extend([
-            format!("pd{digit} = pvalue % 9"),
-            "pvalue = pvalue / 9".into(),
+            format!("pc = tailarea[{at}]"),
+            format!("if pc = 0 goto {end}"),
+            format!("pcy = tailarea[{}]", at + 1),
+            format!("pmx = tailarea[{}]", at + 2),
+            format!("tailarea[{at}] = 0"),
+            format!("tailarea[{}] = 0", at + 1),
+            format!("tailarea[{}] = 0", at + 2),
         ]);
+        lines.extend(name);
+        for (value, last) in [("pc", false), ("pcy", false), ("pmx", true)] {
+            lines.push(format!("int2str ps {value}"));
+            lines.push("filewrite pfh ps".into());
+            lines.push(if last {
+                "filewriteln pfh ''".into()
+            } else {
+                "filewrite pfh ' '".into()
+            });
+        }
+        lines.push(format!(":{end}"));
+    };
+    for (slot, (name, _)) in PROFILE_POINTS.iter().enumerate() {
+        slot_lines(slot, vec![format!("filewrite pfh '{name} '")]);
     }
-    lines.extend([
-        format!(
-            "{} = pd0 + pd1 * 256 + pd2 * 65536 + pd3 * 16777216",
-            parameter_word("pindex", 0)
-        ),
-        format!(
-            "{} = pd4 + pd5 * 256 + pd6 * 65536 + pd7 * 16777216",
-            parameter_word("pindex", 1)
-        ),
-        // Bytes after the ninth adjustment are not part of the record fields.
-        format!("pw2 = {} >> 8", parameter_word("pindex", 2)),
-        format!("{} = pw2 * 256 + pd8", parameter_word("pindex", 2)),
-        ":restore_parameters_next".into(),
-        "pindex = pindex + 1".into(),
-        "goto restore_parameters".into(),
-    ]);
-    for (i, key) in keys.clone() {
-        lines.extend([
-            format!(":restore_key{i}"),
-            format!("if token > {} goto restore_reset", key.max),
-            format!("stored{i} = token"),
-            "goto restore_reset".into(),
-        ]);
-    }
-    lines.extend([
-        ":restore_reset".into(),
-        "token = 0".into(),
-        "digits = 0".into(),
-        "invalid = 0".into(),
-        ":restore_continue".into(),
-        "if ended = 0 goto restore_byte".into(),
-    ]);
-    lines.extend([
-        ":restore_close".into(),
-        "fileclose sfh".into(),
-        ":restore_apply".into(),
-        // A plugin that is not installed has no menu to turn it off, so it
-        // restores 0.
-        format!("plugins = {}", word(HOST_PLUGINS)),
-    ]);
-    for (i, key) in keys.clone() {
-        lines.extend([
-            format!("bit = (plugins >> {}) and 1", key.plugin),
-            format!("if bit = 0 stored{i} = 0"),
-        ]);
-        if let Some(offset) = key.word {
-            lines.push(format!("{} = stored{i}", word(offset)));
+    for module in 0..MODULE_SLOTS {
+        for (kind, (name, _)) in PROFILE_KINDS.iter().enumerate() {
+            let slot = PROFILE_POINTS.len() + module * PROFILE_KINDS.len() + kind;
+            slot_lines(
+                slot,
+                vec![
+                    format!("filewrite pfh pname{module}"),
+                    format!("filewrite pfh ' {name} '"),
+                ],
+            );
         }
     }
-    // An effect that is no longer installed stays Off.
     lines.extend([
-        format!("count = {}", word(HOST_COUNT)),
-        format!("if count > {MAX_COUNT} count = 0"),
-        "index = 0".into(),
-        ":restore_find".into(),
-        "if stored0 = 0 goto restore_end".into(),
-        "if index >= count goto restore_end".into(),
-        format!("code = {} and 65535", code_word("index")),
-        "if code != stored0 goto restore_next".into(),
-        format!(
-            "{} = {} + index * {RECORD_SIZE}",
-            word(HOST_ACTIVE),
-            word(HOST_RECORDS)
-        ),
-        "goto restore_end".into(),
-        ":restore_next".into(),
-        "index = index + 1".into(),
-        "goto restore_find".into(),
-        // Write only after the next change, so a missing effect keeps its file
-        // entry until the user selects something else.
-        ":restore_end".into(),
-        "call snapshot".into(),
-        "psaved = pchanges".into(),
-        "plast = pchanges".into(),
+        "fileclose pfh".into(),
+        ":profile_write_end".into(),
+        "return".into(),
     ]);
-    // `save` reads `last` and `saved`: an unset variable is a runtime error.
-    for (i, _) in keys {
-        lines.extend([
-            format!("saved{i} = value{i}"),
-            format!("last{i} = value{i}"),
-        ]);
-    }
-    lines.push("return".into());
     lines
+}
+
+/// The label stem of a state file in the loader.
+fn label(file: StateFile) -> String {
+    file.stem().to_ascii_lowercase()
+}
+
+/// The loader path of a state file with the extension `extension`.
+fn state_path(file: StateFile, extension: &str) -> String {
+    format!("{DATA_FOLDER}\\{}.{extension}", file.stem())
+}
+
+/// The loader path of a file of the package folder, `SCRIPT\GRKIT`.
+fn core_path(name: &str) -> String {
+    format!("C:\\SCRIPT\\GRKIT\\{name}")
+}
+
+/// The size of the largest file that the loader writes for `file`: each key
+/// at its largest value, and for the main file, an adjustment entry for each
+/// effect. Each line ends with CR LF.
+pub fn worst_state_size(file: StateFile) -> usize {
+    let line = |value: u32| value.to_string().len() + 2;
+    let keys: usize = capabilities::state_keys()
+        .iter()
+        .filter(|key| key.file == file)
+        .map(|key| line(state_key_id(&key.name)) + line(key.max))
+        .sum();
+    let parameters = match file {
+        StateFile::Main => {
+            MAX_COUNT * (line(PARAMETER_KEY_BASE + 32767) + line(PARAMETER_VALUE_MAX))
+                + MODULE_SETTINGS_MAX
+                    * (line(PARAMETER_KEY_BASE - 1) + line(MODULE_SETTING_VALUES as u32 - 1))
+        }
+    };
+    keys + parameters
 }
 
 pub fn runtime_files(binary: &[u8]) -> Files {
@@ -591,37 +749,56 @@ pub fn runtime_files_for(binary: &[u8], icon_stride: usize) -> Files {
     package_runtime_files(&[binary], icon_stride)
 }
 
-/// The most installers that a package holds: `INSTALL.BIN`, then
-/// `INSTALL2.BIN` to `INSTALL9.BIN`, so each name stays 8.3.
-pub const MAX_INSTALLERS: usize = 9;
+/// The exit statuses of a core file that the package scripts test
+/// (`runtime/install_status.h`): the core does not relocate to the running
+/// build, or (`--known`) does not name it.
+pub const STATUS_RELOCATION: u32 = 47;
+pub const STATUS_OTHER_BUILD: u32 = 48;
 
-/// The path of installer `index` in the runtime files.
-pub fn installer_path(index: usize) -> String {
-    match index {
-        0 => "SCRIPT/PLUGINS/INSTALL.BIN".into(),
-        _ => format!("SCRIPT/PLUGINS/INSTALL{}.BIN", index + 1),
+/// The core file of a runtime build: the core of one firmware build and its
+/// installer, which SCAN.SH and INSTALL.SH run.
+pub const CORE_FILE: &str = "SCRIPT/GRKIT/CORE.BIN";
+
+/// The most core files that a package holds: `CORE1.BIN` to `CORE9.BIN`, so
+/// each name stays 8.3.
+pub const MAX_CORE_FILES: usize = 9;
+
+/// The path of core file `index` of `count` in a package: `CORE.BIN` for one
+/// build, else `CORE1.BIN` and on, in release order.
+pub fn core_path_of(index: usize, count: usize) -> String {
+    if count == 1 {
+        CORE_FILE.to_owned()
+    } else {
+        format!("{PACKAGE_FOLDER}/CORE{}.BIN", index + 1)
     }
 }
 
-/// The runtime files of a package with the installer of each runtime build of
+/// The runtime files of a package with the core file of each runtime build of
 /// a camera, in release order, for `icon_stride`-byte icon slots. The builds of
-/// a camera have the same scripts and plan, so the first installer scans.
+/// a camera have the same scripts and plan, so the first core file scans.
 ///
-/// With one installer, `INSTALL.SH` runs `--install`. With more, it runs each
-/// installer with `--known` first, which reads one word to find the build. If
-/// no installer names the build, it tries each one with `--try`, which runs the
-/// relocation, and the last one with `--install`, which writes `INSTALL.ERR`
-/// if it also fails. A known build thus installs without a relocation of
+/// With one core file, `INSTALL.SH` runs it with `--install`. With more, it
+/// runs each with `--known` first, which reads one word to find the build. If
+/// no core file names the build, it tries each one with `--try`, which runs
+/// the relocation, and the last one with `--install`, which writes
+/// `INSTALL.ERR` if it also fails. A known build thus installs without a relocation of
 /// another build, and an unknown build still gets each runtime.
 ///
 /// After Linux deletes a file in the folder, the camera does not find the next
 /// new name that it looks up there, and it keeps that miss. So `SCAN.SH`, the
-/// first script of a power-on, looks up each installer before it scans.
+/// first script of a power-on, looks up each core file before it scans.
 pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
-    assert!((1..=MAX_INSTALLERS).contains(&binaries.len()));
-    let target = "C:\\SCRIPT\\PLUGINS\\PLUGINS.TTL";
+    let count = binaries.len();
+    assert!((1..=MAX_CORE_FILES).contains(&count));
+    let target = core_path("LOADER.TTL");
     let startup = format!("filesearch '{target}'\r\nif result = 0 goto done\r\ninclude '{target}'\r\n:done\r\nend\r\n");
-    let name = |index: usize| installer_path(index).rsplit('/').next().unwrap().to_owned();
+    let name = |index: usize| {
+        core_path_of(index, count)
+            .rsplit('/')
+            .next()
+            .unwrap()
+            .to_owned()
+    };
     // Each script body sets `status` to the exit status of the installer.
     let wrapper = |body: String, mode: &str| {
         format!(
@@ -632,46 +809,51 @@ pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
     };
     let single = |mode: &str| format!("{LINUX_DIRECTORY}/{} --{mode}\nstatus=$?\n", name(0));
     let names = |range: std::ops::Range<usize>| range.map(name).collect::<Vec<_>>().join(" ");
-    let (scan, install) = match binaries.len() {
+    let (scan, install) = match count {
         1 => (single("scan"), single("install")),
         count => (
             format!(
-                "for installer in {}; do [ -e {LINUX_DIRECTORY}/$installer ]; done\n{}",
+                "for core in {}; do [ -e {LINUX_DIRECTORY}/$core ]; done\n{}",
                 names(1..count),
                 single("scan")
             ),
             format!(
-                "for installer in {all}; do\n\
-                 \x20 {LINUX_DIRECTORY}/$installer --known\n\
+                "for core in {all}; do\n\
+                 \x20 {LINUX_DIRECTORY}/$core --known\n\
                  \x20 status=$?\n\
-                 \x20 case $status in 48) ;; *) break ;; esac\n\
+                 \x20 case $status in {other}) ;; *) break ;; esac\n\
                  done\n\
-                 case $status in 48)\n\
-                 \x20 for installer in {tried}; do\n\
-                 \x20   {LINUX_DIRECTORY}/$installer --try\n\
+                 case $status in {other})\n\
+                 \x20 for core in {tried}; do\n\
+                 \x20   {LINUX_DIRECTORY}/$core --try\n\
                  \x20   status=$?\n\
-                 \x20   case $status in 47) ;; *) break ;; esac\n\
+                 \x20   case $status in {relocation}) ;; *) break ;; esac\n\
                  \x20 done\n\
-                 \x20 case $status in 47) {LINUX_DIRECTORY}/{last} --install; status=$? ;; esac\n\
+                 \x20 case $status in {relocation}) {LINUX_DIRECTORY}/{last} --install; status=$? ;; esac\n\
                  \x20 ;;\n\
                  esac\n",
                 all = names(0..count),
                 tried = names(0..count - 1),
                 last = name(count - 1),
+                other = STATUS_OTHER_BUILD,
+                relocation = STATUS_RELOCATION,
             ),
         ),
     };
     let mut files = Files::from([
         ("SCRIPT/STARTUP.TTL".into(), startup.into_bytes()),
-        ("SCRIPT/PLUGINS/PLUGINS.TTL".into(), loader_for(icon_stride)),
-        ("SCRIPT/PLUGINS/SCAN.SH".into(), wrapper(scan, "scan")),
         (
-            "SCRIPT/PLUGINS/INSTALL.SH".into(),
+            format!("{PACKAGE_FOLDER}/LOADER.TTL"),
+            loader_for(icon_stride),
+        ),
+        (format!("{PACKAGE_FOLDER}/SCAN.SH"), wrapper(scan, "scan")),
+        (
+            format!("{PACKAGE_FOLDER}/INSTALL.SH"),
             wrapper(install, "install"),
         ),
     ]);
     for (index, binary) in binaries.iter().enumerate() {
-        files.insert(installer_path(index), binary.to_vec());
+        files.insert(core_path_of(index, count), binary.to_vec());
     }
     files
 }
@@ -682,7 +864,7 @@ mod tests {
 
     #[test]
     fn state_keys_have_distinct_positive_ids() {
-        let keys = plugins::state_keys();
+        let keys = capabilities::state_keys();
         let mut ids: Vec<_> = keys.iter().map(|key| state_key_id(&key.name)).collect();
         assert!(ids
             .iter()
@@ -690,11 +872,42 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), keys.len());
-        // The loader handles the Image Control effect, the one key without a
+        // The loader handles the effect of CORE.TONE, the one key without a
         // header word, as value 0.
-        assert_eq!(keys[0].name, "image-control.effect");
+        assert_eq!(keys[0].name, "CORE.TONE");
         assert!(keys[0].word.is_none());
         assert!(keys[1..].iter().all(|key| key.word.is_some()));
+    }
+
+    #[test]
+    fn legacy_state_keys_map_to_the_current_keys() {
+        let ids = legacy_state_ids();
+        let mut old: Vec<_> = ids.iter().map(|(old, _)| *old).collect();
+        old.sort_unstable();
+        old.dedup();
+        assert_eq!(old.len(), LEGACY_STATE_KEYS.len());
+        // An old key is neither an Fn adjustment entry nor 0.
+        assert!(old
+            .iter()
+            .all(|id| *id > 0 && !(PARAMETER_KEY_BASE..=PARAMETER_KEY_BASE + 32767).contains(id)));
+        // The key IDs in the state files of GRKit 1.2.
+        assert_eq!(
+            old,
+            [161811731, 495043802, 541741532, 684634731, 733922165, 957718554]
+        );
+        // Each target is a capability or a setting of an official module.
+        let capabilities: Vec<_> = capabilities::state_keys()
+            .iter()
+            .map(|key| state_key_id(&key.name))
+            .collect();
+        let modules = [
+            crate::grm::state_id("GUIDES", "STYLE"),
+            crate::grm::state_id("DATE", "STYLE"),
+            crate::grm::state_id("DATE", "LOOK"),
+        ];
+        for (_, new) in &ids {
+            assert!(capabilities.contains(new) || modules.contains(new));
+        }
     }
 
     /// A runtime error ends the script and frees the arrays, so the resident
@@ -742,15 +955,16 @@ mod tests {
         assert!(!script.contains("filereadln"));
         // Each computed record index is below `count`, which is at most MAX_COUNT.
         assert!(script.contains(&format!("if count > {MAX_COUNT} goto snapshot_values")));
-        assert!(script.contains(&format!("if count > {MAX_COUNT} count = 0")));
         assert!(script.contains("if pcount < 0 pcount = 0"));
         assert!(script.contains(&format!("if pcount > {MAX_COUNT} pcount = 0")));
-        assert_eq!(script.matches("if pindex >= pcount goto").count(), 2);
+        assert_eq!(script.matches("if pindex >= pcount goto").count(), 1);
     }
 
-    /// A series of changes writes the card once: `save` writes only when two
-    /// polls in a row read the same selections. Restore sets each variable
-    /// that `save` reads, because an unset variable is a runtime error.
+    /// A series of changes writes the card once: each poll reads only the
+    /// change count of the core, and the watch loop calls the saves only when
+    /// two polls in a row read the same count and the file does not have it.
+    /// The start sets each variable that the loop reads, because an unset
+    /// variable is a runtime error.
     #[test]
     fn the_resident_script_saves_after_the_selections_settle() {
         let script = state_script();
@@ -760,31 +974,37 @@ mod tests {
                 .position(|l| l == line)
                 .unwrap_or_else(|| panic!("{line}"))
         };
-        let save = at(":save");
-        let settle = at("if stable = 0 goto save_end");
-        let write = at("filecreate sfh 'C:\\SCRIPT\\PLUGINS\\STATE.TMP'");
-        assert!(save < settle && settle < at("changed = 0") && settle < write);
-        assert!(at(&format!("mpause {STATE_POLL_MS}")) < save);
-        let restored = at(":restore_end");
-        let mut read = vec!["plast".to_string()];
-        read.extend((0..plugins::state_keys().len()).map(|i| format!("last{i}")));
-        for name in read {
-            let compare = script[save..settle]
-                .iter()
-                .position(|l| l.contains(&format!("<> {name} ")))
-                .unwrap_or_else(|| panic!("{name}"));
-            assert!(script[save..save + compare]
-                .iter()
-                .all(|l| !l.starts_with(&format!("{name} ="))));
-            assert!(script[restored..]
+        let read = format!("changes = registry[{}]", HOST_STATE_CHANGES / 4);
+        let (start, watch) = (at(":resident"), at(":watch"));
+        let poll = at(&format!("mpause {STATE_POLL_MS}"));
+        assert_eq!(script[poll + 1], read);
+        let moved = at("if changes <> last goto watch_moved");
+        let settled = at("if changes = saved goto watch");
+        assert!(watch < poll && poll < moved && moved < settled);
+        assert_eq!(script[settled + 1], "stamp = changes");
+        for file in StateFile::ALL {
+            assert!(settled < at(&format!("call save_{}", label(file))));
+        }
+        // An idle poll runs four lines: the pause, the read, two compares.
+        assert_eq!(settled - poll + 1, 4);
+        assert_eq!(script[at(":watch_moved") + 1], "last = changes");
+        for name in ["last", "saved"] {
+            assert!(script[start..watch]
                 .iter()
                 .any(|l| l.starts_with(&format!("{name} ="))));
         }
+        assert!(script[start..watch].contains(&read));
+        // A save reads the selections, and records the count that it saved.
+        for file in StateFile::ALL {
+            let save = at(&format!(":save_{}", label(file)));
+            assert_eq!(script[save + 2], "call snapshot");
+        }
+        assert!(script.iter().any(|l| l == "saved = stamp"));
     }
 
     #[test]
     fn adjustment_entries_fit_the_state_file() {
-        // Nine base-9 digits, and keys of at most nine digits that no plugin
+        // Nine base-9 digits, and keys of at most nine digits that no other
         // key uses.
         assert_eq!(PARAMETER_VALUE_MAX, 9u32.pow(PARAMETER_COUNT as u32) - 1);
         assert_eq!(
@@ -797,12 +1017,154 @@ mod tests {
         );
         let last = PARAMETER_KEY_BASE + 32767;
         assert!(last.to_string().len() <= STATE_DIGITS);
-        assert!(plugins::state_keys().iter().all(|key| {
+        assert!(capabilities::state_keys().iter().all(|key| {
             let id = state_key_id(&key.name);
             !(PARAMETER_KEY_BASE..=last).contains(&id)
         }));
-        // Each key and value line, with CR LF, for every effect and plugin key.
+        // Each key and value line, with CR LF, for every effect, capability key,
+        // and module setting.
         let line = STATE_DIGITS + 2;
-        assert!(2 * line * (MAX_COUNT + plugins::state_keys().len()) <= STATE_MAX_BYTES);
+        assert!(
+            worst_state_size(StateFile::Main)
+                <= 2 * line * (MAX_COUNT + capabilities::state_keys().len() + MODULE_SETTINGS_MAX)
+        );
+        // Module setting IDs stay below the adjustment entries, and values
+        // fit the digits that the loader parses.
+        assert!(((MODULE_SETTING_VALUES - 1).to_string().len()) <= STATE_DIGITS);
+        assert!(crate::grm::state_id("GUIDES", "STYLE") < PARAMETER_KEY_BASE);
+    }
+
+    /// The installer, the module SDK, and the menu agree on the values of a
+    /// native settings row.
+    #[test]
+    fn native_setting_rows_have_one_value_limit() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime");
+        for (file, name) in [
+            ("module_link.h", "GRM_SETTING_ROW_VALUES"),
+            ("sdk/grkit.h", "GRKIT_SETTING_ROW_VALUES"),
+            ("core.h", "SETTING_VALUES"),
+        ] {
+            let text = std::fs::read_to_string(root.join(file)).unwrap();
+            let value = text
+                .lines()
+                .find_map(|line| line.strip_prefix(&format!("#define {name} ")))
+                .and_then(|value| value.trim_end_matches('U').parse::<usize>().ok());
+            assert_eq!(value, Some(NATIVE_SETTING_VALUES), "{file}");
+        }
+        for (file, name, rows) in [
+            ("module_link.h", "GRM_SETTING_ROWS", NATIVE_SETTING_ROWS),
+            ("sdk/grkit.h", "GRKIT_SETTING_ROWS", NATIVE_SETTING_ROWS),
+            ("core.h", "SETTING_ROWS", NATIVE_SETTING_ROWS + 1),
+        ] {
+            let text = std::fs::read_to_string(root.join(file)).unwrap();
+            let value = text
+                .lines()
+                .find_map(|line| line.strip_prefix(&format!("#define {name} ")))
+                .and_then(|value| value.trim_end_matches('U').parse::<usize>().ok());
+            assert_eq!(value, Some(rows), "{file}");
+        }
+    }
+
+    /// INSTALL reads the largest file that the loader writes: its bytes and
+    /// its pairs (runtime/state.h).
+    #[test]
+    fn the_read_limit_covers_the_largest_state_file() {
+        for file in StateFile::ALL {
+            assert!(worst_state_size(file) <= STATE_MAX_BYTES, "{file:?}");
+        }
+        let header = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/state.h"),
+        )
+        .unwrap();
+        let pairs: usize = header
+            .lines()
+            .find_map(|line| line.strip_prefix("#define STATE_PAIRS "))
+            .and_then(|value| value.trim_end_matches('U').parse().ok())
+            .unwrap();
+        assert!(MAX_COUNT + capabilities::state_keys().len() + MODULE_SETTINGS_MAX <= pairs);
+    }
+
+    fn at(script: &[String], line: &str) -> usize {
+        script
+            .iter()
+            .position(|l| l == line)
+            .unwrap_or_else(|| panic!("{line}"))
+    }
+
+    /// The state files are in the data folder, which holds the loader. Without
+    /// the folder, no save writes.
+    #[test]
+    fn the_loader_saves_in_the_data_folder() {
+        let script = state_script();
+        let check = at(&script, "if result = 0 stateok = 0");
+        assert_eq!(script[check - 1], "foldersearch 'C:\\GRKIT'");
+        assert!(check < at(&script, ":watch"));
+        for file in StateFile::ALL {
+            let save = at(&script, &format!(":save_{}", label(file)));
+            assert_eq!(
+                script[save + 1],
+                format!("if stateok = 0 goto save_{}_end", label(file))
+            );
+        }
+        let writes: Vec<_> = script
+            .iter()
+            .filter(|l| l.starts_with("filecreate") || l.starts_with("filerename"))
+            .collect();
+        assert_eq!(writes.len(), 2 * StateFile::ALL.len());
+        assert!(
+            writes.iter().all(|l| l.contains("C:\\GRKIT\\")),
+            "{writes:?}"
+        );
+    }
+
+    /// INSTALL restores the state before the hooks start (runtime/state.h),
+    /// so the loader only writes the file. Its start is the restored values.
+    #[test]
+    fn the_loader_reads_no_state_file() {
+        let script = loader();
+        let script = String::from_utf8_lossy(&script);
+        let opens: Vec<_> = script
+            .lines()
+            .filter(|l| l.starts_with("fileopen"))
+            .collect();
+        // The plan, and the profile file, which the loader appends to.
+        assert!(
+            opens
+                .iter()
+                .all(|l| l.contains("PLAN.BIN") || l.ends_with("PROFILE.LOG' 1")),
+            "{opens:?}"
+        );
+        assert!(!script.contains("SCRIPT\\PLUGINS"));
+        let state = state_script();
+        let start = at(&state, "saved = changes");
+        assert!(start < at(&state, ":watch"));
+    }
+
+    /// INSTALL restores the state of GRKit 1.2 when the data folder has no
+    /// state file, so the loader then saves at the first poll.
+    #[test]
+    fn the_loader_saves_at_once_without_a_state_file() {
+        let state = state_script();
+        let force = at(&state, "if result = 0 saved = changes - 1");
+        assert_eq!(state[force - 1], "filesearch 'C:\\GRKIT\\STATE.TXT'");
+        assert!(at(&state, "saved = changes") < force);
+        assert!(force < at(&state, ":watch"));
+    }
+
+    /// A key with the value 0 has no entry, because a missing key restores 0.
+    #[test]
+    fn the_loader_writes_only_keys_with_a_value() {
+        let script = state_script();
+        for (i, key) in capabilities::state_keys().iter().enumerate() {
+            let write = at(
+                &script,
+                &format!("filewriteln sfh '{}'", state_key_id(&key.name)),
+            );
+            assert_eq!(
+                script[write - 1],
+                format!("if value{i} = 0 goto save_key{i}")
+            );
+            assert_eq!(script[write + 3], format!(":save_key{i}"));
+        }
     }
 }

@@ -17,6 +17,4 @@ clap.workspace = true
 grkit-core.workspace = true
 grkit-build.workspace = true
 serde_json.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true

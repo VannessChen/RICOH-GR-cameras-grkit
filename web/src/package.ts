@@ -1,4 +1,4 @@
-import { effectUrl, siteUrl, type Effect } from './catalog';
+import { effectUrl, siteUrl, type Effect, type ImportedEffect } from './catalog';
 import wasmUrl from './wasm/grkit_wasm_bg.wasm?url';
 
 /** A request fails when no data arrives for this long, so a stalled connection ends in an error. */
@@ -93,6 +93,9 @@ export function loadWasm(): Promise<Wasm> {
 const buildUrl = (target: string) => siteUrl(`runtime/${target}/build.json`);
 const guideUrl = (camera: string, language: string) => siteUrl(`guides/${camera}/${language}.pdf`);
 const runtimeUrl = (target: string, path: string) => siteUrl(`runtime/${target}/sd/${path}`);
+/** The release publishes each official module once, for every camera. */
+/** The site file of an official module, which a person can also copy to GRKIT/MODULES. */
+export const moduleUrl = (id: string) => siteUrl(`modules/${id}.GRM`);
 
 /**
  * The runtime paths that `build.json` lists, read without the packager so that the files can
@@ -138,7 +141,7 @@ async function sha256(bytes: Uint8Array): Promise<string> {
  * Builds GRKit.zip in the browser from the published runtime of each build in `targets`, in
  * release order, and the selected effects. The builds of a camera have the same effects, so the
  * effects come from the first build.
- * `camera` selects the ModeSet file. `omitted` names the plugins that the package does not install.
+ * `camera` selects the ModeSet file. `modules` names the module files that the package holds.
  * `language` selects the installation guide, which the site publishes as `guides/<camera>/<language>.pdf`.
  * grkit-wasm checks each runtime file against `build.json` and each effect's format.
  * `onProgress` receives the number of bytes of the files of this package that have arrived.
@@ -147,7 +150,7 @@ export async function buildPackage(
   targets: readonly string[],
   camera: string,
   effects: readonly Effect[],
-  omitted: readonly string[],
+  modules: readonly string[],
   language: string,
   onProgress: (received: number) => void,
 ): Promise<Blob> {
@@ -172,6 +175,8 @@ export async function buildPackage(
         })
         .catch(ignore);
     }
+    const moduleBytes = Promise.all(modules.map((id) => use(moduleUrl(id))));
+    moduleBytes.catch(ignore);
     const effectBytes = Promise.all(
       effects.map((effect) =>
         effect.imported ? Promise.resolve(effect.imported.blob) : use(effectUrl(targets[0]!, effect.file)),
@@ -206,8 +211,8 @@ export async function buildPackage(
         }
         builder.addEffect(blob);
       }
-      for (const name of omitted) {
-        builder.omitPlugin(name);
+      for (const bytes of await moduleBytes) {
+        builder.addModule(bytes);
       }
       const zip = builder.build();
       return new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' });
@@ -234,6 +239,16 @@ export async function buildScriptsOff(camera: string): Promise<Blob> {
 }
 
 /** Starts the download of a blob as a file. */
+/**
+ * Saves the `.GRF` file of an imported effect under the file name that a
+ * package gives it: the first 8 hex digits of the SHA-256 of its ID
+ * (`grkit_core::effects::filename`).
+ */
+export async function saveImported(effect: ImportedEffect): Promise<void> {
+  const digest = await sha256(new TextEncoder().encode(effect.id));
+  save(new Blob([effect.imported.blob as Uint8Array<ArrayBuffer>]), `${digest.slice(0, 8).toUpperCase()}.GRF`);
+}
+
 export function save(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

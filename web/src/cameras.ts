@@ -1,5 +1,5 @@
 import { CAMERA_RELEASES } from './generated/cameras';
-import { CAMERA_PLUGINS } from './generated/plugins';
+import { CAMERA_MODULES } from './generated/modules';
 import type { ModuleKey } from './modules';
 
 export { PREVIEW_TARGET } from './generated/site';
@@ -8,7 +8,7 @@ export interface Camera {
   /** The entry on the site. Two entries can share one package camera. */
   key: string;
   /** The camera of the package (`camera.rs`): it selects the ModeSet file and the guide. */
-  id: keyof typeof CAMERA_PLUGINS;
+  id: keyof typeof CAMERA_MODULES;
   name: string;
   /**
    * The supported firmware versions (`camera.rs` releases), the runtime builds for them, and the
@@ -26,11 +26,11 @@ export interface Camera {
     modeset: string;
     /** True until the runtime has been tested on a camera with one of the versions. */
     experimental: boolean;
-    /** The modules that the site offers, in menu order: the plugins of the runtime
-     * (`camera.rs`, through `CAMERA_PLUGINS`) without `excluded`. */
+    /** The modules that the site offers, in menu order: those of the camera
+     * (`modules.rs`, through `CAMERA_MODULES`), less any that the entry does not offer. */
     modules: readonly ModuleKey[];
-    /** Plugins of the runtime that the package always omits, so the installer never installs them. */
-    excluded?: readonly ModuleKey[];
+    /** True when the entry offers no Image Control, so its package has no effects. */
+    noEffects?: boolean;
   };
 }
 
@@ -58,21 +58,21 @@ export const CAMERAS: readonly Camera[] = [
     id: 'gr3',
     name: 'GR III / GR III HDF',
     // 2.20 changes only the end screen; the installer relocates the 2.10 runtime to it.
-    support: { ...releases('gr3'), modules: CAMERA_PLUGINS.gr3 },
+    support: { ...releases('gr3'), modules: CAMERA_MODULES.gr3 },
   },
   // GR IIIx 1.60 and 1.70 run the GR III 2.10 and 2.20 code, so they use the same runtime.
   {
     key: 'gr3x',
     id: 'gr3x',
     name: 'GR IIIx / GR IIIx HDF',
-    support: { ...releases('gr3x'), modules: CAMERA_PLUGINS.gr3x },
+    support: { ...releases('gr3x'), modules: CAMERA_MODULES.gr3x },
   },
   // GR IV 1.11 and the two builds of 1.20 have a runtime each. The package holds all three.
   {
     key: 'gr4',
     id: 'gr4',
     name: 'GR IV / GR IV HDF',
-    support: { ...releases('gr4'), modules: CAMERA_PLUGINS.gr4 },
+    support: { ...releases('gr4'), modules: CAMERA_MODULES.gr4 },
   },
   // GR IV Monochrome runs the GR IV firmware with its own version: it shows 1.11 as 1.00 and 1.20
   // as 1.10. It uses the GR IV package and ModeSet file. The effects are made for color sensors,
@@ -84,8 +84,8 @@ export const CAMERAS: readonly Camera[] = [
     support: {
       ...releases('gr4'),
       firmware: '1.00 / 1.10',
-      modules: CAMERA_PLUGINS.gr4.filter((key) => key !== 'imageControl'),
-      excluded: ['imageControl'],
+      modules: CAMERA_MODULES.gr4.filter((key) => key !== 'filmLook'),
+      noEffects: true,
     },
   },
 ];

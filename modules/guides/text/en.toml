@@ -1,0 +1,17 @@
+title = "Guides"
+rows = ["Off", "Thirds", "Center", "Golden Ratio", "Diagonals", "Thirds + Center"]
+
+[settings.STYLE]
+label = "Style"
+
+[settings.COLOR]
+label = "Color"
+values = ["Black", "White", "Yellow"]
+
+[settings.OPACITY]
+label = "Opacity"
+values = ["50%", "100%"]
+
+[settings.DISP]
+label = "Hide with DISP"
+values = ["On", "Off"]

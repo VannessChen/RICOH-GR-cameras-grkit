@@ -1,0 +1,5 @@
+title = "粒紋感"
+rows = ["關閉", "弱", "中", "強"]
+
+[settings."CORE.GRAIN"]
+label = "強度"

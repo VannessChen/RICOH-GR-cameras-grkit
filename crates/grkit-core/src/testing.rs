@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 use crate::{effects, packaging, runtime, Files};
 
-/// A stand-in for `INSTALL.BIN`: an ARM ELF32 header with nothing after it, which
+/// A stand-in for `CORE.BIN`: an ARM ELF32 header with nothing after it, which
 /// `packaging::validate_runtime` accepts.
 pub fn installer() -> Vec<u8> {
     let mut binary = vec![0; 52];
@@ -71,4 +71,25 @@ pub fn effect(id: &str) -> Vec<u8> {
         "matrix": [8192, 0, 0, 0, 8192, 0, 0, 0, 8192],
         "curves": [&curve, &curve, &curve]});
     effects::encode(&value, &vec![0; effects::ICON_SIZE]).unwrap()
+}
+
+/// A module file (`crate::grm`) with the ID `id` and no registrations.
+pub fn module(id: &str) -> Vec<u8> {
+    crate::grm::Module {
+        id: id.into(),
+        version: 1,
+        code: vec![0; 40],
+        descriptor: 0,
+        ..Default::default()
+    }
+    .encode()
+    .expect("a valid module")
+}
+
+/// A module file for each official module (`crate::modules::OFFICIAL`).
+pub fn official_modules() -> Vec<Vec<u8>> {
+    crate::modules::OFFICIAL
+        .iter()
+        .map(|official| module(official.id))
+        .collect()
 }

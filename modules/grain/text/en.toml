@@ -1,0 +1,5 @@
+title = "Grain"
+rows = ["Off", "Weak", "Medium", "Strong"]
+
+[settings."CORE.GRAIN"]
+label = "Strength"

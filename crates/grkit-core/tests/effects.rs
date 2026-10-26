@@ -51,20 +51,26 @@ fn starter_definitions_match_existing_golden_bytes() {
 #[test]
 fn host_artwork_matches_golden_pixels_and_preserves_binary_transparency() {
     assert_eq!(
-        hex::encode(Sha256::digest(artwork::plugins_pixels())),
+        hex::encode(Sha256::digest(artwork::grkit_pixels())),
         "5d9423843d61423d1a3b7d8cbbe84a7885b729ab29aa5b92333d3b7d43b25e46"
     );
     assert_eq!(
         hex::encode(Sha256::digest(artwork::version_pixels())),
         "4119d11482f7f7a0636d481beae529aa4d87a4ec8d4afc62c2d8d4c8b295b0c6"
     );
-    let modules = grkit_core::plugins::tiles();
-    // Seven Framing, six Guides, six Date Stamp, and four Grain tiles,
-    // addressed by offset from the first.
-    assert_eq!(modules.len(), 23);
-    assert_eq!(modules[0], artwork::framing_pixels());
+    // The tiles of the module folders keep the rules of the host artwork.
+    let mut modules: Vec<Vec<u8>> = Vec::new();
+    for entry in std::fs::read_dir(root().join("../modules")).unwrap() {
+        let tiles = entry.unwrap().path().join("tiles");
+        for tile in std::fs::read_dir(tiles).into_iter().flatten() {
+            let png = std::fs::read(tile.unwrap().path()).unwrap();
+            let (width, height, rgba) = grkit_core::png::decode_rgba8(&png).unwrap();
+            assert_eq!((width, height), (40, 40));
+            modules.push(rgba);
+        }
+    }
     for pixels in [
-        artwork::plugins_pixels(),
+        artwork::grkit_pixels(),
         artwork::version_pixels(),
         artwork::off_pixels(),
         artwork::render_tile("OFF", "film").unwrap(),
@@ -528,10 +534,10 @@ fn overlay_labels_fit_their_area_and_outline_their_text() {
         value
     };
     for index in 0..artwork::OVERLAY_LABELS.len() {
-        let (width, height, offset) = (
-            field(index * 8, 2),
-            field(index * 8 + 2, 2),
-            field(index * 8 + 4, 4),
+        let (width, height, pixels) = artwork::overlay_label_pixels(&table, index);
+        assert_eq!(
+            (width, height),
+            (field(index * 8, 2), field(index * 8 + 2, 2))
         );
         assert_eq!(height, artwork::OVERLAY_LABEL_HEIGHT);
         // A Framing label at the left of the row ends before the centered
@@ -541,7 +547,6 @@ fn overlay_labels_fit_their_area_and_outline_their_text() {
             (30..=widest).contains(&width),
             "label {index} is {width} wide"
         );
-        let pixels = &table[offset..offset + width * height];
         // White text, its black outline, and transparent pixels.
         for value in [0, 1, 255] {
             assert!(pixels.contains(&value), "label {index} lacks {value}");

@@ -1,0 +1,5 @@
+title = "粒状感"
+rows = ["オフ", "弱", "中", "強"]
+
+[settings."CORE.GRAIN"]
+label = "強さ"
