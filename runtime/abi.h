@@ -134,8 +134,10 @@
 #define GRKIT_HOST_FRAME_PREVIEW 212
 /* Number of Framing paints. A diagnostic. */
 #define GRKIT_HOST_FRAME_DRAWS 216
-/* ADJ canvas of the preview. It stays set until a full draw erases the mask. */
-#define GRKIT_HOST_FRAME_PREVIEW_CANVAS 220
+/* ADJ controller of the preview. Its canvas shows the preview. ADJ can make
+   its canvas after its first refresh, so a draw reads the canvas from the
+   controller. The word stays set until a full draw erases the mask. */
+#define GRKIT_HOST_FRAME_PREVIEW_ADJ 220
 /* Address of the effect list of the Effects page (runtime/effects.h), or 0
    without a listed effect. INSTALL writes it. */
 #define GRKIT_HOST_EFFECTS 224

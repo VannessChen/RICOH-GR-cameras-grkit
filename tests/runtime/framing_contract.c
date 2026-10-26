@@ -362,7 +362,7 @@ int main(void)
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
     header[GRKIT_HOST_FRAME_PREVIEW/4]=3;
     header[GRKIT_HOST_MODULE_PREVIEW/4]=GRKIT_CORE_ASPECT+1; header[GRKIT_HOST_MODULE_PREVIEW/4+1]=2;
-    header[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=TEST_CANVAS;
+    header[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]=TEST_OWNER;
     framing_prepare(TEST_CANVAS);
     assert(BYTE(TEST_CANVAS,0xa0)==1);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
@@ -377,19 +377,33 @@ int main(void)
     for(u32 i=0; i<sizeof(pixels)/sizeof(pixels[0]); ++i) pixels[i]=SENTINEL;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
-    assert(header[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]==TEST_CANVAS);
+    assert(header[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]==TEST_OWNER);
     /* An ended preview gets one more full draw, then releases the canvas. */
     header[GRKIT_HOST_FRAME_PREVIEW/4]=0;
     BYTE(TEST_CANVAS,0xa0)=0;
     framing_prepare(TEST_CANVAS);
     assert(BYTE(TEST_CANVAS,0xa0)==1);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
-    assert(header[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]==0);
+    assert(header[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]==0);
     assert_untouched();
+    /* ADJ that opens on GRKit refreshes before it makes its canvas. The
+       preview names the controller, so the first draw of the canvas that
+       the controller gets shows the preview. */
+    reset();
+    header[GRKIT_HOST_FRAME_OWNER/4]=0; header[GRKIT_HOST_FRAME_CANVAS/4]=0;
+    header[GRKIT_HOST_FRAME_PREVIEW/4]=2;
+    WORD(TEST_OWNER,4)=0;
+    header[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]=TEST_OWNER;
+    WORD(TEST_OWNER,4)=TEST_CANVAS;
+    BYTE(TEST_CANVAS,0xa0)=0;
+    framing_prepare(TEST_CANVAS);
+    assert(BYTE(TEST_CANVAS,0xa0)==1);
+    framing_paint(TEST_CANVAS,TEST_BITMAP);
+    assert(pixels[1]==0x80000000 && pixels[1+240*TEST_STRIDE]==SENTINEL);
     /* Unsupported bitmaps stay untouched in the preview path too. */
     reset();
     header[GRKIT_HOST_FRAME_PREVIEW/4]=2;
-    header[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=TEST_CANVAS;
+    header[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]=TEST_OWNER;
     BYTE(TEST_BITMAP,2)=4;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
@@ -468,7 +482,7 @@ int main(void)
     header[GRKIT_HOST_FRAME_RATIO/4]=0;
     header[GRKIT_HOST_FRAME_PREVIEW/4]=1;
     header[GRKIT_HOST_MODULE_PREVIEW/4]=1; header[GRKIT_HOST_MODULE_PREVIEW/4+1]=1;
-    header[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=TEST_CANVAS;
+    header[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]=TEST_OWNER;
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_guides(0,1,0);
     /* The Guides page with the committed XPan crop, which each camera

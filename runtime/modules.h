@@ -190,13 +190,14 @@ static u32 module_layers_on(volatile u32 *h) {
    values of the others. The page of CORE.ASPECT shows the area of its
    highlighted ratio, and other pages show the crop that the live view draws.
    Off ends the drawing, and the canvas stays until a full draw has erased
-   it. A change of the preview redraws the canvas: ADJ draws it when it
-   opens, before this runs, and a return from a native settings page draws
-   nothing more. */
+   it. The preview names the ADJ controller, not its canvas: when ADJ opens
+   on GRKit, its only refresh runs before ADJ makes the canvas. A change of
+   the preview redraws the canvas, if it exists: a return from a native
+   settings page draws nothing more. */
 #ifndef MENU_PREVIEW_INVALIDATE
 #define MENU_PREVIEW_INVALIDATE(view) CALL1(FW_VIEW_INVALIDATE)(view)
 #endif
-static void frame_preview_set(volatile u32 *h,u32 canvas,u32 movie) {
+static void frame_preview_set(volatile u32 *h,u32 controller,u32 movie) {
     u32 module=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE ? h[GRKIT_HOST_MODULE/4] : 0;
     u32 slot=module, choice=h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && slot<module_pages(h);
     u32 ratio=framing_crop(h), handle, value;
@@ -212,13 +213,14 @@ static void frame_preview_set(volatile u32 *h,u32 canvas,u32 movie) {
     }
     /* A highlighted Off keeps the canvas for the next row. */
     h[GRKIT_HOST_FRAME_PREVIEW/4]=ratio || choice || module_layers_on(h) ? ratio+1 : 0;
-    h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=canvas;
+    h[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]=controller;
 }
-static void frame_preview(volatile u32 *h,u32 canvas,u32 movie) {
-    u32 frame=h[GRKIT_HOST_FRAME_PREVIEW/4], at=h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4];
+static void frame_preview(volatile u32 *h,u32 controller,u32 movie) {
+    u32 frame=h[GRKIT_HOST_FRAME_PREVIEW/4], at=h[GRKIT_HOST_FRAME_PREVIEW_ADJ/4];
     u32 handle=h[GRKIT_HOST_MODULE_PREVIEW/4], value=h[GRKIT_HOST_MODULE_PREVIEW/4+1];
-    frame_preview_set(h,canvas,movie);
-    if(canvas && !movie && (frame!=h[GRKIT_HOST_FRAME_PREVIEW/4] || at!=canvas ||
+    u32 canvas=controller ? WORD(controller,ADJ_CANVAS) : 0;
+    frame_preview_set(h,controller,movie);
+    if(canvas && !movie && (frame!=h[GRKIT_HOST_FRAME_PREVIEW/4] || at!=controller ||
                   handle!=h[GRKIT_HOST_MODULE_PREVIEW/4] || value!=h[GRKIT_HOST_MODULE_PREVIEW/4+1]))
         MENU_PREVIEW_INVALIDATE(canvas);
 }

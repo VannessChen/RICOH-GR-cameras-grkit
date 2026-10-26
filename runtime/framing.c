@@ -312,12 +312,17 @@ static u32 canvas_pixels(u32 canvas,u32 bitmap) {
    area: 3:2, XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
 static const u16 photo_boxes[7][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
                                     {0,87,720,393},{120,0,600,480},{60,0,660,480}};
+/* The ADJ canvas of the preview, or 0 (runtime/modules.h: frame_preview). */
+static u32 preview_canvas(volatile u32 *h) {
+    u32 adj=h[GRKIT_HOST_FRAME_PREVIEW_ADJ/4];
+    return adj ? WORD(adj,ADJ_CANVAS) : 0;
+}
 static void prepare_canvas(volatile u32 *h,u32 canvas) {
     /* Canvas::Draw clears the full native bitmap before drawing its children.
        Use this path even for Off to remove the previous drawing on the next draw. */
     if((h[GRKIT_HOST_FRAME_CANVAS/4]==canvas &&
         (overlay_active(h) || h[GRKIT_HOST_FRAME_BITMAP/4])) ||
-       (canvas && h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]==canvas))
+       (canvas && preview_canvas(h)==canvas))
         BYTE(canvas,0xa0)=1;
 }
 void framing_prepare(u32 canvas) {
@@ -333,7 +338,7 @@ void framing_prepare(u32 canvas) {
 static void preview_paint(volatile u32 *h,u32 canvas,u32 bitmap) {
     u32 preview=h[GRKIT_HOST_FRAME_PREVIEW/4],data,area;
     Surface surface;
-    if(!preview) { h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=0; return; }
+    if(!preview) { h[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]=0; return; }
     if(preview>sizeof(photo_boxes)/sizeof(photo_boxes[0]) || !module_layers(h)) return;
     data=canvas_pixels(canvas,bitmap);
     area=preview-1;
@@ -345,7 +350,7 @@ static void preview_paint(volatile u32 *h,u32 canvas,u32 bitmap) {
 static void paint_canvas(volatile u32 *h,u32 canvas,u32 bitmap) {
     u32 owner=h[GRKIT_HOST_FRAME_OWNER/4],full,data,cue,area;
     Surface surface;
-    if(canvas && canvas==h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]) { preview_paint(h,canvas,bitmap); return; }
+    if(canvas && canvas==preview_canvas(h)) { preview_paint(h,canvas,bitmap); return; }
     if(canvas!=h[GRKIT_HOST_FRAME_CANVAS/4] || !owner) return;
     if(!overlay_active(h)) { h[GRKIT_HOST_FRAME_BITMAP/4]=0; return; }
     h[GRKIT_HOST_FRAME_BITMAP/4]=bitmap;

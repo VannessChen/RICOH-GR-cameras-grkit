@@ -649,9 +649,21 @@ static void module_tiles_follow_the_effect_icons(void)
 
 /* The ADJ page blocks start with record 0 committed, as ADJ has it, and
    Framing at `ratio`. */
+/* ADJ controllers of the preview tests: their ADJ_CANVAS words name the
+   canvases 0x5a000000, 0x5b000000, and 0x5c000000. */
+#define ADJ_A (TEST_OBJECTS + 0x3800U)
+#define ADJ_B (TEST_OBJECTS + 0x3900U)
+#define ADJ_C (TEST_OBJECTS + 0x3a00U)
+static void adj_controllers(void)
+{
+    object_memory[(0x3800U + ADJ_CANVAS) / 4] = 0x5a000000U;
+    object_memory[(0x3900U + ADJ_CANVAS) / 4] = 0x5b000000U;
+    object_memory[(0x3a00U + ADJ_CANVAS) / 4] = 0x5c000000U;
+}
 static void adj_pages_start(u32 ratio)
 {
     reset();
+    adj_controllers();
     test_header[GRKIT_HOST_ACTIVE / 4] = 0x59005000;
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = ratio;
 }
@@ -743,34 +755,34 @@ static void the_framing_page_sets_the_ratios_of_the_target(void)
        of the ratio, and the ratio as the value of the CORE.ASPECT layers. */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
     preview_invalidations = 0;
-    frame_preview(test_header, 0x5a000000, 0);
+    frame_preview(test_header, ADJ_A, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 2);
     assert(test_header[GRKIT_HOST_MODULE_PREVIEW / 4] == GRKIT_CORE_ASPECT + 1 && test_header[GRKIT_HOST_MODULE_PREVIEW / 4 + 1] == 1);
     /* A new preview redraws the ADJ canvas once. The same preview does not. */
     assert(preview_invalidations == 1 && preview_invalidated == 0x5a000000);
-    frame_preview(test_header, 0x5a000000, 0);
+    frame_preview(test_header, ADJ_A, 0);
     assert(preview_invalidations == 1);
     /* The preview holds the value of the row: row 2 is 2.35:1 (value 4). */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
-    frame_preview(test_header, 0x5a000000, 0);
+    frame_preview(test_header, ADJ_A, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 5 && test_header[GRKIT_HOST_MODULE_PREVIEW / 4 + 1] == 4);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5a000000);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW_ADJ / 4] == ADJ_A);
     assert(preview_invalidations == 2);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
-    frame_preview(test_header, 0x5a000000, 0);
+    frame_preview(test_header, ADJ_A, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 1);
     assert(preview_invalidations == 3);
     /* The movie ADJ has no preview and no redraw for it. */
-    frame_preview(test_header, 0x5a000000, 1);
+    frame_preview(test_header, ADJ_A, 1);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 0);
     assert(preview_invalidations == 3);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = CROP_ROW;
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == FRAMING_ROW);
     /* Other ADJ pages show the committed crop. */
-    frame_preview(test_header, 0x5b000000, 0);
+    frame_preview(test_header, ADJ_B, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5b000000);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW_ADJ / 4] == ADJ_B);
     assert(preview_invalidated == 0x5b000000);
     /* An ADJ that opens again, also after a native settings page, has drawn
        its canvas before the preview: the exit cleared the preview, so the
@@ -778,17 +790,17 @@ static void the_framing_page_sets_the_ratios_of_the_target(void)
     {
         unsigned before = preview_invalidations;
         test_header[GRKIT_HOST_FRAME_PREVIEW / 4] = 0;
-        frame_preview(test_header, 0x5b000000, 0);
+        frame_preview(test_header, ADJ_B, 0);
         assert(preview_invalidations == before + 1 && test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1);
     }
     /* A committed Off ends the mask but keeps the canvas for one erasing
        draw. The Guides layer is off too. */
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 0;
-    frame_preview(test_header, 0x5b000000, 0);
+    frame_preview(test_header, ADJ_B, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 0);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5b000000);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW_ADJ / 4] == ADJ_B);
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = CROP_RATIO;
-    test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] = 0;
+    test_header[GRKIT_HOST_FRAME_PREVIEW_ADJ / 4] = 0;
     assert(!menu_back(test_header));
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = FRAMING_ROW;
     assert(same(current_module(test_header)->summary(test_header), ratio_summaries[CROP_RATIO]));
@@ -858,38 +870,38 @@ static void the_guides_page_commits_only_its_style(void)
     }
     /* The page previews its highlighted style inside the committed ratio. */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 2;
-    frame_preview(test_header, 0x5a000000, 0);
+    frame_preview(test_header, ADJ_A, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1);
     assert(test_header[GRKIT_HOST_MODULE_PREVIEW / 4] == 1 && test_header[GRKIT_HOST_MODULE_PREVIEW / 4 + 1] == 2);
-    assert(test_header[GRKIT_HOST_FRAME_PREVIEW_CANVAS / 4] == 0x5a000000);
+    assert(test_header[GRKIT_HOST_FRAME_PREVIEW_ADJ / 4] == ADJ_A);
     /* A highlighted Off with no ratio keeps the canvas for the next row. */
     test_header[GRKIT_HOST_FRAME_RATIO / 4] = 0;
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 0;
     GUIDE_STYLE = 0;
-    frame_preview(test_header, 0x5a000000, 0);
+    frame_preview(test_header, ADJ_A, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 1);
     assert(test_header[GRKIT_HOST_MODULE_PREVIEW / 4] == 1 && test_header[GRKIT_HOST_MODULE_PREVIEW / 4 + 1] == 0);
     /* The movie live view previews nothing. */
-    frame_preview(test_header, 0x5a000000, 1);
+    frame_preview(test_header, ADJ_A, 1);
     assert(!test_header[GRKIT_HOST_FRAME_PREVIEW / 4] && !test_header[GRKIT_HOST_MODULE_PREVIEW / 4]);
     assert(menu_back(test_header));
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_ROOT && test_header[GRKIT_HOST_MENU_CURSOR / 4] == GUIDES_ROW);
     /* Other ADJ pages keep the committed style on the canvas, even without a
        ratio, and preview no module value. */
     GUIDE_STYLE = 4;
-    frame_preview(test_header, 0x5b000000, 0);
+    frame_preview(test_header, ADJ_B, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 1 && !test_header[GRKIT_HOST_MODULE_PREVIEW / 4]);
     /* The Framing page keeps the committed style with its highlighted ratio
        (row 1, XPan). */
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = FRAMING_ROW;
     menu_confirm(test_header);
     test_header[GRKIT_HOST_MENU_CURSOR / 4] = 1;
-    frame_preview(test_header, 0x5b000000, 0);
+    frame_preview(test_header, ADJ_B, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 2 && test_header[GRKIT_HOST_MODULE_PREVIEW / 4] == GRKIT_CORE_ASPECT + 1);
     /* Committed Off for both ends the drawing. */
     assert(menu_back(test_header));
     GUIDE_STYLE = 0;
-    frame_preview(test_header, 0x5b000000, 0);
+    frame_preview(test_header, ADJ_B, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == 0);
     /* A value out of range of its setting reads as 0. */
     GUIDE_STYLE = 999;
@@ -924,7 +936,7 @@ static void the_date_imprint_page_lists_its_styles(void)
     }
     /* The Date Imprint page keeps the committed mask on the ADJ canvas, and
        previews its highlighted style for its layers, which it has none of. */
-    frame_preview(test_header, 0x5c000000, 0);
+    frame_preview(test_header, ADJ_C, 0);
     assert(test_header[GRKIT_HOST_FRAME_PREVIEW / 4] == CROP_RATIO + 1 && test_header[GRKIT_HOST_MODULE_PREVIEW / 4] == 2);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == DATE_ROW);
     assert(same(current_module(test_header)->summary(test_header), "Date Imprint: D M 'YY H:MM"));

@@ -144,8 +144,11 @@ fields!(HEADER_FIELDS {
     HOST_FRAME_PREVIEW = 212, 4;
     /// Number of Framing paints. A diagnostic.
     HOST_FRAME_DRAWS = 216, 4;
-    /// ADJ canvas of the preview. It stays set until a full draw erases the mask.
-    HOST_FRAME_PREVIEW_CANVAS = 220, 4;
+    /// ADJ controller of the preview. Its canvas shows the preview. ADJ can
+    /// make its canvas after its first refresh, so a draw reads the canvas
+    /// from the controller. The word stays set until a full draw erases the
+    /// mask.
+    HOST_FRAME_PREVIEW_ADJ = 220, 4;
     /// Address of the effect list of the Effects page (runtime/effects.h), or
     /// 0 without a listed effect. INSTALL writes it.
     HOST_EFFECTS = 224, 4;

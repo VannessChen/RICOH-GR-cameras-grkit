@@ -348,7 +348,7 @@ A32_ENTRY void menu_refresh(u32 controller) {
     }
     menu_refresh_original(controller);
     toolbar(controller);
-    frame_preview(h,WORD(controller,ADJ_CANVAS),ADJ_MOVIE(controller)==1);
+    frame_preview(h,controller,ADJ_MOVIE(controller)==1);
 }
 /* First row of the cursor's page. The reciprocal equals row/6 for rows below 2^15
    and avoids a division helper, which the freestanding link does not provide. */
@@ -469,7 +469,7 @@ static void render_step(u32 controller,u32 step) {
     fn_guide(controller);
     toolbar(controller);
     /* Slot zero's canvas is at +4, as in the live view. */
-    frame_preview(h,WORD(controller,ADJ_CANVAS),ADJ_MOVIE(controller)==1);
+    frame_preview(h,controller,ADJ_MOVIE(controller)==1);
     h[GRKIT_HOST_MENU_REBUILDING/4]=0;
 }
 static void leave(u32 controller) {
@@ -755,7 +755,7 @@ A32_ENTRY u32 menu_destroy(u32 controller) {
     }
     h[GRKIT_HOST_PREVIEW/4]=0;
     h[GRKIT_HOST_FRAME_PREVIEW/4]=0;
-    h[GRKIT_HOST_FRAME_PREVIEW_CANVAS/4]=0;
+    h[GRKIT_HOST_FRAME_PREVIEW_ADJ/4]=0;
     result=menu_destroy_original(controller);
     if(widget) toolbar_destroy(widget);
     return result;
