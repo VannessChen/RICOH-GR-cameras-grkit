@@ -22,7 +22,7 @@ pub const TEXT_SETTINGS: usize = TEXT_PARAMETER_TITLE - 384;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).
-pub const STRINGS: usize = 23;
+pub const STRINGS: usize = 22;
 /// The project address that About GRKit shows.
 const PROJECT: &str = "github.com/ahonn/grkit";
 /// The longest effect name in a record.
@@ -195,8 +195,8 @@ pub const RUNS: &[Run] = &[
     run("VERSION", 1, "The About row: the GRKit version."),
     run(
         "MODULES_SUMMARY",
-        3,
-        "The Modules root row: no change, a change for the next start, safe mode.",
+        2,
+        "The Modules root row: as usual, and in safe mode.",
     ),
     run(
         "ENABLE",
@@ -268,11 +268,7 @@ fn run_strings(w: &Words, name: &str, version: &str) -> Vec<String> {
         "IMAGE_OFF_SUMMARY" => vec![summary(w.image_control, w.off)],
         "IMAGE_PREFIX" => vec![format!("{}{}", w.image_control, w.separator)],
         "VERSION" => vec![format!("{} {version}", w.version)],
-        "MODULES_SUMMARY" => vec![
-            w.modules.to_string(),
-            summary(w.modules, w.restart),
-            summary(w.modules, w.safe_mode),
-        ],
+        "MODULES_SUMMARY" => vec![w.modules.to_string(), summary(w.modules, w.safe_mode)],
         "ENABLE" => words(&[w.enable]),
         "ON" => words(&[w.on]),
         "SAFE_MODE" => words(&[w.safe_mode]),

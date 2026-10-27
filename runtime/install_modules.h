@@ -35,10 +35,19 @@ static u32 handle_values(u32 handle)
     if (IS_CORE_SETTING(handle)) return core_setting_values[CORE_SETTING(handle)];
     return handle < setting_total ? setting_values[handle] : 0;
 }
-/* Link and copy each usable module: its code at `code` and after, its data
-   in the script array `array`. A module that does not link is skipped; its
-   memory stays reserved. */
-static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_bases)
+/* The modules whose settings each loaded module uses, a bit each. */
+static u32 module_needs[GRKIT_MODULES_MAX];
+/* The module that has setting `k` of the table, or GRKIT_MODULES_MAX. */
+static u32 setting_module(u32 k)
+{
+    for (u32 m = 0; m < module_count; ++m)
+        if ((module_usable >> m & 1) && k - module_first[m] < module_settings[m]) return m;
+    return GRKIT_MODULES_MAX;
+}
+/* One pass of install_modules. The modules of `broken` failed in an earlier
+   pass: they keep their status and their memory, and their settings are
+   missing. */
+static int install_pass(u32 code, u32 array, u32 pixels, const u32 *icon_bases, u32 broken)
 {
     struct grm_symbol symbols[CORE_EXPORT_COUNT + 1];
     u32 n = 0, code_at = code;
@@ -111,6 +120,8 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
         context_at += 4 * CONTEXT_WORDS(module_use_count[i]);
         code_at += module.code_size;
         data_at += data_bytes;
+        module_needs[i] = 0;
+        if (broken >> i & 1) continue;
         u32 failed = 0, own_count = 0, own_uses = 0, layer_count = 0, page_count = 0, tile_count = 0;
         struct grm_setting own[GRM_SETTINGS];
         char own_names[GRM_USES][GRM_NAME + 1];
@@ -137,9 +148,15 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
                     points |= core_setting_points[k];
                     capabilities |= 1U << k;
                 }
-            for (u32 k = 0; k < setting_total && handle == GRM_NO_SETTING; ++k)
+            for (u32 k = 0; k < setting_total && handle == GRM_NO_SETTING; ++k) {
+                u32 owner = setting_module(k);
+                if (owner < GRKIT_MODULES_MAX && (broken >> owner & 1)) continue;
                 if (text_equal(setting_names[k], name + optional) &&
-                    ((setting_flags[k] & GRM_SETTING_PUBLIC) || (k - module_first[i] < module_settings[i]))) handle = k;
+                    ((setting_flags[k] & GRM_SETTING_PUBLIC) || owner == i)) {
+                    handle = k;
+                    if (owner != i && owner < GRKIT_MODULES_MAX) module_needs[i] |= 1U << owner;
+                }
+            }
             if (handle == GRM_NO_SETTING && !optional) { status = GRM_MISSING_SETTING; failed = u; }
             use_handles[u] = handle;
             store(context + 12 + u * 4, handle);
@@ -193,6 +210,7 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
                         module_filter_count + filter_count > MODULE_FILTERS)) status = GRM_NO_ROOM;
         if (status) {
             module_status[i] = (u32)status;
+            module_needs[i] = 0;
             if (status == GRM_MISSING_IMPORT) grm_import_name(&module, failed, module_detail[i], sizeof(module_detail[i]));
             if (status == GRM_MISSING_SETTING && failed < module_use_count[i])
                 name_copy(module_detail[i], module_uses[i][failed], length(module_uses[i][failed]));
@@ -297,7 +315,7 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
         module_id(i, id);
         for (const char *p = id; *p; ++p) name[n++] = (u16)*p;
         /* An error shows after the name: "NAME (52)". */
-        if (status > MANAGE_OFF) {
+        if (status > MANAGE_SAFE) {
             char digits[12]; u32 d = sizeof(digits);
             do { digits[--d] = (char)('0' + status % 10); status /= 10; } while (status);
             name[n++] = ' '; name[n++] = '(';
@@ -335,5 +353,28 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
     if (listed_count && !sync_alias(effects_list, 4 * EFFECT_LIST_WORDS(listed_count))) return STATUS_SYNC;
     if (!sync_alias(services, 4 * SERVICES_WORDS)) return STATUS_SYNC;
     return 0;
+}
+/* Link and copy each usable module: its code at `code` and after, its data
+   in the script array `array`. A module that does not link is skipped; its
+   memory stays reserved. A setting of a module that does not link is
+   missing, also for a module that linked before it. So if a loaded module
+   uses a setting of a module that failed, the pass runs again with the
+   failed modules kept out. Each new pass has more failed modules, so the
+   passes end. The addresses of each module stay the same in each pass. */
+static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_bases)
+{
+    u32 points = needed_points, broken = 0;
+    for (;;) {
+        needed_points = points;
+        int status = install_pass(code, array, pixels, icon_bases, broken);
+        if (status) return status;
+        u32 failed = 0, stale = 0;
+        for (u32 i = 0; i < module_count; ++i)
+            if ((module_usable >> i & 1) && module_status[i]) failed |= 1U << i;
+        for (u32 i = 0; i < module_count; ++i)
+            if ((module_usable >> i & 1) && !module_status[i] && (module_needs[i] & failed)) stale = 1;
+        if (!stale) return 0;
+        broken = failed;
+    }
 }
 #endif

@@ -1406,7 +1406,7 @@ static void options_hide_values_that_are_off_in_adj(void)
     *page_at(TEST_PAGE + 2 * TEST_PAGE_SIZE + PAGE_FLAGS) &= ~CHOICE_OPTIONS;
 }
 
-static void enable_off_applies_at_once_and_on_at_the_next_start(void)
+static void enable_applies_at_once(void)
 {
     reset();
     install_module_list();
@@ -1415,18 +1415,12 @@ static void enable_off_applies_at_once_and_on_at_the_next_start(void)
     /* Enable Off of a loaded module applies at once, as a soft Off: its
        page leaves the root of ADJ, and no restart is due. */
     settings_memory[2 + 6 * 3 + 1] = 1;
-    assert(manage_stopped(test_header, 1) && !manage_changed(test_header));
+    assert(manage_stopped(test_header, 1));
     assert(!(visible_modules(test_header) >> 3 & 1));
+    assert(same(MODULE(MANAGE_MODULE).summary(test_header), "Modules"));
+    /* On applies at once too. */
     settings_memory[2 + 6 * 3 + 1] = 0;
     assert(!manage_stopped(test_header, 1) && visible_modules(test_header) >> 3 & 1);
-    /* Enable On of a module that was Off at this start waits for the next
-       start. Off of a module that did not load changes nothing. */
-    manage_memory[MANAGE_ENTRY(1)] = MANAGE_OFF;
-    assert(manage_changed(test_header) && same(MODULE(MANAGE_MODULE).summary(test_header), "Modules: Restart to apply"));
-    settings_memory[2 + 6 * 3 + 1] = 1;
-    assert(!manage_changed(test_header) && !manage_stopped(test_header, 1));
-    settings_memory[2 + 6 * 3 + 1] = 0;
-    manage_memory[MANAGE_ENTRY(1)] = MANAGE_LOADED;
     /* Safe mode shows in the summary. */
     manage_memory[2] = MANAGE_SAFE_MODE;
     assert(same(MODULE(MANAGE_MODULE).summary(test_header), "Modules: Safe mode"));
@@ -2012,7 +2006,7 @@ int main(void)
     the_date_imprint_settings_page_reads_and_stores_values();
     the_adj_order_page_moves_modules();
     options_hide_values_that_are_off_in_adj();
-    enable_off_applies_at_once_and_on_at_the_next_start();
+    enable_applies_at_once();
     film_look_lists_the_installed_effects_that_are_on();
     /* The MENU page blocks after the first continue the screen that the block
        before them leaves. */

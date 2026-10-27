@@ -135,11 +135,11 @@ static u32 menu_rows_controller(volatile u32 *h,u32 id) {
     return INFO_CONTROLLER;
 }
 static const u16 no_text[]={0};
-/* The value of the About GRKit row: safe mode, a change for the next
-   start, or the version. */
+/* The value of the About GRKit row: safe mode, an effects choice for the
+   next start, or the version. */
 static const u16 *grkit_value(volatile u32 *h) {
     if(manage_word(h,MANAGE_FLAGS)&MANAGE_SAFE_MODE) return text(h,TEXT_SAFE_MODE);
-    if(manage_changed(h) || effects_changed(h)) return text(h,TEXT_RESTART);
+    if(effects_changed(h)) return text(h,TEXT_RESTART);
     return text(h,TEXT_ABOUT+2);
 }
 /* A filler: the label and the value of row view `row`. The views are known

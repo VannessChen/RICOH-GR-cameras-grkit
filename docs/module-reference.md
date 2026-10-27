@@ -147,7 +147,7 @@ A module names each setting that it uses in `uses`, as `MODULE.KEY`. A used sett
 
 - If a required used setting is missing, the module does not load. The report gives error 55 with the name.
 - A name that starts with `?` is optional. If it is missing, its handle is `GRKIT_NO_SETTING`. The installer does not register a page, a layer, or a filter of that setting.
-- A setting of a module that is Off, or of a module file that the installer cannot read, is missing.
+- A setting of a module that does not load is missing, also when that module comes later in the order. A module that is Off loads stopped, so its settings are not missing.
 
 ## Capabilities
 
@@ -316,7 +316,7 @@ The UI services work only in an event handler, a timer callback, or a UI callbac
 | Tiles of one module | 64 | build error, or 53 |
 | Tiles of all loaded modules | 64 | 54 |
 | Rows of a choice page | 1 to 64 | build error, or 53 |
-| Rows of a native settings page | 2 | build error, or 53 |
+| Rows of a native settings page | 5 | build error, or 53 |
 | Values of a native settings row | 8 | 53 |
 | Event subscribers: one in each module, of all loaded modules | 8 | 53 for a second subscriber of a module. The core does not call a ninth module. |
 | Timers of all modules | 8 | `timer_start` returns 0 |
@@ -346,7 +346,7 @@ Other lines:
 | Report text | Meaning |
 | --- | --- |
 | `loaded` | The module loaded. |
-| `not loaded: Enable is Off in the GRKit section of MENU` | Enable of the module is Off in the GRKit section of MENU. |
+| `loaded, stopped: Enable is Off in the GRKit section of MENU` | The module loaded, but Enable is Off, so the core calls none of its code. On applies at once. |
 | `not loaded: safe mode` | GRKit is in the safe mode, so no module loads. See [Report and safe mode](architecture.md#report-and-safe-mode). |
 
-When a module does not load, the other modules still load. A module that requires a setting of it can then get error 55.
+When a module does not load, the other modules still load. A module that requires a setting of it gets error 55. A page, a layer, or a filter of an optional setting of it is not registered.

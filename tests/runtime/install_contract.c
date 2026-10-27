@@ -695,6 +695,40 @@ static void settings_rows_of_used_settings(void)
     assert(install() == 0 && module_status[0] == GRM_BAD_DESCRIPTOR);
 }
 
+/* A setting of a module that does not link is missing, also for a module
+   that links before it: a module that requires the setting gets error 55,
+   and the layer of an optional one is not registered. */
+static void a_setting_of_a_module_that_did_not_link_is_missing(void)
+{
+    const struct spec provider = {.id = "PROV", .settings = {{"MODE", 2, GRM_SETTING_PUBLIC}},
+                                  .imports = {"no_such_function"}};
+    for (u32 first = 0; first < 2; ++first) {
+        reset();
+        struct spec p = provider;
+        p.order = first ? 1 : 3;
+        add_module(PACKAGE_MODULES_PATH, "PROV.GRM", &p);
+        add_module(PACKAGE_MODULES_PATH, "NEEDS.GRM", &(struct spec){
+            .id = "NEEDS", .order = 2, .uses = {"PROV.MODE"},
+            .layer_count = 1, .layers = {{10, 0, GRM_USED | 0}}});
+        add_module(PACKAGE_MODULES_PATH, "MAYUSE.GRM", &(struct spec){
+            .id = "MAYUSE", .order = 2, .uses = {"?PROV.MODE"}, .settings = {{"ON", 2, 0}},
+            .layer_count = 2, .layers = {{10, 0, GRM_USED | 0}, {20, 0, 0}}});
+        assert(install() == 0);
+        /* The order: PROV, MAYUSE, NEEDS, or MAYUSE, NEEDS, PROV. */
+        u32 prov = first ? 0 : 2, mayuse = first ? 1 : 0, needs = first ? 2 : 1;
+        assert(module_status[prov] == GRM_MISSING_IMPORT);
+        assert(module_status[needs] == GRM_MISSING_SETTING && !strcmp(module_detail[needs], "PROV.MODE"));
+        assert(module_status[mayuse] == 0);
+        /* Only the layer of the own setting of MAYUSE paints. */
+        assert(module_layer_count == 1 && module_layers[1] != GRM_NO_SETTING && module_layers[2] == 20U << 16);
+        u32 context = ARRAY_AT + 4 * SETTINGS_WORDS(word(ARRAY_AT));
+        for (u32 i = 0; i < mayuse; ++i)
+            if (module_usable >> i & 1) context += 4 * CONTEXT_WORDS(module_use_count[i]);
+        assert(word(context + 12) == GRM_NO_SETTING);
+        expect_listed(needs, GRM_MISSING_SETTING, "NEEDS (55)");
+    }
+}
+
 static void *run(void *unused)
 {
     (void)unused;
@@ -707,6 +741,7 @@ static void *run(void *unused)
     layers_follow_their_order_and_filters_their_stage();
     the_module_list_shows_each_result();
     settings_rows_of_used_settings();
+    a_setting_of_a_module_that_did_not_link_is_missing();
     reset();
     return 0;
 }

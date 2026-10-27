@@ -149,7 +149,7 @@ The native MENU has a section titled GRKit at the end of the Customize tab. At t
 - **ADJ Order**, which moves a module page in ADJ.
 - **About GRKit**, which shows the version and the project address on the native camera information page.
 
-The rows of the section follow the default order: the `order` of each module, then its ID. ADJ Order changes only the order in ADJ. The choices are settings, so the loader saves them, and they apply at once. Off stops a module: its page leaves ADJ, the core calls none of its code, and the capabilities that only it uses count as unused. Only On of a module that did not load waits for the next start.
+The rows of the section follow the default order: the `order` of each module, then its ID. ADJ Order changes only the order in ADJ. The choices are settings, so the loader saves them, and they apply at once. Off stops a module: its page leaves ADJ, the core calls none of its code, and the capabilities that only it uses count as unused. A module that is Off at a start loads stopped, so On also applies at once.
 
 A page can have options (`options = true`). Its **Options** row turns each value of the page on or off in ADJ, or each effect for a page of `CORE.TONE` (`runtime/effects.h`). SCAN installs the effects that are on first. The options page shows native checkboxes. Each native list shares one SelectMenuController with radio rows, so the controller factory gives the options page a second one, built with checkbox rows (`runtime/menu_settings.h`).
 

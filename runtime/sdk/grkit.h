@@ -180,12 +180,12 @@ typedef struct {
    The installer rejects the module if `rows` is not the number of values.
 
    A page of a setting of this module can also have 1 to GRKIT_SETTING_ROWS
-   rows of a native settings page. Fn on the root row or on the page opens
+   rows of a native settings page, the first the page setting. Fn on the root row or on the page opens
    it when it has 2 rows or more. Each module also has a row in the GRKit
    section of the Customize tab of the native MENU, which opens the native
    settings page with an Enable row before its rows, or Enable and the row
    of the page setting (at most 8 values) for a page without settings rows;
-   so MENU shows at most 4 rows of a page. The row of a page of CORE.TONE
+   so MENU shows Enable and at most GRKIT_SETTING_ROWS rows of a page. The row of a page of CORE.TONE
    opens Enable and the Fn adjustments of the committed effect.
 
    A page of CORE.TONE has GRKIT_CHOICE_CORE_ROWS and only its title: the

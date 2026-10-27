@@ -6,10 +6,9 @@
    the section orders the modules, and so their pages in the GRKit root of
    ADJ, at once. Off applies at once too, as a soft Off: the page of the
    module leaves ADJ, and the core calls no code of the module and treats the
-   capabilities that only it uses as unused (manage_suspend). The module
-   does not load at the next start. On applies at once to a module that
-   loaded at this start, and at the next start to another one; the About
-   GRKit row says so until then.
+   capabilities that only it uses as unused (manage_suspend). On applies at
+   once too. A module that is Off at a start loads stopped, so that On can
+   apply at once (runtime/install_plan.h).
 
    Three settings of the settings table keep the choices of each listed
    module (runtime/settings.h): CORE.OFF.<ID>, 1 for Off; CORE.POS.<ID>, its
@@ -49,11 +48,10 @@
 #define MANAGE_NAME_UNITS 16U
 #define MANAGE_STRIDE (MANAGE_NAME + 2U * MANAGE_NAME_UNITS)
 #define MANAGE_NO_TILE 0xffffffffU
-/* The status of a module that loaded, of one that safe mode kept out, and of
-   one that is Off. Other values are the errors of runtime/module_link.h. */
+/* The status of a module that loaded, also stopped, and of one that safe
+   mode kept out. Other values are the errors of runtime/module_link.h. */
 #define MANAGE_LOADED 0U
 #define MANAGE_SAFE 1U
-#define MANAGE_OFF 2U
 /* The most listed modules (MODULES_MAX of the installer). */
 #define MANAGE_MODULES 8U
 /* A position without a CORE.POS value sorts after each position. */
@@ -104,14 +102,6 @@ static u32 manage_row(volatile u32 *h,u32 module) {
     return 0;
 }
 static u32 manage_status(volatile u32 *h,u32 module) { return MANAGE_MAP(manage_entry(h,module)+MANAGE_STATUS)[0]; }
-/* Whether a choice waits for the next start: a module that did not load
-   because it was Off is On. */
-static u32 manage_changed(volatile u32 *h) {
-    u32 i;
-    for(i=0;i<manage_count(h);++i)
-        if(manage_status(h,i)==MANAGE_OFF && !manage_off(h,i)) return 1;
-    return 0;
-}
 /* Whether a soft Off stops a module that loaded at this start. */
 static u32 manage_stopped(volatile u32 *h,u32 module) {
     return manage_status(h,module)==MANAGE_LOADED && manage_off(h,module);
@@ -152,8 +142,7 @@ static u32 manage_of_title(volatile u32 *h,u32 title) {
 }
 static const u16 *manage_title(volatile u32 *h) { return text(h,TEXT_ADJ); }
 static const u16 *manage_summary(volatile u32 *h) {
-    if(manage_word(h,MANAGE_FLAGS)&MANAGE_SAFE_MODE) return text(h,TEXT_MODULES_SUMMARY+2);
-    return text(h,TEXT_MODULES_SUMMARY+manage_changed(h));
+    return text(h,TEXT_MODULES_SUMMARY+(manage_word(h,MANAGE_FLAGS)&MANAGE_SAFE_MODE ? 1 : 0));
 }
 static u32 manage_rows(volatile u32 *h) { return manage_count(h); }
 static const u16 *manage_label(volatile u32 *h,u32 row) { return manage_name(h,manage_module(h,row)); }
@@ -180,9 +169,9 @@ static u32 manage_committed(volatile u32 *h) {
    in their order. Each row is a module, and its values are the positions 1
    to the module count; the row shows the position of the module. A choice
    moves the module to that position and gives each module its row + 1 as
-   CORE.POS, so the page shows the new order at once; the change applies at
-   the next start. SERVICES_MENU + MENU_ROWS_GROUP holds the group of the
-   open page. */
+   CORE.POS, so the page and the root of ADJ (runtime/modules.h: root_order)
+   show the new order at once. SERVICES_MENU + MENU_ROWS_GROUP holds the
+   group of the open page. */
 #define MANAGE_GROUP_ROWS SETTING_ROWS
 #define MANAGE_GROUPS ((MANAGE_MODULES+MANAGE_GROUP_ROWS-1U)/MANAGE_GROUP_ROWS)
 static u32 manage_group(volatile u32 *h) {

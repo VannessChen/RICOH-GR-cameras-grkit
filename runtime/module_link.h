@@ -44,8 +44,9 @@
 #define GRM_TILES 64U
 #define GRM_PAGE_ROWS 64U
 #define GRM_TEXT_UNITS 64U
-/* The most rows of a native settings page (a page has 0, or 2 to this
-   many), and the most values of each row. */
+/* The most rows of a native settings page (a page has 0 to this many; with
+   1, Fn opens no settings page, runtime/menu.c), and the most values of each
+   row. */
 #define GRM_SETTING_ROWS 5U
 #define GRM_SETTING_ROW_VALUES 8U
 /* The stages of plane filters (runtime/sdk/grkit.h). */
