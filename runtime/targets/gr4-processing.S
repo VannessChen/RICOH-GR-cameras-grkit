@@ -115,11 +115,11 @@ module_gamma_curves:
     ldr r0, [r0, #8]
     .word 0xeb000000 | (((.Lowned_record - . - 8) >> 2) & 0x00ffffff)
     bne curves_stock
-    add r5, r0, #0x68
+    add r5, r0, #GRKIT_RECORD_CURVES
     str r5, [r1]
-    add r5, r5, #0x200
+    add r5, r5, #GRKIT_RECORD_CURVE_SIZE
     str r5, [r2]
-    add r5, r5, #0x200
+    add r5, r5, #GRKIT_RECORD_CURVE_SIZE
     str r5, [r3]
     mov r1, r0
     ldr r0, [fp, #-0x50]

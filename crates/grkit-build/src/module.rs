@@ -15,7 +15,7 @@ use crate::{
 use anyhow::{bail, ensure, Context, Result};
 use grkit_core::{
     grm::{Import, Module, Segment, DATA_LINK},
-    packaging::Language,
+    language::Language,
 };
 use std::{
     fmt::Write,

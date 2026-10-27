@@ -4,7 +4,7 @@ mod storage;
 
 use anyhow::{ensure, Context, Result};
 use clap::{Parser, Subcommand};
-use grkit_core::{cube::Encoding, effects, fit, packaging, site, Files};
+use grkit_core::{cube::Encoding, effects, fit, language::Language, packaging, site, Files};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -99,7 +99,7 @@ enum Command {
         #[arg(long, default_value = "gr3", value_parser = grkit_core::camera::CAMERAS.map(|camera| camera.id))]
         camera: String,
         /// The language of the installation guide.
-        #[arg(long, default_value = "en", value_parser = packaging::Language::ALL.map(packaging::Language::code))]
+        #[arg(long, default_value = "en", value_parser = Language::ALL.map(Language::code))]
         language: String,
         /// The PDF of the installation guide for the camera, in the language of
         /// `--language`. `grkit guides` writes its source.
@@ -539,7 +539,7 @@ fn run(command: Command) -> Result<Value> {
                 None => packaging::EffectSet::default(),
             };
             let camera = grkit_core::camera::find(&camera)?;
-            let language = packaging::Language::parse(&language)?;
+            let language = Language::parse(&language)?;
             let pdf = storage::read_bounded(&guide, packaging::MAX_FILE_SIZE)?;
             let modules = modules
                 .iter()
@@ -567,7 +567,7 @@ fn run(command: Command) -> Result<Value> {
             storage::validate_output(&out)?;
             let mut tree = Files::new();
             for camera in grkit_core::camera::CAMERAS {
-                for language in packaging::Language::ALL {
+                for language in Language::ALL {
                     for (name, bytes) in grkit_core::guide::source(camera, language)? {
                         tree.insert(format!("{}/{}/{name}", camera.id, language.code()), bytes);
                     }
@@ -575,7 +575,7 @@ fn run(command: Command) -> Result<Value> {
             }
             storage::write_directory(&out, &tree)?;
             Ok(
-                json!({"output": out, "guides": grkit_core::camera::CAMERAS.len() * packaging::Language::ALL.len()}),
+                json!({"output": out, "guides": grkit_core::camera::CAMERAS.len() * Language::ALL.len()}),
             )
         }
         Command::Cameras => Ok(

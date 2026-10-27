@@ -36,17 +36,6 @@ pub const RTOS_IDENTITY: u32 = 0x53002038;
 
 pub const TARGETS: [&Target; 4] = [&GR3_210, &GR4_111, &GR4_120, &GR4_120_0528];
 
-/// The Rust source of each family and target module, for the build manifest.
-pub(crate) const SOURCES: &[(&str, &[u8])] = &[
-    ("common.rs", include_bytes!("target/common.rs")),
-    ("gr3.rs", include_bytes!("target/gr3.rs")),
-    ("gr3_210.rs", include_bytes!("target/gr3_210.rs")),
-    ("gr4.rs", include_bytes!("target/gr4.rs")),
-    ("gr4_111.rs", include_bytes!("target/gr4_111.rs")),
-    ("gr4_120.rs", include_bytes!("target/gr4_120.rs")),
-    ("gr4_120_0528.rs", include_bytes!("target/gr4_120_0528.rs")),
-];
-
 /// The zip that holds the firmware file of a target.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Download {

@@ -75,7 +75,7 @@ pub fn importable(name: &str) -> bool {
 
 /// The folder of the package modules in the SD tree. A person adds a module
 /// in `GRKIT/MODULES`, which the installer also reads.
-pub const FOLDER: &str = "SCRIPT/GRKIT/MODULES";
+pub const FOLDER: &str = crate::card::MODULES_FOLDER;
 
 /// The FNV-1a hash of a symbol name, which an import entry and the export
 /// table of the core give.
@@ -360,7 +360,7 @@ impl Module {
 /// setting, MODE (Off, On), a choice page, and a layer that draws a square
 /// while MODE is On. Paths are relative to the folder.
 pub fn template(id: &str) -> Result<crate::Files> {
-    use crate::packaging::Language;
+    use crate::language::Language;
     ensure!(
         valid_id(id),
         "Invalid module ID {id:?}: use 1 to 8 characters A-Z, 0-9, or _"

@@ -166,6 +166,18 @@ fn embedded_inputs_and_missing_tool() {
     let sources = source_hashes();
     assert!(sources.contains_key("runtime/installer.c"));
     assert!(sources.contains_key("crates/grkit-build/src/firmware.rs"));
+    // Each source of grkit-core and its assets, also those that no list names.
+    for path in [
+        "crates/grkit-build/src/target/gr4_120.rs",
+        "crates/grkit-core/src/grm.rs",
+        "crates/grkit-core/src/hue.rs",
+        "crates/grkit-core/src/fit/mod.rs",
+        "crates/grkit-core/assets/RobotoCondensed-Light.ttf",
+        "Cargo.lock",
+    ] {
+        assert!(sources.contains_key(path), "{path}");
+    }
+    assert!(!sources.keys().any(|path| path.contains("/src/tests/")));
     assert!(
         Toolchain::discover("/nonexistent/grkit-clang", "/nonexistent/grkit-lld")
             .unwrap_err()

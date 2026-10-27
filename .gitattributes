@@ -1,0 +1,2 @@
+# Test snapshots compare bytes, CR LF of the loader scripts included.
+crates/grkit-build/src/tests/snapshots/** -text

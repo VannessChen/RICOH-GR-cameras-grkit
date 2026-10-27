@@ -1,5 +1,6 @@
 /* The module descriptor of the SDK (runtime/sdk/grkit.h) as the installer
-   reads it (runtime/module_link.h). A test compiles this file for 32-bit ARM
+   reads it (runtime/module_link.h), and the SDK copies of the core types.
+   A test compiles this file for 32-bit ARM
    with -fsyntax-only, so each check holds for the layout of the camera. */
 typedef unsigned char u8;
 typedef unsigned int u32;
@@ -100,3 +101,46 @@ SAME(GRKIT_LANGUAGES, GRM_LANGUAGES);
 SAME(GRKIT_TILE_BYTES, GRM_TILE_BYTES);
 SAME(GRKIT_SETTING_ROWS, GRM_SETTING_ROWS);
 SAME(GRKIT_SETTING_ROW_VALUES, GRM_SETTING_ROW_VALUES);
+
+/* The SDK keeps its own copy of the overlay surface and the picture planes
+   (runtime/sdk/grkit.h), because a module includes only the SDK. The core's
+   types (runtime/core.h) come in under other names here, and each SDK field
+   must sit where the core writes it. The SDK names the core's `record` of a
+   PictureSet `reserved`. */
+#define Surface CoreSurface
+#define Plane CorePlane
+#define PictureSet CorePictureSet
+#define chroma_row core_chroma_row
+#define overlay_label core_overlay_label
+#include "core.h"
+#undef Surface
+#undef Plane
+#undef PictureSet
+#undef chroma_row
+#undef overlay_label
+
+#define LIKE(type, core, field) AT(core, field, __builtin_offsetof(type, field))
+SIZE(CoreSurface, sizeof(Surface));
+LIKE(Surface, CoreSurface, data);
+LIKE(Surface, CoreSurface, stride);
+LIKE(Surface, CoreSurface, area);
+LIKE(Surface, CoreSurface, box);
+SIZE(CorePlane, sizeof(Plane));
+LIKE(Plane, CorePlane, y);
+LIKE(Plane, CorePlane, c);
+LIKE(Plane, CorePlane, width);
+LIKE(Plane, CorePlane, height);
+LIKE(Plane, CorePlane, pitch);
+LIKE(Plane, CorePlane, half);
+LIKE(Plane, CorePlane, left);
+LIKE(Plane, CorePlane, top);
+LIKE(Plane, CorePlane, right);
+LIKE(Plane, CorePlane, bottom);
+SIZE(CorePictureSet, sizeof(PictureSet));
+LIKE(PictureSet, CorePictureSet, planes);
+LIKE(PictureSet, CorePictureSet, count);
+AT(CorePictureSet, record, __builtin_offsetof(PictureSet, reserved));
+LIKE(PictureSet, CorePictureSet, mono);
+LIKE(PictureSet, CorePictureSet, scratch);
+/* A plane filter may use all of the scratch that the core gives each call. */
+SAME(GRKIT_PLANE_SCRATCH, GRKIT_PICTURE_MASKS);

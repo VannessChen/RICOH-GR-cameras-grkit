@@ -10,15 +10,17 @@ use zip::{write::SimpleFileOptions, CompressionMethod, DateTime, ZipArchive, Zip
 
 use crate::{
     camera::{self, Camera},
-    effects, modules, runtime, Files,
+    card, effects,
+    language::Language,
+    modules, runtime, Files,
 };
 
 pub const RUNTIME_PATHS: [&str; 5] = [
     "SCRIPT/STARTUP.TTL",
-    "SCRIPT/GRKIT/LOADER.TTL",
-    runtime::CORE_FILE,
-    "SCRIPT/GRKIT/SCAN.SH",
-    "SCRIPT/GRKIT/INSTALL.SH",
+    card::LOADER_FILE,
+    card::CORE_FILE,
+    card::SCAN_FILE,
+    card::INSTALL_FILE,
 ];
 pub const MAX_ENTRIES: usize = 200;
 pub const MAX_FILE_SIZE: usize = 16 * 1024 * 1024;
@@ -145,7 +147,7 @@ fn marked_target(binary: &[u8]) -> Option<&str> {
 fn runtime_target(runtime: &Files, camera: &Camera) -> Result<&'static str> {
     let targets = camera.targets();
     if let Some(name) = runtime
-        .get(runtime::CORE_FILE)
+        .get(card::CORE_FILE)
         .and_then(|binary| marked_target(binary))
     {
         let target = targets
@@ -232,16 +234,12 @@ fn package_runtime(runtimes: &[VerifiedRuntime], camera: &Camera) -> Result<File
     );
     let binaries: Vec<&[u8]> = runtimes
         .iter()
-        .map(|runtime| runtime.files()[runtime::CORE_FILE].as_slice())
+        .map(|runtime| runtime.files()[card::CORE_FILE].as_slice())
         .collect();
     let files = runtime::package_runtime_files(&binaries, runtime::icon_stride(targets[0])?);
     // The builds of a camera share every file but the core file. The package
     // has its own scripts that run the core files.
-    let own = [
-        runtime::CORE_FILE,
-        "SCRIPT/GRKIT/INSTALL.SH",
-        "SCRIPT/GRKIT/SCAN.SH",
-    ];
+    let own = [card::CORE_FILE, card::INSTALL_FILE, card::SCAN_FILE];
     for runtime in runtimes {
         for (name, blob) in runtime.files() {
             ensure!(
@@ -261,7 +259,7 @@ pub fn validate_runtime(files: &Files, target: &str) -> Result<()> {
         files.len() == RUNTIME_PATHS.len() && RUNTIME_PATHS.iter().all(|p| files.contains_key(*p)),
         "Expected the complete production runtime file set"
     );
-    let binary = &files[runtime::CORE_FILE];
+    let binary = &files[card::CORE_FILE];
     check_installer(binary)?;
     ensure!(
         *files == runtime::runtime_files_for(binary, runtime::icon_stride(target)?),
@@ -357,17 +355,9 @@ pub fn load_runtime(manifest: &[u8], files: &Files) -> Result<VerifiedRuntime> {
     })
 }
 
-/// The inbox of the package effects on the card. SCAN copies a new package
-/// effect into the effects library, `GRKIT/EFFECTS`, where a person adds or
-/// deletes effect files.
-pub const EFFECTS_FOLDER: &str = "SCRIPT/GRKIT/EFFECTS";
+pub use crate::card::EFFECTS_FOLDER;
 
-/// The package list (`runtime/install_library.h`): the file name of each effect and
-/// module of the package, one on each line. Each package has it, also
-/// without effects, so a merge copy of a new package over an old one gives
-/// the same result as a replace copy: the installer ignores the package files
-/// that the list does not name.
-pub const PACKAGE_LIST: &str = "SCRIPT/GRKIT/PACKAGE.TXT";
+pub use crate::card::PACKAGE_LIST;
 
 /// The compiled effects of a package, each under its package filename (`effects::filename`).
 #[derive(Clone, Debug, Default)]
@@ -421,130 +411,6 @@ fn is_effect_path(name: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
-/// The language of a package's installation guide. A package has the guide in
-/// one language, as a PDF.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Language {
-    #[default]
-    English,
-    SimplifiedChinese,
-    TraditionalChinese,
-    Japanese,
-}
-
-impl Language {
-    pub const ALL: [Language; 4] = [
-        Language::English,
-        Language::SimplifiedChinese,
-        Language::TraditionalChinese,
-        Language::Japanese,
-    ];
-
-    /// Parses a language tag of the site: `en`, `zh-Hans`, `zh-Hant`, or `ja`.
-    pub fn parse(code: &str) -> Result<Self> {
-        Self::ALL
-            .into_iter()
-            .find(|language| language.code() == code)
-            .with_context(|| format!("Unknown language {code:?}. Use en, zh-Hans, zh-Hant, or ja"))
-    }
-
-    pub fn code(self) -> &'static str {
-        match self {
-            Language::English => "en",
-            Language::SimplifiedChinese => "zh-Hans",
-            Language::TraditionalChinese => "zh-Hant",
-            Language::Japanese => "ja",
-        }
-    }
-
-    /// The title of the installation guide in this language.
-    pub fn guide_title(self) -> &'static str {
-        match self {
-            Language::English => "GRKit Installation Guide",
-            Language::SimplifiedChinese => "GRKit 安装指南",
-            Language::TraditionalChinese => "GRKit 安裝指南",
-            Language::Japanese => "GRKit インストールガイド",
-        }
-    }
-
-    /// The package path of the PDF guide in this language: its title.
-    pub fn guide_path(self) -> String {
-        format!("{}.pdf", self.guide_title())
-    }
-
-    /// The guide text for a camera of `target`, before the camera names go in.
-    fn guide_template(self, gr4: bool) -> &'static str {
-        match (gr4, self) {
-            (false, Language::English) => include_str!("../../../resources/INSTALLATION.md"),
-            (false, Language::SimplifiedChinese) => {
-                include_str!("../../../resources/INSTALLATION.zh-Hans.md")
-            }
-            (false, Language::TraditionalChinese) => {
-                include_str!("../../../resources/INSTALLATION.zh-Hant.md")
-            }
-            (false, Language::Japanese) => include_str!("../../../resources/INSTALLATION.ja.md"),
-            (true, Language::English) => include_str!("../../../resources/INSTALLATION-GR4.md"),
-            (true, Language::SimplifiedChinese) => {
-                include_str!("../../../resources/INSTALLATION-GR4.zh-Hans.md")
-            }
-            (true, Language::TraditionalChinese) => {
-                include_str!("../../../resources/INSTALLATION-GR4.zh-Hant.md")
-            }
-            (true, Language::Japanese) => {
-                include_str!("../../../resources/INSTALLATION-GR4.ja.md")
-            }
-        }
-    }
-
-    /// The camera phrase of a guide, for example "GR III and GR III HDF
-    /// firmware 2.10" for one version, or "... firmware 2.10 or 2.20" for the
-    /// releases of the camera.
-    pub fn camera_phrase(self, camera: &Camera, versions: &[&str]) -> String {
-        let (and, word, or) = match self {
-            Language::English => ("and", "firmware", " or "),
-            Language::SimplifiedChinese => ("和", "固件", " 或 "),
-            Language::TraditionalChinese => ("與", "韌體", " 或 "),
-            Language::Japanese => ("および", "ファームウェア", " または "),
-        };
-        format!(
-            "{} {and} {} {word} {}",
-            camera.name,
-            camera.hdf,
-            versions.join(or)
-        )
-    }
-}
-
-/// The Mode Set screen that step 3 of each guide shows. GR III and GR IV show
-/// the same screen.
-const MODESET_IMAGE: (&str, &[u8]) = (
-    "images/modeset.png",
-    include_bytes!("../../../resources/images/modeset.png"),
-);
-
-/// The screenshots of the GR III guides, at the paths that the guides link, so
-/// the links work in the repository and in the guide source.
-const GUIDE_IMAGES: [(&str, &[u8]); 2] = [
-    (
-        "images/grkit-root.jpg",
-        include_bytes!("../../../resources/images/grkit-root.jpg"),
-    ),
-    MODESET_IMAGE,
-];
-
-/// The GR IV guides show only the Mode Set screen, because other GR III screens
-/// could differ from GR IV screens.
-const GR4_GUIDE_IMAGES: [(&str, &[u8]); 1] = [MODESET_IMAGE];
-
-/// The screenshots that the guides of `camera` show.
-pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])] {
-    if camera.is_gr4() {
-        &GR4_GUIDE_IMAGES
-    } else {
-        &GUIDE_IMAGES
-    }
-}
-
 /// What a valid package holds besides the runtime.
 #[derive(Debug)]
 pub struct Contents {
@@ -593,7 +459,7 @@ pub fn validate_contents(contents: &Files) -> Result<Contents> {
     let cores = camera.targets().len();
     let runtime_paths: Vec<String> = RUNTIME_PATHS
         .iter()
-        .filter(|name| **name != runtime::CORE_FILE)
+        .filter(|name| **name != card::CORE_FILE)
         .map(|name| (*name).to_owned())
         .chain((0..cores).map(|index| runtime::core_path_of(index, cores)))
         .collect();
@@ -712,27 +578,6 @@ fn checksum_list(contents: &Files) -> Vec<u8> {
         .filter(|(name, _)| name.as_str() != "SHA256SUMS")
         .map(|(name, blob)| format!("{}  {name}\n", sha256(blob)))
         .collect::<String>()
-        .into_bytes()
-}
-
-/// The installation guide of `camera` in one language, as Markdown, the source of
-/// its PDF (`guide::source`). The main resource describes GR III. GR IIIx gets
-/// its names, firmware version, and ModeSet file. GR IV, which has fewer modules,
-/// has its own resource.
-pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
-    let gr4 = camera.is_gr4();
-    // The resource names the first release of its camera. The guide of a
-    // camera names each release that GRKit supports. A guide serves each
-    // package of the camera, so it names the releases of each runtime build.
-    let base = if gr4 { &camera::GR4 } else { &camera::GR3 };
-    let releases = camera.versions();
-    let guide = language.guide_template(gr4).replace(
-        &language.camera_phrase(base, &[base.releases[0].firmware]),
-        &language.camera_phrase(camera, &releases),
-    );
-    guide
-        .replace(base.hdf, camera.hdf)
-        .replace(base.modeset, camera.modeset)
         .into_bytes()
 }
 

@@ -1,4 +1,5 @@
 import { effectUrl, siteUrl, type Effect, type ImportedEffect } from './catalog';
+import { effectFilename } from './import/names';
 import wasmUrl from './wasm/grkit_wasm_bg.wasm?url';
 
 /** A request fails when no data arrives for this long, so a stalled connection ends in an error. */
@@ -239,14 +240,9 @@ export async function buildScriptsOff(camera: string): Promise<Blob> {
 }
 
 /** Starts the download of a blob as a file. */
-/**
- * Saves the `.GRF` file of an imported effect under the file name that a
- * package gives it: the first 8 hex digits of the SHA-256 of its ID
- * (`grkit_core::effects::filename`).
- */
+/** Saves the `.GRF` file of an imported effect under the file name that a package gives it. */
 export async function saveImported(effect: ImportedEffect): Promise<void> {
-  const digest = await sha256(new TextEncoder().encode(effect.id));
-  save(new Blob([effect.imported.blob as Uint8Array<ArrayBuffer>]), `${digest.slice(0, 8).toUpperCase()}.GRF`);
+  save(new Blob([effect.imported.blob as Uint8Array<ArrayBuffer>]), await effectFilename(effect.id));
 }
 
 export function save(blob: Blob, filename: string): void {

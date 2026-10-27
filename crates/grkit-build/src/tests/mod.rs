@@ -9,6 +9,45 @@ mod porting;
 mod resolution;
 mod targets;
 
+/// Compares `text` with the snapshot `name` in `src/tests/snapshots`. With
+/// GRKIT_UPDATE_GENERATED set, it writes the snapshot instead, so a change of
+/// the output shows in the diff of the snapshot.
+fn snapshot(name: &str, text: &str) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/tests/snapshots")
+        .join(name);
+    if std::env::var_os("GRKIT_UPDATE_GENERATED").is_some() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, text).unwrap();
+        return;
+    }
+    let expected = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(
+        expected == text,
+        "The snapshot {name} changed. Review the change, then run \
+         GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-build"
+    );
+}
+
+/// `header` with each long array initializer as its number of values and the
+/// SHA-256 of its text, so that a snapshot shows the other lines in full.
+fn summarized(header: &str) -> String {
+    header
+        .lines()
+        .map(|line| match line.split_once("= {") {
+            Some((head, values)) if line.len() > 200 => {
+                let values = values.trim_end_matches("};");
+                format!(
+                    "{head}= {{ /* {} values, SHA-256 {} */ }};\n",
+                    values.split(',').count(),
+                    sha256(values.as_bytes())
+                )
+            }
+            _ => format!("{line}\n"),
+        })
+        .collect()
+}
+
 /// Where the synthetic image keeps its literal words, away from each site.
 const SYNTHETIC_LITERALS: u32 = target::RTOS_BASE + 0x10000;
 

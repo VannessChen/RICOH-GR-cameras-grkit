@@ -9,10 +9,122 @@
 use anyhow::{bail, ensure, Result};
 
 use crate::{
-    camera::Camera,
-    packaging::{guide_images, installation_guide, Language},
+    camera::{self, Camera},
+    language::Language,
     Files,
 };
+
+/// The installation guide of each language.
+impl Language {
+    /// The title of the installation guide in this language. A package has
+    /// the guide in one language, as a PDF.
+    pub fn guide_title(self) -> &'static str {
+        match self {
+            Language::English => "GRKit Installation Guide",
+            Language::SimplifiedChinese => "GRKit 安装指南",
+            Language::TraditionalChinese => "GRKit 安裝指南",
+            Language::Japanese => "GRKit インストールガイド",
+        }
+    }
+
+    /// The package path of the PDF guide in this language: its title.
+    pub fn guide_path(self) -> String {
+        format!("{}.pdf", self.guide_title())
+    }
+
+    /// The guide text for a camera of `target`, before the camera names go in.
+    fn guide_template(self, gr4: bool) -> &'static str {
+        match (gr4, self) {
+            (false, Language::English) => include_str!("../../../resources/INSTALLATION.md"),
+            (false, Language::SimplifiedChinese) => {
+                include_str!("../../../resources/INSTALLATION.zh-Hans.md")
+            }
+            (false, Language::TraditionalChinese) => {
+                include_str!("../../../resources/INSTALLATION.zh-Hant.md")
+            }
+            (false, Language::Japanese) => include_str!("../../../resources/INSTALLATION.ja.md"),
+            (true, Language::English) => include_str!("../../../resources/INSTALLATION-GR4.md"),
+            (true, Language::SimplifiedChinese) => {
+                include_str!("../../../resources/INSTALLATION-GR4.zh-Hans.md")
+            }
+            (true, Language::TraditionalChinese) => {
+                include_str!("../../../resources/INSTALLATION-GR4.zh-Hant.md")
+            }
+            (true, Language::Japanese) => {
+                include_str!("../../../resources/INSTALLATION-GR4.ja.md")
+            }
+        }
+    }
+
+    /// The camera phrase of a guide, for example "GR III and GR III HDF
+    /// firmware 2.10" for one version, or "... firmware 2.10 or 2.20" for the
+    /// releases of the camera.
+    pub fn camera_phrase(self, camera: &Camera, versions: &[&str]) -> String {
+        let (and, word, or) = match self {
+            Language::English => ("and", "firmware", " or "),
+            Language::SimplifiedChinese => ("和", "固件", " 或 "),
+            Language::TraditionalChinese => ("與", "韌體", " 或 "),
+            Language::Japanese => ("および", "ファームウェア", " または "),
+        };
+        format!(
+            "{} {and} {} {word} {}",
+            camera.name,
+            camera.hdf,
+            versions.join(or)
+        )
+    }
+}
+
+/// The Mode Set screen that step 3 of each guide shows. GR III and GR IV show
+/// the same screen.
+const MODESET_IMAGE: (&str, &[u8]) = (
+    "images/modeset.png",
+    include_bytes!("../../../resources/images/modeset.png"),
+);
+
+/// The screenshots of the GR III guides, at the paths that the guides link, so
+/// the links work in the repository and in the guide source.
+const GUIDE_IMAGES: [(&str, &[u8]); 2] = [
+    (
+        "images/grkit-root.jpg",
+        include_bytes!("../../../resources/images/grkit-root.jpg"),
+    ),
+    MODESET_IMAGE,
+];
+
+/// The GR IV guides show only the Mode Set screen, because other GR III screens
+/// could differ from GR IV screens.
+const GR4_GUIDE_IMAGES: [(&str, &[u8]); 1] = [MODESET_IMAGE];
+
+/// The screenshots that the guides of `camera` show.
+pub fn guide_images(camera: &Camera) -> &'static [(&'static str, &'static [u8])] {
+    if camera.is_gr4() {
+        &GR4_GUIDE_IMAGES
+    } else {
+        &GUIDE_IMAGES
+    }
+}
+
+/// The installation guide of `camera` in one language, as Markdown, the source of
+/// its PDF (`guide::source`). The main resource describes GR III. GR IIIx gets
+/// its names, firmware version, and ModeSet file. GR IV, which has fewer modules,
+/// has its own resource.
+pub fn installation_guide(camera: &Camera, language: Language) -> Vec<u8> {
+    let gr4 = camera.is_gr4();
+    // The resource names the first release of its camera. The guide of a
+    // camera names each release that GRKit supports. A guide serves each
+    // package of the camera, so it names the releases of each runtime build.
+    let base = if gr4 { &camera::GR4 } else { &camera::GR3 };
+    let releases = camera.versions();
+    let guide = language.guide_template(gr4).replace(
+        &language.camera_phrase(base, &[base.releases[0].firmware]),
+        &language.camera_phrase(camera, &releases),
+    );
+    guide
+        .replace(base.hdf, camera.hdf)
+        .replace(base.modeset, camera.modeset)
+        .into_bytes()
+}
 
 /// The source file of a guide, next to the images that it shows.
 pub const SOURCE: &str = "guide.typ";

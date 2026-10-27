@@ -10,11 +10,11 @@
    is the capture area that the capture.aspect hooks and the overlay read.
    The camera keeps the native 3:2, and the resident loader saves the crop.
 
-   The includer defines u8, u32, and the header fields (runtime/abi.h). A
-   component that reads the value defines ASPECT_NATIVE() as the native
-   still aspect id. A component that sets it also defines
-   ASPECT_SET_NATIVE(id), which sets the native aspect as the native menu
-   does, and ASPECT_REQUEST(), which sends the native aspect request again. */
+   The includer defines u8, u32, the header fields (runtime/abi.h), and
+   aspect_native(). runtime/setting_store.h sets the value. */
+/* The native still aspect id. Each component that includes this file
+   defines it. */
+static u32 aspect_native(void);
 #ifndef CAPABILITY_USED
 /* Whether a loaded module uses the capability `handle`. */
 #define CAPABILITY_USED(h,handle) ((h)[GRKIT_HOST_CAPABILITIES/4]>>((handle)-GRKIT_CORE_SETTING_BASE)&1U)
@@ -50,27 +50,12 @@ static __attribute__((unused)) u32 aspect_offered(u32 value) { return !value || 
 #endif
 #endif
 
-#ifdef ASPECT_NATIVE
 /* The value of CORE.ASPECT: the crop in native 3:2, or a crop that applies
    in the native aspect, else Off. A native aspect that the user sets in the
    camera menu is not a Framing ratio, so it reads as Off. */
 static __attribute__((unused)) u32 aspect_value(volatile u32 *h) {
-    u32 native=ASPECT_NATIVE(), crop=framing_crop(h);
+    u32 native=aspect_native(), crop=framing_crop(h);
     return !native || (crop && FRAMING_CROP_KEEPS(native,crop)) ? crop : 0;
 }
-#endif
 
-#ifdef ASPECT_SET_NATIVE
-/* Set CORE.ASPECT to a value that the target offers. Each value needs the
-   native 3:2, which the native setter requests. A crop then sends the
-   request again, so the capture hook applies the new crop. */
-static __attribute__((unused)) void aspect_store(volatile u32 *h,u32 value) {
-    h[GRKIT_HOST_FRAME_RATIO/4]=value;
-    if(ASPECT_NATIVE()) {
-        ASPECT_SET_NATIVE(0);
-        if(!value) return;
-    }
-    ASPECT_REQUEST();
-}
-#endif
 #endif

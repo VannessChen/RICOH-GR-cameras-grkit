@@ -571,3 +571,31 @@ fn overlay_labels_fit_their_area_and_outline_their_text() {
         .unwrap();
     assert!(7 + widest < 360 - cue / 2);
 }
+
+/// Label n names the CORE.ASPECT value n (LABEL_RATIO in runtime/sdk/grkit.h):
+/// it starts the summary of value n of the Framing module.
+#[test]
+fn overlay_labels_follow_the_aspect_values() {
+    let aspect = grkit_core::capabilities::CAPABILITIES
+        .iter()
+        .find(|capability| capability.key == "ASPECT")
+        .unwrap();
+    assert_eq!(artwork::OVERLAY_LABELS.len(), aspect.values as usize);
+    let text = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../modules/framing/text/en.toml"),
+    )
+    .unwrap();
+    // A TOML array of strings is also a JSON array.
+    let line = text
+        .lines()
+        .find_map(|line| line.strip_prefix("summaries = "))
+        .unwrap();
+    let summaries: Vec<String> = serde_json::from_str(line).unwrap();
+    assert_eq!(summaries.len(), artwork::OVERLAY_LABELS.len());
+    for (value, summary) in summaries.iter().enumerate().skip(1) {
+        assert!(
+            summary.starts_with(artwork::OVERLAY_LABELS[value]),
+            "label {value}"
+        );
+    }
+}

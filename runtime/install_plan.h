@@ -25,7 +25,7 @@ static char module_names[GRKIT_MODULES_MAX][CATALOG_NAME_SIZE];
 static u32 module_count, module_usable, module_words, module_code_bytes;
 static u8 module_file[MODULE_FILE_MAX];
 static struct grm_module module;
-/* The settings of the usable modules in module order (runtime/settings.h):
+/* The settings of the usable modules in module order (runtime/setting_table.h):
    the full name, values, and flags of each, the first setting and the count
    of each module, and the used settings of each module. */
 static char setting_names[GRKIT_MODULE_SETTINGS_MAX][GRM_NAME];

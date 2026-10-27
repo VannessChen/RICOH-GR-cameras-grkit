@@ -1,6 +1,8 @@
 use std::io::{Cursor, Read, Write};
 
-use grkit_core::{camera, packaging::*, runtime, testing, Files};
+use grkit_core::{
+    camera, guide::installation_guide, language::Language, packaging::*, runtime, testing, Files,
+};
 use serde_json::{json, Value};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 

@@ -4,7 +4,6 @@
    Enable, Options, and the settings of the page, and the option list. The
    settings page code (runtime/menu_settings.h) reads them, so the includer
    includes this file inside that one. */
-#ifdef FW_MENU_TABS
 /* The page of a listed module in the GRKit section of MENU
    (menu_rows_install, LISTED_PAGE), which
    shows an Enable row, then the settings of its module page. SERVICES_MENU +
@@ -18,13 +17,11 @@
 static const u16 *on_off_text(volatile u32 *h,u32 value) { return text(h,value ? TEXT_OFF : TEXT_ON); }
 static u32 listed(volatile u32 *h) { return services_word(h,SERVICES_MENU+MENU_ROWS_LISTED)[0]; }
 static u32 listed_slot(volatile u32 *h) { return services_word(h,SERVICES_MENU+MENU_ROWS_PAGE)[0]; }
-#ifdef PARAMETER_KINDS
 /* The Fn adjustments of the committed effect: the row shows the effect. */
 static u32 one_value(volatile u32 *h) { (void)h; return 1; }
 static u32 no_value(volatile u32 *h) { (void)h; return 0; }
 static void no_set(volatile u32 *h,u32 value) { (void)h; (void)value; }
 static const u16 *adjustments_label(volatile u32 *h) { return text(h,TEXT_ADJUSTMENTS); }
-#endif
 static const u16 no_value_text[1]={0};
 /* The rows of a page of CORE.TONE: Film Stock, the effect, whose value page
    lists Off and the shown effects in their ADJ order, then Parameters, the
@@ -33,28 +30,22 @@ static const u16 no_value_text[1]={0};
 static const u16 *film_label(volatile u32 *h) { return text(h,TEXT_FILM); }
 static const u16 *film_text(volatile u32 *h,u32 value) { return tone_label(h,value); }
 static void film_set(volatile u32 *h,u32 value) { tone_apply(h,value); }
-#ifdef PARAMETER_KINDS
 static const u16 *adjustments_text(volatile u32 *h,u32 value) { (void)h; (void)value; return no_value_text; }
-#endif
 static const Setting tone_settings[2]={
     {film_label,tone_rows,film_text,tone_committed,film_set},
-#ifdef PARAMETER_KINDS
     {adjustments_label,one_value,adjustments_text,no_value,no_set},
-#endif
 };
 /* The settings of the module page of the listed module after its Enable
-   row, with module_at selecting the page, and their count in *n; or 0. */
+   row, with menu_page selecting the page, and their count in *n; or 0. */
 static const Setting *listed_base(volatile u32 *h,u32 *n) {
-    const Module *page;
+    const MenuPage *page;
     *n=0;
     if(listed_slot(h)>=module_pages(h)) return 0;
-    page=module_at(h,listed_slot(h));
+    page=menu_page(h,listed_slot(h));
     if(page==&tone_module) {
         /* Without a committed effect, there are no Fn adjustments. */
         *n=1;
-#ifdef PARAMETER_KINDS
         if(h[GRKIT_HOST_ACTIVE/4]) *n=2;
-#endif
         return tone_settings;
     }
     if(page->settings) {
@@ -66,15 +57,15 @@ static const Setting *listed_base(volatile u32 *h,u32 *n) {
     *n=1;
     return choice_one;
 }
-/* The options of the listed module: module_at selects its page. A page of
+/* The options of the listed module: menu_page selects its page. A page of
    CORE.TONE has the listed effects in the order of the Effects choices,
    another page its values but Off. */
-static u32 option_tone(volatile u32 *h) { return module_at(h,listed_slot(h))==&tone_module; }
+static u32 option_tone(volatile u32 *h) { return menu_page(h,listed_slot(h))==&tone_module; }
 /* The number of options of page `slot`, or 0 for a page without options. */
 static u32 options_of(volatile u32 *h,u32 slot) {
-    const Module *page;
+    const MenuPage *page;
     if(slot>=module_pages(h)) return 0;
-    page=module_at(h,slot);
+    page=menu_page(h,slot);
     if(!choice_options(h)) return 0;
     if(page==&tone_module) return effects_count(h);
     return setting_rows(h,CHOICE_ENTRY(h)[1])-1;
@@ -211,13 +202,7 @@ static const Setting listed_settings[SETTING_ROWS]={
 /* Whether row `row` of a page opens the Fn adjustments instead of a value
    page. */
 static u32 settings_fn_row(volatile u32 *h,const Setting *page,u32 row) {
-#ifdef PARAMETER_KINDS
     const Setting *b;
     return page==listed_settings && listed_kind(h,row,&b)==1 && b==tone_settings;
-#else
-    (void)h; (void)page; (void)row;
-    return 0;
-#endif
 }
-#endif
 #endif /* GRKIT_MENU_LISTED_H */

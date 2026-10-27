@@ -1,4 +1,5 @@
 import type { Cover } from '../catalog';
+import { EFFECT_ID_MAX, EFFECT_NAME_MAX } from '../generated/site';
 
 /** The input encodings of `grkit effects import --input`, in the order the page offers them. */
 export const INPUTS = ['standard', 'srgb', 'linear', 'vlog', 'flog', 'flog2', 'flog2c'] as const;
@@ -18,8 +19,18 @@ export const INPUT_NAMES: Readonly<Record<Input, string>> = {
 /** The file types that `Cube::read` accepts. */
 export const LUT_ACCEPT = '.cube,.png,.tif,.tiff';
 
-const MAX_NAME = 16;
-const MAX_ID = 31;
+const MAX_NAME = EFFECT_NAME_MAX;
+const MAX_ID = EFFECT_ID_MAX;
+
+/**
+ * The name of the `.GRF` file of an effect in a package: the first 8 hex digits of
+ * the SHA-256 of its ID (`grkit_core::effects::filename`).
+ */
+export async function effectFilename(id: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(id));
+  const hex = Array.from(new Uint8Array(digest).slice(0, 4), (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.toUpperCase()}.GRF`;
+}
 
 /** An effect name has 1 to 16 printable ASCII characters and no edge spaces (`effects.rs`). */
 export function validName(name: string): boolean {

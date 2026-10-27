@@ -22,6 +22,8 @@ The [README](README.md#build-from-source) builds a GR III package. For other pac
 
 ## Test
 
+`scripts/check.sh` runs the checks of the Tests workflow, except `cargo deny`. It adds the ARM builds and the firmware tests when their variables are set (see below). The commands one at a time:
+
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -36,7 +38,7 @@ Host C tests compile parts of the runtime with a host C compiler. If no host com
 The ARM builds are ignored tests. The second command needs the firmware:
 
 ```sh
-GRKIT_CLANG=clang GRKIT_LLD=ld.lld cargo test -p grkit-build --locked synthetic_ -- --ignored
+GRKIT_CLANG=clang GRKIT_LLD=ld.lld cargo test -p grkit-build --locked -- --ignored synthetic_ dump_
 GRKIT_TEST_FIRMWARE="$PWD/firmware/fwdc239b.bin" GRKIT_CLANG=clang GRKIT_LLD=ld.lld \
   cargo test -p grkit-build --locked pinned_firmware_build_is_reproducible -- --ignored
 ```

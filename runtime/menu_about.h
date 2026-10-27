@@ -1,8 +1,12 @@
 #ifndef GRKIT_MENU_ABOUT_H
 #define GRKIT_MENU_ABOUT_H
-/* About GRKit on the native camera information page (runtime/menu.c). */
-#ifdef FW_MENU_TABS
-/* About GRKit on the camera information page (INFO_CONTROLLER). */
+/* About GRKit on the native camera information page (INFO_CONTROLLER,
+   runtime/menu.c). The build header gives the lines of the page that show
+   the version and the address (INFO_LINES), or the text IDs of its labels
+   (INFO_LABEL_TEXTS). */
+#if !defined(INFO_LINES) && !defined(INFO_LABEL_TEXTS)
+#error "The build header defines INFO_LINES or INFO_LABEL_TEXTS"
+#endif
 static u32 about_shows(volatile u32 *h) {
     return h[GRKIT_HOST_SERVICES/4] && services_word(h,SERVICES_MENU+MENU_ROWS_ABOUT)[0];
 }
@@ -59,5 +63,4 @@ static u32 info_text(volatile u32 *h,u32 id) {
     descriptor(at+n*2,text(h,TEXT_ABOUT+(n==0 ? 0 : n==1 ? 1 : 3)));
     return (u32)(at+n*2)|1U;
 }
-#endif
 #endif /* GRKIT_MENU_ABOUT_H */

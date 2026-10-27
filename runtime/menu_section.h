@@ -1,8 +1,6 @@
 #ifndef GRKIT_MENU_SECTION_H
 #define GRKIT_MENU_SECTION_H
 /* The GRKit section of the Customize tab of the native MENU (runtime/menu.c). */
-#ifdef SETTINGS_SUBMENU
-#ifdef FW_MENU_TABS
 /* The GRKit section of the native MENU. MENU builds its tabs at the first
    MENU of a start, after a controller change. So the first controller
    change after INSTALL copies the Customize tab descriptor into the services
@@ -30,7 +28,6 @@
 #define MENU_ROW_GRKIT 1U
 #define MENU_ROW_LISTED 2U
 #define MENU_ROW_ADJ 3U
-#ifdef PARAMETER_KINDS
 /* The model snapshot that a cancel of the parameter page restores, as
    open_parameters takes it from ADJ. FW_ADJ_SNAPSHOT reads only the movie
    flag of its controller: GR III the byte ADJ_MOVIE_FIELD, GR IV a global
@@ -44,7 +41,6 @@ static void menu_still_snapshot(void) {
     CALL1(FW_ADJ_SNAPSHOT)((u32)adj_still);
 #endif
 }
-#endif
 /* The text IDs of the label and the value of a MENU row, and of the section
    title: those of the first two rows of the borrowed submenu. No view of the
    Customize tab shows them, so the text hook can claim them there; it gives
@@ -111,7 +107,6 @@ static u32 menu_rows_controller(volatile u32 *h,u32 id) {
     u32 slot=id-MENU_ROW_TARGET, kind, module;
     if(!h[GRKIT_HOST_SERVICES/4]) return id;
     menu_rows_install(h);
-#ifdef PARAMETER_KINDS
     /* The Fn adjustments row of the page of Image Control. Without a
        committed effect, it opens nothing. */
     if(id==MENU_FN_TARGET) {
@@ -121,7 +116,6 @@ static u32 menu_rows_controller(volatile u32 *h,u32 id) {
         h[GRKIT_HOST_SETTINGS/4]|=SETTINGS_FN;
         return IC_PARAMETERS_CONTROLLER;
     }
-#endif
     if(slot>=services_word(h,SERVICES_MENU)[MENU_ROWS_COUNT/4]) return id;
     kind=menu_row(h,slot)[MENU_ROW_KIND/4];
     module=menu_row(h,slot)[MENU_ROW_MODULE/4];
@@ -177,7 +171,7 @@ static void menu_row_fill(u32 slot,u32 row) {
            value. */
         page=listed_page(h,module);
         if(page<module_pages(h)) {
-            const Module *m=module_at(h,page);
+            const MenuPage *m=menu_page(h,page);
             label=m->title(h);
             value=manage_off(h,module) ? on_off_text(h,1) : m->label(h,m->committed(h));
         }
@@ -216,8 +210,4 @@ static u32 menu_rows_text(volatile u32 *h,u32 view,u32 id) {
         return (u32)services_word(h,SERVICES_MENU+MENU_ROWS_TITLE_AT)|1U;
     return 0;
 }
-#else
-static u32 menu_rows_controller(volatile u32 *h,u32 id) { (void)h; return id; }
-#endif
-#endif
 #endif /* GRKIT_MENU_SECTION_H */

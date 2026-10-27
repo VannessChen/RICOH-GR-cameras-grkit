@@ -110,8 +110,9 @@ pub fn validate_plan(plan: &PatchPlan) -> Result<()> {
     Ok(())
 }
 
-// Every file under runtime/, from build.rs.
-include!(concat!(env!("OUT_DIR"), "/runtime_sources.rs"));
+// Every file under runtime/, and the Rust sources and assets of a build, from
+// build.rs.
+include!(concat!(env!("OUT_DIR"), "/sources.rs"));
 
 /// A file under `runtime/` by its path there, such as `targets/gr4.h`.
 pub fn runtime_source(path: &str) -> Option<&'static [u8]> {
@@ -121,82 +122,18 @@ pub fn runtime_source(path: &str) -> Option<&'static [u8]> {
         .map(|&(_, bytes)| bytes)
 }
 
+/// The SHA-256 of each file that can change a runtime build, by its path in
+/// the repository.
 pub fn source_hashes() -> BTreeMap<String, String> {
-    let mut sources: BTreeMap<_, _> = RUNTIME_SOURCES
+    RUNTIME_SOURCES
         .iter()
         .map(|(name, bytes)| (format!("runtime/{name}"), sha256(bytes)))
-        .collect();
-    for (name, bytes) in [
-        ("lib.rs", include_bytes!("lib.rs").as_slice()),
-        ("arm.rs", include_bytes!("arm.rs").as_slice()),
-        ("firmware.rs", include_bytes!("firmware.rs").as_slice()),
-        ("target.rs", include_bytes!("target.rs").as_slice()),
-        ("toolchain.rs", include_bytes!("toolchain.rs").as_slice()),
-        ("components.rs", include_bytes!("components.rs").as_slice()),
-        ("loader.rs", include_bytes!("loader.rs").as_slice()),
-        ("relocation.rs", include_bytes!("relocation.rs").as_slice()),
-    ] {
-        sources.insert(format!("crates/grkit-build/src/{name}"), sha256(bytes));
-    }
-    for (name, bytes) in target::SOURCES {
-        sources.insert(
-            format!("crates/grkit-build/src/target/{name}"),
-            sha256(bytes),
-        );
-    }
-    for (name, bytes) in [
-        (
-            "artwork.rs",
-            include_bytes!("../../grkit-core/src/artwork.rs").as_slice(),
-        ),
-        (
-            "runtime.rs",
-            include_bytes!("../../grkit-core/src/runtime.rs").as_slice(),
-        ),
-        (
-            "abi.rs",
-            include_bytes!("../../grkit-core/src/abi.rs").as_slice(),
-        ),
-        (
-            "menu_text.rs",
-            include_bytes!("../../grkit-core/src/menu_text.rs").as_slice(),
-        ),
-        (
-            "capabilities.rs",
-            include_bytes!("../../grkit-core/src/capabilities.rs").as_slice(),
-        ),
-        (
-            "modules.rs",
-            include_bytes!("../../grkit-core/src/modules.rs").as_slice(),
-        ),
-    ] {
-        sources.insert(format!("crates/grkit-core/src/{name}"), sha256(bytes));
-    }
-    for (name, bytes) in [
-        (
-            "Cargo.toml",
-            include_bytes!("../../../Cargo.toml").as_slice(),
-        ),
-        (
-            "Cargo.lock",
-            include_bytes!("../../../Cargo.lock").as_slice(),
-        ),
-        (
-            "crates/grkit-build/Cargo.toml",
-            include_bytes!("../Cargo.toml").as_slice(),
-        ),
-        (
-            "crates/grkit-core/Cargo.toml",
-            include_bytes!("../../grkit-core/Cargo.toml").as_slice(),
-        ),
-        (
-            "crates/grkit-core/src/lib.rs",
-            include_bytes!("../../grkit-core/src/lib.rs").as_slice(),
-        ),
-    ] {
-        sources.insert(name.to_owned(), sha256(bytes));
-    }
-    sources
+        .chain(
+            BUILD_SOURCES
+                .iter()
+                .map(|(name, bytes)| (name.to_string(), sha256(bytes))),
+        )
+        .collect()
 }
 
 pub fn materialize_runtime(directory: &Path) -> Result<()> {

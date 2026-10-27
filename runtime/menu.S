@@ -1,17 +1,18 @@
 #include "firmware.h"
 #include "abi.h"
 #include "hooks.h"
-/* menu.c has the Fn parameter page with PARAMETER_KINDS and the settings page
-   with SETTINGS_SUBMENU (build header). The hooks of each page come from the
-   site tables of the target (hooks.h). A build has both or neither. */
-#if defined(PARAMETER_KINDS) != defined(HOOK_MENU_PARAMETER_START)
-#error "PARAMETER_KINDS and the menu_parameter_* hooks go together"
+/* Each build has the Fn parameter page (PARAMETER_KINDS), the settings page
+   (SETTINGS_SUBMENU), and the checkbox options page (FW_CHECK_ITEM) of
+   menu.c. The hooks of each page come from the site tables of the target
+   (hooks.h). */
+#if !defined(PARAMETER_KINDS) || !defined(HOOK_MENU_PARAMETER_START)
+#error "The build header defines PARAMETER_KINDS, and the target has the menu_parameter_* hooks"
 #endif
-#if defined(SETTINGS_SUBMENU) != defined(HOOK_MENU_SETTINGS_CHANGE)
-#error "SETTINGS_SUBMENU and the menu_settings_* hooks go together"
+#if !defined(SETTINGS_SUBMENU) || !defined(HOOK_MENU_SETTINGS_CHANGE)
+#error "The build header defines SETTINGS_SUBMENU, and the target has the menu_settings_* hooks"
 #endif
-#if defined(FW_CHECK_ITEM) != defined(HOOK_MENU_CHECK_FACTORY)
-#error "The checkbox options page needs its hooks and its firmware definitions together"
+#if !defined(FW_CHECK_ITEM) || !defined(HOOK_MENU_CHECK_FACTORY)
+#error "The build header defines FW_CHECK_ITEM, and the target has the menu_check_* hooks"
 #endif
 .syntax unified
 .arm
@@ -383,7 +384,6 @@ menu_icon_entry:
 .ltorg
 #endif
 
-#ifdef HOOK_MENU_PARAMETER_START
 /* The native parameter page edits the adjustments of a GRKit effect while
    GRKIT_HOST_PARAMETERS holds its record (menu.c). Each hook replaces the
    first instruction, `mov r12, sp`, of an Image Control model getter or setter
@@ -522,9 +522,7 @@ menu_parameter_event:
 parameter_event_resume:
     ldr pc, =HOOK_MENU_PARAMETER_EVENT_RESUME
 .ltorg
-#endif
 
-#ifdef HOOK_MENU_SETTINGS_CHANGE
 /* The native settings page of a GRKit root row (menu.c). ChangeController
    entry: r1 is the controller that opens. */
 .global menu_settings_change
@@ -545,7 +543,6 @@ menu_settings_change:
     pop {r0-r3, r12, lr}
     bx lr
 
-#ifdef HOOK_MENU_CHECK_FACTORY
 /* The entry of the controller factory (r0 the factory, r1 the controller
    ID): the checkbox page of an options page (menu_check_controller), else
    the native factory. */
@@ -563,7 +560,6 @@ menu_check_factory:
     pop {r0-r3, r12, lr}
     .inst HOOK_MENU_CHECK_FACTORY_STOCK
     ldr pc, =HOOK_MENU_CHECK_FACTORY_RESUME
-#endif
 
 #ifdef HOOK_MENU_INFO_UPDATE
 /* The update of the camera information page (menu.c: menu_info_fill). The
@@ -703,4 +699,3 @@ SETTINGS_METHOD menu_settings_draw_4, menu_settings_draw, 4, HOOK_MENU_SETTINGS_
 SETTINGS_METHOD menu_settings_apply_4, menu_settings_apply, 4, HOOK_MENU_SETTINGS_APPLY_4_STOCK, HOOK_MENU_SETTINGS_APPLY_4_RESUME
 SETTINGS_METHOD menu_settings_current_4, menu_settings_current, 4, HOOK_MENU_SETTINGS_CURRENT_4_STOCK, HOOK_MENU_SETTINGS_CURRENT_4_RESUME
 .ltorg
-#endif

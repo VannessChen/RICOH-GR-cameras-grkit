@@ -1,12 +1,11 @@
 //! Data-only Image Control definitions and GRFX0001 encoding.
 //!
-//! Bytes 84..128 hold the optional extension: u32 features, an i16[9] signed Q13
-//! post-curve matrix at 88, and the selective color parameters at 106 (see
-//! `selective`). Bytes 120..128 are reserved. An effect without features has zeros in
-//! the whole extension. With feature 8, bytes 8084..8172 of the reserved tail hold the hue
-//! sectors (see `hue`); the rest of the tail stays zero. Feature 16 adds hue levels to
-//! feature 8: the file grows to `SIZE_WITH_LEVELS` bytes, and the bytes from `SIZE` hold
-//! the sectors of levels 1 to 3, then zeros.
+//! `abi::GRF_FIELDS` gives the layout of the file. The extension is the features, the
+//! post-curve matrix, the selective color (see `selective`), and reserved bytes. An
+//! effect without features has zeros in the whole extension. With feature 8, the hue
+//! sectors (see `hue`) follow the icon; the rest of the file stays zero. Feature 16 adds
+//! hue levels to feature 8: the file grows to `SIZE_WITH_LEVELS` bytes, and the bytes
+//! from `SIZE` hold the sectors of levels 1 to 3, then zeros.
 
 use anyhow::{bail, ensure, Context, Result};
 use serde::{
@@ -17,15 +16,22 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::fmt;
 
+use crate::abi::{
+    GRF_BYTES, GRF_CRC, GRF_CURVES, GRF_FEATURES, GRF_FLAGS, GRF_HUE, GRF_ICON, GRF_ID, GRF_MAGIC,
+    GRF_MATRIX, GRF_NAME, GRF_PADDING, GRF_POST, GRF_RESERVED, GRF_SELECTIVE,
+};
 use crate::hue;
-use crate::selective::{self, Selective};
+use crate::selective::Selective;
 
 pub const MAGIC: &[u8; 8] = b"GRFX0001";
 pub const SIZE: usize = 8192;
 /// The size of an effect with hue levels (feature 16).
 pub const SIZE_WITH_LEVELS: usize = 8704;
 pub const ICON_SIZE: usize = 6400;
-pub const ICON_OFFSET: usize = 1684;
+pub const ICON_OFFSET: usize = GRF_ICON;
+/// The longest effect ID and the longest effect name, in characters.
+pub const ID_MAX: usize = 31;
+pub const NAME_MAX: usize = 16;
 pub const MONOCHROME: u32 = 1;
 pub const SCHEMA: &str = "grkit-effect-v1";
 pub const FEATURE_POST: u32 = 1;
@@ -36,12 +42,10 @@ pub const FEATURE_HUE_SECTORS: u32 = 8;
 pub const FEATURE_HUE_LEVELS: u32 = 16;
 const FEATURES: u32 = FEATURE_POST | FEATURE_SELECTIVE | FEATURE_HUE_SECTORS | FEATURE_HUE_LEVELS;
 /// The hue sectors use the start of the reserved tail of the file.
-pub const HUE_OFFSET: usize = 8084;
+pub const HUE_OFFSET: usize = GRF_HUE;
 /// Optional keys of both a definition and a decoded effect. A definition writes
 /// `selective_color` in degrees; a decoded effect holds its GRF integers.
 const EXTENSION_KEYS: [&str; 3] = ["post_matrix", "selective_color", "hue_sectors"];
-const SELECTIVE_OFFSET: usize = 106;
-const RESERVED: std::ops::Range<usize> = SELECTIVE_OFFSET + selective::SIZE..128;
 
 struct UniqueValue(Value);
 
@@ -380,13 +384,14 @@ impl Effect {
             SIZE
         };
         let mut blob = vec![0; size];
-        blob[..8].copy_from_slice(MAGIC);
-        blob[84..88].copy_from_slice(&features.to_le_bytes());
+        blob[GRF_MAGIC..GRF_MAGIC + 8].copy_from_slice(MAGIC);
+        blob[GRF_FEATURES..GRF_FEATURES + 4].copy_from_slice(&features.to_le_bytes());
         for (index, value) in self.post_matrix.unwrap_or([0; 9]).iter().enumerate() {
-            blob[88 + index * 2..90 + index * 2].copy_from_slice(&value.to_le_bytes());
+            let at = GRF_POST + index * 2;
+            blob[at..at + 2].copy_from_slice(&value.to_le_bytes());
         }
         if let Some(selective) = &self.selective {
-            blob[SELECTIVE_OFFSET..RESERVED.start].copy_from_slice(&selective.to_bytes());
+            blob[GRF_SELECTIVE..GRF_RESERVED].copy_from_slice(&selective.to_bytes());
         }
         if let Some(sectors) = &self.hue_sectors {
             blob[HUE_OFFSET..HUE_OFFSET + hue::SIZE].copy_from_slice(&sectors.to_bytes());
@@ -394,27 +399,29 @@ impl Effect {
                 blob[SIZE..SIZE + hue::LEVEL_SIZE].copy_from_slice(&levels);
             }
         }
-        blob[8..12].copy_from_slice(&(size as u32).to_le_bytes());
-        blob[80..84].copy_from_slice(&self.flags.to_le_bytes());
-        for (offset, text) in [(16, &self.id), (48, &self.name)] {
+        blob[GRF_BYTES..GRF_BYTES + 4].copy_from_slice(&(size as u32).to_le_bytes());
+        blob[GRF_FLAGS..GRF_FLAGS + 4].copy_from_slice(&self.flags.to_le_bytes());
+        for (offset, text) in [(GRF_ID, &self.id), (GRF_NAME, &self.name)] {
             blob[offset..offset + text.len()].copy_from_slice(text.as_bytes());
         }
         // The matrix, two bytes of padding, then the curves.
         for (index, value) in self.matrix.iter().enumerate() {
-            blob[128 + index * 2..130 + index * 2].copy_from_slice(&value.to_le_bytes());
+            let at = GRF_MATRIX + index * 2;
+            blob[at..at + 2].copy_from_slice(&value.to_le_bytes());
         }
         for (index, value) in self.curves.iter().flatten().enumerate() {
-            blob[148 + index * 2..150 + index * 2].copy_from_slice(&value.to_le_bytes());
+            let at = GRF_CURVES + index * 2;
+            blob[at..at + 2].copy_from_slice(&value.to_le_bytes());
         }
-        blob[ICON_OFFSET..ICON_OFFSET + ICON_SIZE].copy_from_slice(icon);
+        blob[GRF_ICON..GRF_ICON + ICON_SIZE].copy_from_slice(icon);
         let crc = checksum(&blob);
-        blob[12..16].copy_from_slice(&crc.to_le_bytes());
+        blob[GRF_CRC..GRF_CRC + 4].copy_from_slice(&crc.to_le_bytes());
         Ok(blob)
     }
 }
 
 pub fn valid_id(id: &str) -> bool {
-    (1..=31).contains(&id.len())
+    (1..=ID_MAX).contains(&id.len())
         && id.as_bytes()[0].is_ascii_alphanumeric()
         && id
             .bytes()
@@ -438,14 +445,14 @@ pub fn filename(effect_id: &str) -> Result<String> {
     ))
 }
 
-/// Checks an effect ID (`valid_id`) and a name of 1 to 16 printable ASCII characters.
+/// Checks an effect ID (`valid_id`) and a name of 1 to `NAME_MAX` printable ASCII characters.
 pub fn check_identity(effect_id: &str, name: &str) -> Result<()> {
     ensure!(
         valid_id(effect_id),
         "Expected a 1 to 31 character lowercase ASCII effect ID"
     );
     ensure!(
-        (1..=16).contains(&name.len())
+        (1..=NAME_MAX).contains(&name.len())
             && name.trim() == name
             && name.bytes().all(|c| (32..=126).contains(&c)),
         "Expected 1 to 16 printable ASCII name characters without edge spaces"
@@ -466,13 +473,15 @@ fn check_icon(icon: &[u8]) -> Result<()> {
 }
 
 pub fn checksum(blob: &[u8]) -> u32 {
+    // The CRC field reads as zero.
+    let crc = GRF_CRC..GRF_CRC + 4;
     let mut hasher = crc32fast::Hasher::new();
-    hasher.update(&blob[..blob.len().min(12)]);
-    if blob.len() > 12 {
-        hasher.update(&[0; 4][..(blob.len() - 12).min(4)]);
+    hasher.update(&blob[..blob.len().min(crc.start)]);
+    if blob.len() > crc.start {
+        hasher.update(&[0; 4][..(blob.len() - crc.start).min(4)]);
     }
-    if blob.len() > 16 {
-        hasher.update(&blob[16..]);
+    if blob.len() > crc.end {
+        hasher.update(&blob[crc.end..]);
     }
     hasher.finalize()
 }
@@ -491,10 +500,10 @@ pub fn decode(blob: &[u8]) -> Result<(Effect, Vec<u8>)> {
     let read_u32 = |offset| u32::from_le_bytes(blob[offset..offset + 4].try_into().unwrap());
     let read_i16 = |offset: usize| i16::from_le_bytes([blob[offset], blob[offset + 1]]);
     ensure!(
-        read_u32(8) == blob.len() as u32 && read_u32(12) == checksum(blob),
+        read_u32(GRF_BYTES) == blob.len() as u32 && read_u32(GRF_CRC) == checksum(blob),
         "Invalid effect size or CRC32"
     );
-    let features = read_u32(84);
+    let features = read_u32(GRF_FEATURES);
     let levels = features & FEATURE_HUE_LEVELS != 0;
     ensure!(
         levels == (blob.len() == SIZE_WITH_LEVELS)
@@ -508,8 +517,8 @@ pub fn decode(blob: &[u8]) -> Result<(Effect, Vec<u8>)> {
     };
     ensure!(
         [
-            (RESERVED.start, RESERVED.end),
-            (146, 148),
+            (GRF_RESERVED, GRF_MATRIX),
+            (GRF_PADDING, GRF_CURVES),
             (hue_end, SIZE),
             (blob.len().min(SIZE + hue::LEVEL_SIZE), blob.len()),
         ]
@@ -529,16 +538,16 @@ pub fn decode(blob: &[u8]) -> Result<(Effect, Vec<u8>)> {
         );
         Ok(std::str::from_utf8(&field[..end])?)
     };
-    let id = string(16)?;
-    let name = string(48)?;
+    let id = string(GRF_ID)?;
+    let name = string(GRF_NAME)?;
     ensure!(features & !FEATURES == 0, "Unsupported effect features");
-    let post: [i16; 9] = std::array::from_fn(|i| read_i16(88 + i * 2));
+    let post: [i16; 9] = std::array::from_fn(|i| read_i16(GRF_POST + i * 2));
     // A field without its feature bit must stay zero, so the bytes stay canonical.
     ensure!(
         features & FEATURE_POST != 0 || post.iter().all(|v| *v == 0),
         "Unsupported effect features"
     );
-    let selective = &blob[SELECTIVE_OFFSET..RESERVED.start];
+    let selective = &blob[GRF_SELECTIVE..GRF_RESERVED];
     ensure!(
         features & FEATURE_SELECTIVE != 0 || selective.iter().all(|v| *v == 0),
         "Unsupported effect features"
@@ -546,11 +555,11 @@ pub fn decode(blob: &[u8]) -> Result<(Effect, Vec<u8>)> {
     let effect = Effect {
         id: id.to_owned(),
         name: name.to_owned(),
-        flags: read_u32(80),
-        matrix: std::array::from_fn(|i| read_i16(128 + i * 2)),
+        flags: read_u32(GRF_FLAGS),
+        matrix: std::array::from_fn(|i| read_i16(GRF_MATRIX + i * 2)),
         curves: std::array::from_fn(|c| {
             std::array::from_fn(|i| {
-                let offset = 148 + c * 512 + i * 2;
+                let offset = GRF_CURVES + c * 512 + i * 2;
                 u16::from_le_bytes([blob[offset], blob[offset + 1]])
             })
         }),
@@ -567,7 +576,7 @@ pub fn decode(blob: &[u8]) -> Result<(Effect, Vec<u8>)> {
             })
             .transpose()?,
     };
-    let icon = blob[ICON_OFFSET..ICON_OFFSET + ICON_SIZE].to_vec();
+    let icon = blob[GRF_ICON..GRF_ICON + ICON_SIZE].to_vec();
     effect.check()?;
     check_icon(&icon)?;
     Ok((effect, icon))

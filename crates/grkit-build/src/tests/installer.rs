@@ -57,10 +57,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     ));
     // GR III has one runtime, so it names no build for `--known`.
     assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
-    assert_eq!(
-        sha256(header.as_bytes()),
-        "1a20869a7be191ac22770ddeae309cbfaed94f65234058e3517d3f93b3909b74"
-    );
+    snapshot("installer-gr3-synthetic.h", &summarized(&header));
     Ok(())
 }
 
@@ -146,31 +143,15 @@ fn menu_assembly_symbols_are_typed_functions() {
 #[test]
 fn production_scripts_and_activation_match_fixed_contracts() {
     let files = grkit_core::runtime::runtime_files(b"ELF");
-    let expected = [
-        (
-            "SCRIPT/STARTUP.TTL",
-            "b8c3481389e351d3ff330be1368642ca201d4e173c3c462a63c708eb6a335ce8",
-        ),
-        (
-            "SCRIPT/GRKIT/LOADER.TTL",
-            "766fe83188a7725e005db38f6af8971aa2affc3d43b61ae33cde82a8f17c7f4e",
-        ),
-        (
-            "SCRIPT/GRKIT/CORE.BIN",
-            "706abe3c90152075e656b661079730facf323f3ebccda7547ee1935c90845a09",
-        ),
-        (
-            "SCRIPT/GRKIT/SCAN.SH",
-            "3840798044d54c7d344e8d21cbd3e021f3d8997d2c281779be6d48b216c0cb96",
-        ),
-        (
-            "SCRIPT/GRKIT/INSTALL.SH",
-            "10394f8d929940615421d5e46b2590bc9feaad4c4e900bcf82041610d2655283",
-        ),
-    ];
-    assert_eq!(files.len(), expected.len());
-    for (path, hash) in expected {
-        assert_eq!(sha256(&files[path]), hash, "{path}");
+    assert_eq!(files.len(), 5);
+    assert_eq!(files["SCRIPT/GRKIT/CORE.BIN"], b"ELF");
+    for (path, name) in [
+        ("SCRIPT/STARTUP.TTL", "STARTUP.TTL"),
+        ("SCRIPT/GRKIT/LOADER.TTL", "LOADER.TTL"),
+        ("SCRIPT/GRKIT/SCAN.SH", "SCAN.SH"),
+        ("SCRIPT/GRKIT/INSTALL.SH", "INSTALL.SH"),
+    ] {
+        snapshot(name, std::str::from_utf8(&files[path]).unwrap());
     }
     assert!(!files
         .values()
@@ -183,13 +164,10 @@ fn production_scripts_and_activation_match_fixed_contracts() {
     ] {
         let activation = grkit_core::runtime::activation_files(camera);
         assert_eq!(activation.len(), 2);
+        assert_eq!(activation[modeset], b"[SCRIPT_EN_MODE EN]\r\n");
         assert_eq!(
-            sha256(&activation[modeset]),
-            "94db9a80a0e5c8f6bd8f3fce41aff6b8758f58333193ed48eb0b6db7db76afb3"
-        );
-        assert_eq!(
-            sha256(&activation["DEVELOP.MOD"]),
-            "0d622b3b4e26b183a0434f876f33cf56787c9b37c9b05e850f4be4a15c8ccf2d"
+            activation["DEVELOP.MOD"],
+            [7, 1, 44, 31, 16, 3, 30, 22, 5, 45]
         );
     }
 }

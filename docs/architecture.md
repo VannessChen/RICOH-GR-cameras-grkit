@@ -44,6 +44,8 @@ A target is one firmware build. Its module in `crates/grkit-build/src/target/` g
 
 The targets of one camera line form a family, such as the GR IV builds. A family lists its hooks once, with the extension point of each, and shares the runtime code and the header `runtime/targets/<family>.h`. Tests require each build of a family to have each hook and each header definition of the family. A change for one build therefore fails until it reaches each build.
 
+Each build has each feature of the runtime. If a build lacks a header definition that a feature needs, the build fails. The runtime does not turn off a feature for a missing definition. A conditional selects only between the variants of the families, such as where a family keeps the camera language.
+
 | Target | Cameras |
 | --- | --- |
 | `gr3-2.10` | GR III 2.10 and 2.20, GR IIIx 1.60 and 1.70, and their HDF models |
@@ -190,8 +192,6 @@ If the code of a new firmware version moves by less than the relocation radius, 
 5. Run `GRKIT_UPDATE_GENERATED=1 cargo test -p grkit-core --test generated`.
 6. Add the firmware zip to the private firmware backup (`docs/releasing.md`).
 7. Run `grkit port` again with `--check <new target>`, then the tests. Mark the release as not experimental only after a test on a camera.
-
-A maintainer can freeze an old build when keeping it current costs more than it gives. A frozen build still builds and gets fixes, but its hooks leave out new features (`components::hooks`).
 
 ## Code areas
 

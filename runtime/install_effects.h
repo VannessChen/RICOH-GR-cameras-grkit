@@ -133,8 +133,8 @@ static const u16 multiaxial_levels[8] = GRKIT_HUE_LEVEL_CONTROL;
 static const u16 multiaxial_levels_halved[8] = GRKIT_HUE_LEVEL_CONTROL_HALVED;
 static void multiaxial(u32 record, const u8 *profile)
 {
-    const u8 *sectors = profile + GRKIT_HUE_OFFSET;
-    int levels = (get32(profile + 84) & GRKIT_FEATURE_HUE_LEVELS) != 0;
+    const u8 *sectors = profile + GRKIT_GRF_HUE;
+    int levels = (get32(profile + GRKIT_GRF_FEATURES) & GRKIT_FEATURE_HUE_LEVELS) != 0;
     u32 slot = record + GRKIT_RECORD_MULTIAXIAL, table = slot + 0x98;
     u32 stock = word(TABLE_ADDRESS(1) + 11 * 4);
     store(slot, slot + 8);

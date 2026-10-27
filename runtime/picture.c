@@ -23,7 +23,6 @@ extern volatile u32 *framing_header(void);
 
 #include "tone.h"
 static u32 owned(volatile u32 *h,u32 record) { return record_index(h,record)<GRKIT_TEXT_RECORDS; }
-#ifdef FW_YCBCR_CALC
 /* Features of an owned record, or 0 for a native one. */
 static u32 record_features(volatile u32 *h,u32 record) {
     return owned(h,record) ? WORD(record,GRKIT_RECORD_FEATURES) : 0;
@@ -66,7 +65,6 @@ void picture_post(u32 object,u32 context,u32 settings) {
     post_matrix(h,object,context,settings);
     profile_end(h,start,GRKIT_PROFILE_PICTURE_POST);
 }
-#endif
 /* ---- Recorded pictures: the encode host -----------------------------------
    JpegEncodeMacroProcess::Execute (0x535047d4) calls picture_encode before it
    submits the encode. Its image descriptors hold Y at +4, CbCr at +8, then u16
@@ -129,8 +127,9 @@ static void flush(const Plane *p) {
     PICTURE_CACHE_FLUSH(p->c,p->pitch*(p->half ? p->height>>1 : p->height));
 }
 
-#include "aspect.h"
+static u32 aspect_native(void) { return PICTURE_NATIVE_ASPECT(); }
 #include "settings.h"
+#include "services.h"
 /* The module plane filters that INSTALL registered (GRKIT_HOST_MODULE_FILTERS),
    or 0 for a count out of range. Each has two words: its apply function, and
    its setting handle with its stage in the high half. */
@@ -210,7 +209,6 @@ void picture_record_parameters(u32 entry,u32 shot) {
 /* Whether the native Image Control type of a shot makes a monochrome picture,
    such as Monotone or a type of GR IV Monochrome. */
 static u32 native_monochrome(u32 shot) {
-#ifdef NATIVE_MONOCHROME_TYPES
     u32 type;
     if(shot<0x40000000U || shot>0xbfffff00U) return 0;
     type=BYTE(shot,SETTINGS_IC_TYPE);
@@ -218,10 +216,6 @@ static u32 native_monochrome(u32 shot) {
     if(type>=32) return type<64 && (NATIVE_MONOCHROME_TYPES_HIGH>>(type-32)&1);
 #endif
     return type<32 && (NATIVE_MONOCHROME_TYPES>>type&1);
-#else
-    (void)shot;
-    return 0;
-#endif
 }
 /* Once per plane set. The second full-size image (descriptor 3) shares the
    main planes. */

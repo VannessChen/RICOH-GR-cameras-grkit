@@ -5,7 +5,7 @@
 use grkit_core::{
     effects,
     grm::{self, Import, Module, Segment},
-    menu_text, packaging, runtime,
+    language, menu_text, runtime,
     selective::Selective,
 };
 use serde_json::{json, Value};
@@ -118,6 +118,9 @@ fn compile_with(
         "-O2",
         "-Wno-int-to-pointer-cast",
         "-Wno-pointer-to-int-cast",
+        // As the runtime build: a component defines each static function
+        // that a shared header declares and it uses.
+        "-Werror=undefined-internal",
         // The harness links the code without the firmware symbols.
         "-DGRKIT_HOST_ADDRESSES",
         target,
@@ -532,7 +535,7 @@ int main(void) {
             menu_text::TEXT_SIZE,
             menu_text::TEXT_SUMMARY,
             menu_text::STRINGS,
-            packaging::Language::ALL.len(),
+            language::Language::ALL.len(),
             runtime::MAX_COUNT,
             menu_text::SUMMARY_UNITS,
             runtime::TAIL_SIZE,
@@ -682,6 +685,11 @@ fn the_module_format_constants_agree() {
 fn the_sdk_descriptor_has_the_layout_that_the_installer_reads() {
     let clang = env::var_os("GRKIT_CLANG").unwrap_or_else(|| "clang".into());
     if Command::new(&clang).arg("--version").output().is_err() {
+        assert!(
+            env::var("GRKIT_REQUIRE_NATIVE_TESTS").as_deref() != Ok("1"),
+            "GRKIT_REQUIRE_NATIVE_TESTS=1 requires clang for the ARM layout check; set GRKIT_CLANG"
+        );
+        eprintln!("SKIPPED ARM layout check: no clang found; set GRKIT_CLANG");
         return;
     }
     checked(
@@ -879,16 +887,25 @@ fn native_framing_contract_preserves_canvas_bounds_and_settings() {
     )
     .unwrap();
     // The module headers of Framing and Guides, which the harness compiles
-    // in one file: their setting indexes, and each setting at its default 0.
-    std::fs::write(
-        temporary.path().join("grkit_module.h"),
-        "#ifndef GRKIT_MODULE_H\n#define GRKIT_MODULE_H\n\
-         #define SETTING_STYLE 0U\n#define SETTING_COLOR 1U\n#define SETTING_OPACITY 2U\n\
-         #define SETTING_DISP 3U\n#define SETTING_MASK 0U\n#define SETTING_LABEL 1U\n\
-         const GrkitContext grkit_self;\n\
-         u32 setting_get(u32 handle) { (void)handle; return 0; }\n#endif\n",
-    )
-    .unwrap();
+    // in one file: the index of each setting in its module.toml, and each
+    // setting at its default 0.
+    let mut module = String::from("#ifndef GRKIT_MODULE_H\n#define GRKIT_MODULE_H\n");
+    for name in ["guides", "framing"] {
+        let manifest: toml::Table =
+            std::fs::read_to_string(root().join("modules").join(name).join("module.toml"))
+                .unwrap()
+                .parse()
+                .unwrap();
+        for (index, setting) in manifest["settings"].as_array().unwrap().iter().enumerate() {
+            module += &format!(
+                "#define SETTING_{} {index}U\n",
+                setting["key"].as_str().unwrap()
+            );
+        }
+    }
+    module += "const GrkitContext grkit_self;\n\
+               u32 setting_get(u32 handle) { (void)handle; return 0; }\n#endif\n";
+    std::fs::write(temporary.path().join("grkit_module.h"), module).unwrap();
     for (index, target) in targets().iter().enumerate() {
         let executable = temporary.path().join(format!("framing_contract_{index}"));
         compile_with(

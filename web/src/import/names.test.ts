@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { readBaseGamma } from '../catalog';
+import { EFFECT_FILENAME_SAMPLE } from '../generated/site';
 import {
   base64,
   coverFromFile,
   coverIcon,
+  effectFilename,
   effectId,
   nameFromFile,
   validCover,
@@ -24,6 +26,10 @@ describe('imported effect names', () => {
     for (const file of ['Kodak_Portra-400.cube', 'A very long LUT name for a film.cube', 'x.tif']) {
       expect(validName(nameFromFile(file))).toBe(true);
     }
+  });
+
+  it('names the effect file as effects.rs does', async () => {
+    expect(await effectFilename(EFFECT_FILENAME_SAMPLE.id)).toBe(EFFECT_FILENAME_SAMPLE.filename);
   });
 
   it('checks names as effects.rs does', () => {

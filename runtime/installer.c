@@ -10,7 +10,7 @@ struct patch { u32 address, size, kind; const u8 *before; u8 *after; };
 #include "module_payload.h"
 #include "grf.h"
 #include "module_link.h"
-#include "settings.h"
+#include "setting_table.h"
 /* The layout of the effect list (no menu functions without MENU_TEXT). */
 #include "effects.h"
 /* The layout of the state of the core services. */
@@ -291,7 +291,7 @@ static int read_plan(void)
         copy(listed[i], entry + GRKIT_PLANNED_HEAD, LISTED_HEAD);
         copy((u8 *)names[i], entry + GRKIT_PLANNED_FILE, CATALOG_NAME_SIZE);
         names[i][CATALOG_NAME_SIZE - 1] = 0;
-        listed[i][CATALOG_ID + 31] = 0;
+        listed[i][CATALOG_ID + GRKIT_GRF_ID_MAX] = 0;
         listed_status[i] = get32(entry + GRKIT_PLANNED_STATUS);
         listed_choice[i] = get32(entry + GRKIT_PLANNED_CHOICE);
         listed_record[i] = get32(entry + GRKIT_PLANNED_RECORD);
@@ -360,24 +360,14 @@ static void apply_state(u32 base, u32 table)
         for (u32 d = 0; d < 9; ++d) { at(record + GRKIT_RECORD_PARAMETERS + d)[0] = (u8)(value % 9); value /= 9; }
     }
 }
-static int install(void)
+/* The script arrays that the loader allocated (grkit_core::runtime::loader):
+   the registry, the icon chunks, the module array, then the tail. */
+struct arrays { u32 base, tail, module_array, icon_bases[MAX_CHUNKS]; };
+/* Check that each array has its planned size and that no two overlap. */
+static int check_arrays(struct arrays *a)
 {
-    int status = read_plan();
-    if (status) return status;
-    /* The loaded modules add the points that they need (install_modules). */
-    needed_points = 0;
-    /* The modules of SCAN, which the loader reserved memory for. */
-    plan_modules();
-    plan_array();
-    layout();
-    if (get32(plan + GRKIT_PLAN_HEADER_WORDS) != size / 4 || get32(plan + GRKIT_PLAN_ICON_CHUNKS) != icon_chunks ||
-        get32(plan + GRKIT_PLAN_MODULE_WORDS) != module_words || get32(plan + GRKIT_PLAN_MODULE_TILES) != module_tiles)
-        return STATUS_PLAN;
-    if ((status = relocate())) return status;
-    /* The arrays: the registry, the icon chunks, the module array, then the
-       tail (grkit_core::runtime::loader). */
     if (*(volatile u16 *)at(ARRAY_COUNT) != 2 + icon_chunks + (module_words != 0) || word(ARRAY_TABLE) != size / 4) return STATUS_ARRAYS;
-    u32 base = word(ARRAY_TABLE + 4), icon_bases[MAX_CHUNKS];
+    u32 base = a->base = word(ARRAY_TABLE + 4), *icon_bases = a->icon_bases;
     if (!heap(base, size)) return STATUS_ARRAY_MEMORY;
     for (u32 i = 0; i < icon_chunks; ++i) {
         u32 bytes = chunk_count(i) * ICON_STRIDE;
@@ -389,29 +379,37 @@ static int install(void)
         icon_bases[i] = ptr;
     }
     /* The module array follows the icon chunks. */
-    u32 module_array = 0;
+    u32 module_array = a->module_array = 0;
     if (module_words) {
         u32 entry = ARRAY_TABLE + (1 + icon_chunks) * 8, bytes = module_words * 4;
-        module_array = word(entry + 4);
+        module_array = a->module_array = word(entry + 4);
         if (word(entry) != module_words || !heap(module_array, bytes) ||
             (module_array < base + size && base < module_array + bytes)) return STATUS_ARRAY_MEMORY;
         for (u32 j = 0; j < icon_chunks; ++j)
             if (module_array < icon_bases[j] + chunk_count(j) * ICON_STRIDE && icon_bases[j] < module_array + bytes) return STATUS_ARRAY_MEMORY;
     }
     /* The tail follows the other arrays and overlaps none of them. */
-    u32 tail = word(ARRAY_TABLE + (2 + icon_chunks + (module_words != 0) - 1) * 8 + 4);
+    u32 tail = a->tail = word(ARRAY_TABLE + (2 + icon_chunks + (module_words != 0) - 1) * 8 + 4);
     if (word(ARRAY_TABLE + (2 + icon_chunks + (module_words != 0) - 1) * 8) != GRKIT_TAIL_SIZE / 4 ||
         !heap(tail, GRKIT_TAIL_SIZE) || (tail < base + size && base < tail + GRKIT_TAIL_SIZE) ||
         (module_array && tail < module_array + module_words * 4 && module_array < tail + GRKIT_TAIL_SIZE)) return STATUS_ARRAY_MEMORY;
     for (u32 j = 0; j < icon_chunks; ++j)
         if (tail < icon_bases[j] + chunk_count(j) * ICON_STRIDE && icon_bases[j] < tail + GRKIT_TAIL_SIZE) return STATUS_ARRAY_MEMORY;
+    return 0;
+}
+
+/* The .data values of the running image are those at its copy source. */
+#define INITIAL(address) ((address) - RELOCATION_DATA_START + relocation.data_source)
+/* Check that the firmware is in the state that INSTALL expects: the language
+   table, the Standard record and the type tables, the stock bytes of each
+   patch, and the native settings. */
+static int check_firmware(void)
+{
     /* The tail after the RTOS image has no stock bytes to check. On a camera it
        holds the noise of uninitialized DRAM after power-on, or the code of an
        earlier GRKit session, so its content cannot show that it is free. The
        guards of the relocation detect a firmware that extends the image into
        it. */
-    /* The .data values of the running image are those at its copy source. */
-#define INITIAL(address) ((address) - RELOCATION_DATA_START + relocation.data_source)
     if (word(ENGLISH_SLOT) != word(INITIAL(ENGLISH_SLOT))) return STATUS_LANGUAGE_NOT_READY;
 #ifndef GRKIT_NO_IMAGE_CONTROL
     /* The record is unchanged since startup and has the pinned layout. */
@@ -445,17 +443,32 @@ static int install(void)
     u32 payload = word(control);
     if (!heap(payload, SETTINGS_IC_TYPE + 1) || at(payload + SETTINGS_IC_TYPE)[0] >= IC_TYPE_COUNT) return STATUS_SETTINGS_NOT_READY;
 #endif
+    return 0;
+}
+
+/* The base of the icon pixel offsets of the camera, or 0 when the camera
+   has not drawn an icon yet. */
+static u32 icon_pixels(void)
+{
 #ifdef ICON_DRAWER_SLOT
     /* The icon drawer exists after the first icon draw. Its first word is the
        base of icon pixel offsets, which can lie outside the mapping. */
     u32 drawer = word(ICON_DRAWER_SLOT);
-    if (!heap(drawer, 4)) return STATUS_ICONS_NOT_READY;
+    if (!heap(drawer, 4)) return 0;
     u32 pixels = word(drawer);
-    if ((pixels & 3) || !pixels) return STATUS_ICONS_NOT_READY;
+    if ((pixels & 3) || !pixels) return 0;
 #else
     u32 pixels = word(ICON_PIXEL_BASE_SLOT);
-    if ((pixels & 3) || pixels < MAP_BASE || pixels >= HEAP_MIN) return STATUS_ICONS_NOT_READY;
+    if ((pixels & 3) || pixels < MAP_BASE || pixels >= HEAP_MIN) return 0;
 #endif
+    return pixels;
+}
+
+/* Write the header, clear the icon chunks, and copy the menu text and the
+   live-view labels into the tail. */
+static void write_header(const struct arrays *a)
+{
+    u32 base = a->base, tail = a->tail;
     zero(at(base), size);
     store(base + GRKIT_HOST_COUNT, count); store(base + GRKIT_HOST_RECORDS, base + GRKIT_HOST_HEADER_SIZE);
     store(base + GRKIT_HOST_TAIL, tail);
@@ -463,8 +476,8 @@ static int install(void)
     /* The next still live view shows that GRKit has loaded (runtime/framing.c). */
     store(base + GRKIT_HOST_LOAD_CUE, 1);
     for (u32 i = 0; i < icon_chunks; ++i) {
-        zero(at(icon_bases[i]), chunk_count(i) * ICON_STRIDE);
-        store(base + GRKIT_HOST_ICON_CHUNKS + i * 4, icon_bases[i]);
+        zero(at(a->icon_bases[i]), chunk_count(i) * ICON_STRIDE);
+        store(base + GRKIT_HOST_ICON_CHUNKS + i * 4, a->icon_bases[i]);
     }
     /* Menu text after the picture scratch (runtime/abi.h). */
     _Static_assert(MAX_COUNT <= GRKIT_TEXT_RECORDS, "Menu text has no summary slot for each record");
@@ -473,24 +486,33 @@ static int install(void)
     copy(at(text), menu_text, MENU_TEXT_BYTES);
     _Static_assert(LABELS_BYTES <= GRKIT_LABELS_SIZE, "Live-view labels exceed their area");
     copy(at(text + GRKIT_TEXT_SIZE), overlay_labels, LABELS_BYTES);
+}
+
 #ifndef GRKIT_NO_IMAGE_CONTROL
+/* Write the record, the menu summaries, and the icon of each effect. */
+static void write_records(const struct arrays *a, u32 pixels)
+{
+    u32 base = a->base, text = a->tail + GRKIT_PICTURE_SCRATCH;
+    const u32 *icon_bases = a->icon_bases;
     for (u32 i = 0; i < count; ++i) {
         u32 record = base + GRKIT_HOST_HEADER_SIZE + i * GRKIT_RECORD_SIZE;
         const u8 *profile = profiles[i];
-        copy(at(record), (const u8 *)at(STOCK_RECORD), 84);
-        store(record + 4, record + 84);
-        copy(at(record + 84), profile + 128, 1556);
+        copy(at(record), (const u8 *)at(STOCK_RECORD), GRKIT_RECORD_COEFFICIENTS);
+        store(record + 4, record + GRKIT_RECORD_COEFFICIENTS);
+        /* The matrix and the curves, which the coefficients hold as the GRF
+           does (grkit_core::abi). */
+        copy(at(record + GRKIT_RECORD_COEFFICIENTS), profile + GRKIT_GRF_MATRIX, GRKIT_GRF_ICON - GRKIT_GRF_MATRIX);
         /* Extension: features, then the post matrix, selective color, and the
            reserved zero bytes. */
-        copy(at(record + GRKIT_RECORD_FEATURES), profile + 84, 4);
-        copy(at(record + GRKIT_RECORD_POST), profile + 88, 40);
-        if (get32(profile + 84) & 8U) multiaxial(record, profile);
+        copy(at(record + GRKIT_RECORD_FEATURES), profile + GRKIT_GRF_FEATURES, GRKIT_GRF_FEATURES_SIZE);
+        copy(at(record + GRKIT_RECORD_POST), profile + GRKIT_GRF_POST, GRKIT_GRF_MATRIX - GRKIT_GRF_POST);
+        if (get32(profile + GRKIT_GRF_FEATURES) & GRKIT_FEATURE_HUE) multiaxial(record, profile);
         /* Neutral Fn adjustments until the loader restores the saved ones. */
         zero(at(record + GRKIT_RECORD_PARAMETERS), 9);
         u32 n = length((const char *)profile + CATALOG_EFFECT_NAME);
         for (u32 j = 0; j < n; ++j) at(record + GRKIT_RECORD_NAME + j * 2)[0] = profile[CATALOG_EFFECT_NAME + j];
-        store(record + GRKIT_RECORD_MONOCHROME, get32(profile + 80));
-        copy(at(record + GRKIT_RECORD_ID), profile + 16, 32);
+        store(record + GRKIT_RECORD_MONOCHROME, get32(profile + GRKIT_GRF_FLAGS));
+        copy(at(record + GRKIT_RECORD_ID), profile + GRKIT_GRF_ID, GRKIT_GRF_ID_SIZE);
         /* The Image Control summary in each language: the prefix, then the name. */
         for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language) {
             volatile u16 *summary = (volatile u16 *)at(text + GRKIT_TEXT_SUMMARY +
@@ -505,10 +527,10 @@ static int install(void)
         u32 slot = HOST_ICON_COUNT + i;
         u32 icon = icon_bases[slot / ICONS_PER_CHUNK] + (slot % ICONS_PER_CHUNK) * ICON_STRIDE;
         icon_header(icon, pixels);
-        copy(at(icon + ICON_PIXELS), profile + 1684, 6400);
+        copy(at(icon + ICON_PIXELS), profile + GRKIT_GRF_ICON, GRKIT_GRF_ICON_SIZE);
         store(record + GRKIT_RECORD_ICON, icon);
         /* Resolve hash collisions in catalog order, and skip native values. */
-        u32 code = effect_code(profile + 16), j = 0;
+        u32 code = effect_code(profile + GRKIT_GRF_ID), j = 0;
         while (j < i || NATIVE_CODE(code)) {
             if (!NATIVE_CODE(code) && *(volatile u16 *)at(base + GRKIT_HOST_HEADER_SIZE + j * GRKIT_RECORD_SIZE + GRKIT_RECORD_CODE) != code) { ++j; continue; }
             code = 0x8000 | ((code + 1) & 0x7fff);
@@ -516,64 +538,69 @@ static int install(void)
         }
         *(volatile u16 *)at(record + GRKIT_RECORD_CODE) = code;
     }
+}
 #endif
+
+static void write_host_icons(const struct arrays *a, u32 pixels)
+{
+    u32 base = a->base;
     /* Host artwork does not consume an effect record or a native settings ID.
        It comes first in chunk 0: Off, the GRKit tile, the Version tile, then
        the Modules tile. */
     _Static_assert(HOST_ICON_COUNT == 4, "The host icons are Off, GRKit, Version, and Modules");
     for (u32 i = 0; i < HOST_ICON_COUNT; ++i) {
-        u32 icon = icon_bases[0] + i * ICON_STRIDE;
+        u32 icon = a->icon_bases[0] + i * ICON_STRIDE;
         static const u8 *const artwork[HOST_ICON_COUNT] = {off_pixels, grkit_pixels, version_pixels, modules_pixels};
         icon_header(icon, pixels);
         copy(at(icon + ICON_PIXELS), artwork[i], 6400);
         /* The menu derives the Version and Modules icons from the GRKit icon. */
         if (i < 2) store(base + (i ? GRKIT_HOST_GRKIT_ICON : GRKIT_HOST_OFF_ICON), icon);
     }
-    /* The GRKit section of MENU lists each module, also when none loads, so
-       the menu hooks install with a listed module. */
-    if (module_count) {
-        u32 code = relocated[TAIL_SYMBOL] + TAIL_BYTES;
-        if (code + module_code_bytes > RTOS_EXECUTABLE_END) return GRM_NO_ROOM;
-        if ((status = install_modules(code, module_array, pixels, icon_bases))) return status;
-        needed_points |= POINT_MENU_PAGE;
-        store(base + GRKIT_HOST_MANAGE, module_list);
-        store(base + GRKIT_HOST_EFFECTS, effect_list);
-        store(base + GRKIT_HOST_SERVICES, services_block);
-        store(base + GRKIT_HOST_MODULE_SETTINGS, module_array);
-        store(base + GRKIT_HOST_CAPABILITIES, capabilities_running);
-        store(base + GRKIT_HOST_MODULE_PAGE_COUNT, module_page_count);
-        for (u32 i = 0; i < module_page_count * 3; ++i) store(base + GRKIT_HOST_MODULE_PAGES + i * 4, module_pages[i]);
-        store(base + GRKIT_HOST_MODULE_LAYER_COUNT, module_layer_count);
-        for (u32 i = 0; i < module_layer_count * 3; ++i) store(base + GRKIT_HOST_MODULE_LAYERS + i * 4, module_layers[i]);
-        store(base + GRKIT_HOST_MODULE_FILTER_COUNT, module_filter_count);
-        for (u32 i = 0; i < module_filter_count * 2; ++i) store(base + GRKIT_HOST_MODULE_FILTERS + i * 4, module_filters[i]);
+}
+
+/* Link the modules and register them in the header. */
+static int write_modules(const struct arrays *a, u32 pixels)
+{
+    u32 base = a->base;
+    int status;
+    u32 code = relocated[TAIL_SYMBOL] + TAIL_BYTES;
+    if (code + module_code_bytes > RTOS_EXECUTABLE_END) return GRM_NO_ROOM;
+    if ((status = install_modules(code, a->module_array, pixels, a->icon_bases))) return status;
+    needed_points |= POINT_MENU_PAGE;
+    store(base + GRKIT_HOST_MANAGE, module_list);
+    store(base + GRKIT_HOST_EFFECTS, effect_list);
+    store(base + GRKIT_HOST_SERVICES, services_block);
+    store(base + GRKIT_HOST_MODULE_SETTINGS, a->module_array);
+    store(base + GRKIT_HOST_CAPABILITIES, capabilities_running);
+    store(base + GRKIT_HOST_MODULE_PAGE_COUNT, module_page_count);
+    for (u32 i = 0; i < module_page_count * 3; ++i) store(base + GRKIT_HOST_MODULE_PAGES + i * 4, module_pages[i]);
+    store(base + GRKIT_HOST_MODULE_LAYER_COUNT, module_layer_count);
+    for (u32 i = 0; i < module_layer_count * 3; ++i) store(base + GRKIT_HOST_MODULE_LAYERS + i * 4, module_layers[i]);
+    store(base + GRKIT_HOST_MODULE_FILTER_COUNT, module_filter_count);
+    for (u32 i = 0; i < module_filter_count * 2; ++i) store(base + GRKIT_HOST_MODULE_FILTERS + i * 4, module_filters[i]);
+    return 0;
+}
+
+static void write_profile(const struct arrays *a)
+{
+    u32 base = a->base, tail = a->tail;
+    u32 table = tail + GRKIT_PROFILE;
+    zero(at(table), GRKIT_PROFILE_SIZE);
+    for (u32 i = 0; i < module_count && i < GRKIT_MODULE_SLOTS; ++i) {
+        u32 entry = table + i * GRKIT_PROFILE_MODULE_SIZE, n = 0;
+        if (module_status[i]) continue;
+        store(entry, module_code_from[i]);
+        store(entry + 4, module_code_to[i]);
+        char id[9];
+        module_id(i, id);
+        for (; id[n] && n < GRKIT_PROFILE_NAME_BYTES; ++n) at(entry + 8 + n)[0] = (u8)id[n];
     }
-    /* The profile table: the code range and the name of each module that
-       loaded, and counters at 0 (the tail holds noise after power-on). */
-    if (profile_mode) {
-        u32 table = tail + GRKIT_PROFILE;
-        zero(at(table), GRKIT_PROFILE_SIZE);
-        for (u32 i = 0; i < module_count && i < GRKIT_MODULE_SLOTS; ++i) {
-            u32 entry = table + i * GRKIT_PROFILE_MODULE_SIZE, n = 0;
-            if (module_status[i]) continue;
-            store(entry, module_code_from[i]);
-            store(entry + 4, module_code_to[i]);
-            char id[9];
-            module_id(i, id);
-            for (; id[n] && n < GRKIT_PROFILE_NAME_BYTES; ++n) at(entry + 8 + n)[0] = (u8)id[n];
-        }
-        store(base + GRKIT_HOST_PROFILE, table);
-    }
-    /* The saved values, before the hooks start (plan_modules read them). */
-    apply_state(base, module_count ? module_array : 0);
-    for (u32 i = 0; i < CODE_RELOCATION_COUNT; ++i) {
-        u32 patch_index = code_relocations[i * 2], offset = code_relocations[i * 2 + 1];
-        put32(patches[patch_index].after + offset, base);
-    }
-    if (!sync_alias(base, size)) return STATUS_SYNC;
-    if (!sync_alias(tail, GRKIT_TAIL_SIZE)) return STATUS_SYNC;
-    for (u32 i = 0; i < icon_chunks; ++i)
-        if (!sync_alias(icon_bases[i], chunk_count(i) * ICON_STRIDE)) return STATUS_SYNC;
+    store(base + GRKIT_HOST_PROFILE, table);
+}
+
+/* Install the patches. Each payload goes in before its entry branch. */
+static int publish_patches(void)
+{
     /* Publish payloads before entry branches. Cross-domain coherence needs device validation. */
     u32 installed = 0;
     for (; installed < PATCH_COUNT; ++installed) {
@@ -590,6 +617,50 @@ static int install(void)
         }
         return rollback_ok ? STATUS_ROLLED_BACK : STATUS_ROLLBACK_FAILED;
     }
+    return 0;
+}
+
+static int install(void)
+{
+    struct arrays arrays;
+    int status = read_plan();
+    if (status) return status;
+    /* The loaded modules add the points that they need (install_modules). */
+    needed_points = 0;
+    /* The modules of SCAN, which the loader reserved memory for. */
+    plan_modules();
+    plan_array();
+    layout();
+    if (get32(plan + GRKIT_PLAN_HEADER_WORDS) != size / 4 || get32(plan + GRKIT_PLAN_ICON_CHUNKS) != icon_chunks ||
+        get32(plan + GRKIT_PLAN_MODULE_WORDS) != module_words || get32(plan + GRKIT_PLAN_MODULE_TILES) != module_tiles)
+        return STATUS_PLAN;
+    if ((status = relocate())) return status;
+    if ((status = check_arrays(&arrays))) return status;
+    if ((status = check_firmware())) return status;
+    u32 pixels = icon_pixels();
+    if (!pixels) return STATUS_ICONS_NOT_READY;
+    write_header(&arrays);
+#ifndef GRKIT_NO_IMAGE_CONTROL
+    write_records(&arrays, pixels);
+#endif
+    write_host_icons(&arrays, pixels);
+    /* The GRKit section of MENU lists each module, also when none loads, so
+       the menu hooks install with a listed module. */
+    if (module_count && (status = write_modules(&arrays, pixels))) return status;
+    /* The profile table: the code range and the name of each module that
+       loaded, and counters at 0 (the tail holds noise after power-on). */
+    if (profile_mode) write_profile(&arrays);
+    /* The saved values, before the hooks start (plan_modules read them). */
+    apply_state(arrays.base, module_count ? arrays.module_array : 0);
+    for (u32 i = 0; i < CODE_RELOCATION_COUNT; ++i) {
+        u32 patch_index = code_relocations[i * 2], offset = code_relocations[i * 2 + 1];
+        put32(patches[patch_index].after + offset, arrays.base);
+    }
+    if (!sync_alias(arrays.base, size)) return STATUS_SYNC;
+    if (!sync_alias(arrays.tail, GRKIT_TAIL_SIZE)) return STATUS_SYNC;
+    for (u32 i = 0; i < icon_chunks; ++i)
+        if (!sync_alias(arrays.icon_bases[i], chunk_count(i) * ICON_STRIDE)) return STATUS_SYNC;
+    if ((status = publish_patches())) return status;
     print("GR_MODULE_INSTALLED "); number(count); print("\n");
     return 0;
 }

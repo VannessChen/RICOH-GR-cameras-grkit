@@ -3,13 +3,11 @@ use crate::{
     relocation::{self, Planner, Region, Source},
     target, Anchor, PatchPlan,
 };
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use grkit_core::{
     artwork::{grkit_pixels, modules_pixels, off_pixels, version_pixels},
-    runtime::{
-        icon_stride, HOST_ICON_COUNT, ICONS_PER_CHUNK, LINUX_DATA_DIRECTORY, LINUX_DIRECTORY,
-        LINUX_LEGACY_DIRECTORY, MAX_CHUNKS, MAX_COUNT,
-    },
+    card::{LINUX_DATA_DIRECTORY, LINUX_DIRECTORY, LINUX_LEGACY_DIRECTORY},
+    runtime::{icon_stride, HOST_ICON_COUNT, ICONS_PER_CHUNK, MAX_CHUNKS, MAX_COUNT},
 };
 use std::fmt::Write;
 
@@ -52,6 +50,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         ),
         None => None,
     };
+    // The values that the installer uses as they are.
     let mut constants = vec![
         ("MAX_COUNT", MAX_COUNT as u32),
         ("MAX_CHUNKS", MAX_CHUNKS as u32),
@@ -60,20 +59,26 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         ("HOST_ICON_COUNT", HOST_ICON_COUNT as u32),
         ("MAP_BASE", 0x51000000),
         ("MAP_SIZE", 0xf000000),
+        ("HEAP_END", target.heap_end),
+    ];
+    // The firmware addresses. The installer relocates the runtime: it finds
+    // each of these in the running image (`relocation_tables`).
+    let mut addresses = vec![
         ("ARRAY_COUNT", target.array_count),
         ("ARRAY_TABLE", target.array_table),
         ("HEAP_MIN", target.heap_min),
-        ("HEAP_END", target.heap_end),
+        ("ENGLISH_SLOT", target.english_slot),
     ];
     let mut stock_record = None;
-    constants.push(("ENGLISH_SLOT", target.english_slot));
     if let Some(native) = image_control {
         let (record_address, record) = body.stock_record()?;
         stock_record = Some(record);
-        constants.extend([
+        addresses.extend([
             ("STOCK_RECORD", record_address),
-            ("TABLE_BYTES", native.table_bytes),
             ("SETTINGS_DOMAIN", native.settings_domain),
+        ]);
+        constants.extend([
+            ("TABLE_BYTES", native.table_bytes),
             ("SETTINGS_IC_TYPE", native.settings_type),
             ("IC_TYPE_COUNT", native.type_count),
         ]);
@@ -83,27 +88,14 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
     } else {
         "ICON_PIXEL_BASE_SLOT"
     };
-    constants.push((name, target.pixel_base_slot));
-    // The installer relocates the runtime: it finds these addresses in the
-    // running image.
-    let mut addresses = Vec::new();
-    constants.retain(|&(name, value)| {
-        let moves = matches!(
-            name,
-            "ARRAY_COUNT"
-                | "ARRAY_TABLE"
-                | "HEAP_MIN"
-                | "ENGLISH_SLOT"
-                | "STOCK_RECORD"
-                | "SETTINGS_DOMAIN"
-                | "ICON_DRAWER_SLOT"
-                | "ICON_PIXEL_BASE_SLOT"
-        );
-        if moves {
-            addresses.push((name, value));
-        }
-        !moves
-    });
+    addresses.push((name, target.pixel_base_slot));
+    // The code, the data, and the BSS of the firmware end at `heap_min`. A
+    // constant in that range is a firmware address that would not move with
+    // the build.
+    let firmware = target::RTOS_BASE..=target.heap_min;
+    if let Some((name, value)) = constants.iter().find(|(_, value)| firmware.contains(value)) {
+        bail!("{name} ({value:#x}) is a firmware address, so the installer must relocate it");
+    }
     constants.extend([
         ("PATCH_COUNT", plan.patches.len() as u32),
         ("CODE_RELOCATION_COUNT", plan.relocations.len() as u32),
@@ -150,7 +142,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
             target.identities.iter().copied(),
         );
     }
-    // The card layout (grkit_core::runtime): the package in SCRIPT/GRKIT, and
+    // The card layout (grkit_core::card): the package in SCRIPT/GRKIT, and
     // the data of the person in GRKIT.
     let paths = [
         ("PLAN_PATH", LINUX_DIRECTORY, "/PLAN.BIN"),

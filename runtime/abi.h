@@ -263,14 +263,67 @@
    fields at +0x6c, 60 3x3 i32 Q10 matrices at +0x98, the highlight-correction
    set at +0x908, and its control fields at +0x920. Zero without hue sectors. */
 #define GRKIT_RECORD_MULTIAXIAL 0x740
+/* The R, G, and B tone curves in the coefficients: 256 14-bit samples each,
+   GRKIT_RECORD_CURVE_SIZE bytes apart. */
+#define GRKIT_RECORD_CURVES 0x68
+#define GRKIT_RECORD_CURVE_SIZE 0x200
+/* A GRFX0001 effect file has GRKIT_GRF_SIZE bytes, or GRKIT_GRF_MAX_SIZE with
+   hue levels (feature 16). Each byte that no field holds is zero. */
+#define GRKIT_GRF_SIZE 8192U
+#define GRKIT_GRF_MAX_SIZE 8704U
+/* The magic `GRFX0001`. */
+#define GRKIT_GRF_MAGIC 0U
+#define GRKIT_GRF_MAGIC_SIZE 8U
+/* u32 size of the file. */
+#define GRKIT_GRF_BYTES 8U
+#define GRKIT_GRF_BYTES_SIZE 4U
+/* u32 CRC-32 of the file, which reads these bytes as zero. */
+#define GRKIT_GRF_CRC 12U
+#define GRKIT_GRF_CRC_SIZE 4U
+/* The effect ID: NUL-terminated and zero-padded. */
+#define GRKIT_GRF_ID 16U
+#define GRKIT_GRF_ID_SIZE 32U
+/* The effect name: NUL-terminated and zero-padded ASCII. */
+#define GRKIT_GRF_NAME 48U
+#define GRKIT_GRF_NAME_SIZE 32U
+/* u32 flags: 1 for a monochrome effect. */
+#define GRKIT_GRF_FLAGS 80U
+#define GRKIT_GRF_FLAGS_SIZE 4U
+/* u32 extension features (GRKIT_FEATURE_*), zero without the extension. */
+#define GRKIT_GRF_FEATURES 84U
+#define GRKIT_GRF_FEATURES_SIZE 4U
+/* i16[9] signed Q13 RGB matrix after the tone curves (feature 1). */
+#define GRKIT_GRF_POST 88U
+#define GRKIT_GRF_POST_SIZE 18U
+/* Selective color (feature 2): i16 cos and sin of the target hue, four u16
+   tangents, and two u8 chroma limits. */
+#define GRKIT_GRF_SELECTIVE 106U
+#define GRKIT_GRF_SELECTIVE_SIZE 14U
+/* Reserved and zero. */
+#define GRKIT_GRF_RESERVED 120U
+#define GRKIT_GRF_RESERVED_SIZE 8U
+/* i16[9] signed Q13 color matrix. */
+#define GRKIT_GRF_MATRIX 128U
+#define GRKIT_GRF_MATRIX_SIZE 18U
+/* Zero. */
+#define GRKIT_GRF_PADDING 146U
+#define GRKIT_GRF_PADDING_SIZE 2U
+/* The R, G, and B tone curves: 256 14-bit u16 samples each. */
+#define GRKIT_GRF_CURVES 148U
+#define GRKIT_GRF_CURVES_SIZE 1536U
+/* The 40 x 40 RGBA8 icon, with binary alpha. */
+#define GRKIT_GRF_ICON 1684U
+#define GRKIT_GRF_ICON_SIZE 6400U
+/* Hue sectors of feature 8: 11 x 6 i8 coefficients (GRKIT_HUE_MATRICES bytes),
+   then the u16 control fields 10..20 of the weight curve. */
+#define GRKIT_GRF_HUE 8084U
+#define GRKIT_GRF_HUE_SIZE 88U
+#define GRKIT_GRF_ID_MAX 31U
+#define GRKIT_GRF_NAME_MAX 16U
 #define GRKIT_FEATURE_POST 1U
 #define GRKIT_FEATURE_SELECTIVE 2U
 #define GRKIT_FEATURE_HUE 8U
 #define GRKIT_FEATURE_HUE_LEVELS 16U
-/* Hue sectors of feature 8 in a GRF: 11 x 6 i8 coefficients
-   (GRKIT_HUE_MATRICES bytes), then the u16 control fields 10..20 of the weight
-   curve. */
-#define GRKIT_HUE_OFFSET 8084U
 #define GRKIT_HUE_SIZE 88U
 #define GRKIT_HUE_MATRICES 66U
 /* Hue levels of feature 16: the sectors of levels 1 to 3 after the first

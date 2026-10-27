@@ -27,7 +27,7 @@ extern volatile u32 *framing_header(void);
 
 #ifndef FRAMING_DISPLAY_MODE
 /* The native display mode that DISP cycles (runtime/targets), or 0 (full)
-   before the settings exist and on a target without it. */
+   before the settings exist. */
 static u32 framing_display_mode(void) {
 #if defined(UI_SETTINGS_SLOT) && defined(DISPLAY_MODE_SETTING)
     u32 settings=WORD(UI_SETTINGS_SLOT,0);
@@ -35,14 +35,14 @@ static u32 framing_display_mode(void) {
 #elif defined(DISPLAY_MODE_BYTE)
     return BYTE(DISPLAY_MODE_BYTE,0);
 #else
-    return 0;
+#error "The build header defines DISPLAY_MODE_BYTE, or UI_SETTINGS_SLOT and DISPLAY_MODE_SETTING"
 #endif
 }
 #define FRAMING_DISPLAY_MODE() framing_display_mode()
 #endif
 
 /* The capture aspect (CORE.ASPECT). */
-#define ASPECT_NATIVE() FRAMING_NATIVE_ASPECT()
+static u32 aspect_native(void) { return FRAMING_NATIVE_ASPECT(); }
 #include "aspect.h"
 static u32 native_display(void) { return FRAMING_DISPLAY_MODE(); }
 #ifndef LABEL_MAP
@@ -93,6 +93,7 @@ static void overlay_label(const Surface *s,u32 label,u32 left,u32 top) {
 }
 
 #include "settings.h"
+#include "services.h"
 /* The core exports these services to modules (runtime/sdk/grkit.h). INSTALL
    links each module call to it by name (grkit_core::grm::EXPORTS). The menu
    component exports setting_set, because a setting of CORE.ASPECT changes
@@ -251,6 +252,7 @@ u32 framing_live_aspect(u32 property) {
 #define capture_sync(controller) ((void)(controller))
 #endif
 /* Only the native still-photo LCD canvas owns these transient references. */
+/* The highlight warning after INSTALL (runtime/level.h). */
 static void level_boot(volatile u32 *h,u32 controller);
 static void bind_canvas(volatile u32 *h,u32 controller) {
     h[GRKIT_HOST_FRAME_OWNER/4]=controller;
@@ -377,66 +379,7 @@ static void paint_canvas(volatile u32 *h,u32 canvas,u32 bitmap) {
     }
     ++h[GRKIT_HOST_FRAME_DRAWS/4];
 }
-/* ---- Highlight warning -------------------------------------------------
-   The live view warns where the shown luma reaches the threshold that
-   ScreenDevice::OnSetLevelAlarm gives the display: 0xfe00, luma 254 of 255.
-   The curves of a GRKit color effect end below that white, so the warning
-   never showed. With an effect, the threshold is the luma of the effect's
-   white, less 1: input 255 of its curves, after its post matrix, with the
-   BT.601 luma weights. The Fn adjustments are not in it. runtime/menu.c sets
-   the warning again after a change of the effect. */
-/* The R, G, and B curves of a record, 256 14-bit samples each
-   (runtime/processing.S: module_gamma_curves). */
-#define RECORD_CURVES 0x68
-static u32 level_threshold(volatile u32 *h) {
-    static const int luma[3]={77,150,29};
-    u32 record=h[GRKIT_HOST_ACTIVE/4], post, c, k, y8;
-    int rgb[3], sum, y=0;
-    if(!record || !(h[GRKIT_HOST_CAPABILITIES/4]&GRKIT_CORE_TONE_BIT)) return 0xfe00U;
-    post=WORD(record,GRKIT_RECORD_FEATURES)&GRKIT_FEATURE_POST;
-    for(c=0;c<3;++c) rgb[c]=(int)HALF(record,RECORD_CURVES+c*0x200+255*2);
-    for(k=0;k<3;++k) {
-        sum=rgb[k];
-        if(post) {
-            sum=0;
-            for(c=0;c<3;++c) sum+=(s16)HALF(record,GRKIT_RECORD_POST+(k*3+c)*2)*rgb[c];
-            sum=(sum+4096)>>13;
-        }
-        y+=luma[k]*(sum<0 ? 0 : sum>16383 ? 16383 : sum);
-    }
-    /* y is the 14-bit luma in Q8. Round the 8-bit luma up. */
-    y8=(((u32)y>>8)*255U+16383U)>>14;
-    return y8>=255U ? 0xfe00U : y8 ? (y8-1U)<<8 : 0;
-}
-/* framing_level_threshold (runtime/framing.S): the threshold of a warning
-   that the camera turns on. */
-u32 framing_level_value(void) { return level_threshold(framing_header()); }
-/* framing_level_mode: the screen and the mode of each warning setting. */
-void framing_level_record(u32 screen,u32 mode) {
-    volatile u32 *h=framing_header();
-    h[GRKIT_HOST_LEVEL_SCREEN/4]=screen;
-    h[GRKIT_HOST_LEVEL_MODE/4]=mode;
-}
-/* The camera can set the warning before INSTALL installs the hooks, with
-   the native threshold, because the live view starts first. The first live
-   view update after INSTALL marks the warning as changed, as a change of
-   its setting does, and sets it again with the threshold of the effect.
-   UpdateLevelAlarm gets 1, as from its other caller, so that a DISP state of
-   the live view does not skip the change. The screen word holds 1 until that
-   setting records the screen. */
-#ifndef FRAMING_LEVEL_UPDATE
-#define FRAMING_LEVEL_UPDATE(controller) (((void (*)(u32,u32))FW_LIVEVIEW_LEVEL_UPDATE)(controller,1))
-#endif
-static void level_boot(volatile u32 *h,u32 controller) {
-#ifdef LIVEVIEW_LEVEL_PENDING
-    if(h[GRKIT_HOST_LEVEL_SCREEN/4] || level_threshold(h)==0xfe00U) return;
-    h[GRKIT_HOST_LEVEL_SCREEN/4]=1;
-    BYTE(controller,LIVEVIEW_LEVEL_PENDING)=1;
-    FRAMING_LEVEL_UPDATE(controller);
-#else
-    (void)h; (void)controller;
-#endif
-}
+#include "level.h"
 /* The paint of a full draw, the module layers included. */
 void framing_paint(u32 canvas,u32 bitmap) {
     volatile u32 *h=framing_header();

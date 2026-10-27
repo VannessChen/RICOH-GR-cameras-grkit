@@ -6,7 +6,7 @@
 
 use anyhow::{ensure, Result};
 
-use crate::packaging::Language;
+use crate::language::Language;
 
 /// The size of the text area after the picture scratch.
 pub const TEXT_SIZE: usize = 24576;

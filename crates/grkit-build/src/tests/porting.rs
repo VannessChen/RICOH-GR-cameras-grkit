@@ -74,11 +74,11 @@ fn port_drafts_the_module_of_each_target() -> Result<()> {
             relocatable: true,
             identity: None,
         };
-        let module = format!("{}.rs", target.module());
-        let (_, source) = target::SOURCES
+        let module = format!("crates/grkit-build/src/target/{}.rs", target.module());
+        let (_, source) = crate::BUILD_SOURCES
             .iter()
             .find(|(name, _)| *name == module)
-            .unwrap_or_else(|| panic!("target::SOURCES has no {module}"));
+            .unwrap_or_else(|| panic!("BUILD_SOURCES has no {module}"));
         assert_eq!(
             rust_items(&port.draft_target()?),
             rust_items(std::str::from_utf8(source)?),

@@ -189,6 +189,9 @@ pub fn hooks_header(body: &FirmwareImage) -> Result<String> {
 /// firmware tasks. The largest frame is `blur_line` of `picture.c` (1344 bytes).
 const MENU_FRAME_LIMIT: &str = "-Wframe-larger-than=256";
 const FRAMING_FRAME_LIMIT: &str = "-Wframe-larger-than=1536";
+/// A static function that a shared header declares and a component uses but
+/// does not define, such as `aspect_native` (runtime/aspect.h), fails the build.
+const UNDEFINED_INTERNAL: &str = "-Werror=undefined-internal";
 
 pub struct Component {
     pub patches: Vec<Patch>,
@@ -336,6 +339,7 @@ pub fn menu(
             "-fno-asynchronous-unwind-tables",
             MENU_FRAME_LIMIT,
             "-Werror=frame-larger-than",
+            UNDEFINED_INTERNAL,
             "-c",
             path(&runtime.join("menu.c"))?,
             "-o",
@@ -412,6 +416,7 @@ pub fn framing(
                 "-fno-asynchronous-unwind-tables",
                 FRAMING_FRAME_LIMIT,
                 "-Werror=frame-larger-than",
+                UNDEFINED_INTERNAL,
                 "-I",
                 path(runtime)?,
                 "-c",

@@ -4,9 +4,9 @@
 
 use std::fmt::Write;
 
-use crate::{capabilities, effects, hue, menu_text, runtime};
+use crate::{capabilities, effects, hue, menu_text, selective};
 
-/// A byte range of the private header or of a record.
+/// A byte range of the private header, of a record, or of a GRF file.
 pub struct Field {
     /// The C name without the `GRKIT_` prefix.
     pub name: &'static str,
@@ -27,6 +27,33 @@ macro_rules! fields {
         }),*];
     };
 }
+
+// The capacity of the runtime. `runtime` exports these too.
+/// The icon slots of one icon chunk, which one script array holds.
+pub const ICONS_PER_CHUNK: usize = 40;
+/// The largest script array in words, which holds the modules.
+pub const MODULE_ARRAY_WORDS: usize = 65536;
+/// The most modules that GRKit lists at a start, from the package and from
+/// `GRKIT/MODULES` together. It lists the first ones in their default order.
+pub const MODULES_MAX: usize = 8;
+/// The most settings of all modules (`runtime/settings.h`).
+pub const MODULE_SETTINGS_MAX: usize = 160;
+/// The most artwork tiles of all modules. The installer puts them in the
+/// icon chunks after the effect icons.
+pub const MODULE_TILES_MAX: usize = 64;
+/// Off, GRKit, Version, and Modules.
+/// The menu addresses the Version and Modules icons by their offset from the
+/// GRKit icon, so the host icons come first in chunk 0, and they must fit in
+/// it. The effect icons follow them.
+pub const HOST_ICON_COUNT: usize = 4;
+const _: () = assert!(HOST_ICON_COUNT <= ICONS_PER_CHUNK);
+/// Product limit for private Image Control effects. Each effect takes a
+/// record of the registry array and an icon slot, about 10.5 KB of script
+/// memory. The registry holds only the header and the records, and they fit
+/// one array of 65536 words. The tail is an array of its own.
+pub const MAX_COUNT: usize = 20;
+/// The chunk addresses that the header holds (`GRKIT_HOST_ICON_CHUNKS`).
+pub const ICON_CHUNK_SLOTS: usize = 5;
 
 /// The fields of the header.
 pub const HOST_HEADER_SIZE: usize = 512;
@@ -117,7 +144,7 @@ fields!(HEADER_FIELDS {
     HOST_LIVE_PARAMETER_CHANGES = 152, 4;
     /// Icon chunk addresses: chunk n holds icon slots 40 n to 40 n + 39. The
     /// host icons come first in chunk 0, then the effect icons.
-    HOST_ICON_CHUNKS = 156, 4 * runtime::ICON_CHUNK_SLOTS;
+    HOST_ICON_CHUNKS = 156, 4 * ICON_CHUNK_SLOTS;
     /// Icon of the GRKit tile.
     HOST_GRKIT_ICON = 176, 4;
     /// Private toolbar cell, or 0.
@@ -254,6 +281,63 @@ fields!(RECORD_FIELDS {
     RECORD_MULTIAXIAL = 0x740, 0x980;
 });
 
+/// The R, G, and B tone curves inside `RECORD_COEFFICIENTS`: 256 14-bit samples
+/// each, `RECORD_CURVE_SIZE` bytes apart. They end where the coefficients end.
+pub const RECORD_CURVES: usize = 0x68;
+pub const RECORD_CURVE_SIZE: usize = 0x200;
+const _: () = assert!(
+    RECORD_CURVES > RECORD_COEFFICIENTS && RECORD_CURVES + 3 * RECORD_CURVE_SIZE == RECORD_NAME
+);
+
+// The GRFX0001 effect file (`effects`), which SCAN and INSTALL read. A file
+// has `effects::SIZE` bytes, or `effects::SIZE_WITH_LEVELS` with the hue
+// levels of feature 16 after the first `effects::SIZE` bytes. Each byte that
+// no field holds is zero.
+fields!(GRF_FIELDS {
+    /// The magic `GRFX0001`.
+    GRF_MAGIC = 0, 8;
+    /// u32 size of the file.
+    GRF_BYTES = 8, 4;
+    /// u32 CRC-32 of the file, which reads these bytes as zero.
+    GRF_CRC = 12, 4;
+    /// The effect ID: NUL-terminated and zero-padded.
+    GRF_ID = 16, 32;
+    /// The effect name: NUL-terminated and zero-padded ASCII.
+    GRF_NAME = 48, 32;
+    /// u32 flags: 1 for a monochrome effect.
+    GRF_FLAGS = 80, 4;
+    /// u32 extension features (GRKIT_FEATURE_*), zero without the extension.
+    GRF_FEATURES = 84, 4;
+    /// i16[9] signed Q13 RGB matrix after the tone curves (feature 1).
+    GRF_POST = 88, 18;
+    /// Selective color (feature 2): i16 cos and sin of the target hue, four u16
+    /// tangents, and two u8 chroma limits.
+    GRF_SELECTIVE = 106, selective::SIZE;
+    /// Reserved and zero.
+    GRF_RESERVED = 120, 8;
+    /// i16[9] signed Q13 color matrix.
+    GRF_MATRIX = 128, 18;
+    /// Zero.
+    GRF_PADDING = 146, 2;
+    /// The R, G, and B tone curves: 256 14-bit u16 samples each.
+    GRF_CURVES = 148, 3 * 512;
+    /// The 40 x 40 RGBA8 icon, with binary alpha.
+    GRF_ICON = 1684, effects::ICON_SIZE;
+    /// Hue sectors of feature 8: 11 x 6 i8 coefficients (GRKIT_HUE_MATRICES
+    /// bytes), then the u16 control fields 10..20 of the weight curve.
+    GRF_HUE = 8084, hue::SIZE;
+});
+
+// INSTALL copies a GRF into a record (runtime/installer.c): the matrix and the
+// curves to the coefficients, then the post matrix, the selective color, and
+// the reserved bytes.
+const _: () = assert!(
+    RECORD_NAME - RECORD_COEFFICIENTS == GRF_ICON - GRF_MATRIX
+        && RECORD_CURVES - RECORD_COEFFICIENTS == GRF_CURVES - GRF_MATRIX
+        && RECORD_SELECTIVE - RECORD_POST == GRF_SELECTIVE - GRF_POST
+        && RECORD_PARAMETERS - RECORD_POST == GRF_MATRIX - GRF_POST
+);
+
 /// The plan file that SCAN writes and INSTALL and the loader read
 /// (`PLAN.BIN`): this header, the GRF file of each installed effect
 /// (`GRKIT_GRF_MAX_SIZE` bytes each), then an entry for each listed effect.
@@ -352,7 +436,7 @@ pub const TAIL_SIZE: usize = PROFILE + PROFILE_SIZE;
 // parameter page title.
 const _: () = assert!(
     menu_text::TEXT_SUMMARY
-        + runtime::MAX_COUNT * crate::packaging::Language::ALL.len() * menu_text::SUMMARY_UNITS * 2
+        + MAX_COUNT * crate::language::Language::ALL.len() * menu_text::SUMMARY_UNITS * 2
         <= menu_text::TEXT_SETTINGS
 );
 
@@ -408,6 +492,29 @@ fn array(out: &mut String, doc: &str, name: &str, values: &[impl std::fmt::Displ
     define(out, doc, name, format!("{{ {} }}", values.join(", ")));
 }
 
+/// The GRF file: the offset and the size of each field, the file sizes, and
+/// the longest ID and name.
+fn grf_table(out: &mut String) {
+    comment(
+        out,
+        "A GRFX0001 effect file has GRKIT_GRF_SIZE bytes, or GRKIT_GRF_MAX_SIZE with \
+         hue levels (feature 16). Each byte that no field holds is zero.",
+    );
+    writeln!(out, "#define GRKIT_GRF_SIZE {}U", effects::SIZE).unwrap();
+    writeln!(
+        out,
+        "#define GRKIT_GRF_MAX_SIZE {}U",
+        effects::SIZE_WITH_LEVELS
+    )
+    .unwrap();
+    for field in GRF_FIELDS {
+        define(out, field.doc, field.name, format!("{}U", field.offset));
+        writeln!(out, "#define GRKIT_{}_SIZE {}U", field.name, field.size).unwrap();
+    }
+    writeln!(out, "#define GRKIT_GRF_ID_MAX {}U", effects::ID_MAX).unwrap();
+    writeln!(out, "#define GRKIT_GRF_NAME_MAX {}U", effects::NAME_MAX).unwrap();
+}
+
 /// The GRF extension features, and the hue sectors that INSTALL expands into the
 /// MultiAxial set of a record (`effects`, `hue`).
 fn hue_tables(out: &mut String) {
@@ -430,13 +537,6 @@ fn hue_tables(out: &mut String) {
         effects::FEATURE_HUE_LEVELS
     )
     .unwrap();
-    define(
-        out,
-        "Hue sectors of feature 8 in a GRF: 11 x 6 i8 coefficients (GRKIT_HUE_MATRICES \
-         bytes), then the u16 control fields 10..20 of the weight curve.",
-        "HUE_OFFSET",
-        format!("{}U", effects::HUE_OFFSET),
-    );
     writeln!(out, "#define GRKIT_HUE_SIZE {}U", hue::SIZE).unwrap();
     writeln!(out, "#define GRKIT_HUE_MATRICES {}U", hue::SECTORS * 6).unwrap();
     define(
@@ -498,7 +598,7 @@ pub fn header() -> String {
     writeln!(
         out,
         "#define GRKIT_MODULE_SETTINGS_MAX {}",
-        runtime::MODULE_SETTINGS_MAX
+        MODULE_SETTINGS_MAX
     )
     .unwrap();
     comment(
@@ -506,11 +606,11 @@ pub fn header() -> String {
         "The most modules that GRKit lists, and the words of the largest script \
          array, which holds the module array.",
     );
-    writeln!(out, "#define GRKIT_MODULES_MAX {}U", runtime::MODULES_MAX).unwrap();
+    writeln!(out, "#define GRKIT_MODULES_MAX {}U", MODULES_MAX).unwrap();
     writeln!(
         out,
         "#define GRKIT_MODULE_ARRAY_WORDS {}U",
-        runtime::MODULE_ARRAY_WORDS
+        MODULE_ARRAY_WORDS
     )
     .unwrap();
     comment(
@@ -519,24 +619,9 @@ pub fn header() -> String {
          tiles, in chunks of GRKIT_ICONS_PER_CHUNK (GRKIT_HOST_ICON_CHUNKS). \
          GRKIT_ICON_MODULE_TILE(n) is the icon ID of module tile n.",
     );
-    writeln!(
-        out,
-        "#define GRKIT_HOST_ICON_COUNT {}",
-        runtime::HOST_ICON_COUNT
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "#define GRKIT_ICONS_PER_CHUNK {}",
-        runtime::ICONS_PER_CHUNK
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "#define GRKIT_MODULE_TILES_MAX {}",
-        runtime::MODULE_TILES_MAX
-    )
-    .unwrap();
+    writeln!(out, "#define GRKIT_HOST_ICON_COUNT {}", HOST_ICON_COUNT).unwrap();
+    writeln!(out, "#define GRKIT_ICONS_PER_CHUNK {}", ICONS_PER_CHUNK).unwrap();
+    writeln!(out, "#define GRKIT_MODULE_TILES_MAX {}", MODULE_TILES_MAX).unwrap();
     writeln!(out, "#define GRKIT_ICON_MODULE_TILE(n) (0x7000U+(n))").unwrap();
     // A change of a saved selection: the loader saves after the count changes.
     writeln!(
@@ -625,6 +710,19 @@ pub fn header() -> String {
     );
     writeln!(out, "#define GRKIT_RECORD_SIZE {RECORD_SIZE:#x}").unwrap();
     table(&mut out, RECORD_FIELDS, true);
+    define(
+        &mut out,
+        "The R, G, and B tone curves in the coefficients: 256 14-bit samples \
+         each, GRKIT_RECORD_CURVE_SIZE bytes apart.",
+        "RECORD_CURVES",
+        format!("{RECORD_CURVES:#x}"),
+    );
+    writeln!(
+        out,
+        "#define GRKIT_RECORD_CURVE_SIZE {RECORD_CURVE_SIZE:#x}"
+    )
+    .unwrap();
+    grf_table(&mut out);
     hue_tables(&mut out);
     define(
         &mut out,
@@ -765,10 +863,10 @@ pub fn header() -> String {
     writeln!(
         out,
         "#define GRKIT_TEXT_LANGUAGES {}",
-        crate::packaging::Language::ALL.len()
+        crate::language::Language::ALL.len()
     )
     .unwrap();
-    writeln!(out, "#define GRKIT_TEXT_RECORDS {}", runtime::MAX_COUNT).unwrap();
+    writeln!(out, "#define GRKIT_TEXT_RECORDS {}", MAX_COUNT).unwrap();
     out.push_str("#define GRKIT_TEXT(h) ((h)[GRKIT_HOST_TAIL/4]+GRKIT_PICTURE_SCRATCH)\n");
     out.push_str("#define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)\n");
     writeln!(
@@ -831,6 +929,15 @@ mod tests {
     #[test]
     fn record_fields_do_not_overlap() {
         check(RECORD_FIELDS, RECORD_SIZE, false);
+    }
+
+    #[test]
+    fn the_grf_fields_follow_each_other_in_the_file() {
+        check(GRF_FIELDS, effects::SIZE, false);
+        assert!(GRF_FIELDS
+            .windows(2)
+            .all(|pair| pair[0].offset + pair[0].size == pair[1].offset));
+        assert_eq!(GRF_FIELDS[0].offset, 0);
     }
 
     #[test]

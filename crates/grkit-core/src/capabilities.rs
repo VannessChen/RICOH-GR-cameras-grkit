@@ -138,7 +138,7 @@ pub const CAPABILITIES: [Capability; 4] = [
     },
 ];
 
-/// A state file of the resident loader in `runtime::DATA_FOLDER`. The loader
+/// A state file of the resident loader in `card::DATA_FOLDER`. The loader
 /// restores the files in the order of `ALL`, so the settings of the main file
 /// apply first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

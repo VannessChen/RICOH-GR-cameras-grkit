@@ -167,7 +167,7 @@ static unsigned char *mapped(unsigned address)
     return (unsigned char *)object_at(address & ~3U) + (address & 3U);
 }
 /* The page of module i (runtime/modules.h). */
-#define MODULE(i) (*module_at(test_header, (i)))
+#define MODULE(i) (*menu_page(test_header, (i)))
 /* XPan, a crop on every camera. */
 #define CROP_RATIO 1U
 /* A page icon as its global ID. */
@@ -1132,7 +1132,7 @@ static void the_root_shows_only_visible_module_pages(void)
     assert(test_header[GRKIT_HOST_MODULE / 4] == DATE_MODULE);
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2);
     /* visible_modules keeps the page that the caller selected. */
-    module_at(test_header, GUIDES_MODULE);
+    menu_page(test_header, GUIDES_MODULE);
     visible_modules(test_header);
     assert(test_header[GRKIT_HOST_MODULE_CHOICE / 4] == GUIDES_MODULE);
     /* A module page without its slot in GRKIT_HOST_MODULE_PAGE_COUNT does not

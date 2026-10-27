@@ -7,8 +7,8 @@ The site serves these files:
 | Path | Source |
 |---|---|
 | `index.html`, `assets/`, `_headers`, `THIRD_PARTY_LICENSES.txt` | `pnpm build` in this directory |
-| `runtime/gr3-2.10/`, `runtime/gr4-1.11/` | `grkit site` |
-| `effects/gr3-2.10/`, `effects/gr4-1.11/` | `grkit effects publish` |
+| `runtime/<target>/` | `grkit site`, for each runtime build of `grkit release-plan` |
+| `effects/<target>/` | `grkit effects publish`, for each runtime build of `grkit release-plan` |
 
 `THIRD_PARTY_LICENSES.txt` gives the licenses of the bundled JavaScript packages and fonts, and of the Rust crates in the WebAssembly module. `pnpm build` writes it with `scripts/third-party-licenses.mjs`. The script reads the JavaScript licenses from the Vite build and the crate licenses from `cargo metadata`, so Cargo must be on `PATH`.
 

@@ -4,20 +4,20 @@
    modules (GRKIT_HOST_MODULE_PAGES), then the core Modules row
    (runtime/manage.h) and the core About row (runtime/about.h). */
 #include "about.h"
-#include "settings.h"
+#include "setting_store.h"
 #include "effects.h"
-#include "tone.h"
+#include "tone_page.h"
 
 #define MODULE_PAGE(slot) (slot)
 #define MANAGE_MODULE MODULE_PAGE(GRKIT_MODULE_SLOTS)
 #define ABOUT_MODULE (MANAGE_MODULE+1U)
 #define MODULE_TOTAL (ABOUT_MODULE+1U)
 
-static const Module about_module = ABOUT_PAGE;
+static const MenuPage about_module = ABOUT_PAGE;
 
 /* ---- Module pages ----------------------------------------------------------
    One generic choice page serves each module page (runtime/sdk/grkit.h).
-   module_at() selects the slot in GRKIT_HOST_MODULE_CHOICE before it returns
+   menu_page() selects the slot in GRKIT_HOST_MODULE_CHOICE before it returns
    the page, so get a page again after you get another one. */
 #define CHOICE_ENTRY(h) ((h)+GRKIT_HOST_MODULE_PAGES/4+(h)[GRKIT_HOST_MODULE_CHOICE/4]*3)
 /* GrkitPage fields, and GRKIT_CHOICE_OFF_ROW. */
@@ -39,7 +39,7 @@ static const Module about_module = ABOUT_PAGE;
 #define PAGE_WORD(p,o) WORD(p,o)
 #endif
 #include "manage.h"
-static const Module manage_module_page = MANAGE_PAGE;
+static const MenuPage manage_module_page = MANAGE_PAGE;
 static u32 module_pages(volatile u32 *h) {
     u32 n=h[GRKIT_HOST_MODULE_PAGE_COUNT/4];
     return n<=GRKIT_MODULE_SLOTS ? n : 0;
@@ -107,7 +107,7 @@ static u32 choice_icon(volatile u32 *h,u32 row) {
 static u32 choice_checked(volatile u32 *h,u32 row) { return choice_row_value(h,row)==choice_value(h); }
 static void choice_apply(volatile u32 *h,u32 row) { setting_store(h,CHOICE_ENTRY(h)[1],choice_row_value(h,row)); }
 static u32 choice_committed(volatile u32 *h) { return choice_value_row(h,choice_value(h)); }
-static const Module choice_module={choice_title,choice_summary,choice_rows,choice_label,choice_icon,
+static const MenuPage choice_module={choice_title,choice_summary,choice_rows,choice_label,choice_icon,
     choice_checked,choice_apply,choice_committed,0,0,0};
 
 /* The rows of the native settings page of a module page. INSTALL writes
@@ -152,16 +152,16 @@ static const u16 *choice_one_text(volatile u32 *h,u32 row) { return choice_label
 static const Setting choice_one[SETTING_ROWS]={
     {choice_one_label,choice_rows,choice_one_text,choice_committed,choice_apply},
 };
-static const Module choice_settings_module={choice_title,choice_summary,choice_rows,choice_label,choice_icon,
+static const MenuPage choice_settings_module={choice_title,choice_summary,choice_rows,choice_label,choice_icon,
     choice_checked,choice_apply,choice_committed,0,0,choice_settings};
 
 /* A page of CORE.TONE gets its rows from the core (runtime/tone.h), and its
    title from the module. */
-static const Module tone_module={choice_title,tone_summary,tone_rows,tone_label,tone_icon,
+static const MenuPage tone_module={choice_title,tone_summary,tone_rows,tone_label,tone_icon,
     tone_checked,tone_apply,tone_committed,tone_preview,tone_parameters,0};
 
 /* The page of module `index`. */
-static const Module *module_at(volatile u32 *h,u32 index) {
+static const MenuPage *menu_page(volatile u32 *h,u32 index) {
     if(index>=ABOUT_MODULE) return &about_module;
     if(index==MANAGE_MODULE) return &manage_module_page;
     h[GRKIT_HOST_MODULE_CHOICE/4]=index;
@@ -204,7 +204,7 @@ static void frame_preview_set(volatile u32 *h,u32 controller,u32 movie) {
     h[GRKIT_HOST_MODULE_PREVIEW/4]=0;
     if(movie) { h[GRKIT_HOST_FRAME_PREVIEW/4]=0; return; }
     if(choice) {
-        module_at(h,module);
+        menu_page(h,module);
         handle=CHOICE_ENTRY(h)[1];
         value=choice_row_value(h,h[GRKIT_HOST_MENU_CURSOR/4]);
         h[GRKIT_HOST_MODULE_PREVIEW/4]=handle+1;
@@ -244,12 +244,12 @@ static u32 visible_modules(volatile u32 *h) {
     for(slot=0;slot<module_pages(h);++slot) {
         listed=page_listed(h,slot);
         if(listed<MANAGE_MODULES && manage_stopped(h,listed)) continue;
-        if(module_at(h,MODULE_PAGE(slot))->rows(h)>=2) mask|=1U<<MODULE_PAGE(slot);
+        if(menu_page(h,MODULE_PAGE(slot))->rows(h)>=2) mask|=1U<<MODULE_PAGE(slot);
     }
     /* Module management and the version are in the native MENU (runtime/menu.c).
        About shows only so that the root has a row. */
     if(!mask) mask=1U<<ABOUT_MODULE;
-    /* module_at selects a page: keep the page of the caller. */
+    /* menu_page selects a page: keep the page of the caller. */
     h[GRKIT_HOST_MODULE_CHOICE/4]=choice;
     return mask;
 }
@@ -291,36 +291,36 @@ static u32 root_count(volatile u32 *h) { return root_row(h,MODULE_TOTAL); }
 static u32 current_index(volatile u32 *h) {
     return h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]) : h[GRKIT_HOST_MODULE/4];
 }
-static const Module *current_module(volatile u32 *h) { return module_at(h,current_index(h)); }
+static const MenuPage *current_module(volatile u32 *h) { return menu_page(h,current_index(h)); }
 static u32 count(volatile u32 *h) {
     return h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT ? root_count(h) : current_module(h)->rows(h);
 }
 /* The page learns that its highlighted row changed, so the page of CORE.TONE
    can preview the row in the live view. */
 static void highlight(volatile u32 *h) {
-    const Module *module;
+    const MenuPage *module;
     if(h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_MODULE || h[GRKIT_HOST_MODULE/4]>=MODULE_TOTAL) return;
-    module=module_at(h,h[GRKIT_HOST_MODULE/4]);
+    module=menu_page(h,h[GRKIT_HOST_MODULE/4]);
     if(module->highlight) module->highlight(h);
 }
 /* Fn applies to the highlighted row of a page that has native parameters,
    and to the root row of such a page for its committed row. */
 static u32 parameters_row(volatile u32 *h) {
-    const Module *module;
+    const MenuPage *module;
     u32 row=h[GRKIT_HOST_MENU_CURSOR/4];
     if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT) {
-        module=module_at(h,root_module(h,row));
+        module=menu_page(h,root_module(h,row));
         row=module->committed(h);
     }
     else if(h[GRKIT_HOST_MENU_LEVEL/4]!=MENU_MODULE || h[GRKIT_HOST_MODULE/4]>=MODULE_TOTAL) return 0;
-    else module=module_at(h,h[GRKIT_HOST_MODULE/4]);
+    else module=menu_page(h,h[GRKIT_HOST_MODULE/4]);
     return module->parameters && module->parameters(h,row);
 }
 /* Each module opens at its committed row. Image Control previews from there. */
 static void menu_open(volatile u32 *h,u32 module) {
     h[GRKIT_HOST_MODULE/4]=module;
     h[GRKIT_HOST_MENU_LEVEL/4]=MENU_MODULE;
-    h[GRKIT_HOST_MENU_CURSOR/4]=module_at(h,module)->committed(h);
+    h[GRKIT_HOST_MENU_CURSOR/4]=menu_page(h,module)->committed(h);
 }
 /* ADJ opens at the root. About always shows there, so the root has a row even
    when no module page is visible. */
@@ -343,7 +343,7 @@ static u32 page_reachable(volatile u32 *h,u32 module) { return visible_modules(h
 static void menu_normalize(volatile u32 *h) {
     u32 module=h[GRKIT_HOST_MODULE/4];
     if(h[GRKIT_HOST_MENU_LEVEL/4]<MENU_ROOT || h[GRKIT_HOST_MENU_LEVEL/4]>MENU_MODULE || module>=MODULE_TOTAL ||
-       (h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && (!page_reachable(h,module) || !module_at(h,module)->rows(h))))
+       (h[GRKIT_HOST_MENU_LEVEL/4]==MENU_MODULE && (!page_reachable(h,module) || !menu_page(h,module)->rows(h))))
         menu_start(h);
     if(h[GRKIT_HOST_MENU_CURSOR/4]>=count(h)) h[GRKIT_HOST_MENU_CURSOR/4]=0;
 }
@@ -352,7 +352,7 @@ static void menu_confirm(volatile u32 *h) {
     menu_normalize(h);
     if(h[GRKIT_HOST_MENU_LEVEL/4]==MENU_ROOT) {
         u32 module=root_module(h,h[GRKIT_HOST_MENU_CURSOR/4]);
-        if(module_at(h,module)->rows(h)) menu_open(h,module);
+        if(menu_page(h,module)->rows(h)) menu_open(h,module);
     }
     else current_module(h)->apply(h,h[GRKIT_HOST_MENU_CURSOR/4]);
 }

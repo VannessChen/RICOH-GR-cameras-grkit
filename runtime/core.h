@@ -80,7 +80,7 @@ typedef struct {
        settings instead of the page of the module. The page title is the
        module title. */
     const Setting *settings;
-} Module;
+} MenuPage;
 
 /* Core services for pages. */
 /* One string of the menu text table in the menu language (runtime/abi.h). */

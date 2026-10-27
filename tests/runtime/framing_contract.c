@@ -304,9 +304,9 @@ static void assert_guides(u32 ratio,u32 style,u32 badge)
 /* The white of each record curve: R, G, B at input 255. */
 static void record_white(u32 r, u32 g, u32 b)
 {
-    HALF(TEST_RECORD, 0x68 + 255 * 2) = (u16)r;
-    HALF(TEST_RECORD, 0x268 + 255 * 2) = (u16)g;
-    HALF(TEST_RECORD, 0x468 + 255 * 2) = (u16)b;
+    HALF(TEST_RECORD, GRKIT_RECORD_CURVES + 255 * 2) = (u16)r;
+    HALF(TEST_RECORD, GRKIT_RECORD_CURVES + GRKIT_RECORD_CURVE_SIZE + 255 * 2) = (u16)g;
+    HALF(TEST_RECORD, GRKIT_RECORD_CURVES + 2 * GRKIT_RECORD_CURVE_SIZE + 255 * 2) = (u16)b;
 }
 /* The live-view highlight warning: the threshold follows the white of the
    active effect, and each setting of the camera records its screen and mode. */

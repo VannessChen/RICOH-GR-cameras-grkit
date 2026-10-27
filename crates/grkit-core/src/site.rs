@@ -29,8 +29,12 @@ fn unit(m: &[i16; 9]) -> [f64; 9] {
     m.map(|v| v as f64 / 8192.0)
 }
 
+/// The effect ID of the file name sample in the generated module.
+const FILENAME_SAMPLE: &str = "velvia-100-v1";
+
 /// The constants that the site shares with the packager, as a TypeScript module.
 pub fn generated() -> Vec<(&'static str, String)> {
+    let filename = effects::filename(FILENAME_SAMPLE).expect("a valid sample ID");
     let module = format!(
         "// Generated from crates/grkit-core/src/site.rs. Do not edit: change the\n\
          // constants there, then run\n\
@@ -40,8 +44,15 @@ pub fn generated() -> Vec<(&'static str, String)> {
          /** The effects that one package can hold. */\n\
          export const MAX_EFFECTS = {};\n\n\
          /** The schema of the effect catalog of each target. */\n\
-         export const CATALOG_SCHEMA = '{CATALOG_SCHEMA}';\n",
-        crate::runtime::MAX_COUNT
+         export const CATALOG_SCHEMA = '{CATALOG_SCHEMA}';\n\n\
+         /** The longest effect name and the longest effect ID (effects.rs). */\n\
+         export const EFFECT_NAME_MAX = {};\n\
+         export const EFFECT_ID_MAX = {};\n\n\
+         /** An effect ID and the name of its GRF file in a package (effects::filename). */\n\
+         export const EFFECT_FILENAME_SAMPLE = {{ id: '{FILENAME_SAMPLE}', filename: '{filename}' }} as const;\n",
+        crate::runtime::MAX_COUNT,
+        effects::NAME_MAX,
+        effects::ID_MAX,
     );
     vec![("web/src/generated/site.ts", module)]
 }

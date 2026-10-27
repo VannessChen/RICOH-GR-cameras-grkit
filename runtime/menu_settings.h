@@ -2,8 +2,7 @@
 #define GRKIT_MENU_SETTINGS_H
 /* The native settings page: a borrowed MENU submenu and its value pages,
    which show the settings of a module page (runtime/menu.c). */
-#ifdef SETTINGS_SUBMENU
-/* The native settings page of a root row (Module::settings). GRKit opens the
+/* The native settings page of a root row (MenuPage::settings). GRKit opens the
    MENU submenu SETTINGS_SUBMENU from ADJ, as the Fn page opens. While
    GRKIT_HOST_SETTINGS holds the module + 1, the submenu reads a private copy
    of its kind table entry with the rows of the module (1 to SETTING_ROWS),
@@ -61,12 +60,10 @@ static volatile u32 *settings_block(volatile u32 *h) { return SETTINGS_MAP(GRKIT
 #include "menu_listed.h"
 /* The settings of page `module`, or 0. */
 static const Setting *settings_of(volatile u32 *h,u32 module,u32 one) {
-#ifdef FW_MENU_TABS
     if(module==LISTED_PAGE) return listed_settings;
-#endif
     if(module>=MODULE_TOTAL) return 0;
-    if(one) { module_at(h,module); return choice_one; }
-    return module_at(h,module)->settings;
+    if(one) { menu_page(h,module); return choice_one; }
+    return menu_page(h,module)->settings;
 }
 /* The settings of the open page, or 0. */
 static const Setting *settings_page(volatile u32 *h) {
@@ -96,28 +93,17 @@ static u32 settings_borrowed(u32 row) { return row<SETTINGS_BORROWED ? row : SET
    Stock. */
 #define VALUES_MAX MENU_VALUES_MAX
 static u32 settings_options(volatile u32 *h,const Setting *page,u32 setting) {
-#ifdef FW_MENU_TABS
     const Setting *b;
     return page==listed_settings && listed_kind(h,setting,&b)==LISTED_OPTIONS;
-#else
-    (void)h; (void)page; (void)setting;
-    return 0;
-#endif
 }
 static u32 settings_long(volatile u32 *h,const Setting *page,u32 setting) {
-#ifdef FW_MENU_TABS
     return settings_options(h,page,setting) || page[setting].values(h)>SETTING_VALUES;
-#else
-    (void)h; (void)page; (void)setting;
-    return 0;
-#endif
 }
 static u32 settings_values(volatile u32 *h,const Setting *page,u32 setting) {
     u32 n=page[setting].values(h), most=settings_long(h,page,setting) ? VALUES_MAX : SETTING_VALUES;
     return n<most ? n : most;
 }
 static void settings_forget_all(volatile u32 *h);
-#if defined(FW_CHECK_ITEM) && defined(FW_MENU_TABS)
 /* An options page shows a checkbox on each option. Each SelectMenu of the
    camera shares one SelectMenuController, built once with radio rows. The
    controller factory gives the open options page (CHECK_ID) a second one,
@@ -157,20 +143,17 @@ A32_ENTRY void menu_check_dot(u32 line,u32 shown) {
     if(check_row(line)) return;
     MENU_VIEW2(FW_ROW_DOT,line,shown);
 }
-#endif
 /* A controller change to `id`: returns the controller to change to. A MENU
    row of a module opens its settings page (menu_rows_controller). The page
    ends at any controller outside it. */
 A32_ENTRY u32 menu_settings_controller(u32 id) {
     volatile u32 *h=menu_header();
     u32 i, last=0;
-#ifdef FW_MENU_TABS
     /* OK on an option: the value page stays, so the change does not happen. */
     if(h[GRKIT_HOST_SERVICES/4] && services_word(h,SERVICES_MENU+MENU_ROWS_STAY)[0]) {
         services_word(h,SERVICES_MENU+MENU_ROWS_STAY)[0]=0;
         return 0;
     }
-#endif
     /* OK on the last row changes to the kind of the first row, which no
        controller has: the last row opens the Fn adjustments or the value page
        of SETTINGS_ALIAS. */
@@ -178,12 +161,9 @@ A32_ENTRY u32 menu_settings_controller(u32 id) {
        id==settings_block(h)[SUBMENU_KIND_ROW_KINDS/4]) {
         last=1;
         id=settings_pages[SETTINGS_ALIAS];
-#ifdef FW_MENU_TABS
         if(settings_fn_row(h,settings_page(h),SETTINGS_BORROWED)) id=MENU_FN_TARGET;
-#endif
     }
     id=menu_rows_controller(h,id);
-#if defined(FW_CHECK_ITEM) && defined(FW_MENU_TABS)
     /* The checkbox page serves the options page that opens now. The return
        to the settings page keeps it, as the submenu finds the row to put
        its cursor on from the page that returns. Any other controller gets
@@ -194,15 +174,12 @@ A32_ENTRY u32 menu_settings_controller(u32 id) {
             if(id==settings_pages[i] && settings_page(h) && settings_alias(h,i)<settings_rows(h) &&
                settings_options(h,settings_page(h),settings_alias(h,i))) check_word(h,CHECK_ID)[0]=id;
     }
-#endif
-#ifdef FW_MENU_TABS
     /* The section title of MENU needs the controller that shows. The camera
        information page shows About GRKit only after the About GRKit row. */
     if(h[GRKIT_HOST_SERVICES/4]) {
         services_word(h,SERVICES_MENU+MENU_ROWS_CURRENT)[0]=id;
         if(id!=INFO_CONTROLLER) services_word(h,SERVICES_MENU+MENU_ROWS_ABOUT)[0]=0;
     }
-#endif
     if(id==SETTINGS_SUBMENU) {
         h[GRKIT_HOST_SETTINGS/4]&=~(SETTINGS_FN|SETTINGS_LAST_ROW);
         if(settings_page(h)) settings_forget_all(h);
@@ -217,18 +194,14 @@ A32_ENTRY u32 menu_settings_controller(u32 id) {
         if(last) h[GRKIT_HOST_SETTINGS/4]|=SETTINGS_LAST_ROW;
         else h[GRKIT_HOST_SETTINGS/4]&=~SETTINGS_LAST_ROW;
         if(settings_page(h)) settings_forget_all(h);
-#ifdef FW_MENU_TABS
         /* An options page starts with its cursor on the first option. */
         if(h[GRKIT_HOST_SERVICES/4] && settings_page(h) && settings_alias(h,i)<settings_rows(h) &&
            settings_long(h,settings_page(h),settings_alias(h,i)))
             services_word(h,SERVICES_MENU+MENU_ROWS_STAY_ROW)[0]=0;
-#endif
         return id;
     }
-#ifdef PARAMETER_KINDS
     /* The Fn adjustments that a row of the page opened return to the page. */
     if(id==IC_PARAMETERS_CONTROLLER && h[GRKIT_HOST_SETTINGS/4]&SETTINGS_FN) return id;
-#endif
     h[GRKIT_HOST_SETTINGS/4]=0;
     return id;
 }
@@ -246,20 +219,16 @@ static void settings_forget(volatile u32 *h,u32 view) {
     volatile u32 *block=settings_block(h);
     u32 i;
     for(i=0;i<SETTINGS_VIEW_SLOTS;++i) if(block[SETTINGS_VIEWS/4+i*3]==view) block[SETTINGS_VIEWS/4+i*3]=0;
-#ifdef FW_MENU_TABS
     if(h[GRKIT_HOST_SERVICES/4])
         for(i=0;i<MENU_VALUES_MAX;++i)
             if(value_entry(h,i)[MENU_VALUE_VIEW/4]==view) value_entry(h,i)[MENU_VALUE_ROW/4]=value_entry(h,i)[MENU_VALUE_VIEW/4]=0;
-#endif
 }
 static void settings_forget_all(volatile u32 *h) {
     volatile u32 *block=settings_block(h);
     u32 i;
     for(i=0;i<SETTINGS_VIEW_SLOTS;++i) block[SETTINGS_VIEWS/4+i*3]=0;
-#ifdef FW_MENU_TABS
     if(h[GRKIT_HOST_SERVICES/4])
         for(i=0;i<MENU_VALUES_MAX;++i) value_entry(h,i)[MENU_VALUE_ROW/4]=value_entry(h,i)[MENU_VALUE_VIEW/4]=0;
-#endif
 }
 /* Show `name` in `view` of value slot `slot`. Reset the text ID first: the
    view measures its text only when its ID changes. */
@@ -270,7 +239,6 @@ static void settings_view(volatile u32 *h,u32 slot,u32 view,const u16 *name) {
     descriptor(at+1,name);
     MENU_VIEW3(FW_STRING_VIEW_RESET,view,0,0);
 }
-#ifdef FW_MENU_TABS
 /* The row of the open value page of the settings page, or SETTING_ROWS. */
 static u32 settings_value_row(volatile u32 *h) {
     u32 current=services_word(h,SERVICES_MENU+MENU_ROWS_CURRENT)[0], i;
@@ -287,7 +255,7 @@ static u32 options_page_text(volatile u32 *h,u32 n,const u16 *name) {
    "Framing Options" or "画幅选项". */
 static const u16 *options_title(volatile u32 *h) {
     volatile u16 *to=(volatile u16 *)services_word(h,SERVICES_MENU+MENU_ROWS_PAGE_TITLE);
-    const u16 *title=listed_slot(h)<module_pages(h) ? module_at(h,listed_slot(h))->title(h) : manage_name(h,listed(h));
+    const u16 *title=listed_slot(h)<module_pages(h) ? menu_page(h,listed_slot(h))->title(h) : manage_name(h,listed(h));
     const u16 *options=text(h,TEXT_OPTIONS);
     u32 n=0;
     while(n<MENU_PAGE_TITLE_UNITS-20 && *title) to[n++]=*title++;
@@ -296,7 +264,6 @@ static const u16 *options_title(volatile u32 *h) {
     to[n]=0;
     return (const u16 *)to;
 }
-#endif
 /* The text descriptor of a settings page text, with bit 0 set (the text hooks
    then select the font of the menu language), or 0. */
 static u32 settings_text(volatile u32 *h,u32 view,u32 id) {
@@ -304,7 +271,6 @@ static u32 settings_text(volatile u32 *h,u32 view,u32 id) {
     const Setting *page=settings_page(h);
     u32 i;
     if(!page) return 0;
-#ifdef FW_MENU_TABS
     if(h[GRKIT_HOST_SERVICES/4]) {
         u32 row=settings_value_row(h);
         /* The values of an open long value page. */
@@ -320,7 +286,6 @@ static u32 settings_text(volatile u32 *h,u32 view,u32 id) {
             if(id==SELECT_GUIDE_BACK_TEXT) return options_page_text(h,2,text(h,TEXT_GUIDE+1));
         }
     }
-#endif
     if(id==SETTINGS_TITLE_TEXT)
         for(i=0;i<SETTINGS_VIEW_SLOTS;++i)
             if(block[SETTINGS_VIEWS/4+i*3]==view) return (u32)(block+SETTINGS_VIEWS/4+i*3+1)|1U;
@@ -366,8 +331,6 @@ A32_ENTRY u32 menu_settings_count(u32 unused,u32 unused2,u32 setting) {
 static u32 settings_draw(volatile u32 *h,u32 row,u32 value,u32 setting) {
     const Setting *page=settings_row_page(h,setting);
     if(!page) return 0;
-#ifdef FW_MENU_TABS
-#ifdef FW_CHECK_ITEM
     /* A checkbox row of an options page: the checkbox shows whether the
        option is on, and the text is its label. */
     if(settings_options(h,page,setting) && check_row(row)) {
@@ -383,7 +346,6 @@ static u32 settings_draw(volatile u32 *h,u32 row,u32 value,u32 setting) {
         }
         return 1;
     }
-#endif
     if(settings_long(h,page,setting)) {
         if(value<settings_values(h,page,setting)) {
             volatile u32 *at=value_entry(h,value);
@@ -397,7 +359,6 @@ static u32 settings_draw(volatile u32 *h,u32 row,u32 value,u32 setting) {
         MENU_VIEW2(FW_ROW_TEXT,row,SETTINGS_TITLE_TEXT);
         return 1;
     }
-#endif
     if(value<settings_values(h,page,setting))
         settings_view(h,SETTING_ROWS+value,MENU_OBJECT_WORD(row,ROW_TEXT_VIEW),page[setting].value_text(h,value));
     MENU_VIEW2(FW_ROW_TEXT,row,SETTINGS_TITLE_TEXT);
@@ -427,9 +388,7 @@ A32_ENTRY u32 menu_settings_current(u32 value,u32 unused,u32 setting) {
     setting=settings_alias(h,setting);
     page=settings_row_page(h,setting);
     if(!page) return 0;
-#ifdef FW_MENU_TABS
     if(settings_options(h,page,setting)) return (services_word(h,SERVICES_MENU+MENU_ROWS_STAY_ROW)[0]==value)+1;
-#endif
     return (page[setting].get(h)==value)+1;
 }
 /* The settings of a page: those of a module page give their count, the
@@ -438,9 +397,7 @@ static u32 settings_count(volatile u32 *h,const Setting *page) {
     u32 n=0;
     if(page==choice_settings) n=PAGE_WORD(CHOICE_ENTRY(h)[0],PAGE_SETTING_ROWS);
     else if(page==manage_settings) n=manage_group_rows(h);
-#ifdef FW_MENU_TABS
     else if(page==listed_settings) n=listed_rows(h);
-#endif
     else while(n<SETTING_ROWS && page[n].label) ++n;
     return n<SETTING_ROWS ? n : SETTING_ROWS;
 }
@@ -462,9 +419,7 @@ static void settings_open(volatile u32 *h,u32 module,u32 one) {
            those of the first row (menu_settings_controller). */
         if(i<SETTINGS_BORROWED) {
             block[SUBMENU_KIND_CONTROLLERS/4+i]=settings_pages[i];
-#ifdef FW_MENU_TABS
             if(settings_fn_row(h,page,i)) block[SUBMENU_KIND_CONTROLLERS/4+i]=MENU_FN_TARGET;
-#endif
             /* The stock entry has three rows: the others take the kind of the first. */
             block[SUBMENU_KIND_ROW_KINDS/4+i]=block[SUBMENU_KIND_ROW_KINDS/4];
         }
@@ -474,17 +429,14 @@ static void settings_open(volatile u32 *h,u32 module,u32 one) {
         descriptor(block+SETTINGS_LABELS/4+(i+1)*2,page[i].label(h));
     }
     /* The settings of a module or an effect have its name. */
-#ifdef FW_MENU_TABS
     if(module==LISTED_PAGE)
-        descriptor(block+SETTINGS_LABELS/4,listed_slot(h)<module_pages(h) ? module_at(h,listed_slot(h))->title(h) :
+        descriptor(block+SETTINGS_LABELS/4,listed_slot(h)<module_pages(h) ? menu_page(h,listed_slot(h))->title(h) :
                    manage_name(h,listed(h)));
     else
-#endif
     descriptor(block+SETTINGS_LABELS/4,module==MANAGE_MODULE ? manage_title(h) :
-               module_at(h,module)->title(h));
+               menu_page(h,module)->title(h));
     for(i=0;i<SETTINGS_VIEW_SLOTS*3;++i) block[SETTINGS_VIEWS/4+i]=0;
     h[GRKIT_HOST_SETTINGS/4]=(module+1)|(one ? SETTINGS_ONE : 0);
 }
 static void settings_start(volatile u32 *h,u32 module) { settings_open(h,module,0); }
-#endif
 #endif /* GRKIT_MENU_SETTINGS_H */

@@ -54,7 +54,7 @@ static const u32 core_exports[] = {0xc0e27352U, 0x40U};
 
 #include "grf.h"
 #include "module_link.h"
-#include "settings.h"
+#include "setting_table.h"
 #include "effects.h"
 #include "services.h"
 #include "install_status.h"

@@ -10,7 +10,9 @@ use anyhow::{ensure, Context, Result};
 use grkit_core::{
     camera::{self, Camera},
     cube::Cube,
-    effects, fit, lut_image,
+    effects, fit,
+    language::Language,
+    lut_image,
     packaging::{self, EffectSet},
     site, Files,
 };
@@ -139,7 +141,7 @@ pub struct Builder {
     effects: EffectSet,
     modules: Vec<Vec<u8>>,
     camera: &'static Camera,
-    language: packaging::Language,
+    language: Language,
     guide: Option<Vec<u8>>,
 }
 
@@ -152,7 +154,7 @@ impl Builder {
             effects: EffectSet::default(),
             modules: Vec::new(),
             camera: &camera::GR3,
-            language: packaging::Language::English,
+            language: Language::English,
             guide: None,
         })
     }
@@ -222,9 +224,9 @@ impl Builder {
     }
 
     /// Selects the language of the installation guide by its code
-    /// (`packaging::Language::code`), English by default.
+    /// (`Language::code`), English by default.
     pub fn set_language(&mut self, code: &str) -> Result<()> {
-        self.language = packaging::Language::parse(code)?;
+        self.language = Language::parse(code)?;
         Ok(())
     }
 

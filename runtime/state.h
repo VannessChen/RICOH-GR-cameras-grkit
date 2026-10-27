@@ -1,6 +1,6 @@
 #ifndef GRKIT_STATE_H
 #define GRKIT_STATE_H
-/* The state file for the installer (crates/grkit-core/src/runtime.rs). The
+/* The state file for the installer (crates/grkit-core/src/runtime/state.rs). The
    includer defines u8 and u32.
 
    STATE.TXT holds two decimal lines for each value: the key ID, then the
