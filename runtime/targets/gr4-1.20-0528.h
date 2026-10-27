@@ -104,6 +104,8 @@
 /* The RAM table of the MENU tab descriptors, and the MENU row setters of
    the label and of the value text. */
 #define FW_MENU_TABS FIRMWARE(0x55001e78)
+/* The rows of the stock Customize tab (runtime/menu_section.h). */
+#define MENU_TAB_STOCK_ROWS 24
 #define FW_MENU_ROW_LABEL FIRMWARE(0x535992c4)
 #define FW_MENU_ROW_VALUE FIRMWARE(0x53599578)
 #define FW_ADJ_REFRESH FIRMWARE(0x531bff98)

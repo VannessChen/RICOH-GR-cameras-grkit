@@ -122,13 +122,16 @@ const MENU_PAGES: &[HookSpec] = &[
     bl("menu_settings_kinds_r8", Menu, MenuPage),
     bl("menu_settings_kinds_r5", Menu, MenuPage),
     bl("menu_settings_kinds_r3_1", Menu, MenuPage),
-    // The submenu shows six rows (`runtime/menu.S`): the store of the fifth
-    // row type in its constructor, the two compares of the rows to hide, and
-    // the load of the row kind in its draw.
+    // The submenu shows up to `GRKIT_SUBMENU_ROWS` rows (`runtime/menu.S`):
+    // the store of the fifth row type in its constructor, the two compares of
+    // the rows to hide, the loads of the row kind and the row label in its
+    // draw, and the load of the row controller at OK.
     bl("menu_settings_build", Menu, MenuPage),
     bl("menu_settings_hide_first", Menu, MenuPage),
     bl("menu_settings_hide_next", Menu, MenuPage),
     bl("menu_settings_row_kind", Menu, MenuPage),
+    bl("menu_settings_label", Menu, MenuPage),
+    bl("menu_settings_open", Menu, MenuPage),
 ];
 
 /// Framing and Guides: LiveViewController update, exit, and destroy, then

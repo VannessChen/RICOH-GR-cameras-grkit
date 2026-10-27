@@ -698,7 +698,7 @@ static void write_profile(const struct arrays *a)
     u32 base = a->base, tail = a->tail;
     u32 table = tail + GRKIT_PROFILE;
     zero(at(table), GRKIT_PROFILE_SIZE);
-    for (u32 i = 0; i < module_count && i < GRKIT_MODULE_SLOTS; ++i) {
+    for (u32 i = 0; i < module_count && i < GRKIT_PROFILE_MODULES; ++i) {
         u32 entry = table + i * GRKIT_PROFILE_MODULE_SIZE, n = 0;
         if (module_status[i]) continue;
         store(entry, module_code_from[i]);

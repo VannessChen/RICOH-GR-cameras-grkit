@@ -11,10 +11,8 @@
 
    The rows: a row for each listed module (runtime/manage.h), which opens
    its Enable row, its Options row, and the settings of its module page; ADJ
-   Order, which orders
-   the module pages in ADJ, one row for each group of MANAGE_GROUP_ROWS
-   modules; then About GRKit, which shows the GRKit version and the project
-   address.
+   Order, which orders the module pages in ADJ; then About GRKit, which
+   shows the GRKit version and the project address.
 
    A row targets MENU_ROW_TARGET + its slot, which no controller has: the
    controller change becomes a change to the borrowed settings submenu with
@@ -51,11 +49,11 @@ _Static_assert(MENU_TAB_SIZE==MENU_ROWS_TAB_SIZE,"The services block holds a MEN
 static volatile u32 *menu_row(volatile u32 *h,u32 slot) {
     return services_word(h,SERVICES_MENU+MENU_ROWS_FIRST+slot*MENU_ROW_SIZE);
 }
-/* The page slot of listed module `module`, or GRKIT_MODULE_SLOTS. */
+/* The page slot of listed module `module`, or GRKIT_MODULE_PAGES_MAX. */
 static u32 listed_page(volatile u32 *h,u32 module) {
     u32 slot;
     for(slot=0;slot<module_pages(h);++slot) if(page_listed(h,slot)==module) return slot;
-    return GRKIT_MODULE_SLOTS;
+    return GRKIT_MODULE_PAGES_MAX;
 }
 /* The fillers of the rows (below). */
 static void (*const fillers[MENU_ROWS_SLOTS])(u32,u32);
@@ -71,9 +69,15 @@ static u32 menu_rows_add(volatile u32 *h,u32 copy,u32 *rows,u32 slots,u32 kind,u
     ++*rows;
     return slots+1;
 }
+/* The GRKit rows fit the Customize tab of each build: its stock rows
+   (MENU_TAB_STOCK_ROWS of the build header), then a row for each listed
+   module, ADJ Order, and About GRKit. */
+_Static_assert(MENU_ROWS_SLOTS==MANAGE_MODULES+2U,"A row slot for each GRKit row");
+_Static_assert(MENU_TAB_STOCK_ROWS+MENU_ROWS_SLOTS<=MENU_TAB_MAX_ROWS,"The Customize tab holds each GRKit row");
 static void menu_rows_install(volatile u32 *h) {
     volatile u32 *state=services_word(h,SERVICES_MENU);
     u32 copy=(u32)services_word(h,SERVICES_MENU+MENU_ROWS_TAB), stock, rows, sections, slots=0, i, top;
+    u32 listed=manage_count(h), adj=listed>0;
     if(state[MENU_ROWS_DONE/4]) return;
     state[MENU_ROWS_DONE/4]=1;
     stock=WORD(FW_MENU_TABS+4*MENU_TAB_GRKIT,0);
@@ -90,10 +94,15 @@ static void menu_rows_install(volatile u32 *h) {
         BYTE(copy,MENU_TAB_SECTIONS)=(u8)(sections+1);
     }
     descriptor(services_word(h,SERVICES_MENU+MENU_ROWS_TITLE_AT),grkit_title);
+    /* A build with more stock rows than its header gives, such as a build
+       that INSTALL relocates, keeps ADJ Order and About GRKit: the last
+       modules of the default order get no row. */
+    if(rows+listed+adj+1U>MENU_TAB_MAX_ROWS)
+        listed=MENU_TAB_MAX_ROWS>rows+adj+1U ? MENU_TAB_MAX_ROWS-rows-adj-1U : 0;
     /* The modules in their default order, which the ADJ Order row changes
        only in ADJ. */
-    for(i=0;i<manage_count(h);++i) slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_LISTED,i);
-    for(i=0;i*MANAGE_GROUP_ROWS<manage_count(h);++i) slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_ADJ,i);
+    for(i=0;i<listed;++i) slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_LISTED,i);
+    if(adj) slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_ADJ,0);
     slots=menu_rows_add(h,copy,&rows,slots,MENU_ROW_GRKIT,0);
     state[MENU_ROWS_COUNT/4]=slots;
     BYTE(copy,MENU_TAB_ROWS)=(u8)rows;
@@ -120,7 +129,6 @@ static u32 menu_rows_controller(volatile u32 *h,u32 id) {
     kind=menu_row(h,slot)[MENU_ROW_KIND/4];
     module=menu_row(h,slot)[MENU_ROW_MODULE/4];
     if(kind==MENU_ROW_ADJ) {
-        services_word(h,SERVICES_MENU+MENU_ROWS_GROUP)[0]=module;
         settings_start(h,MANAGE_MODULE);
         return SETTINGS_SUBMENU;
     }
@@ -164,7 +172,7 @@ static void menu_row_fill(u32 slot,u32 row) {
     }
     kind=at[MENU_ROW_KIND/4];
     module=at[MENU_ROW_MODULE/4];
-    if(kind==MENU_ROW_ADJ) { label=text(h,TEXT_ADJ+(module ? 1 : 0)); value=no_text; }
+    if(kind==MENU_ROW_ADJ) { label=text(h,TEXT_ADJ); value=no_text; }
     else if(kind==MENU_ROW_LISTED) {
         /* A loaded module shows the value of its page, as a native row shows
            its value, or Off while it is Off; another module its Enable

@@ -48,13 +48,17 @@ typedef struct {
     u32 (*get)(volatile u32 *);
     void (*set)(volatile u32 *,u32);
 } Setting;
-/* The most rows of a native settings page: the settings of a module page
-   (GRM_SETTING_ROWS) and the Enable row before them in MENU. The borrowed
-   submenu builds six row views (runtime/menu.S: menu_settings_build), one
-   more than the native five. Its table entry has room for five rows: the
-   sixth borrows the kind of the first and the value page of another row
-   (runtime/menu_settings.h: SETTINGS_ALIAS). A page has 2 to SETTING_ROWS rows. */
+/* The most rows of the settings page of a module: its settings
+   (GRM_SETTING_ROWS) and the Enable row before them in MENU. */
 #define SETTING_ROWS 6U
+/* The most rows of a native settings page. The borrowed submenu builds
+   SUBMENU_ROWS row views instead of the native five (runtime/menu.S:
+   menu_settings_build) and scrolls past six. The ADJ Order page has a row
+   for each listed module (runtime/manage.h). Its table entry has room for
+   the controllers of five rows: a later row borrows the value page of
+   another row (runtime/menu_settings.h: SETTINGS_ALIAS). */
+#define SUBMENU_ROWS GRKIT_SUBMENU_ROWS
+_Static_assert(SETTING_ROWS<=SUBMENU_ROWS,"The submenu shows each row of a module");
 
 typedef struct {
     const u16 *(*title)(volatile u32 *);

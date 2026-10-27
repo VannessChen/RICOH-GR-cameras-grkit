@@ -17,7 +17,7 @@
    code in another task, such as a layer or a plane filter. */
 #define SERVICES_SUBSCRIBER_COUNT 0U
 #define SERVICES_SUBSCRIBERS 4U
-#define SERVICES_SUBSCRIBERS_MAX 8U
+#define SERVICES_SUBSCRIBERS_MAX GRKIT_MODULES_MAX
 #define SERVICES_READY (SERVICES_SUBSCRIBERS + 8U * SERVICES_SUBSCRIBERS_MAX)
 #define SERVICES_DEPTH (SERVICES_READY + 4U)
 #define SERVICES_APP (SERVICES_DEPTH + 4U)
@@ -54,18 +54,17 @@
 #define UI_CHANGED 72U
 #define UI_SIZE 76U
 /* The GRKit section of the native MENU (runtime/menu_section.h): whether the Customize
-   tab has been patched, the number of rows, the group of the ADJ Order page
-   that is open, the controller of the last controller change,
+   tab has been patched, the number of rows, the controller of the last
+   controller change,
    the listed module of the open module page and its page slot, whether ADJ
    has refreshed after INSTALL, the text descriptor of the section title,
-   and whether an options value page stays open; for each row its module or
-   group, its label and value views, their text descriptors, and what it
+   and whether an options value page stays open; for each row its module,
+   its label and value views, their text descriptors, and what it
    opens; then the private copy of the Customize
    tab descriptor. */
 #define SERVICES_MENU (SERVICES_UI + UI_SIZE)
 #define MENU_ROWS_DONE 0U
 #define MENU_ROWS_COUNT 4U
-#define MENU_ROWS_GROUP 8U
 #define MENU_ROWS_CURRENT 12U
 #define MENU_ROWS_LISTED 16U
 #define MENU_ROWS_PAGE 20U
@@ -86,6 +85,7 @@
 #define MENU_VALUE_TEXT_AT 8U
 #define MENU_VALUE_TEXT 16U
 #define MENU_VALUE_SIZE (MENU_VALUE_TEXT + 2U * MENU_VALUE_UNITS)
+/* A row for each listed module, ADJ Order, and About GRKit. */
 #define MENU_ROWS_SLOTS 12U
 #define MENU_ROW_MODULE 0U
 #define MENU_ROW_LABEL 4U
@@ -112,7 +112,7 @@
    (runtime/manage.h): their count, then the start and the end of the code of
    each. The core calls no module code in these ranges. */
 #define SERVICES_SUSPENDED (SERVICES_MENU + MENU_ROWS_TAB + MENU_ROWS_TAB_SIZE)
-#define SERVICES_SUSPENDED_MAX 8U
+#define SERVICES_SUSPENDED_MAX GRKIT_MODULES_MAX
 /* The checkbox page of options pages (runtime/menu_settings.h): the second
    SelectMenuController, or 0 before the first options page; the controller ID
    of the open options page, or 0; and 1 while the controller is built. */

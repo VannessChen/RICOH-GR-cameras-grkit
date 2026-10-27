@@ -50,8 +50,9 @@ static unsigned *page_at(unsigned address)
 /* Three module settings, the Off and Position settings of three listed
    modules (runtime/manage.h), the choices of three listed effects
    (runtime/effects.h), then COLOR, OPACITY, and DISP of Guides for the MENU
-   page tests. */
-static unsigned settings_memory[2 + 3 * 18];
+   page tests. A list of ten modules has its settings after the three
+   module settings instead. */
+static unsigned settings_memory[2 + 3 * (3 + 3 * 10)];
 static volatile unsigned *mapped_settings(unsigned address)
 {
     assert(address == TEST_SETTINGS);
@@ -61,8 +62,8 @@ static volatile unsigned *mapped_settings(unsigned address)
 /* The module list of the Modules page, then at TEST_EFFECTS the effect list
    of the Effects page. */
 #define TEST_MANAGE 0x5e000000U
-#define TEST_EFFECTS (TEST_MANAGE + 0x100U)
-static unsigned manage_memory[(0x100 + 12 + 3 * 44) / 4];
+#define TEST_EFFECTS (TEST_MANAGE + 0x300U)
+static unsigned manage_memory[(TEST_EFFECTS - TEST_MANAGE + 12 + 3 * 44) / 4];
 /* The module list: the header, then module i at word MANAGE_ENTRY(i). */
 #define MANAGE_ENTRY(i) (4 + (i) * 14)
 static volatile unsigned *mapped_manage(unsigned address)
@@ -1349,10 +1350,9 @@ static void the_adj_order_page_moves_modules(void)
     assert(same(MODULE(MANAGE_MODULE).summary(test_header), "Modules"));
     assert(root_row(test_header, 2) + 1 == root_row(test_header, 3));
     /* A page of six rows: the entry has no room for the controller of the
-       last row, so OK on it changes to the kind of the first row. That
-       opens the value page of SETTINGS_ALIAS for the last row: its title
-       is the label of the last row, and its methods are those of the
-       last row. The submenu shows its own labels again. */
+       last row, so OK on it opens the value page of SETTINGS_ALIAS for the
+       last row: its title is the label of the last row, and its methods
+       are those of the last row. The submenu shows its own labels again. */
     {
         volatile u32 *block = settings_block(test_header);
         static const u32 row_texts[] = SETTINGS_ROW_TEXTS, pages[] = SETTINGS_PAGES;
@@ -1360,8 +1360,9 @@ static void the_adj_order_page_moves_modules(void)
         _Static_assert(sizeof(row_texts) / sizeof(row_texts[0]) == SETTING_ROWS, "A label for each row");
         ((volatile u8 *)block)[SUBMENU_KIND_ROWS] = SETTING_ROWS;
         block[SUBMENU_KIND_ROW_KINDS / 4] = kind;
-        assert(menu_settings_controller(kind) == pages[SETTINGS_ALIAS]);
-        assert(test_header[GRKIT_HOST_SETTINGS / 4] == (MANAGE_MODULE + 1 | SETTINGS_LAST_ROW));
+        assert(menu_settings_row_controller(kind, SETTING_ROWS - 1) == pages[SETTINGS_ALIAS]);
+        assert(menu_settings_controller(pages[SETTINGS_ALIAS]) == pages[SETTINGS_ALIAS]);
+        assert(test_header[GRKIT_HOST_SETTINGS / 4] == (MANAGE_MODULE + 1 | (SETTING_ROWS - 1) << SETTINGS_OPEN_ROW));
         assert(settings_alias(test_header, SETTINGS_ALIAS) == SETTING_ROWS - 1 && settings_alias(test_header, 1) == 1);
         assert(menu_text_override(view, row_texts[SETTINGS_ALIAS]) ==
                ((u32)(block + SETTINGS_LABELS / 4 + SETTING_ROWS * 2) | 1U));
@@ -1379,8 +1380,9 @@ static void the_adj_order_page_moves_modules(void)
         assert(menu_text_override(view, row_texts[SETTING_ROWS - 1]) ==
                ((u32)(block + SETTINGS_LABELS / 4 + SETTING_ROWS * 2) | 1U));
         /* The value page of the first row is its own. */
+        assert(menu_settings_row_controller(pages[SETTINGS_ALIAS], 0) == pages[SETTINGS_ALIAS]);
         assert(menu_settings_controller(pages[SETTINGS_ALIAS]) == pages[SETTINGS_ALIAS]);
-        assert(!(test_header[GRKIT_HOST_SETTINGS / 4] & SETTINGS_LAST_ROW));
+        assert(!(test_header[GRKIT_HOST_SETTINGS / 4] & SETTINGS_OPEN_ROWS));
         ((volatile u8 *)block)[SUBMENU_KIND_ROWS] = 3;
     }
 }
@@ -1430,6 +1432,65 @@ static void enable_applies_at_once(void)
     assert(!manage_count(test_header));
 }
 
+/* ADJ Order has a row for each listed module. The kind table entry has
+   room for the labels of six rows and the controllers of five: a later
+   label shows in a view slot, and OK on a later row opens the value page
+   of SETTINGS_ALIAS for that row. */
+static void the_adj_order_page_has_a_row_for_each_module(void)
+{
+    static const u32 pages[] = SETTINGS_PAGES;
+    volatile u32 *h = test_header, *block;
+    const u32 last = MANAGE_MODULES - 1, native = 0x1234, view = 0x5b000000;
+    _Static_assert(MANAGE_HEADER + MANAGE_MODULES * MANAGE_STRIDE <= TEST_EFFECTS - TEST_MANAGE &&
+                   sizeof(settings_memory) >= 4 * (2 + 3 * (3 + 3 * MANAGE_MODULES)), "The test memory holds the list");
+    reset();
+    settings_memory[0] = 3 + 3 * MANAGE_MODULES;
+    for (u32 i = 0; i < MANAGE_MODULES; ++i) {
+        u32 entry = MANAGE_ENTRY(i);
+        char name[] = "Module 0";
+        settings_memory[2 + (3 + 3 * i) * 3 + 2] = 2;
+        settings_memory[2 + (4 + 3 * i) * 3 + 2] = MANAGE_MODULES + 1;
+        settings_memory[2 + (5 + 3 * i) * 3 + 2] = 1U << MANAGE_OPTION_VALUES;
+        manage_memory[entry] = 52;
+        manage_memory[entry + 2] = MANAGE_NO_TILE;
+        name[7] = (char)('0' + i);
+        ascii((unsigned short *)&manage_memory[entry + 6], name);
+    }
+    manage_memory[0] = MANAGE_MODULES;
+    manage_memory[1] = 3;
+    h[GRKIT_HOST_MANAGE / 4] = TEST_MANAGE;
+    settings_start(h, MANAGE_MODULE);
+    block = settings_block(h);
+    assert(settings_rows(h) == MANAGE_MODULES);
+    /* The entry holds the labels of the first rows. Their views measure
+       the label again, as a move changes the label and keeps its ID. A
+       later row shows its label in a view slot. */
+    object_memory[ROW_LABEL_VIEW / 4] = view;
+    for (u32 i = 0; i < SETTINGS_LABEL_ROWS; ++i) {
+        view_calls = 0;
+        assert(menu_settings_row_label(native, TEST_OBJECTS, i) == native && view_called(FW_STRING_VIEW_RESET));
+    }
+    assert(menu_settings_row_label(native, TEST_OBJECTS, last) == SETTINGS_TITLE_TEXT);
+    assert(menu_text_override(view, SETTINGS_TITLE_TEXT) ==
+           ((u32)(block + SETTINGS_VIEWS / 4 + SETTINGS_LABEL_SLOT(last) * 3 + 1) | 1U));
+    assert(block[SUBMENU_KIND_VALUES / 4 + 2 * last] == (u32)(unsigned long)menu_settings_value_9);
+    /* OK on a row of the entry opens its own value page. */
+    assert(menu_settings_row_controller(pages[1], 1) == pages[1]);
+    assert(!(h[GRKIT_HOST_SETTINGS / 4] & SETTINGS_OPEN_ROWS));
+    /* OK on the last row opens the value page of SETTINGS_ALIAS, which
+       shows each position. Position 1 moves the last module first. */
+    assert(menu_settings_row_controller(native, last) == pages[SETTINGS_ALIAS]);
+    assert(menu_settings_controller(pages[SETTINGS_ALIAS]) == pages[SETTINGS_ALIAS]);
+    assert(settings_alias(h, SETTINGS_ALIAS) == last);
+    assert(menu_settings_count(0, 0, SETTINGS_ALIAS) == MANAGE_MODULES + 1);
+    assert(menu_settings_current(last, 0, SETTINGS_ALIAS) == 2);
+    assert(menu_settings_apply(0, 0, SETTINGS_ALIAS) == 1);
+    assert(same(manage_settings[0].label(h), "Module 9") && same(manage_settings[1].label(h), "Module 0"));
+    /* The return to the page forgets the row. */
+    assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
+    assert(settings_alias(h, SETTINGS_ALIAS) == SETTINGS_ALIAS);
+}
+
 /* The effect list: Portra 400 and Velvia 100 installed as records 0 and
    1, and Gold 200 Off, not installed. Their choices follow the settings
    of the GRKit section. The options rows of MENU (runtime/menu.c) turn
@@ -1438,7 +1499,7 @@ static void install_effect_list(void)
 {
     _Static_assert(EFFECTS_STRIDE == 44 && EFFECTS_HEADER == 8, "The test list matches effects.h");
     static const char *const effect_names[] = {"Portra 400", "Velvia 100", "Gold 200"};
-    volatile unsigned *list = &manage_memory[0x100 / 4];
+    volatile unsigned *list = &manage_memory[(TEST_EFFECTS - TEST_MANAGE) / 4];
     settings_memory[0] = 15;
     for (u32 i = 0; i < 3; ++i) {
         settings_memory[2 + (12 + i) * 3 + 1] = i == 2;
@@ -1570,8 +1631,8 @@ static void the_guides_menu_page_lists_enable_options_and_settings(void)
     assert(listed_rows(h) == 5 && same(page[1].label(h), "Style"));
     *page_at(guides + PAGE_FLAGS) |= CHOICE_OPTIONS;
     /* The entry has room for the controllers and kinds of five rows. The
-       last row keeps its label and its value method in the entry; its
-       controller is the kind of the first row. */
+       last row keeps its label in the entry, and its value method after
+       it. */
     for (u32 i = 0; i < SETTING_ROWS - 1; ++i) assert(block[SUBMENU_KIND_CONTROLLERS / 4 + i] == pages[i]);
     assert(((volatile u16 *)((volatile u8 *)block + SUBMENU_KIND_LABELS))[SETTING_ROWS - 1] == row_texts[SETTING_ROWS - 1]);
     assert(block[SUBMENU_KIND_VALUES / 4 + 2 * (SETTING_ROWS - 1)] == (u32)(unsigned long)menu_settings_value_5);
@@ -1584,8 +1645,9 @@ static void the_guides_menu_page_lists_enable_options_and_settings(void)
     assert(menu_text_override(view + 5, SETTINGS_TITLE_TEXT) == ((u32)(block + SETTINGS_VIEWS / 4 + 5 * 3 + 1) | 1U));
     /* OK on the last row opens the value page of SETTINGS_ALIAS for the
        last row: its title, its values, and its setting. */
-    assert(menu_settings_controller(kind) == pages[SETTINGS_ALIAS]);
-    assert(h[GRKIT_HOST_SETTINGS / 4] & SETTINGS_LAST_ROW);
+    assert(menu_settings_row_controller(kind, SETTING_ROWS - 1) == pages[SETTINGS_ALIAS]);
+    assert(menu_settings_controller(pages[SETTINGS_ALIAS]) == pages[SETTINGS_ALIAS]);
+    assert(h[GRKIT_HOST_SETTINGS / 4] >> SETTINGS_OPEN_ROW == SETTING_ROWS - 1);
     assert(menu_settings_count(0, 0, SETTINGS_ALIAS) == 3);
     assert(menu_text_override(view, row_texts[SETTINGS_ALIAS]) ==
            ((u32)(block + SETTINGS_LABELS / 4 + SETTING_ROWS * 2) | 1U));
@@ -1594,7 +1656,7 @@ static void the_guides_menu_page_lists_enable_options_and_settings(void)
     settings_memory[2 + 17 * 3 + 1] = 0;
     /* The return to the page ends it, and the page reads its rows again. */
     assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
-    assert(!(h[GRKIT_HOST_SETTINGS / 4] & SETTINGS_LAST_ROW) && settings_rows(h) == SETTING_ROWS);
+    assert(!(h[GRKIT_HOST_SETTINGS / 4] & SETTINGS_OPEN_ROWS) && settings_rows(h) == SETTING_ROWS);
 }
 
 static void the_options_page_toggles_its_values(void)
@@ -1727,7 +1789,7 @@ static void reused_row_views_show_the_page_that_reuses_them(void)
     object_memory[(0x100 + ROW_TEXT_VIEW) / 4] = view + 0x10;
     assert(menu_settings_draw(TEST_OBJECTS + 0x100, 0, 2) == 1);
     assert(menu_text_override(view + 0x10, SETTINGS_TITLE_TEXT) ==
-           ((u32)(block + SETTINGS_VIEWS / 4 + SETTING_ROWS * 3 + 1) | 1U));
+           ((u32)(block + SETTINGS_VIEWS / 4 + SUBMENU_ROWS * 3 + 1) | 1U));
     assert(menu_settings_controller(SETTINGS_SUBMENU) == SETTINGS_SUBMENU);
 }
 
@@ -1948,8 +2010,9 @@ static void the_section_rows_follow_the_listed_modules(void)
     menu_rows_install(h);
     assert(menu_tabs[MENU_TAB_GRKIT] == TEST_TAB && factory_calls == 1);
 }
-/* A tab with all its sections gets the rows in its last section. A tab gets
-   only the rows that it has room for. */
+/* A tab with all its sections gets the rows in its last section. A tab
+   without room for each row keeps ADJ Order and About GRKit, and gives rows
+   to the first modules only. */
 static void a_full_tab_gets_no_new_section(void)
 {
     volatile u32 *h = test_header, *menu;
@@ -1963,13 +2026,20 @@ static void a_full_tab_gets_no_new_section(void)
     for (u32 s = 0; s < MENU_TAB_MAX_SECTIONS; ++s)
         assert(HALF(copy, MENU_TAB_TITLES + 2 * s) == HALF(TEST_TAB, MENU_TAB_TITLES + 2 * s) &&
                BYTE(copy, MENU_TAB_STARTS + s) == BYTE(TEST_TAB, MENU_TAB_STARTS + s));
-    /* Room for two rows: the first two modules. */
+    /* Room for four rows: the first two modules, ADJ Order, and About. */
+    static const u32 kinds[] = {MENU_ROW_LISTED, MENU_ROW_LISTED, MENU_ROW_ADJ, MENU_ROW_GRKIT},
+                     modules[] = {0, 1, 0, 0};
+    install_stock_tab(MENU_TAB_MAX_ROWS - 4, 3);
+    menu_rows_install(h);
+    assert(menu[MENU_ROWS_COUNT / 4] == 4 && BYTE(copy, MENU_TAB_ROWS) == MENU_TAB_MAX_ROWS);
+    assert(BYTE(copy, MENU_TAB_SECTIONS) == 4 && BYTE(copy, MENU_TAB_STARTS + 3) == MENU_TAB_MAX_ROWS - 4);
+    for (u32 slot = 0; slot < 4; ++slot)
+        assert(menu_row(h, slot)[MENU_ROW_KIND / 4] == kinds[slot] && menu_row(h, slot)[MENU_ROW_MODULE / 4] == modules[slot]);
+    /* Room for two rows: ADJ Order and About, no module. */
     install_stock_tab(MENU_TAB_MAX_ROWS - 2, 3);
     menu_rows_install(h);
     assert(menu[MENU_ROWS_COUNT / 4] == 2 && BYTE(copy, MENU_TAB_ROWS) == MENU_TAB_MAX_ROWS);
-    assert(BYTE(copy, MENU_TAB_SECTIONS) == 4 && BYTE(copy, MENU_TAB_STARTS + 3) == MENU_TAB_MAX_ROWS - 2);
-    for (u32 slot = 0; slot < 2; ++slot)
-        assert(menu_row(h, slot)[MENU_ROW_KIND / 4] == MENU_ROW_LISTED && menu_row(h, slot)[MENU_ROW_MODULE / 4] == slot);
+    assert(menu_row(h, 0)[MENU_ROW_KIND / 4] == MENU_ROW_ADJ && menu_row(h, 1)[MENU_ROW_KIND / 4] == MENU_ROW_GRKIT);
     /* A tab without room keeps the stock tab and the TopMenu. */
     install_stock_tab(MENU_TAB_MAX_ROWS, 3);
     menu_rows_install(h);
@@ -2005,6 +2075,7 @@ int main(void)
     adj_reopens_on_the_row_of_the_last_module();
     the_date_imprint_settings_page_reads_and_stores_values();
     the_adj_order_page_moves_modules();
+    the_adj_order_page_has_a_row_for_each_module();
     options_hide_values_that_are_off_in_adj();
     enable_applies_at_once();
     film_look_lists_the_installed_effects_that_are_on();

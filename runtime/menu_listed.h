@@ -8,7 +8,7 @@
    (menu_rows_install, LISTED_PAGE), which
    shows an Enable row, then the settings of its module page. SERVICES_MENU +
    MENU_ROWS_LISTED holds the listed module, and MENU_ROWS_PAGE its page
-   slot, or GRKIT_MODULE_SLOTS for a module without a loaded page. */
+   slot, or GRKIT_MODULE_PAGES_MAX for a module without a loaded page. */
 #define LISTED_PAGE (MODULE_TOTAL+1U)
 
 /* The row of the Fn adjustments in the page of Image Control targets this

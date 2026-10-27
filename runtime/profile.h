@@ -100,7 +100,7 @@ static __attribute__((noinline, unused)) void profile_end_module(volatile u32 *h
     u32 table = h[GRKIT_HOST_PROFILE / 4], cycles, i;
     if (!table) return;
     cycles = profile_since(start);
-    for (i = 0; i < GRKIT_MODULE_SLOTS; ++i) {
+    for (i = 0; i < GRKIT_PROFILE_MODULES; ++i) {
         volatile u32 *m = PROFILE_MAP(table + i * GRKIT_PROFILE_MODULE_SIZE);
         if (fn >= m[0] && fn < m[1]) {
             profile_add(table, GRKIT_PROFILE_MODULE_BASE + i * GRKIT_PROFILE_KINDS + kind, cycles);

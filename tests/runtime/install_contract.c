@@ -488,6 +488,32 @@ static void more_modules_than_the_list_holds_are_counted(void)
         assert(!strcmp(module_names[i], file) && module_status[i] == 0);
     }
 }
+/* A full list keeps the package modules: a module of GRKIT/MODULES takes
+   only the place of another one of GRKIT/MODULES that comes after it. */
+static void a_full_list_keeps_the_package_modules(void)
+{
+    reset();
+    for (u32 i = 0; i < GRKIT_MODULES_MAX - 1; ++i) {
+        char id[8], file[16];
+        snprintf(id, sizeof id, "P%u", i);
+        snprintf(file, sizeof file, "P%u.GRM", i);
+        add_module(PACKAGE_MODULES_PATH, file, &(struct spec){.id = id, .order = 50 + i});
+    }
+    add_module(MODULES_PATH, "LATE.GRM", &(struct spec){.id = "LATE", .order = 90});
+    add_module(MODULES_PATH, "EARLY.GRM", &(struct spec){.id = "EARLY", .order = 0});
+    add_module(MODULES_PATH, "NEXT.GRM", &(struct spec){.id = "NEXT", .order = 95});
+    scan();
+    assert(module_count == GRKIT_MODULES_MAX && module_overflow == 2);
+    /* EARLY takes the place of LATE, and NEXT gets none. */
+    assert(!strcmp(module_names[0], "EARLY.GRM") && module_source[0] == 1);
+    for (u32 i = 1; i < GRKIT_MODULES_MAX; ++i) assert(module_source[i] == 0);
+    /* With a full list of package modules, EARLY gets no place. */
+    add_module(PACKAGE_MODULES_PATH, "PLAST.GRM", &(struct spec){.id = "PLAST", .order = 99});
+    scan();
+    assert(module_count == GRKIT_MODULES_MAX && module_overflow == 3);
+    for (u32 i = 0; i < GRKIT_MODULES_MAX; ++i) assert(module_source[i] == 0);
+    assert(!strcmp(module_names[GRKIT_MODULES_MAX - 1], "PLAST.GRM"));
+}
 static void safe_mode_loads_no_module(void)
 {
     reset();
@@ -636,6 +662,25 @@ static void layers_follow_their_order_and_filters_their_stage(void)
     assert((needed_points & (POINT_VIEWFINDER_OVERLAY | POINT_PICTURE_ENCODE)) ==
            (POINT_VIEWFINDER_OVERLAY | POINT_PICTURE_ENCODE));
 }
+/* The header holds GRKIT_MODULE_LAYERS_MAX layers and GRKIT_MODULE_FILTERS_MAX
+   filters of all modules. A module that needs more gets error 54. */
+static void the_layers_and_filters_fill_their_slots(void)
+{
+    reset();
+    for (u32 i = 0; i < GRKIT_MODULES_MAX; ++i) {
+        char id[8], file[16];
+        snprintf(id, sizeof id, "M%u", i);
+        snprintf(file, sizeof file, "M%u.GRM", i);
+        add_module(PACKAGE_MODULES_PATH, file, &(struct spec){
+            .id = id, .order = i, .settings = {{"ON", 2, 0}},
+            .layer_count = 2, .layers = {{10, 0, 0}, {20, 0, 0}},
+            .filter_count = 1, .filters = {{GRM_STAGE_MARK, 0}}});
+    }
+    assert(install() == 0);
+    _Static_assert(GRKIT_MODULE_LAYERS_MAX == 16 && GRKIT_MODULE_FILTERS_MAX == 8, "Eight modules fill the slots");
+    for (u32 i = 0; i < GRKIT_MODULES_MAX; ++i) assert(module_status[i] == (i < 8 ? 0 : GRM_NO_ROOM));
+    assert(module_layer_count == GRKIT_MODULE_LAYERS_MAX && module_filter_count == GRKIT_MODULE_FILTERS_MAX);
+}
 static void the_module_list_shows_each_result(void)
 {
     reset();
@@ -735,12 +780,14 @@ static void *run(void *unused)
     (void)unused;
     modules_come_from_both_folders_in_header_order();
     more_modules_than_the_list_holds_are_counted();
+    a_full_list_keeps_the_package_modules();
     safe_mode_loads_no_module();
     a_bad_module_keeps_the_others();
     the_budget_counts_the_services_block();
     install_writes_the_settings_and_the_contexts();
     layers_follow_their_order_and_filters_their_stage();
     the_module_list_shows_each_result();
+    the_layers_and_filters_fill_their_slots();
     settings_rows_of_used_settings();
     a_setting_of_a_module_that_did_not_link_is_missing();
     reset();

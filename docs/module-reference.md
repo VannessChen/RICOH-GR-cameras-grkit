@@ -303,7 +303,7 @@ The UI services work only in an event handler, a timer callback, or a UI callbac
 
 | Limit | Value | Error when exceeded |
 | --- | --- | --- |
-| Module files that GRKit lists in both module folders | 8 | GRKit keeps the first files in the default order. The report gives the number of the other files. |
+| Module files that GRKit lists in both module folders | 10 | GRKit keeps the package modules, then the first other files in the default order. A module of `GRKIT/MODULES` never takes the place of a package module. The report gives the number of the other files. |
 | Module ID | 1 to 8 characters `A`-`Z`, `0`-`9`, `_` | build error |
 | Code, data, or BSS of one module | 65536 bytes each | build error, or 50 |
 | Code of all modules | 1 MiB | 54 |
@@ -314,16 +314,16 @@ The UI services work only in an event handler, a timer callback, or a UI callbac
 | Values of one setting | 1 to 65536 | build error, or 53 |
 | Entries of the settings table: the settings of all modules, 2 for each listed module, and the entries that the core keeps for the effects | 160 | 54 |
 | Tiles of one module | 64 | build error, or 53 |
-| Tiles of all loaded modules | 64 | 54 |
+| Tiles of all loaded modules | 128 | 54 |
 | Rows of a choice page | 1 to 64 | build error, or 53 |
 | Rows of a native settings page | 5 | build error, or 53 |
 | Values of a native settings row | 8 | 53 |
-| Event subscribers: one in each module, of all loaded modules | 8 | 53 for a second subscriber of a module. The core does not call a ninth module. |
+| Event subscribers | 1 in each module | 53 |
 | Timers of all modules | 8 | `timer_start` returns 0 |
 | Units of one text | 64 UTF-16 units | build error, or 53 |
-| Pages of all loaded modules | 8 | 54 |
-| Layers of all loaded modules | 8 | 54 |
-| Plane filters of all loaded modules | 4 | 54 |
+| Pages of all loaded modules | 10 | 54 |
+| Layers of all loaded modules | 16 | 54 |
+| Plane filters of all loaded modules | 8 | 54 |
 | Layer order | 0 to 65535 | build error |
 | Stack frame of one function | 1536 bytes | build error |
 | Data, BSS, and tables of all modules | 65536 words in one script array | 54 |

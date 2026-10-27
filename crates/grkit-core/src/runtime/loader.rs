@@ -4,8 +4,8 @@
 use super::*;
 use crate::abi::{
     HOST_PROCESSING_CALLS, HOST_PROFILE, MAILBOX_FAILED, MAILBOX_INSTALLED, MAILBOX_PLAN,
-    MAILBOX_RESULT, MAILBOX_STATUS, MAILBOX_WORDS, MODULE_SLOTS, PLAN_COUNT, PLAN_HEADER_WORDS,
-    PLAN_ICON_CHUNKS, PLAN_MAGIC, PLAN_MODULE_TILES, PLAN_MODULE_WORDS, PROFILE, PROFILE_KINDS,
+    MAILBOX_RESULT, MAILBOX_STATUS, MAILBOX_WORDS, PLAN_COUNT, PLAN_HEADER_WORDS, PLAN_ICON_CHUNKS,
+    PLAN_MAGIC, PLAN_MODULE_TILES, PLAN_MODULE_WORDS, PROFILE, PROFILE_KINDS, PROFILE_MODULES,
     PROFILE_MODULE_SIZE, PROFILE_POINTS, PROFILE_SLOTS, PROFILE_SLOT_SIZE,
 };
 use crate::capabilities::{self, StateFile};
@@ -422,7 +422,7 @@ fn profile_script() -> Vec<String> {
         format!("pframes = registry[{}]", HOST_PROCESSING_CALLS / 4),
     ];
     // The module names: the bytes up to the first 0.
-    for module in 0..MODULE_SLOTS {
+    for module in 0..PROFILE_MODULES {
         let base = table + module * PROFILE_MODULE_SIZE / 4 + 2;
         let end = format!("profile_name{module}_end");
         lines.push(format!("pname{module} = ''"));
@@ -511,7 +511,7 @@ fn profile_script() -> Vec<String> {
     for (slot, (name, _)) in PROFILE_POINTS.iter().enumerate() {
         slot_lines(slot, vec![format!("filewrite pfh '{name} '")]);
     }
-    for module in 0..MODULE_SLOTS {
+    for module in 0..PROFILE_MODULES {
         for (kind, (name, _)) in PROFILE_KINDS.iter().enumerate() {
             let slot = PROFILE_POINTS.len() + module * PROFILE_KINDS.len() + kind;
             slot_lines(

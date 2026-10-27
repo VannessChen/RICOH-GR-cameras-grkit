@@ -16,13 +16,13 @@ pub const TEXT_SUMMARY: usize = 8192;
 /// The last 16 bytes of the text area: the parameter page title of a GRKit
 /// session. Words: the page, its vtable, then the descriptor of the effect name.
 pub const TEXT_PARAMETER_TITLE: usize = TEXT_SIZE - 16;
-/// The 384 bytes before the parameter page title: the native settings page of
+/// The 512 bytes before the parameter page title: the native settings page of
 /// a GRKit session (`runtime/menu.c`).
-pub const TEXT_SETTINGS: usize = TEXT_PARAMETER_TITLE - 384;
+pub const TEXT_SETTINGS: usize = TEXT_PARAMETER_TITLE - 512;
 /// The units of the longest string with its NUL, and of each summary slot.
 pub const SUMMARY_UNITS: usize = 32;
 /// The number of strings in each language (`GRKIT_TEXT_STRINGS`).
-pub const STRINGS: usize = 22;
+pub const STRINGS: usize = 21;
 /// The project address that About GRKit shows.
 const PROJECT: &str = "github.com/ahonn/grkit";
 /// The longest effect name in a record.
@@ -215,11 +215,7 @@ pub const RUNS: &[Run] = &[
         1,
         "The Image Control settings row that opens the Fn adjustments.",
     ),
-    run(
-        "ADJ",
-        2,
-        "The ADJ Order rows of MENU: the first group of modules, then the second.",
-    ),
+    run("ADJ", 1, "The ADJ Order row of MENU."),
     run(
         "OPTIONS",
         1,
@@ -274,7 +270,7 @@ fn run_strings(w: &Words, name: &str, version: &str) -> Vec<String> {
         "SAFE_MODE" => words(&[w.safe_mode]),
         "RESTART" => words(&[w.restart]),
         "ADJUSTMENTS" => words(&[w.adjustments]),
-        "ADJ" => vec![w.adj_order.to_string(), format!("{} 2", w.adj_order)],
+        "ADJ" => words(&[w.adj_order]),
         "OPTIONS" => words(&[w.options]),
         "ABOUT" => vec![
             w.about.to_string(),

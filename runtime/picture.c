@@ -133,7 +133,7 @@ static u32 aspect_native(void) { return PICTURE_NATIVE_ASPECT(); }
 /* The module plane filters that INSTALL registered (GRKIT_HOST_MODULE_FILTERS),
    or 0 for a count out of range. Each has two words: its apply function, and
    its setting handle with its stage in the high half. */
-#define MODULE_FILTER_MAX (GRKIT_HOST_MODULE_FILTERS_WORDS/2)
+#define MODULE_FILTER_MAX GRKIT_MODULE_FILTERS_MAX
 static u32 module_filters(volatile u32 *h) {
     u32 n=h[GRKIT_HOST_MODULE_FILTER_COUNT/4];
     return n<=MODULE_FILTER_MAX ? n : 0;

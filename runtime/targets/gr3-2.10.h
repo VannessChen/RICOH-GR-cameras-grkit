@@ -148,6 +148,8 @@
 #define ROW_TEXT_VIEW 0xf8
 #define FW_ROW_VALUE FIRMWARE(0x533a6ad0)
 #define ROW_VALUE_VIEW 0xfc
+/* The label view of a submenu row, which its label setter sets. */
+#define ROW_LABEL_VIEW 0xec
 /* Rows of modules in the native MENU (runtime/menu_section.h). MENU builds its
    tabs at the first MENU of a start from the tab descriptors in the RAM
    table FW_MENU_TABS; entry MENU_TAB_GRKIT is the Customize tab. A
@@ -172,6 +174,8 @@
 #define MENU_TAB_TARGETS 0x1bc
 #define MENU_TAB_PREDICATES 0x254
 #define MENU_TAB_MAX_ROWS 38
+/* The rows of the stock Customize tab. */
+#define MENU_TAB_STOCK_ROWS 22
 #define MENU_ROW_LABEL_VIEW 0xec
 #define FW_MENU_TABS FIRMWARE(0x55001eb8)
 #define FW_MENU_ROW_LABEL FIRMWARE(0x5339dc70)

@@ -153,7 +153,7 @@ static u32 cue_update(volatile u32 *h,u32 controller) {
    setting handle, and its flags with its order in the high half. */
 static u32 module_layers(volatile u32 *h) {
     u32 n=h[GRKIT_HOST_MODULE_LAYER_COUNT/4];
-    return n<=GRKIT_MODULE_SLOTS ? n : 0;
+    return n<=GRKIT_MODULE_LAYERS_MAX ? n : 0;
 }
 #define MODULE_LAYER(h,i) ((h)+GRKIT_HOST_MODULE_LAYERS/4+(i)*3)
 /* The flags of a layer (runtime/sdk/grkit.h). */

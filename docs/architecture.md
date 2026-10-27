@@ -146,7 +146,7 @@ GRKit adds an entry to the ADJ toolbar. It lists the module pages and reuses the
 
 The native MENU has a section titled GRKit at the end of the Customize tab. At the first controller change after INSTALL, the core copies the Customize tab descriptor and adds the section. The section has:
 
-- A row for each module file, also for a module that did not load (`runtime/manage.h`). It opens **Enable**, then the settings of the module page. The native settings pages that the rows open are borrowed from the camera (`runtime/menu_settings.h`).
+- A row for each module file, also for a module that did not load (`runtime/manage.h`). It opens **Enable**, then the settings of the module page. The native settings pages that the rows open are borrowed from the camera (`runtime/menu_settings.h`). The tab has room for a fixed number of rows. Each build header gives the rows of its stock tab, and the build fails if the rows of the most modules do not fit. On a build with more stock rows, such as a relocated build, the last modules get no row, and ADJ Order and About GRKit stay.
 - **ADJ Order**, which moves a module page in ADJ.
 - **About GRKit**, which shows the version and the project address on the native camera information page.
 

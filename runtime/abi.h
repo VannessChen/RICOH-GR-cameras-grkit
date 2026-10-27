@@ -7,19 +7,25 @@
 /* The private header: the start of the registry array. ARM code addresses it
    through the literal GRKIT_HEADER_REFERENCE, which the installer relocates. */
 #define GRKIT_HEADER_REFERENCE 0x58012340
-#define GRKIT_HOST_HEADER_SIZE 512
-#define GRKIT_MODULE_SLOTS 8
+#define GRKIT_HOST_HEADER_SIZE 768
+/* The most module pages, layers, and plane filters that the header holds. */
+#define GRKIT_MODULE_PAGES_MAX 10
+#define GRKIT_MODULE_LAYERS_MAX 16
+#define GRKIT_MODULE_FILTERS_MAX 8
 #define GRKIT_MODULE_SETTINGS_MAX 160
 /* The most modules that GRKit lists, and the words of the largest script
    array, which holds the module array. */
-#define GRKIT_MODULES_MAX 8U
+#define GRKIT_MODULES_MAX 10U
 #define GRKIT_MODULE_ARRAY_WORDS 65536U
+/* The row views of the borrowed native settings page: the ADJ Order page has a
+   row for each listed module. Without a suffix, for the assembler. */
+#define GRKIT_SUBMENU_ROWS 10
 /* Icon slots: the host icons, then the effect icons, then the module tiles, in
    chunks of GRKIT_ICONS_PER_CHUNK (GRKIT_HOST_ICON_CHUNKS).
    GRKIT_ICON_MODULE_TILE(n) is the icon ID of module tile n. */
 #define GRKIT_HOST_ICON_COUNT 4
 #define GRKIT_ICONS_PER_CHUNK 40
-#define GRKIT_MODULE_TILES_MAX 64
+#define GRKIT_MODULE_TILES_MAX 128
 #define GRKIT_ICON_MODULE_TILE(n) (0x7000U+(n))
 #define GRKIT_STATE_CHANGED(h) (++(h)[GRKIT_HOST_STATE_CHANGES/4])
 #define GRKIT_HOST_MAGIC_VALUE 0x314d5247
@@ -177,34 +183,37 @@
 /* Two words for each module plane filter, in stage order: its apply function,
    and its setting handle in the low half with its stage in the high half. */
 #define GRKIT_HOST_MODULE_FILTERS 268
-#define GRKIT_HOST_MODULE_FILTERS_WORDS 6
+#define GRKIT_HOST_MODULE_FILTERS_WORDS 16
+/* Reserved for later fields. */
+#define GRKIT_HOST_RESERVED 332
+#define GRKIT_HOST_RESERVED_WORDS 24
 /* Address of the module settings table, or 0 (runtime/settings.h). INSTALL
    writes it. */
-#define GRKIT_HOST_MODULE_SETTINGS 292
+#define GRKIT_HOST_MODULE_SETTINGS 428
 /* The ADJ preview of a module page: its setting handle plus 1 (0 for none),
    then the highlighted value. Module layers of that setting paint the
    highlighted value on the ADJ canvas. */
-#define GRKIT_HOST_MODULE_PREVIEW 296
+#define GRKIT_HOST_MODULE_PREVIEW 432
 #define GRKIT_HOST_MODULE_PREVIEW_WORDS 2
 /* Number of module pages in GRKIT_HOST_MODULE_PAGES. INSTALL writes it. */
-#define GRKIT_HOST_MODULE_PAGE_COUNT 304
+#define GRKIT_HOST_MODULE_PAGE_COUNT 440
 /* Three words for each module page (runtime/sdk/grkit.h), in load order: the
    address of its GrkitPage, its setting handle, and the global index of its
    tile 0 (GRKIT_ICON_MODULE_TILE). */
-#define GRKIT_HOST_MODULE_PAGES 308
-#define GRKIT_HOST_MODULE_PAGES_WORDS 24
+#define GRKIT_HOST_MODULE_PAGES 444
+#define GRKIT_HOST_MODULE_PAGES_WORDS 30
 /* The module page that the generic page callbacks of the menu serve. */
-#define GRKIT_HOST_MODULE_CHOICE 404
+#define GRKIT_HOST_MODULE_CHOICE 564
 /* Number of module layers in GRKIT_HOST_MODULE_LAYERS. INSTALL writes it. */
-#define GRKIT_HOST_MODULE_LAYER_COUNT 408
+#define GRKIT_HOST_MODULE_LAYER_COUNT 568
 /* Three words for each module layer, in painting order: its paint function,
    its setting handle (GRKIT_NO_SETTING paints with the value 1), and its flags
    in the low half with its order in the high half. */
-#define GRKIT_HOST_MODULE_LAYERS 412
-#define GRKIT_HOST_MODULE_LAYERS_WORDS 24
+#define GRKIT_HOST_MODULE_LAYERS 572
+#define GRKIT_HOST_MODULE_LAYERS_WORDS 48
 /* Key of the inputs of the last private curve composition in the gamma stage,
    or 0 (runtime/processing.h). */
-#define GRKIT_HOST_GAMMA_KEY 508
+#define GRKIT_HOST_GAMMA_KEY 764
 
 /* The capabilities of the core (grkit_core::capabilities): the handle of each
    CORE setting, and for each handle in order, its header word and its number
@@ -431,14 +440,16 @@
    width, a u16 height, and the u32 offset of its pixels from the table start
    at 8 n. Each pixel is one byte of text coverage, row by row. */
 #define GRKIT_LABELS_SIZE 16384
-/* The profile table after the labels (runtime/profile.h). For each module slot
-   at GRKIT_PROFILE_MODULE_SIZE n: its code start, its code end, and
-   GRKIT_PROFILE_NAME_BYTES ASCII bytes of its name. At GRKIT_PROFILE_SLOTS,
-   GRKIT_PROFILE_SLOT_COUNT slots of GRKIT_PROFILE_SLOT_SIZE bytes: calls,
-   cycles, and the cycles of the largest call. The core points come first, then
-   GRKIT_PROFILE_KINDS slots for each module slot. */
+/* The profile table after the labels (runtime/profile.h). For each of the
+   first GRKIT_PROFILE_MODULES listed modules, at GRKIT_PROFILE_MODULE_SIZE n:
+   its code start, its code end, and GRKIT_PROFILE_NAME_BYTES ASCII bytes of
+   its name. At GRKIT_PROFILE_SLOTS, GRKIT_PROFILE_SLOT_COUNT slots of
+   GRKIT_PROFILE_SLOT_SIZE bytes: calls, cycles, and the cycles of the largest
+   call. The core points come first, then GRKIT_PROFILE_KINDS slots for each of
+   those modules. */
 #define GRKIT_PROFILE 182472
 #define GRKIT_PROFILE_SIZE 500
+#define GRKIT_PROFILE_MODULES 8
 #define GRKIT_PROFILE_MODULE_SIZE 16
 #define GRKIT_PROFILE_NAME_BYTES 8
 #define GRKIT_PROFILE_SLOTS 128
@@ -465,7 +476,7 @@
 /* The native settings page of a GRKit session, before the parameter page
    title: the borrowed submenu entry, the text descriptors, and the views that
    show settings (runtime/menu.c). */
-#define GRKIT_TEXT_SETTINGS 24176
+#define GRKIT_TEXT_SETTINGS 24048
 #define GRKIT_TEXT_LANGUAGES 4
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_TAIL/4]+GRKIT_PICTURE_SCRATCH)
@@ -490,18 +501,18 @@
 #define TEXT_RESTART 9
 /* The Image Control settings row that opens the Fn adjustments. */
 #define TEXT_ADJUSTMENTS 10
-/* The ADJ Order rows of MENU: the first group of modules, then the second. */
+/* The ADJ Order row of MENU. */
 #define TEXT_ADJ 11
 /* The settings row that lists the options of a module page. */
-#define TEXT_OPTIONS 13
+#define TEXT_OPTIONS 12
 /* About GRKit: the title, the Version row and its value, the Project row and
    its value. */
-#define TEXT_ABOUT 14
+#define TEXT_ABOUT 13
 /* The Film Look settings row that selects the effect. */
-#define TEXT_FILM 19
+#define TEXT_FILM 18
 /* The guides of an options value page: OK turns an option on or off, MENU goes
    back. */
-#define TEXT_GUIDE 20
-#define GRKIT_TEXT_STRINGS 22
+#define TEXT_GUIDE 19
+#define GRKIT_TEXT_STRINGS 21
 
 #endif

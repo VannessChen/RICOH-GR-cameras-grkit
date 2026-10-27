@@ -1,6 +1,6 @@
 static const char target_marker[] __attribute__((used)) = "GRKIT_TARGET=gr3-2.10";
 #define MAX_COUNT 0x14U
-#define MAX_CHUNKS 0x3U
+#define MAX_CHUNKS 0x4U
 #define ICONS_PER_CHUNK 0x28U
 #define ICON_STRIDE 0x1908U
 #define HOST_ICON_COUNT 0x4U
@@ -119,8 +119,8 @@ static const u8 off_pixels[] __attribute__((aligned(4))) = { /* 6400 values, SHA
 static const u8 grkit_pixels[] __attribute__((aligned(4))) = { /* 6400 values, SHA-256 8daa7522039e76004d273927f937c4a419594664c8c32f7b02bd7c515ffe272d */ };
 static const u8 version_pixels[] __attribute__((aligned(4))) = { /* 6400 values, SHA-256 e239340476014064a1d36a3dddfb164bfbe4731b325a6ffb08a64397a39e44a6 */ };
 static const u8 modules_pixels[] __attribute__((aligned(4))) = { /* 6400 values, SHA-256 c63d6fe4548456b6724e152bfa63bdadcf44163e6bb2b9e13a1842e9a9a4acea */ };
-#define MENU_TEXT_BYTES 1544U
-static const u8 menu_text[] __attribute__((aligned(4))) = { /* 1544 values, SHA-256 850c52d5399d39c9c9c58d3afd29810ae841f1d4ba1ab00297303703f7319b6d */ };
+#define MENU_TEXT_BYTES 1440U
+static const u8 menu_text[] __attribute__((aligned(4))) = { /* 1440 values, SHA-256 6ae43d199957ef09f9c1a62ad48cc4bbcc626f2c38789ed573ead924af5b2e0b */ };
 #define LABELS_BYTES 10536U
 static const u8 overlay_labels[] __attribute__((aligned(4))) = { /* 10536 values, SHA-256 477b3e7571314bca35b476aecd04e6fadcf1462feddf97d0db4559b8750876f7 */ };
 static const u8 stock_tables[] __attribute__((aligned(4))) = { /* 312 values, SHA-256 43c6a333770e97d39d0749933c4cc8fd3d39ab51233e06eaefe7dda15bae5cb6 */ };

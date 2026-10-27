@@ -1,6 +1,6 @@
 #ifndef GRKIT_MODULES_H
 #define GRKIT_MODULES_H
-/* The menu modules, in root order: GRKIT_MODULE_SLOTS slots for the pages of
+/* The menu modules, in root order: GRKIT_MODULE_PAGES_MAX slots for the pages of
    modules (GRKIT_HOST_MODULE_PAGES), then the core Modules row
    (runtime/manage.h) and the core About row (runtime/about.h). */
 #include "about.h"
@@ -9,7 +9,7 @@
 #include "tone_page.h"
 
 #define MODULE_PAGE(slot) (slot)
-#define MANAGE_MODULE MODULE_PAGE(GRKIT_MODULE_SLOTS)
+#define MANAGE_MODULE MODULE_PAGE(GRKIT_MODULE_PAGES_MAX)
 #define ABOUT_MODULE (MANAGE_MODULE+1U)
 #define MODULE_TOTAL (ABOUT_MODULE+1U)
 
@@ -42,7 +42,7 @@ static const MenuPage about_module = ABOUT_PAGE;
 static const MenuPage manage_module_page = MANAGE_PAGE;
 static u32 module_pages(volatile u32 *h) {
     u32 n=h[GRKIT_HOST_MODULE_PAGE_COUNT/4];
-    return n<=GRKIT_MODULE_SLOTS ? n : 0;
+    return n<=GRKIT_MODULE_PAGES_MAX ? n : 0;
 }
 static u32 choice_value(volatile u32 *h) { return setting_value(h,CHOICE_ENTRY(h)[1]); }
 /* Whether the page has options (GRKIT_CHOICE_OPTIONS). */
@@ -177,7 +177,7 @@ static u32 module_icon(u32 module,u32 icon) { (void)module; return icon; }
 /* Whether a module layer paints its committed value on the ADJ canvas. */
 static u32 module_layers_on(volatile u32 *h) {
     u32 i, n=h[GRKIT_HOST_MODULE_LAYER_COUNT/4];
-    for(i=0;i<n && i<GRKIT_MODULE_SLOTS;++i) {
+    for(i=0;i<n && i<GRKIT_MODULE_LAYERS_MAX;++i) {
         u32 handle=h[GRKIT_HOST_MODULE_LAYERS/4+i*3+1];
         if(services_suspended(h,h[GRKIT_HOST_MODULE_LAYERS/4+i*3])) continue;
         if(handle==0xffffffffU || setting_value(h,handle)) return 1;
@@ -257,7 +257,7 @@ static u32 visible_modules(volatile u32 *h) {
    of their modules (CORE.POS, runtime/manage.h), which applies at once, then
    the core rows. */
 static u32 root_order(volatile u32 *h,u32 *order) {
-    u32 n=module_pages(h), keys[GRKIT_MODULE_SLOTS], i, j, t;
+    u32 n=module_pages(h), keys[GRKIT_MODULE_PAGES_MAX], i, j, t;
     for(i=0;i<n;++i) {
         u32 listed=page_listed(h,i);
         keys[i]=listed<MANAGE_MODULES ? manage_key(h,listed) : 2*MANAGE_DEFAULT_KEY+i;
@@ -272,7 +272,7 @@ static u32 root_order(volatile u32 *h,u32 *order) {
 }
 /* The module of a root row, or of the last row for a row past the end. */
 static u32 root_module(volatile u32 *h,u32 row) {
-    u32 mask=visible_modules(h), order[GRKIT_MODULE_SLOTS+3], n=root_order(h,order), i, last=0;
+    u32 mask=visible_modules(h), order[GRKIT_MODULE_PAGES_MAX+3], n=root_order(h,order), i, last=0;
     for(i=0;i<n;++i) {
         if(!(mask>>order[i]&1)) continue;
         if(!row--) return order[i];
@@ -282,7 +282,7 @@ static u32 root_module(volatile u32 *h,u32 row) {
 }
 /* The root row of a module, or the number of root rows for MODULE_TOTAL. */
 static u32 root_row(volatile u32 *h,u32 module) {
-    u32 mask=visible_modules(h), order[GRKIT_MODULE_SLOTS+3], n=root_order(h,order), row=0, i;
+    u32 mask=visible_modules(h), order[GRKIT_MODULE_PAGES_MAX+3], n=root_order(h,order), row=0, i;
     for(i=0;i<n && order[i]!=module;++i) row+=mask>>order[i]&1;
     return row;
 }

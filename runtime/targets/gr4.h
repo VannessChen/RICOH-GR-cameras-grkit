@@ -121,6 +121,8 @@
 #define CHECK_LINE_TYPE 0x2aU
 #define CHECK_TEXT_VIEW 0xf0
 #define ROW_VALUE_VIEW 0xfc
+/* The label view of a submenu row, which its label setter sets. */
+#define ROW_LABEL_VIEW 0xec
 /* Rows of modules in the native MENU (runtime/menu_section.h). MENU builds its
    tabs at the first MENU of a start from the tab descriptors in the RAM
    table FW_MENU_TABS of the build header; entry MENU_TAB_GRKIT is the

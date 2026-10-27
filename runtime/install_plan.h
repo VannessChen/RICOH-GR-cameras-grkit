@@ -112,8 +112,8 @@ static u32 module_file_order(const char *name, u32 source)
 /* A module file is <ID>.GRM. Keep the names in their default order, so SCAN
    and INSTALL take the modules in the same order. */
 /* The module files past GRKIT_MODULES_MAX, for REPORT.TXT. A full list keeps the
-   first files in the default order, so the result does not depend on the
-   directory order. */
+   package modules, then the first other files in the default order, so the
+   result does not depend on the directory order. */
 static u32 module_overflow;
 /* The folder of each listed module: 0 for the package folder, 1 for
    GRKIT/MODULES. A module file of GRKIT/MODULES replaces the package module
@@ -141,8 +141,20 @@ static void offer_module(const char *name, u32 n, void *context)
         }
     u32 order = module_file_order(file, source);
     if (module_count == GRKIT_MODULES_MAX) {
+        /* The file that leaves: the last one of the person, else the last
+           package file. A file of the person never takes the place of a
+           package file. */
+        u32 out = GRKIT_MODULES_MAX - 1;
+        for (u32 k = GRKIT_MODULES_MAX; k-- > 0;)
+            if (module_source[k]) { out = k; break; }
         ++module_overflow;
-        if (!module_after(module_order[GRKIT_MODULES_MAX - 1], module_names[GRKIT_MODULES_MAX - 1], order, file)) return;
+        if (module_source[out] < source ||
+            (module_source[out] == source && !module_after(module_order[out], module_names[out], order, file))) return;
+        for (u32 j = out; j + 1 < module_count; ++j) {
+            name_copy(module_names[j], module_names[j + 1], length(module_names[j + 1]));
+            module_source[j] = module_source[j + 1];
+            module_order[j] = module_order[j + 1];
+        }
         --module_count;
     }
     u32 at = module_count++;

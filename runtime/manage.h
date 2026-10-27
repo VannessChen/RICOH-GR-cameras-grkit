@@ -53,7 +53,7 @@
 #define MANAGE_LOADED 0U
 #define MANAGE_SAFE 1U
 /* The most listed modules (MODULES_MAX of the installer). */
-#define MANAGE_MODULES 8U
+#define MANAGE_MODULES GRKIT_MODULES_MAX
 /* A position without a CORE.POS value sorts after each position. */
 #define MANAGE_DEFAULT_KEY 1000U
 
@@ -164,27 +164,21 @@ static u32 manage_committed(volatile u32 *h) {
     return module<manage_count(h) ? manage_row(h,module) : 0;
 }
 
-/* The ADJ Order rows of the GRKit section of MENU (runtime/menu_section.h) open a
-   native settings page for each group of MANAGE_GROUP_ROWS listed modules,
-   in their order. Each row is a module, and its values are the positions 1
-   to the module count; the row shows the position of the module. A choice
-   moves the module to that position and gives each module its row + 1 as
-   CORE.POS, so the page and the root of ADJ (runtime/modules.h: root_order)
-   show the new order at once. SERVICES_MENU + MENU_ROWS_GROUP holds the
-   group of the open page. */
-#define MANAGE_GROUP_ROWS SETTING_ROWS
-#define MANAGE_GROUPS ((MANAGE_MODULES+MANAGE_GROUP_ROWS-1U)/MANAGE_GROUP_ROWS)
-static u32 manage_group(volatile u32 *h) {
-    return h[GRKIT_HOST_SERVICES/4] ? services_word(h,SERVICES_MENU+MENU_ROWS_GROUP)[0] : 0;
-}
-/* The rows of the open group. */
-static u32 manage_group_rows(volatile u32 *h) {
-    u32 first=manage_group(h)*MANAGE_GROUP_ROWS, n=manage_count(h);
-    return first>=n ? 0 : n-first<MANAGE_GROUP_ROWS ? n-first : MANAGE_GROUP_ROWS;
-}
-_Static_assert(MANAGE_MODULES<=SETTING_VALUES,"A value page holds each position");
+/* The ADJ Order row of the GRKit section of MENU (runtime/menu_section.h) opens a
+   native settings page with a row for each listed module, in their order.
+   The values of a row are the positions 1 to the module count; the row
+   shows the position of the module. A choice moves the module to that
+   position and gives each module its row + 1 as CORE.POS, so the page and
+   the root of ADJ (runtime/modules.h: root_order) show the new order at
+   once. */
+_Static_assert(MANAGE_MODULES<=SUBMENU_ROWS,"The ADJ Order page has a row for each module");
+/* More positions than SETTING_VALUES make a long value page
+   (runtime/menu_settings.h: settings_long). */
+_Static_assert(MANAGE_MODULES<=MENU_VALUES_MAX,"A value page holds each position");
 static u32 manage_values(volatile u32 *h) { return manage_count(h); }
-static const u16 manage_positions[MANAGE_MODULES][2]={{'1',0},{'2',0},{'3',0},{'4',0},{'5',0},{'6',0},{'7',0},{'8',0}};
+static const u16 manage_positions[][3]={{'1',0},{'2',0},{'3',0},{'4',0},{'5',0},{'6',0},{'7',0},{'8',0},{'9',0},
+    {'1','0',0}};
+_Static_assert(sizeof(manage_positions)/sizeof(manage_positions[0])==MANAGE_MODULES,"A text for each position");
 static const u16 *manage_value_text(volatile u32 *h,u32 value) {
     (void)h;
     return manage_positions[value<MANAGE_MODULES ? value : MANAGE_MODULES-1];
@@ -203,17 +197,22 @@ static void manage_move(volatile u32 *h,u32 row,u32 to) {
 }
 #define MANAGE_ROW(n) \
     static const u16 *manage_label_##n(volatile u32 *h) { \
-        return manage_name(h,manage_module(h,manage_group(h)*MANAGE_GROUP_ROWS+n)); } \
-    static u32 manage_get_##n(volatile u32 *h) { return manage_group(h)*MANAGE_GROUP_ROWS+n; } \
-    static void manage_set_##n(volatile u32 *h,u32 value) { manage_move(h,manage_group(h)*MANAGE_GROUP_ROWS+n,value); }
-MANAGE_ROW(0) MANAGE_ROW(1) MANAGE_ROW(2) MANAGE_ROW(3) MANAGE_ROW(4) MANAGE_ROW(5)
-static const Setting manage_settings[SETTING_ROWS]={
+        return manage_name(h,manage_module(h,n)); } \
+    static u32 manage_get_##n(volatile u32 *h) { (void)h; return n; } \
+    static void manage_set_##n(volatile u32 *h,u32 value) { manage_move(h,n,value); }
+MANAGE_ROW(0) MANAGE_ROW(1) MANAGE_ROW(2) MANAGE_ROW(3) MANAGE_ROW(4) MANAGE_ROW(5) MANAGE_ROW(6) MANAGE_ROW(7)
+MANAGE_ROW(8) MANAGE_ROW(9)
+static const Setting manage_settings[SUBMENU_ROWS]={
     {manage_label_0,manage_values,manage_value_text,manage_get_0,manage_set_0},
     {manage_label_1,manage_values,manage_value_text,manage_get_1,manage_set_1},
     {manage_label_2,manage_values,manage_value_text,manage_get_2,manage_set_2},
     {manage_label_3,manage_values,manage_value_text,manage_get_3,manage_set_3},
     {manage_label_4,manage_values,manage_value_text,manage_get_4,manage_set_4},
     {manage_label_5,manage_values,manage_value_text,manage_get_5,manage_set_5},
+    {manage_label_6,manage_values,manage_value_text,manage_get_6,manage_set_6},
+    {manage_label_7,manage_values,manage_value_text,manage_get_7,manage_set_7},
+    {manage_label_8,manage_values,manage_value_text,manage_get_8,manage_set_8},
+    {manage_label_9,manage_values,manage_value_text,manage_get_9,manage_set_9},
 };
 #define MANAGE_PAGE {manage_title,manage_summary,manage_rows,manage_label,manage_icon, \
     manage_checked,manage_apply,manage_committed,0,0,manage_settings}

@@ -132,6 +132,8 @@ const SITES: &[Site] = &[
     ("menu_settings_hide_first", 0x531c6144, "040057e3"),
     ("menu_settings_hide_next", 0x531c6168, "040054e3"),
     ("menu_settings_row_kind", 0x531c6260, "031198e7"),
+    ("menu_settings_label", 0x531c6244, "b810d3e1"),
+    ("menu_settings_open", 0x531c5d9c, "145092e5"),
     ("menu_settings_count_0", 0x531b3c84, "0600a0e3"),
     ("menu_settings_draw_0", 0x531b5b34, "0dc0a0e1"),
     ("menu_settings_apply_0", 0x531b7514, "0dc0a0e1"),

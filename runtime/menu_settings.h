@@ -5,16 +5,18 @@
 /* The native settings page of a root row (MenuPage::settings). GRKit opens the
    MENU submenu SETTINGS_SUBMENU from ADJ, as the Fn page opens. While
    GRKIT_HOST_SETTINGS holds the module + 1, the submenu reads a private copy
-   of its kind table entry with the rows of the module (1 to SETTING_ROWS),
+   of its kind table entry with the rows of the module (1 to SUBMENU_ROWS),
    and the value pages of the rows show and set the settings of the module.
    Row i opens the borrowed value page SETTINGS_PAGES[i], whose title is the
    row label SETTINGS_ROW_TEXTS[i]. The text hooks show the
-   module title, the row labels, and the values. A value view shows the text
-   ID SETTINGS_TITLE_TEXT, so that the text hooks find the view.
+   module title, the row labels, and the values. A value view, and the label
+   of a row past the labels of the entry, shows the text ID
+   SETTINGS_TITLE_TEXT, so that the text hooks find the view.
 
-   The settings block (GRKIT_TEXT_SETTINGS): the entry, the descriptors of the
-   title and of the row labels, then for each value view the view and its
-   descriptor: the submenu value of each row, then the value page rows.
+   The settings block (GRKIT_TEXT_SETTINGS): the entry and the value methods
+   of its rows, the descriptors of the title and of the row labels, then for
+   each view the view and its descriptor: the submenu value of each row, the
+   value page rows, then the labels past those of the entry.
 
    The return to ADJ is a controller change, which ends the page. ADJ
    refreshes also while GRKit opens the page (leave), so its refresh must not
@@ -22,25 +24,30 @@
 #ifndef SETTINGS_MAP
 #define SETTINGS_MAP(address) ((volatile u32 *)MENU_TEXT(address))
 #endif
-#define SETTINGS_LABELS 0x80
-#define SETTINGS_VIEWS (SETTINGS_LABELS+(1+SETTING_ROWS)*8)
-#define SETTINGS_VIEW_SLOTS (SETTING_ROWS+SETTING_VALUES)
-_Static_assert(SUBMENU_KIND_SIZE<=SETTINGS_LABELS && SETTINGS_LABELS+(1+SETTING_ROWS)*8<=SETTINGS_VIEWS &&
+/* The rows whose labels the kind table entry has room for. */
+#define SETTINGS_LABEL_ROWS ((SUBMENU_KIND_CONTROLLERS-SUBMENU_KIND_LABELS)/2U)
+#define SETTINGS_LABELS ((SUBMENU_KIND_VALUES+8*SUBMENU_ROWS+7)&~7U)
+#define SETTINGS_VIEWS (SETTINGS_LABELS+(1+SUBMENU_ROWS)*8)
+/* The view slots: the value of each row, the value page rows, then the
+   labels past SETTINGS_LABEL_ROWS. */
+#define SETTINGS_LABEL_SLOT(row) (SUBMENU_ROWS+SETTING_VALUES+(row)-SETTINGS_LABEL_ROWS)
+#define SETTINGS_VIEW_SLOTS SETTINGS_LABEL_SLOT(SUBMENU_ROWS)
+_Static_assert(SUBMENU_KIND_SIZE<=SETTINGS_LABELS &&
                SETTINGS_VIEWS+SETTINGS_VIEW_SLOTS*12<=GRKIT_TEXT_PARAMETER_TITLE-GRKIT_TEXT_SETTINGS,
                "The settings page fits its block");
-/* The row labels of the submenu, and the value pages of the rows that the
-   kind table entry has room for (SETTINGS_BORROWED). The entry gives the
-   last row the kind of the first as its controller (menu.S:
-   menu_settings_row_kind): that row opens the value page of row
-   SETTINGS_ALIAS, and SETTINGS_LAST_ROW gives the page to the last row
-   (menu_settings_controller). The last row keeps its label and value method
-   in the room of the entry. */
-#define SETTINGS_BORROWED (SETTING_ROWS-1U)
+/* The kind table entry has room for the labels of SETTINGS_LABEL_ROWS rows
+   and the controllers of SETTINGS_BORROWED rows: a later label shows in a
+   view slot (menu_settings_row_label), and a later row opens the value page
+   of row SETTINGS_ALIAS (menu_settings_row_controller), which then shows
+   that row (SETTINGS_OPEN_ROW). The value methods of all rows follow the
+   entry in the private copy. */
+#define SETTINGS_BORROWED 5U
 #define SETTINGS_ALIAS 0U
-_Static_assert(SUBMENU_KIND_LABELS+2*SETTING_ROWS<=SUBMENU_KIND_CONTROLLERS &&
-               SUBMENU_KIND_VALUES+8*SETTING_ROWS<=SETTINGS_LABELS,"The entry holds the labels and value methods");
+_Static_assert(SETTINGS_LABEL_ROWS==SETTING_ROWS &&
+               SUBMENU_KIND_CONTROLLERS+4*SETTINGS_BORROWED<=SUBMENU_KIND_ROW_KINDS,
+               "The entry holds the labels and controllers");
 static const u32 settings_pages[SETTINGS_BORROWED]=SETTINGS_PAGES;
-static const u16 settings_row_texts[SETTING_ROWS]=SETTINGS_ROW_TEXTS;
+static const u16 settings_row_texts[SETTINGS_LABEL_ROWS]=SETTINGS_ROW_TEXTS;
 /* Whether controller `current` is the borrowed submenu or one of its value
    pages, whose texts a settings page gives (menu_text_override). */
 static u32 settings_shows(u32 current) {
@@ -55,8 +62,10 @@ static volatile u32 *settings_block(volatile u32 *h) { return SETTINGS_MAP(GRKIT
    that a row of the page opened show (menu_settings_controller). */
 #define SETTINGS_ONE 0x10000U
 #define SETTINGS_FN 0x20000U
-/* The value page of SETTINGS_ALIAS shows the last row. */
-#define SETTINGS_LAST_ROW 0x40000U
+/* The row past SETTINGS_BORROWED whose value page SETTINGS_ALIAS shows, or
+   0: bits 24 to 31. */
+#define SETTINGS_OPEN_ROW 24U
+#define SETTINGS_OPEN_ROWS 0xff000000U
 #include "menu_listed.h"
 /* The settings of page `module`, or 0. */
 static const Setting *settings_of(volatile u32 *h,u32 module,u32 one) {
@@ -80,10 +89,11 @@ static const Setting *settings_row_page(volatile u32 *h,u32 setting) {
 }
 static u32 menu_rows_controller(volatile u32 *h,u32 id);
 static void settings_open(volatile u32 *h,u32 module,u32 one);
-/* The row of the value page of borrowed page `page`: the last row after
-   it opened the page of SETTINGS_ALIAS. */
+/* The row of the value page of borrowed page `page`: a later row after it
+   opened the page of SETTINGS_ALIAS. */
 static u32 settings_alias(volatile u32 *h,u32 page) {
-    return page==SETTINGS_ALIAS && h[GRKIT_HOST_SETTINGS/4]&SETTINGS_LAST_ROW ? SETTINGS_BORROWED : page;
+    u32 open=h[GRKIT_HOST_SETTINGS/4]>>SETTINGS_OPEN_ROW;
+    return page==SETTINGS_ALIAS && open ? open : page;
 }
 /* The borrowed page that shows the value page of row `row`. */
 static u32 settings_borrowed(u32 row) { return row<SETTINGS_BORROWED ? row : SETTINGS_ALIAS; }
@@ -148,20 +158,11 @@ A32_ENTRY void menu_check_dot(u32 line,u32 shown) {
    ends at any controller outside it. */
 A32_ENTRY u32 menu_settings_controller(u32 id) {
     volatile u32 *h=menu_header();
-    u32 i, last=0;
+    u32 i;
     /* OK on an option: the value page stays, so the change does not happen. */
     if(h[GRKIT_HOST_SERVICES/4] && services_word(h,SERVICES_MENU+MENU_ROWS_STAY)[0]) {
         services_word(h,SERVICES_MENU+MENU_ROWS_STAY)[0]=0;
         return 0;
-    }
-    /* OK on the last row changes to the kind of the first row, which no
-       controller has: the last row opens the Fn adjustments or the value page
-       of SETTINGS_ALIAS. */
-    if(settings_page(h) && settings_rows(h)==SETTING_ROWS &&
-       id==settings_block(h)[SUBMENU_KIND_ROW_KINDS/4]) {
-        last=1;
-        id=settings_pages[SETTINGS_ALIAS];
-        if(settings_fn_row(h,settings_page(h),SETTINGS_BORROWED)) id=MENU_FN_TARGET;
     }
     id=menu_rows_controller(h,id);
     /* The checkbox page serves the options page that opens now. The return
@@ -181,7 +182,7 @@ A32_ENTRY u32 menu_settings_controller(u32 id) {
         if(id!=INFO_CONTROLLER) services_word(h,SERVICES_MENU+MENU_ROWS_ABOUT)[0]=0;
     }
     if(id==SETTINGS_SUBMENU) {
-        h[GRKIT_HOST_SETTINGS/4]&=~(SETTINGS_FN|SETTINGS_LAST_ROW);
+        h[GRKIT_HOST_SETTINGS/4]&=~(SETTINGS_FN|SETTINGS_OPEN_ROWS);
         if(settings_page(h)) settings_forget_all(h);
         /* The page shows its rows and labels again on each start, as a value
            page can change them: Film Stock adds Parameters once an effect is
@@ -191,8 +192,6 @@ A32_ENTRY u32 menu_settings_controller(u32 id) {
         return id;
     }
     for(i=0;i<SETTINGS_BORROWED;++i) if(id==settings_pages[i]) {
-        if(last) h[GRKIT_HOST_SETTINGS/4]|=SETTINGS_LAST_ROW;
-        else h[GRKIT_HOST_SETTINGS/4]&=~SETTINGS_LAST_ROW;
         if(settings_page(h)) settings_forget_all(h);
         /* An options page starts with its cursor on the first option. */
         if(h[GRKIT_HOST_SERVICES/4] && settings_page(h) && settings_alias(h,i)<settings_rows(h) &&
@@ -239,11 +238,41 @@ static void settings_view(volatile u32 *h,u32 slot,u32 view,const u16 *name) {
     descriptor(at+1,name);
     MENU_VIEW3(FW_STRING_VIEW_RESET,view,0,0);
 }
-/* The row of the open value page of the settings page, or SETTING_ROWS. */
+/* OK on row `row` of the submenu: the controller that the row opens, which
+   the entry gives (`native`) for a row up to SETTINGS_BORROWED. A later row
+   opens its Fn adjustments, or the value page of SETTINGS_ALIAS for that
+   row. */
+A32_ENTRY u32 menu_settings_row_controller(u32 native,u32 row) {
+    volatile u32 *h=menu_header();
+    const Setting *page=settings_page(h);
+    if(!page) return native;
+    h[GRKIT_HOST_SETTINGS/4]&=~SETTINGS_OPEN_ROWS;
+    if(row<SETTINGS_BORROWED || row>=settings_rows(h)) return native;
+    h[GRKIT_HOST_SETTINGS/4]|=row<<SETTINGS_OPEN_ROW;
+    return settings_fn_row(h,page,row) ? MENU_FN_TARGET : settings_pages[SETTINGS_ALIAS];
+}
+/* The label text ID of row `row` of the submenu, whose row view is `line`:
+   the entry gives it (`native`) for a row up to SETTINGS_LABEL_ROWS. Reset
+   the label view of each row of the page, as its text can change while its
+   ID stays: ADJ Order moves the modules. */
+A32_ENTRY u32 menu_settings_row_label(u32 native,u32 line,u32 row) {
+    volatile u32 *h=menu_header();
+    const Setting *page=settings_page(h);
+    u32 view=MENU_OBJECT_WORD(line,ROW_LABEL_VIEW);
+    if(!page || row>=settings_rows(h)) return native;
+    if(row<SETTINGS_LABEL_ROWS) {
+        settings_forget(h,view);
+        MENU_VIEW3(FW_STRING_VIEW_RESET,view,0,0);
+        return native;
+    }
+    settings_view(h,SETTINGS_LABEL_SLOT(row),view,page[row].label(h));
+    return SETTINGS_TITLE_TEXT;
+}
+/* The row of the open value page of the settings page, or SUBMENU_ROWS. */
 static u32 settings_value_row(volatile u32 *h) {
     u32 current=services_word(h,SERVICES_MENU+MENU_ROWS_CURRENT)[0], i;
     for(i=0;i<SETTINGS_BORROWED;++i) if(current==settings_pages[i]) return settings_alias(h,i);
-    return SETTING_ROWS;
+    return SUBMENU_ROWS;
 }
 /* The descriptor `n` of the texts of an options page with `name`. */
 static u32 options_page_text(volatile u32 *h,u32 n,const u16 *name) {
@@ -291,7 +320,7 @@ static u32 settings_text(volatile u32 *h,u32 view,u32 id) {
             if(block[SETTINGS_VIEWS/4+i*3]==view) return (u32)(block+SETTINGS_VIEWS/4+i*3+1)|1U;
     if(id==SETTINGS_TITLE_TEXT) return (u32)(block+SETTINGS_LABELS/4)|1U;
     /* A row label, or the title of its value page. */
-    for(i=0;i<settings_rows(h);++i)
+    for(i=0;i<SETTINGS_LABEL_ROWS && i<settings_rows(h);++i)
         if(id==settings_row_texts[i]) {
             u32 row=i<SETTINGS_BORROWED ? settings_alias(h,i) : i;
             return (u32)(block+SETTINGS_LABELS/4+(row+1)*2)|1U;
@@ -307,12 +336,10 @@ static void settings_row(u32 row,u32 setting) {
     MENU_VIEW2(FW_ROW_VALUE,row,SETTINGS_TITLE_TEXT);
     fit_value(MENU_OBJECT_WORD(row,ROW_VALUE_VIEW));
 }
-A32_ENTRY void menu_settings_value_0(u32 submenu,u32 row) { (void)submenu; settings_row(row,0); }
-A32_ENTRY void menu_settings_value_1(u32 submenu,u32 row) { (void)submenu; settings_row(row,1); }
-A32_ENTRY void menu_settings_value_2(u32 submenu,u32 row) { (void)submenu; settings_row(row,2); }
-A32_ENTRY void menu_settings_value_3(u32 submenu,u32 row) { (void)submenu; settings_row(row,3); }
-A32_ENTRY void menu_settings_value_4(u32 submenu,u32 row) { (void)submenu; settings_row(row,4); }
-A32_ENTRY void menu_settings_value_5(u32 submenu,u32 row) { (void)submenu; settings_row(row,5); }
+#define SETTINGS_VALUE(n) \
+    A32_ENTRY void menu_settings_value_##n(u32 submenu,u32 row) { (void)submenu; settings_row(row,n); }
+SETTINGS_VALUE(0) SETTINGS_VALUE(1) SETTINGS_VALUE(2) SETTINGS_VALUE(3) SETTINGS_VALUE(4)
+SETTINGS_VALUE(5) SETTINGS_VALUE(6) SETTINGS_VALUE(7) SETTINGS_VALUE(8) SETTINGS_VALUE(9)
 /* The methods of the value page of borrowed page `setting`, which shows the
    value page of row settings_alias(setting). Each returns 0 for the native
    method, else its result + 1. The row count: */
@@ -360,7 +387,7 @@ static u32 settings_draw(volatile u32 *h,u32 row,u32 value,u32 setting) {
         return 1;
     }
     if(value<settings_values(h,page,setting))
-        settings_view(h,SETTING_ROWS+value,MENU_OBJECT_WORD(row,ROW_TEXT_VIEW),page[setting].value_text(h,value));
+        settings_view(h,SUBMENU_ROWS+value,MENU_OBJECT_WORD(row,ROW_TEXT_VIEW),page[setting].value_text(h,value));
     MENU_VIEW2(FW_ROW_TEXT,row,SETTINGS_TITLE_TEXT);
     return 1;
 }
@@ -396,27 +423,30 @@ A32_ENTRY u32 menu_settings_current(u32 value,u32 unused,u32 setting) {
 static u32 settings_count(volatile u32 *h,const Setting *page) {
     u32 n=0;
     if(page==choice_settings) n=PAGE_WORD(CHOICE_ENTRY(h)[0],PAGE_SETTING_ROWS);
-    else if(page==manage_settings) n=manage_group_rows(h);
+    else if(page==manage_settings) n=manage_count(h);
     else if(page==listed_settings) n=listed_rows(h);
     else while(n<SETTING_ROWS && page[n].label) ++n;
-    return n<SETTING_ROWS ? n : SETTING_ROWS;
+    return n<SUBMENU_ROWS ? n : SUBMENU_ROWS;
 }
 /* Start a page for `module`: copy the borrowed entry with the rows of the
    module, their labels, value pages, and private value methods, and fill
    the descriptors of the labels. The menu language does not change while
    the page is open. */
 static void settings_open(volatile u32 *h,u32 module,u32 one) {
-    static void (*const values[SETTING_ROWS])(u32,u32)={menu_settings_value_0,menu_settings_value_1,
-        menu_settings_value_2,menu_settings_value_3,menu_settings_value_4,menu_settings_value_5};
+    static void (*const values[])(u32,u32)={menu_settings_value_0,menu_settings_value_1,
+        menu_settings_value_2,menu_settings_value_3,menu_settings_value_4,menu_settings_value_5,
+        menu_settings_value_6,menu_settings_value_7,menu_settings_value_8,menu_settings_value_9};
     volatile u32 *block=settings_block(h);
     const Setting *page=settings_of(h,module,one);
     u32 stock=FW_SUBMENU_KINDS+SETTINGS_SUBMENU_KIND*SUBMENU_KIND_SIZE, i, rows=page ? settings_count(h,page) : 0;
     for(i=0;i<SUBMENU_KIND_SIZE/4;++i) block[i]=MENU_OBJECT_WORD(stock,i*4);
     ((volatile u8 *)block)[SUBMENU_KIND_ROWS]=(u8)rows;
+    _Static_assert(sizeof(values)/sizeof(values[0])==SUBMENU_ROWS,"A value method for each row");
     for(i=0;i<rows;++i) {
-        ((volatile u16 *)((volatile u8 *)block+SUBMENU_KIND_LABELS))[i]=settings_row_texts[i];
-        /* The last row has no room for its controller and kind: they are
-           those of the first row (menu_settings_controller). */
+        if(i<SETTINGS_LABEL_ROWS)
+            ((volatile u16 *)((volatile u8 *)block+SUBMENU_KIND_LABELS))[i]=settings_row_texts[i];
+        /* A later row has no room for its controller and kind
+           (menu_settings_row_controller, menu.S: menu_settings_row_kind). */
         if(i<SETTINGS_BORROWED) {
             block[SUBMENU_KIND_CONTROLLERS/4+i]=settings_pages[i];
             if(settings_fn_row(h,page,i)) block[SUBMENU_KIND_CONTROLLERS/4+i]=MENU_FN_TARGET;

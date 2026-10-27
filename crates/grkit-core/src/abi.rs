@@ -34,13 +34,16 @@ pub const ICONS_PER_CHUNK: usize = 40;
 /// The largest script array in words, which holds the modules.
 pub const MODULE_ARRAY_WORDS: usize = 65536;
 /// The most modules that GRKit lists at a start, from the package and from
-/// `GRKIT/MODULES` together. It lists the first ones in their default order.
-pub const MODULES_MAX: usize = 8;
+/// `GRKIT/MODULES` together. The package modules come first, then the first
+/// other ones in their default order. The GRKit section of MENU has a row
+/// for each listed module, and each build keeps room for them in the
+/// Customize tab (runtime/menu_section.h).
+pub const MODULES_MAX: usize = 10;
 /// The most settings of all modules (`runtime/settings.h`).
 pub const MODULE_SETTINGS_MAX: usize = 160;
 /// The most artwork tiles of all modules. The installer puts them in the
 /// icon chunks after the effect icons.
-pub const MODULE_TILES_MAX: usize = 64;
+pub const MODULE_TILES_MAX: usize = 128;
 /// Off, GRKit, Version, and Modules.
 /// The menu addresses the Version and Modules icons by their offset from the
 /// GRKit icon, so the host icons come first in chunk 0, and they must fit in
@@ -56,15 +59,19 @@ pub const MAX_COUNT: usize = 20;
 pub const ICON_CHUNK_SLOTS: usize = 5;
 
 /// The fields of the header.
-pub const HOST_HEADER_SIZE: usize = 512;
+pub const HOST_HEADER_SIZE: usize = 768;
 /// The placeholder for the header address in ARM code. The installer replaces
 /// each literal word with this value by the address of the `registry` array.
 pub const HEADER_REFERENCE: u32 = 0x58012340;
 /// `GRM1`.
 pub const HOST_MAGIC_VALUE: u32 = 0x314d5247;
 pub const HOST_VERSION_VALUE: u32 = 1;
-/// The most module layers, and the most module pages, that the header holds.
-pub const MODULE_SLOTS: usize = 8;
+/// The most module pages that the header holds: one for each listed module.
+pub const MODULE_PAGES_MAX: usize = MODULES_MAX;
+/// The most module layers, and the most module plane filters, of all modules
+/// that the header holds.
+pub const MODULE_LAYERS_MAX: usize = 16;
+pub const MODULE_FILTERS_MAX: usize = 8;
 
 fields!(HEADER_FIELDS {
     /// Number of Image Control records.
@@ -215,7 +222,9 @@ fields!(HEADER_FIELDS {
     /// Two words for each module plane filter, in stage order: its apply
     /// function, and its setting handle in the low half with its stage in the
     /// high half.
-    HOST_MODULE_FILTERS = 268, HOST_MODULE_SETTINGS - 268;
+    HOST_MODULE_FILTERS = 268, 8 * MODULE_FILTERS_MAX;
+    /// Reserved for later fields.
+    HOST_RESERVED = 268 + 8 * MODULE_FILTERS_MAX, HOST_MODULE_SETTINGS - 268 - 8 * MODULE_FILTERS_MAX;
     /// Address of the module settings table, or 0 (runtime/settings.h).
     /// INSTALL writes it.
     HOST_MODULE_SETTINGS = HOST_MODULE_PREVIEW - 4, 4;
@@ -228,7 +237,7 @@ fields!(HEADER_FIELDS {
     /// Three words for each module page (runtime/sdk/grkit.h), in load order:
     /// the address of its GrkitPage, its setting handle, and the global index
     /// of its tile 0 (GRKIT_ICON_MODULE_TILE).
-    HOST_MODULE_PAGES = HOST_MODULE_CHOICE - 12 * MODULE_SLOTS, 12 * MODULE_SLOTS;
+    HOST_MODULE_PAGES = HOST_MODULE_CHOICE - 12 * MODULE_PAGES_MAX, 12 * MODULE_PAGES_MAX;
     /// The module page that the generic page callbacks of the menu serve.
     HOST_MODULE_CHOICE = HOST_MODULE_LAYER_COUNT - 4, 4;
     /// Number of module layers in GRKIT_HOST_MODULE_LAYERS. INSTALL writes it.
@@ -236,7 +245,7 @@ fields!(HEADER_FIELDS {
     /// Three words for each module layer, in painting order: its paint
     /// function, its setting handle (GRKIT_NO_SETTING paints with the value
     /// 1), and its flags in the low half with its order in the high half.
-    HOST_MODULE_LAYERS = HOST_GAMMA_KEY - 12 * MODULE_SLOTS, 12 * MODULE_SLOTS;
+    HOST_MODULE_LAYERS = HOST_GAMMA_KEY - 12 * MODULE_LAYERS_MAX, 12 * MODULE_LAYERS_MAX;
     /// Key of the inputs of the last private curve composition in the gamma
     /// stage, or 0 (runtime/processing.h).
     HOST_GAMMA_KEY = HOST_HEADER_SIZE - 4, 4;
@@ -427,14 +436,19 @@ pub const SHOT_POSTURE: usize = 8;
 pub const PICTURE_SCRATCH: usize = PICTURE_MASKS + SHOT_ENTRY + SHOT_STRIDE * SHOT_ENTRIES;
 /// Bytes of the live-view labels after the menu text (`artwork::overlay_labels`).
 pub const LABELS_SIZE: usize = 16384;
-/// The profile table after the labels (runtime/profile.h): for each module
-/// slot its code start, its code end, and 8 ASCII bytes of its name, then a
+/// The profile table after the labels (runtime/profile.h): for each of the
+/// first `PROFILE_MODULES` listed modules its code start, its code end, and 8
+/// ASCII bytes of its name, then a
 /// counter slot of calls, cycles, and the largest call for each core point
 /// and for each module and kind.
 pub const PROFILE: usize = PICTURE_SCRATCH + menu_text::TEXT_SIZE + LABELS_SIZE;
 pub const PROFILE_MODULE_SIZE: usize = 16;
 pub const PROFILE_NAME_BYTES: usize = 8;
-pub const PROFILE_SLOTS: usize = MODULE_SLOTS * PROFILE_MODULE_SIZE;
+/// The modules that the profile counts. The loader writes the lines of each
+/// in its own script code, so more modules make the resident script longer.
+pub const PROFILE_MODULES: usize = 8;
+const _: () = assert!(PROFILE_MODULES <= MODULES_MAX);
+pub const PROFILE_SLOTS: usize = PROFILE_MODULES * PROFILE_MODULE_SIZE;
 pub const PROFILE_SLOT_SIZE: usize = 12;
 /// The core points, in slot order: the name in the profile file, and the C
 /// name of the slot without the `GRKIT_PROFILE_` prefix.
@@ -451,7 +465,7 @@ pub const PROFILE_POINTS: [(&str, &str); 7] = [
 /// event handler, timer, or UI callback in the App task.
 pub const PROFILE_KINDS: [(&str, &str); 3] =
     [("paint", "PAINT"), ("filter", "FILTER"), ("call", "CALL")];
-pub const PROFILE_SLOT_COUNT: usize = PROFILE_POINTS.len() + MODULE_SLOTS * PROFILE_KINDS.len();
+pub const PROFILE_SLOT_COUNT: usize = PROFILE_POINTS.len() + PROFILE_MODULES * PROFILE_KINDS.len();
 pub const PROFILE_SIZE: usize = PROFILE_SLOTS + PROFILE_SLOT_COUNT * PROFILE_SLOT_SIZE;
 /// Everything after the records: the picture scratch, the menu text, the
 /// live-view labels, then the profile table.
@@ -618,7 +632,13 @@ pub fn header() -> String {
     );
     writeln!(out, "#define GRKIT_HEADER_REFERENCE {HEADER_REFERENCE:#x}").unwrap();
     writeln!(out, "#define GRKIT_HOST_HEADER_SIZE {HOST_HEADER_SIZE}").unwrap();
-    writeln!(out, "#define GRKIT_MODULE_SLOTS {MODULE_SLOTS}").unwrap();
+    comment(
+        &mut out,
+        "The most module pages, layers, and plane filters that the header holds.",
+    );
+    writeln!(out, "#define GRKIT_MODULE_PAGES_MAX {MODULE_PAGES_MAX}").unwrap();
+    writeln!(out, "#define GRKIT_MODULE_LAYERS_MAX {MODULE_LAYERS_MAX}").unwrap();
+    writeln!(out, "#define GRKIT_MODULE_FILTERS_MAX {MODULE_FILTERS_MAX}").unwrap();
     writeln!(
         out,
         "#define GRKIT_MODULE_SETTINGS_MAX {}",
@@ -637,6 +657,12 @@ pub fn header() -> String {
         MODULE_ARRAY_WORDS
     )
     .unwrap();
+    comment(
+        &mut out,
+        "The row views of the borrowed native settings page: the ADJ Order page \
+         has a row for each listed module. Without a suffix, for the assembler.",
+    );
+    writeln!(out, "#define GRKIT_SUBMENU_ROWS {}", MODULES_MAX).unwrap();
     comment(
         &mut out,
         "Icon slots: the host icons, then the effect icons, then the module \
@@ -844,17 +870,19 @@ pub fn header() -> String {
     );
     define(
         &mut out,
-        "The profile table after the labels (runtime/profile.h). For each module \
-         slot at GRKIT_PROFILE_MODULE_SIZE n: its code start, its code end, and \
+        "The profile table after the labels (runtime/profile.h). For each of the \
+         first GRKIT_PROFILE_MODULES listed modules, at GRKIT_PROFILE_MODULE_SIZE \
+         n: its code start, its code end, and \
          GRKIT_PROFILE_NAME_BYTES ASCII bytes of its name. At GRKIT_PROFILE_SLOTS, \
          GRKIT_PROFILE_SLOT_COUNT slots of GRKIT_PROFILE_SLOT_SIZE bytes: calls, \
          cycles, and the cycles of the largest call. The core points come first, \
-         then GRKIT_PROFILE_KINDS slots for each module slot.",
+         then GRKIT_PROFILE_KINDS slots for each of those modules.",
         "PROFILE",
         PROFILE,
     );
     for (name, value) in [
         ("SIZE", PROFILE_SIZE),
+        ("MODULES", PROFILE_MODULES),
         ("MODULE_SIZE", PROFILE_MODULE_SIZE),
         ("NAME_BYTES", PROFILE_NAME_BYTES),
         ("SLOTS", PROFILE_SLOTS),

@@ -5,12 +5,11 @@
    that this part uses. */
 /* The header entries of the module pages and layers (runtime/abi.h): three
    words each. Layers stay in painting order. */
-static u32 module_pages[GRKIT_MODULE_SLOTS * 3], module_page_count;
+static u32 module_pages[GRKIT_MODULE_PAGES_MAX * 3], module_page_count;
 /* The plane filters in stage order (GRKIT_HOST_MODULE_FILTERS), two words
    each. */
-#define MODULE_FILTERS (GRKIT_HOST_MODULE_FILTERS_WORDS / 2)
-static u32 module_filters[MODULE_FILTERS * 2], module_filter_count;
-static u32 module_layers[GRKIT_MODULE_SLOTS * 3], module_layer_count;
+static u32 module_filters[GRKIT_MODULE_FILTERS_MAX * 2], module_filter_count;
+static u32 module_layers[GRKIT_MODULE_LAYERS_MAX * 3], module_layer_count;
 static u8 module_code[GRM_MAX_SEGMENT], module_data[GRM_MAX_SEGMENT];
 /* Insert the `width`-word `entry` into `table`, which holds `*count` entries
    in the order of the high half of their word `key`: after the entries whose
@@ -125,9 +124,9 @@ static int install_pass(u32 code, u32 array, u32 pixels, const u32 *icon_bases, 
         u32 failed = 0, own_count = 0, own_uses = 0, layer_count = 0, page_count = 0, tile_count = 0;
         struct grm_setting own[GRM_SETTINGS];
         char own_names[GRM_USES][GRM_NAME + 1];
-        struct grm_layer layers[GRKIT_MODULE_SLOTS];
-        struct grm_page pages[GRKIT_MODULE_SLOTS];
-        struct grm_filter filters[GRKIT_MODULE_SLOTS];
+        struct grm_layer layers[GRM_REGISTRATIONS];
+        struct grm_page pages[GRM_REGISTRATIONS];
+        struct grm_filter filters[GRM_REGISTRATIONS];
         u32 filter_count = 0;
         const u8 *tiles = 0;
         int status = 0;
@@ -169,7 +168,7 @@ static int install_pass(u32 code, u32 array, u32 pixels, const u32 *icon_bases, 
         if (!status)
             status = grm_registrations(&module, module_code, code_base, own, own_count, own_uses,
                                        layers, &layer_count, pages, &page_count, filters, &filter_count,
-                                       GRKIT_MODULE_SLOTS);
+                                       GRM_REGISTRATIONS);
         /* The handles of the pages and the layers. A page or a layer of an
            optional used setting that no module has is not registered. A
            page needs a row for each value of a used setting. */
@@ -205,9 +204,9 @@ static int install_pass(u32 code, u32 array, u32 pixels, const u32 *icon_bases, 
             filters[k].setting = module_handle(i, use_handles, filters[k].setting);
             if (filters[k].setting == GRM_NO_SETTING) filters[k].apply = 0;
         }
-        if (!status && (module_layer_count + layer_count > GRKIT_MODULE_SLOTS ||
-                        module_page_count + page_count > GRKIT_MODULE_SLOTS ||
-                        module_filter_count + filter_count > MODULE_FILTERS)) status = GRM_NO_ROOM;
+        if (!status && (module_layer_count + layer_count > GRKIT_MODULE_LAYERS_MAX ||
+                        module_page_count + page_count > GRKIT_MODULE_PAGES_MAX ||
+                        module_filter_count + filter_count > GRKIT_MODULE_FILTERS_MAX)) status = GRM_NO_ROOM;
         if (status) {
             module_status[i] = (u32)status;
             module_needs[i] = 0;

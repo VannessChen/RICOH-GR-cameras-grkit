@@ -616,33 +616,32 @@ SETTINGS_KINDS_REGISTER menu_settings_kinds_r8, r8
 SETTINGS_KINDS_REGISTER menu_settings_kinds_r5, r5
 SETTINGS_KINDS_SAVED menu_settings_kinds_r3_1, 3
 
-/* The submenu has six row views instead of five (SETTING_ROWS): each native
-   submenu has five rows or fewer, and a GRKit settings page has six. Its
-   constructor builds the list from five row types on the stack: the stub
-   replaces the store of the fifth, stores a sixth after it (the stack guard
-   follows at fp - 0x18), and sets the count. */
+/* The submenu has GRKIT_SUBMENU_ROWS row views instead of five (core.h:
+   SUBMENU_ROWS). Its constructor builds the list from five row types on the
+   stack, and the stack guard follows at fp - 0x18: the stub replaces the
+   store of the fifth and gives the list the types of menu_settings_types. */
 .global menu_settings_build
 .type menu_settings_build, %function
 menu_settings_build:
-    strb ip, [fp, #-0x1c]
-    strb ip, [fp, #-0x1b]
-    mov r2, #6
+    ldr r1, =menu_settings_types
+    mov r2, #GRKIT_SUBMENU_ROWS
     bx lr
-/* The draw hides the rows from the row count to the last view, the sixth:
-   the two compares with the last row. */
+.ltorg
+/* The draw hides the rows from the row count to the last view: the two
+   compares with the last row. */
 .global menu_settings_hide_first
 .type menu_settings_hide_first, %function
 menu_settings_hide_first:
-    cmp r7, #5
+    cmp r7, #GRKIT_SUBMENU_ROWS-1
     bx lr
 .global menu_settings_hide_next
 .type menu_settings_hide_next, %function
 menu_settings_hide_next:
-    cmp r4, #5
+    cmp r4, #GRKIT_SUBMENU_ROWS-1
     bx lr
 /* The kind of row r4 from the kind table (r8 its base, r3 the word index of
-   the kind). The entry has room for the kinds of five rows: the sixth takes
-   the kind of the first, whose word index is r3 - r4. */
+   the kind). The entry has room for the kinds of five rows: a later row
+   takes the kind of the first, whose word index is r3 - r4. */
 .global menu_settings_row_kind
 .type menu_settings_row_kind, %function
 menu_settings_row_kind:
@@ -651,6 +650,38 @@ menu_settings_row_kind:
     subhs r1, r3, r4
     ldrhs r1, [r8, r1, lsl #2]
     bx lr
+/* The label of row r4 in the draw (r3 + 8 its entry slot, r0 the row view):
+   the C function gives the text ID in r1. The entry has room for the labels
+   of six rows. */
+.global menu_settings_label
+.type menu_settings_label, %function
+menu_settings_label:
+    push {r0, r2, r3, r4, r12, lr}
+    mov r1, r0
+    ldrh r0, [r3, #8]
+    mov r2, r4
+    bl menu_settings_row_label
+    mov r1, r0
+    pop {r0, r2, r3, r4, r12, pc}
+/* The controller of the row that OK opens (r2 + 0x14 its entry slot, r0
+   the cursor row): the C function gives it in r5. The entry has room for
+   the controllers of five rows. */
+.global menu_settings_open
+.type menu_settings_open, %function
+menu_settings_open:
+    push {r0-r5, r12, lr}
+    mov r1, r0
+    ldr r0, [r2, #0x14]
+    bl menu_settings_row_controller
+    str r0, [sp, #20]
+    pop {r0-r5, r12, pc}
+/* Each build stores type 0x22 for each of the five stack rows. */
+.section .rodata
+menu_settings_types:
+    .rept GRKIT_SUBMENU_ROWS
+    .byte 0x22
+    .endr
+.text
 
 /* The entry of a value page method: r0 is the page, r1 and r2 the arguments.
    The C function gets r1, r2, and the row of the setting. It returns 0 for
