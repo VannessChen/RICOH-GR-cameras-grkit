@@ -1,3 +1,20 @@
+## 1.3.0 (2026-10-27)
+
+### Features
+
+- Updates keep your settings and effects: delete the old SCRIPT folder and copy the new one, or update on grkit.app, which also keeps those of GRKit 1.2.
+- Date Imprint has a Position setting: Upright keeps the date at the bottom right of vertical photos.
+- Image Control in GRKit is now called Film Look.
+- Framing keeps a 3:2 viewfinder for every ratio, and can show a black mask or frame lines and hide its label.
+- Grain has a Size setting: Auto (by ISO), Small, Medium, or Large.
+- Guides can be white or yellow, opaque, and shown while DISP hides the camera information.
+- All GRKit settings are now in MENU, at the end of the Customize tab, where you turn features and their options on or off at once.
+- In Chrome or Edge on a computer, grkit.app installs, updates, and uninstalls GRKit directly on the SD card.
+
+### Fixes
+
+- The highlight warning shows the brightest areas again while a Film Look effect is on.
+
 ## 1.2.1 (2026-10-24)
 
 ### Fixes
