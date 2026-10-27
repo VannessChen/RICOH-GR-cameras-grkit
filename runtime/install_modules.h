@@ -164,6 +164,20 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
             if (pages[k].setting != GRM_NO_SETTING &&
                 (core_rows ? pages[k].setting != GRKIT_CORE_TONE : handle_values(pages[k].setting) != pages[k].rows))
                 status = GRM_BAD_DESCRIPTOR;
+            /* A settings row of a used setting needs a value text for each
+               value of that setting. */
+            const u8 *page = grm_code_at(&module, module_code, code_base, pages[k].address, GRM_PAGE);
+            u32 rows = page ? grm_word(page + GRM_PAGE_SETTING_ROWS_AT) : 0;
+            const u8 *list = rows ? grm_code_at(&module, module_code, code_base, grm_word(page + GRM_PAGE_SETTINGS_AT), rows * GRM_ROW) : 0;
+            for (u32 r = 1; !status && list && r < rows; ++r) {
+                const u8 *row = list + r * GRM_ROW;
+                u32 named = grm_word(row + GRM_ROW_SETTING_AT), handle = module_handle(i, use_handles, named);
+                if (!(named & GRM_USED) || handle == GRM_NO_SETTING) continue;
+                u32 values = handle_values(handle);
+                if (!values || values > GRM_SETTING_ROW_VALUES ||
+                    !grm_texts(&module, module_code, code_base, grm_word(row + GRM_ROW_VALUES_AT), values * GRM_LANGUAGES))
+                    status = GRM_BAD_DESCRIPTOR;
+            }
         }
         for (u32 k = 0; !status && k < layer_count; ++k)
             if (layers[k].setting != GRM_NO_SETTING) {
@@ -190,12 +204,20 @@ static int install_modules(u32 code, u32 array, u32 pixels, const u32 *icon_base
         copy(at(code_base), module_code, module.code_size);
         /* The native settings rows of each page get absolute setting handles
            (runtime/modules.h): row 0 the page setting, the others settings of
-           the module. */
+           the module or used settings. A row of an optional used setting
+           that no module has is left out, and the rows after it move up. */
         for (u32 k = 0; k < page_count; ++k) {
-            u32 rows = word(pages[k].address + GRM_PAGE_SETTING_ROWS_AT), list = word(pages[k].address + GRM_PAGE_SETTINGS_AT);
-            for (u32 r = 0; r < rows && pages[k].setting != GRM_NO_SETTING; ++r)
-                store(list + r * GRM_ROW + GRM_ROW_SETTING_AT,
-                      r ? module_handle(i, use_handles, word(list + r * GRM_ROW + GRM_ROW_SETTING_AT)) : pages[k].setting);
+            u32 rows = word(pages[k].address + GRM_PAGE_SETTING_ROWS_AT), list = word(pages[k].address + GRM_PAGE_SETTINGS_AT), kept = 0;
+            if (pages[k].setting == GRM_NO_SETTING) continue;
+            for (u32 r = 0; r < rows; ++r) {
+                u32 row = list + r * GRM_ROW, to = list + kept * GRM_ROW;
+                u32 handle = r ? module_handle(i, use_handles, word(row + GRM_ROW_SETTING_AT)) : pages[k].setting;
+                if (handle == GRM_NO_SETTING) continue;
+                for (u32 w = 0; to != row && w < GRM_ROW; w += 4) store(to + w, word(row + w));
+                store(to + GRM_ROW_SETTING_AT, handle);
+                ++kept;
+            }
+            if (kept != rows) store(pages[k].address + GRM_PAGE_SETTING_ROWS_AT, kept);
         }
         copy(at(data_base), module_data, module.data_size);
         zero(at(data_base + module.data_size), module.bss_size);

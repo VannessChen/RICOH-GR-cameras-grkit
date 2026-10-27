@@ -36,14 +36,14 @@ typedef unsigned int u32;
 #define STATE_PATH CARD "/GRKIT/STATE.TXT"
 #define MODULES_PATH CARD "/GRKIT/MODULES"
 #define LEGACY_EFFECTS_PATH CARD "/SCRIPT/PLUGINS/EFFECTS"
-#define CORE_STATE_IDS 861965461, 484706023, 790270076
+#define CORE_STATE_IDS 861965461, 484706023, 790270076, 977751003
 #define PARAMETER_KEY_BASE 990000000U
 #define STATE_TEXT_MAX 16384U
 #define POINT_VIEWFINDER_OVERLAY 0x4U
 #define POINT_MENU_PAGE 0x1U
 #define POINT_PICTURE_ENCODE 0x10U
-static const char *const core_setting_names[] = {"CORE.TONE", "CORE.ASPECT", "CORE.GRAIN"};
-static const u32 core_setting_points[] = {0x12, 0xc, 0x20};
+static const char *const core_setting_names[] = {"CORE.TONE", "CORE.ASPECT", "CORE.GRAIN", "CORE.GRAIN_SIZE"};
+static const u32 core_setting_points[] = {0x12, 0xc, 0x20, 0x40};
 /* The tail of the core, and its one export, overlay_label. */
 #define TAIL 0x54000000U
 #define TAIL_SYMBOL 0U
@@ -259,6 +259,9 @@ struct spec {
     u32 layer_count, filter_count;
     struct { u32 order, flags, setting; } layers[SPEC_ITEMS];
     struct { u32 stage, setting; } filters[SPEC_ITEMS];
+    /* A choice page of own setting 0 with these native settings rows: row 0
+       is setting 0, the others an own setting n or GRM_USED | used n. */
+    u32 page_rows, rows[SPEC_ITEMS];
 };
 static u32 code_words[GRM_MAX_SEGMENT / 4], code_count, relocations[256], relocation_count;
 static u32 emit(u32 value)
@@ -324,15 +327,36 @@ static u32 add_module(const char *folder, const char *file, const struct spec *s
         filter_at[k] = emit(GRM_FILTER); emit(s->filters[k].stage); emit(s->filters[k].setting);
         emit_pointer(apply[k], 1);
     }
+    /* The page: one text for each language and value, 32 at most, and a
+       blank tile for each value of setting 0. */
+    u32 page_at = 0, tiles_at = 0, tile_count = s->page_rows ? s->settings[0].values : 0;
+    if (s->page_rows) {
+        static const u16 hi[] = {'H', 'i', 0};
+        u32 text = emit(0), texts, row_list;
+        emit(0);
+        memcpy(&code_words[text], hi, sizeof hi);
+        texts = code_count;
+        for (u32 k = 0; k < 32; ++k) emit_pointer(text, 0);
+        row_list = code_count;
+        for (u32 r = 0; r < s->page_rows; ++r) {
+            emit(GRM_ROW); emit(r ? s->rows[r] : 0); emit_pointer(texts, 0); emit_pointer(texts, 0);
+        }
+        page_at = emit(GRM_PAGE); emit(GRM_PAGE_CHOICE); emit(0); emit(0);
+        emit_pointer(texts, 0); emit_pointer(texts, 0); emit_pointer(texts, 0);
+        emit(tile_count); emit(s->page_rows); emit_pointer(row_list, 0);
+        tiles_at = code_count;
+        for (u32 k = 0; k < tile_count * GRM_TILE_BYTES / 4; ++k) emit(0);
+    }
     u32 registrations = code_count;
     for (u32 k = 0; k < s->layer_count; ++k) { emit(GRM_POINT_OVERLAY_LAYER); emit_pointer(layer_at[k], 0); }
     for (u32 k = 0; k < s->filter_count; ++k) { emit(GRM_POINT_PICTURE_PLANE); emit_pointer(filter_at[k], 0); }
+    if (s->page_rows) { emit(GRM_POINT_MENU_PAGE); emit_pointer(page_at, 0); }
     u32 descriptor = emit(GRM_DESCRIPTOR);
     emit(abi);
-    emit_list(registrations, s->layer_count + s->filter_count);
+    emit_list(registrations, s->layer_count + s->filter_count + (s->page_rows ? 1 : 0));
     emit_list(setting_list, settings);
     emit_list(use_list, uses);
-    emit_list(0, 0);
+    emit_list(tiles_at, tile_count);
 
     u32 names = 0;
     for (u32 k = 0; k < imports; ++k) names += (u32)strlen(s->imports[k]) + 1;
@@ -644,6 +668,33 @@ static void the_module_list_shows_each_result(void)
     assert(capabilities_used == (capabilities_running | 1U << (GRKIT_CORE_GRAIN - GRKIT_CORE_SETTING_BASE)));
 }
 
+/* A settings row of a used setting gets the handle of that setting. A row of
+   an optional used setting that no module has is left out. */
+static void settings_rows_of_used_settings(void)
+{
+    reset();
+    const struct spec grain = {.id = "GRAIN", .order = 1,
+                               .settings = {{"LEVEL", 2, GRM_SETTING_SAVED}, {"TONE", 3, GRM_SETTING_SAVED}},
+                               .uses = {"?OTHER.SIZE", "CORE.GRAIN"},
+                               .page_rows = 4, .rows = {0, GRM_USED | 0, GRM_USED | 1, 1}};
+    add_module(PACKAGE_MODULES_PATH, "GRAIN.GRM", &grain);
+    assert(install() == 0 && module_status[0] == 0 && module_page_count == 1);
+    u32 page = module_pages[0], list = word(page + GRM_PAGE_SETTINGS_AT);
+    assert(module_pages[1] == 0 && word(page + GRM_PAGE_SETTING_ROWS_AT) == 3);
+    static const u32 handles[] = {0, GRKIT_CORE_GRAIN, 1};
+    for (u32 r = 0; r < 3; ++r) {
+        assert(word(list + r * GRM_ROW) == GRM_ROW && word(list + r * GRM_ROW + GRM_ROW_SETTING_AT) == handles[r]);
+        assert(word(list + r * GRM_ROW + GRM_ROW_LABEL_AT) == word(page + GRM_PAGE_TITLE_AT));
+    }
+    assert(capabilities_used == 1U << (GRKIT_CORE_GRAIN - GRKIT_CORE_SETTING_BASE));
+    /* A row of a used setting that the module does not use is not valid. */
+    reset();
+    struct spec bad = grain;
+    bad.rows[1] = GRM_USED | 2;
+    add_module(PACKAGE_MODULES_PATH, "GRAIN.GRM", &bad);
+    assert(install() == 0 && module_status[0] == GRM_BAD_DESCRIPTOR);
+}
+
 static void *run(void *unused)
 {
     (void)unused;
@@ -655,6 +706,7 @@ static void *run(void *unused)
     install_writes_the_settings_and_the_contexts();
     layers_follow_their_order_and_filters_their_stage();
     the_module_list_shows_each_result();
+    settings_rows_of_used_settings();
     reset();
     return 0;
 }

@@ -3,3 +3,7 @@ rows = ["Off", "Weak", "Medium", "Strong"]
 
 [settings."CORE.GRAIN"]
 label = "Strength"
+
+[settings."CORE.GRAIN_SIZE"]
+label = "Size"
+values = ["Auto", "Small", "Medium", "Large"]

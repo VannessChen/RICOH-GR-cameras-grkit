@@ -10,7 +10,7 @@ The official modules in `modules/` are complete examples:
 | `modules/guides` | an own setting, a choice page, and a layer |
 | `modules/framing` | a page and two layers of a capability, `CORE.ASPECT` |
 | `modules/date` | two settings, a page with a native settings page, and a plane filter |
-| `modules/grain` | a module with only data: a page of `CORE.GRAIN` |
+| `modules/grain` | a module with only data: a page of `CORE.GRAIN` with a row of `CORE.GRAIN_SIZE` |
 | `modules/film-look` | a page of `CORE.TONE`, whose rows the core gives |
 
 ## Prerequisites
@@ -184,4 +184,4 @@ period <number> frames <live-view frames>
 <MODULE> <paint|filter|call> <calls> <cycles> <cycles of the largest call>
 ```
 
-The core points are the live-view canvas (`frame.bind`, `frame.prepare`, `frame.paint`), the picture (`picture.post`, `picture.encode`), and `menu.icon`. `frame.paint` includes the module layers, and `picture.encode` includes the plane filters. The profile does not count the Image Control processing of each frame. It writes the card every 10 seconds, so do not use it to measure battery life.
+The core points are the live-view canvas (`frame.bind`, `frame.prepare`, `frame.paint`), the picture (`picture.post`, `picture.encode`, and on GR III `picture.grain`, the grain noise of a GRKit shot), and `menu.icon`. `picture.grain` counts microseconds instead of cycles. `frame.paint` includes the module layers, and `picture.encode` includes the plane filters. The profile does not count the Image Control processing of each frame. It writes the card every 10 seconds, so do not use it to measure battery life.

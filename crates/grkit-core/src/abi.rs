@@ -160,19 +160,21 @@ fields!(HEADER_FIELDS {
     HOST_FRAME_CANVAS = 232, 4;
     /// Bitmap of the last Framing paint, or 0 when nothing is drawn.
     HOST_FRAME_BITMAP = 236, 4;
-    /// Number of paints without a bitmap. A diagnostic.
-    HOST_FRAME_SKIPPED = 240, 4;
+    /// Grain size, the capability CORE.GRAIN_SIZE: 0 Auto (the ISO of the
+    /// shot), 1 small, 2 medium, 3 large.
+    HOST_GRAIN_SIZE = 240, 4;
     /// Live-view-only override: 0 none, 1 native processing, else an owned record.
     HOST_PREVIEW = 244, 4;
-    /// Record applied by the last non-live-view parameter build, or 0. A
-    /// diagnostic: capture metadata and the encode read the shot ring.
-    HOST_STILL = 248, 4;
+    /// The grain of the shot whose grain stage was set up last: 0 the native
+    /// noise, else the size 1 small, 2 medium, 3 large. The GR III noise fill
+    /// reads it (runtime/picture.c).
+    HOST_GRAIN_SHOT = 248, 4;
     /// Return to GRKit Image Control after the native parameter page: 1 opening,
     /// 2 away. 3: ADJ exited from GRKit, so the next ADJ opens GRKit. 4: MENU
     /// or OK on GRKit passed the event that closes ADJ to the native list.
     HOST_RETURN = 252, 4;
     /// Number of changes of the saved selections: the effect, CORE.ASPECT,
-    /// CORE.GRAIN, the Fn adjustments, and the module settings
+    /// CORE.GRAIN, CORE.GRAIN_SIZE, the Fn adjustments, and the module settings
     /// (GRKIT_STATE_CHANGED). The resident loader polls only this word and
     /// saves the state file after it changes.
     HOST_STATE_CHANGES = 256, 4;
@@ -328,13 +330,14 @@ pub const PROFILE_SLOTS: usize = MODULE_SLOTS * PROFILE_MODULE_SIZE;
 pub const PROFILE_SLOT_SIZE: usize = 12;
 /// The core points, in slot order: the name in the profile file, and the C
 /// name of the slot without the `GRKIT_PROFILE_` prefix.
-pub const PROFILE_POINTS: [(&str, &str); 6] = [
+pub const PROFILE_POINTS: [(&str, &str); 7] = [
     ("frame.bind", "FRAME_BIND"),
     ("frame.prepare", "FRAME_PREPARE"),
     ("frame.paint", "FRAME_PAINT"),
     ("picture.post", "PICTURE_POST"),
     ("picture.encode", "PICTURE_ENCODE"),
     ("menu.icon", "MENU_ICON"),
+    ("picture.grain", "PICTURE_GRAIN"),
 ];
 /// The module kinds, in slot order: a layer paint, a plane filter, and an
 /// event handler, timer, or UI callback in the App task.

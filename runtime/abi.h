@@ -149,19 +149,21 @@
 #define GRKIT_HOST_FRAME_CANVAS 232
 /* Bitmap of the last Framing paint, or 0 when nothing is drawn. */
 #define GRKIT_HOST_FRAME_BITMAP 236
-/* Number of paints without a bitmap. A diagnostic. */
-#define GRKIT_HOST_FRAME_SKIPPED 240
+/* Grain size, the capability CORE.GRAIN_SIZE: 0 Auto (the ISO of the shot), 1
+   small, 2 medium, 3 large. */
+#define GRKIT_HOST_GRAIN_SIZE 240
 /* Live-view-only override: 0 none, 1 native processing, else an owned record. */
 #define GRKIT_HOST_PREVIEW 244
-/* Record applied by the last non-live-view parameter build, or 0. A
-   diagnostic: capture metadata and the encode read the shot ring. */
-#define GRKIT_HOST_STILL 248
+/* The grain of the shot whose grain stage was set up last: 0 the native noise,
+   else the size 1 small, 2 medium, 3 large. The GR III noise fill reads it
+   (runtime/picture.c). */
+#define GRKIT_HOST_GRAIN_SHOT 248
 /* Return to GRKit Image Control after the native parameter page: 1 opening, 2
    away. 3: ADJ exited from GRKit, so the next ADJ opens GRKit. 4: MENU or OK
    on GRKit passed the event that closes ADJ to the native list. */
 #define GRKIT_HOST_RETURN 252
 /* Number of changes of the saved selections: the effect, CORE.ASPECT,
-   CORE.GRAIN, the Fn adjustments, and the module settings
+   CORE.GRAIN, CORE.GRAIN_SIZE, the Fn adjustments, and the module settings
    (GRKIT_STATE_CHANGED). The resident loader polls only this word and saves
    the state file after it changes. */
 #define GRKIT_HOST_STATE_CHANGES 256
@@ -209,7 +211,7 @@
    of values. CORE.TONE has neither: its value is the active record, and the
    effects give its number of values (runtime/tone.h). */
 #define GRKIT_CORE_SETTING_BASE 0x100U
-#define GRKIT_CORE_SETTING_COUNT 3U
+#define GRKIT_CORE_SETTING_COUNT 4U
 #define GRKIT_CORE_TONE 0x100U
 #define GRKIT_CORE_TONE_VALUES 0U
 #define GRKIT_CORE_TONE_BIT 0x1
@@ -219,8 +221,11 @@
 #define GRKIT_CORE_GRAIN 0x102U
 #define GRKIT_CORE_GRAIN_VALUES 4U
 #define GRKIT_CORE_GRAIN_BIT 0x4
-#define GRKIT_CORE_SETTING_WORDS 0,208,48
-#define GRKIT_CORE_SETTING_VALUES 0,7,4
+#define GRKIT_CORE_GRAIN_SIZE 0x103U
+#define GRKIT_CORE_GRAIN_SIZE_VALUES 4U
+#define GRKIT_CORE_GRAIN_SIZE_BIT 0x8
+#define GRKIT_CORE_SETTING_WORDS 0,208,48,240
+#define GRKIT_CORE_SETTING_VALUES 0,7,4,4
 
 /* An Image Control record. The records follow the header. */
 #define GRKIT_RECORD_SIZE 0x1100
@@ -364,13 +369,13 @@
    cycles, and the cycles of the largest call. The core points come first, then
    GRKIT_PROFILE_KINDS slots for each module slot. */
 #define GRKIT_PROFILE 182408
-#define GRKIT_PROFILE_SIZE 488
+#define GRKIT_PROFILE_SIZE 500
 #define GRKIT_PROFILE_MODULE_SIZE 16
 #define GRKIT_PROFILE_NAME_BYTES 8
 #define GRKIT_PROFILE_SLOTS 128
 #define GRKIT_PROFILE_SLOT_SIZE 12
-#define GRKIT_PROFILE_SLOT_COUNT 30
-#define GRKIT_PROFILE_MODULE_BASE 6
+#define GRKIT_PROFILE_SLOT_COUNT 31
+#define GRKIT_PROFILE_MODULE_BASE 7
 #define GRKIT_PROFILE_KINDS 3
 #define GRKIT_PROFILE_FRAME_BIND 0
 #define GRKIT_PROFILE_FRAME_PREPARE 1
@@ -378,11 +383,12 @@
 #define GRKIT_PROFILE_PICTURE_POST 3
 #define GRKIT_PROFILE_PICTURE_ENCODE 4
 #define GRKIT_PROFILE_MENU_ICON 5
+#define GRKIT_PROFILE_PICTURE_GRAIN 6
 #define GRKIT_PROFILE_PAINT 0
 #define GRKIT_PROFILE_FILTER 1
 #define GRKIT_PROFILE_CALL 2
 /* Everything after the records: the script array must hold it. */
-#define GRKIT_TAIL_SIZE 182896
+#define GRKIT_TAIL_SIZE 182908
 #define GRKIT_TEXT_SUMMARY 8192
 /* The parameter page title of a GRKit session, after the summaries: the page,
    its vtable, and the descriptor of the effect name. */

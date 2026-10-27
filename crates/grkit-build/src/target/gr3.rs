@@ -7,7 +7,7 @@ use super::Family;
 use crate::components::{
     b, bl, HookSpec,
     Part::{Framing, Menu, Processing},
-    Point::{MenuPage, PipelineGrain, Tuning},
+    Point::{MenuPage, PipelineGrain, PipelineGrainSize, Tuning},
 };
 
 pub const FAMILY: Family = Family {
@@ -49,8 +49,10 @@ const ICONS: &[HookSpec] = &[
 ];
 
 /// DigitalFilterProcess SetEffectParameter: the Particle load, then the BL to
-/// the stage gate.
+/// the stage gate. The granulation: the BL to its noise fill, which gives
+/// CORE.GRAIN_SIZE.
 const GRAIN: &[HookSpec] = &[
     bl("grain_particle", Framing, PipelineGrain),
     bl("grain_gate", Framing, PipelineGrain),
+    bl("grain_fill", Framing, PipelineGrainSize),
 ];

@@ -38,7 +38,7 @@ Photo: [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/
 - **Framing:** select XPan, 2.35:1, 16:9, 4:3, 5:4, or 1:1. Each ratio sets the native aspect ratio to 3:2, and the viewfinder dims the area outside the photo. Another aspect ratio in the camera menu pauses Framing. DNG files keep the full sensor image and record the crop. A raw converter that applies the recorded crop shows only the photo area.
 - **Guides:** select a guide style. Press Fn to set the color, the opacity, and whether the lines also show while DISP hides the shooting information. The lines show only in the viewfinder.
 - **Date Imprint:** select a date style. Press Fn to set **Date Style** and **Date Font**, the digits: Classic, GR1s, or GR II. Photos get the date at the bottom right.
-- **Grain:** select Weak, Medium, or Strong. Only photos get the grain.
+- **Grain:** select Weak, Medium, or Strong. Press Fn to set **Size**: Auto (by ISO), Small, Medium, or Large. Only photos get the grain.
 
 Press MENU to go back one level. GRKit keeps your settings after power-off.
 

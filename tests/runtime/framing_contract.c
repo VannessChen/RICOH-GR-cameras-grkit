@@ -199,7 +199,6 @@ static void assert_rejected(void)
 {
     framing_paint(TEST_CANVAS, TEST_BITMAP);
     assert_untouched();
-    assert(header[GRKIT_HOST_FRAME_SKIPPED/4]==1);
 }
 /* A field of the label table. */
 static u32 table_field(u32 at,u32 bytes)
@@ -773,7 +772,6 @@ int main(void)
     framing_bind(TEST_OWNER);
     framing_paint(TEST_CANVAS,TEST_BITMAP);
     assert_untouched();
-    assert(header[GRKIT_HOST_FRAME_SKIPPED/4]==1);
     /* Each other display shows it. */
     for(u32 mode=DISPLAY_FULL; mode<DISPLAY_OFF; ++mode) {
         reset_cue(1000);

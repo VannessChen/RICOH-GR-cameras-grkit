@@ -7,7 +7,7 @@
 //! uses its setting. The resident loader saves the value as the state key
 //! `CORE.<KEY>`, and restores it only while a loaded module uses it.
 
-use crate::abi::{HOST_FRAME_RATIO, HOST_GRAIN};
+use crate::abi::{HOST_FRAME_RATIO, HOST_GRAIN, HOST_GRAIN_SIZE};
 
 /// An extension point: the firmware changes that a group of features needs.
 /// The installer applies the patches of a point only when a loaded module
@@ -27,16 +27,20 @@ pub enum Point {
     PictureEncode,
     /// The native grain stage of recorded pictures.
     PipelineGrain,
+    /// The grain size: the native size on GR IV, and the noise fill of the
+    /// grain stage on GR III.
+    PipelineGrainSize,
 }
 
 impl Point {
-    pub const ALL: [Point; 6] = [
+    pub const ALL: [Point; 7] = [
         Point::MenuPage,
         Point::Tuning,
         Point::ViewfinderOverlay,
         Point::CaptureAspect,
         Point::PictureEncode,
         Point::PipelineGrain,
+        Point::PipelineGrainSize,
     ];
 
     pub fn name(self) -> &'static str {
@@ -47,6 +51,7 @@ impl Point {
             Point::CaptureAspect => "capture.aspect",
             Point::PictureEncode => "picture.encode",
             Point::PipelineGrain => "pipeline.grain",
+            Point::PipelineGrainSize => "pipeline.grain-size",
         }
     }
 
@@ -93,7 +98,7 @@ impl Capability {
 }
 
 /// The capabilities in handle order.
-pub const CAPABILITIES: [Capability; 3] = [
+pub const CAPABILITIES: [Capability; 4] = [
     Capability {
         // The effect of still pictures and the live view: 0 Off, then effect
         // n - 1 of the installed effects (runtime/tone.h). The core gives
@@ -122,6 +127,14 @@ pub const CAPABILITIES: [Capability; 3] = [
         values: 4,
         state: State::Word(HOST_GRAIN),
         points: &[Point::PipelineGrain],
+    },
+    Capability {
+        // The grain size: 0 Auto, which follows the ISO of the shot, then 1
+        // small, 2 medium, 3 large (runtime/picture.S).
+        key: "GRAIN_SIZE",
+        values: 4,
+        state: State::Word(HOST_GRAIN_SIZE),
+        points: &[Point::PipelineGrainSize],
     },
 ];
 

@@ -59,7 +59,7 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     assert!(header.contains("#define RTOS_IDENTITY 0x53002038U\n#define RTOS_IDENTITY_COUNT 0U\n"));
     assert_eq!(
         sha256(header.as_bytes()),
-        "613d8f080fcbb424ff900ee221cd1893bfd78b8474a8a79aeeee20741120c514"
+        "1a20869a7be191ac22770ddeae309cbfaed94f65234058e3517d3f93b3909b74"
     );
     Ok(())
 }
@@ -112,12 +112,13 @@ fn generated_header_gives_the_points_of_each_patch() -> Result<()> {
     // Code in the tail belongs to no extension point.
     assert!(header.contains("static const u32 patch_points[] = {0x0};"));
     // CORE.TONE needs the tuning and picture encode points (bits 1 and 4),
-    // CORE.ASPECT the overlay and capture aspect points (bits 2 and 3), and
-    // CORE.GRAIN the grain point (bit 5).
+    // CORE.ASPECT the overlay and capture aspect points (bits 2 and 3),
+    // CORE.GRAIN the grain point (bit 5), and CORE.GRAIN_SIZE the grain size
+    // point (bit 6).
     assert!(header.contains(
-        "static const char *const core_setting_names[] = {\"CORE.TONE\",\"CORE.ASPECT\",\"CORE.GRAIN\"};"
+        "static const char *const core_setting_names[] = {\"CORE.TONE\",\"CORE.ASPECT\",\"CORE.GRAIN\",\"CORE.GRAIN_SIZE\"};"
     ));
-    assert!(header.contains("static const u32 core_setting_points[] = {0x12,0xc,0x20};"));
+    assert!(header.contains("static const u32 core_setting_points[] = {0x12,0xc,0x20,0x40};"));
     Ok(())
 }
 
@@ -152,7 +153,7 @@ fn production_scripts_and_activation_match_fixed_contracts() {
         ),
         (
             "SCRIPT/GRKIT/LOADER.TTL",
-            "cc064295d8d05469602c700a8febfb3fb441bb228393e46c7e597dcafdc53174",
+            "766fe83188a7725e005db38f6af8971aa2affc3d43b61ae33cde82a8f17c7f4e",
         ),
         (
             "SCRIPT/GRKIT/CORE.BIN",

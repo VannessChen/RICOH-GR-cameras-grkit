@@ -64,6 +64,21 @@ static volatile uint32_t *mapped_settings(uint32_t address)
 #define TEST_DATE_APPLY 0x5e000031U
 static void test_apply(uint32_t address, void *set, uint32_t value);
 #define MODULE_APPLY(address,set,value) test_apply(address,set,value)
+/* The GR III noise fill: the native fill writes 0x77, the allocator hands out
+   one block of the arena, and the timer count is a test value. */
+#define GRAIN_PLANE (ARENA + 0x400000)
+#define GRAIN_BLOCK (ARENA + 0x480000)
+static unsigned grain_native_fills, grain_allocations, grain_releases, grain_no_memory;
+static uint32_t grain_counter_value, grain_counter_step;
+#define GRAIN_NATIVE_FILL(buffer,size) (++grain_native_fills, memset(region((buffer), (size)), 0x77, (size)))
+#define GRAIN_ALLOCATE(size) (++grain_allocations, (void)region(GRAIN_BLOCK, (size)), grain_no_memory ? 0U : GRAIN_BLOCK)
+#define GRAIN_RELEASE(block) (assert((block) == GRAIN_BLOCK), ++grain_releases)
+#define GRAIN_MAP(address) ((u8 *)region((address), 1))
+/* Each read of the timer advances it by grain_counter_step. */
+#define GRAIN_COUNTER(high) (*(high) = 0, (grain_counter_value += grain_counter_step) - grain_counter_step)
+#define GRAIN_COUNTER_MHZ 24U
+#define TEST_PROFILE (ARENA + 0x4f0000)
+#define PROFILE_MAP(address) ((volatile u32 *)region((address), 4))
 #include "picture.c"
 
 static volatile u32 header[GRKIT_HOST_HEADER_SIZE / 4];
@@ -212,8 +227,149 @@ static struct box changes(uint32_t index, int mono)
     return b;
 }
 
+#ifdef GRAIN_FILL_PITCH
+/* An independent model of the fill: four xorshift128 generators seeded with
+   splitmix32, then a 2D binomial filter with the edge samples repeated. */
+static uint32_t ref_mix(uint32_t *x)
+{
+    uint32_t z = (*x += 0x9e3779b9U);
+    z = (z ^ (z >> 16)) * 0x85ebca6bU;
+    z = (z ^ (z >> 13)) * 0xc2b2ae35U;
+    return z ^ (z >> 16);
+}
+static void ref_random(uint8_t *plane, uint32_t pitch, uint32_t height, uint32_t seed)
+{
+    uint32_t a[4], b[4], c[4], d[4];
+    for (int i = 0; i < 4; ++i) { a[i] = ref_mix(&seed); b[i] = ref_mix(&seed); c[i] = ref_mix(&seed); d[i] = ref_mix(&seed) | 1U; }
+    for (uint32_t y = 0; y < height; ++y)
+        for (uint32_t x = 0; x < pitch; x += 16)
+            for (int i = 0; i < 4; ++i) {
+                uint32_t t = a[i] ^ (a[i] << 11);
+                a[i] = b[i]; b[i] = c[i]; c[i] = d[i];
+                d[i] = d[i] ^ (d[i] >> 19) ^ t ^ (t >> 8);
+                memcpy(plane + y * pitch + x + 4 * i, &d[i], 4);
+            }
+}
+static void ref_blur(const uint8_t *in, uint8_t *out, uint32_t pitch, uint32_t height, uint32_t taps)
+{
+    static const int k3[3] = {1, 2, 1}, k5[5] = {1, 4, 6, 4, 1};
+    const int *k = taps == 3 ? k3 : k5, half = (int)taps / 2, mean = 128 * (taps == 3 ? 16 : 256);
+    const int gain = taps == 3 ? 5461 : 468;
+    for (int y = 0; y < (int)height; ++y)
+        for (int x = 0; x < (int)pitch; ++x) {
+            int sum = 0;
+            for (int j = -half; j <= half; ++j)
+                for (int i = -half; i <= half; ++i) {
+                    int yy = y + j < 0 ? 0 : y + j > (int)height - 1 ? (int)height - 1 : y + j;
+                    int xx = x + i < 0 ? 0 : x + i > (int)pitch - 1 ? (int)pitch - 1 : x + i;
+                    sum += k[j + half] * k[i + half] * in[yy * pitch + xx];
+                }
+            int v = 128 + ((2 * (sum - mean) * gain + 32768) >> 16);
+            out[y * pitch + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
+        }
+}
+/* Mean, standard deviation, and the correlation of horizontal neighbours. */
+static void grain_stats(const uint8_t *p, uint32_t n, double *mean, double *std, double *corr)
+{
+    double s = 0, ss = 0, c = 0;
+    for (uint32_t i = 0; i < n; ++i) { s += p[i]; ss += (double)p[i] * p[i]; }
+    *mean = s / n;
+    *std = ss / n - *mean * *mean;
+    for (uint32_t i = 0; i + 1 < n; ++i) c += (p[i] - *mean) * (p[i + 1] - *mean);
+    *corr = c / (n - 1) / *std;
+    *std = __builtin_sqrt(*std);
+}
+static void grain_contract(void)
+{
+    enum { PITCH = 1024, HEIGHT = 64, SIZE = PITCH * HEIGHT };
+    static uint8_t want[SIZE], noise[SIZE];
+    uint8_t *plane = region(GRAIN_PLANE, SIZE);
+    double mean, std, corr;
+    grain_counter_value = 0x12345678U;
+    /* The native noise for a shot without GRKit grain, and for a plane that
+       the fill cannot take. */
+    for (int c = 0; c < 4; ++c) {
+        static const uint32_t shot[4] = {0, 4, 2, 2}, pitch[4] = {PITCH, PITCH, 1000, PITCH}, size[4] = {SIZE, SIZE, 1000 * HEIGHT, SIZE - 1};
+        header[GRKIT_HOST_GRAIN_SHOT / 4] = shot[c];
+        grain_native_fills = 0;
+        grain_noise(GRAIN_PLANE, size[c], pitch[c], HEIGHT);
+        assert(grain_native_fills == 1 && plane[0] == 0x77);
+    }
+    /* Small: one random byte each, the same bytes as the model, which are
+       uniform and unrelated to their neighbours. */
+    header[GRKIT_HOST_GRAIN_SHOT / 4] = 1;
+    grain_native_fills = grain_allocations = 0;
+    grain_noise(GRAIN_PLANE, SIZE, PITCH, HEIGHT);
+    ref_random(noise, PITCH, HEIGHT, 0x12345678U);
+    assert(!grain_native_fills && !grain_allocations && !memcmp(plane, noise, SIZE));
+    grain_stats(plane, SIZE, &mean, &std, &corr);
+    assert(mean > 126 && mean < 129 && std > 72 && std < 76 && corr > -0.02 && corr < 0.02);
+    /* Another timer count gives another pattern. */
+    grain_counter_value = 0x12345679U;
+    grain_noise(GRAIN_PLANE, SIZE, PITCH, HEIGHT);
+    assert(memcmp(plane, noise, SIZE));
+    /* Medium and large: the model's filter of the same random bytes, with
+       about the standard deviation of one random byte and wider grain. */
+    for (uint32_t shot = 2; shot <= 3; ++shot) {
+        uint32_t taps = shot == 2 ? 3 : 5;
+        header[GRKIT_HOST_GRAIN_SHOT / 4] = shot;
+        grain_allocations = grain_releases = 0;
+        grain_noise(GRAIN_PLANE, SIZE, PITCH, HEIGHT);
+        assert(grain_allocations == 1 && grain_releases == 1);
+        ref_random(noise, PITCH, HEIGHT, 0x12345679U);
+        ref_blur(noise, want, PITCH, HEIGHT, taps);
+        assert(!memcmp(plane, want, SIZE));
+        grain_stats(plane, SIZE, &mean, &std, &corr);
+        assert(mean > 125 && mean < 131 && std > 66 && std < 76);
+        assert(taps == 3 ? corr > 0.6 && corr < 0.72 : corr > 0.74 && corr < 0.84);
+    }
+    /* A pitch that is not a multiple of 64, and fewer rows than taps: the
+       last generator steps and the edge rows. */
+    for (uint32_t shot = 1; shot <= 3; ++shot) {
+        static const uint32_t pitch = 48, rows[2] = {7, 2};
+        for (int h = 0; h < 2; ++h) {
+            uint32_t size = pitch * rows[h];
+            header[GRKIT_HOST_GRAIN_SHOT / 4] = shot;
+            grain_noise(GRAIN_PLANE, size, pitch, rows[h]);
+            ref_random(noise, pitch, rows[h], 0x12345679U);
+            if (shot == 1) assert(!memcmp(plane, noise, size));
+            else {
+                ref_blur(noise, want, pitch, rows[h], shot == 2 ? 3 : 5);
+                assert(!memcmp(plane, want, size));
+            }
+        }
+    }
+    /* The profile counts the microseconds of the generic timer: two reads
+       24000 ticks apart at 24 MHz are 1000 us. Without the profile, nothing
+       is counted. */
+    memset(region(TEST_PROFILE, GRKIT_PROFILE_SIZE), 0, GRKIT_PROFILE_SIZE);
+    volatile u32 *slot = PROFILE_MAP(TEST_PROFILE + GRKIT_PROFILE_SLOTS + GRKIT_PROFILE_PICTURE_GRAIN * GRKIT_PROFILE_SLOT_SIZE);
+    header[GRKIT_HOST_GRAIN_SHOT / 4] = 3;
+    grain_counter_step = 24000;
+    grain_noise(GRAIN_PLANE, SIZE, PITCH, HEIGHT);
+    assert(slot[0] == 0);
+    header[GRKIT_HOST_PROFILE / 4] = TEST_PROFILE;
+    grain_noise(GRAIN_PLANE, SIZE, PITCH, HEIGHT);
+    assert(slot[0] == 1 && slot[1] == 1000 && slot[2] == 1000);
+    header[GRKIT_HOST_PROFILE / 4] = 0;
+    grain_counter_step = 0;
+    grain_counter_value = 0x12345679U;
+    /* Without memory for the row sums, a larger size gives small grain. */
+    grain_no_memory = 1;
+    grain_releases = 0;
+    grain_noise(GRAIN_PLANE, SIZE, PITCH, HEIGHT);
+    ref_random(noise, PITCH, HEIGHT, 0x12345679U);
+    assert(!grain_releases && !memcmp(plane, noise, SIZE));
+    grain_no_memory = 0;
+    header[GRKIT_HOST_GRAIN_SHOT / 4] = 0;
+}
+#endif
+
 int main(void)
 {
+#ifdef GRAIN_FILL_PITCH
+    grain_contract();
+#endif
     static const short identity[9] = {8192, 0, 0, 0, 8192, 0, 0, 0, 8192};
     /* Native records and GRFX0001 records keep the native matrix bits. */
     reset();

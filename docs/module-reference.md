@@ -63,7 +63,7 @@ A setting reference in `page`, `layers`, or `filters` is a key of `settings`, or
 | --- | --- | --- | --- |
 | `setting` | string | required | The setting of the page: a setting reference. |
 | `off_row` | boolean | `false` | Row 0 shows the Off icon instead of tile 0. |
-| `settings` | array of strings | `[]` | The rows of a native settings page: the page setting, then keys of `settings`. Give 0 to 5 keys (`GRKIT_SETTING_ROWS`). With one key, the page setting alone, the row gets a label of its own, and Fn opens no settings page. |
+| `settings` | array of strings | `[]` | The rows of a native settings page: the page setting, then keys of `settings` or names of `uses`. Give 0 to 5 keys (`GRKIT_SETTING_ROWS`). The row of an optional used setting that no module has is left out. With one key, the page setting alone, the row gets a label of its own, and Fn opens no settings page. |
 | `options` | boolean | `false` | The settings page of the module in the GRKit section of MENU has an Options row, which turns each value of the page on or off in ADJ, or each effect for a page of `CORE.TONE` (`GRKIT_CHOICE_OPTIONS`). A page of a setting with options needs `off_row` and at most 16 values. Without room on the settings page, its first rows leave it. |
 
 A page of `CORE.TONE` has no `off_row` and no `settings`, and it needs no tiles. Its text has only `title`.
@@ -158,6 +158,7 @@ The capabilities are public settings of the core. A module uses one by its name 
 | `CORE.TONE` | 0 Off, then n + 1 for installed effect n | The effect of still pictures and the live view. The core installs the effects only when a loaded module uses `CORE.TONE`. |
 | `CORE.ASPECT` | 7: 0 native 3:2, 1 XPan 65:24, 2 16:9, 3 4:3, 4 2.35:1, 5 1:1, 6 5:4 | The aspect of still pictures. |
 | `CORE.GRAIN` | 4: 0 Off, 1 weak, 2 medium, 3 strong | The grain of recorded pictures, in the native grain stage. The live view and DNG files have no grain. |
+| `CORE.GRAIN_SIZE` | 4: 0 Auto, 1 small, 2 medium, 3 large | The grain size of recorded pictures. Auto follows the ISO of the shot. |
 
 - `CORE.TONE`: a page gives only its title, and the core gives the rows: the effects, their icons, the preview, and the Fn adjustments. The value of an effect is valid only during one start, because the effects and their order can change. Keep no value across a restart.
 - `CORE.ASPECT`: a page shows only the ratios that the camera offers. The core crops each ratio from the native 3:2, also a ratio that the camera has natively. A layer gets the crop in `Surface.area` and `Surface.box`. `setting_set` with a ratio that the camera does not offer does nothing.
@@ -176,7 +177,7 @@ A registration connects a part of the module to an extension point of the core. 
 
 A page is a choice page in ADJ: one row for each value of its setting. OK on a row sets the value. The root shows a page only if it has two rows or more, in the order of the modules, which ADJ Order in MENU can change. The installer rejects a page whose number of rows is not the number of values of its setting.
 
-A page of a setting of the module can also give 2 to 5 rows of a native settings page (`GRKIT_SETTING_ROWS`), as `modules/date` does. The first row is the page setting, and the others are settings of the module, with at most 8 values each. Fn in ADJ opens this page.
+A page of a setting of the module can also give 2 to 5 rows of a native settings page (`GRKIT_SETTING_ROWS`), as `modules/date` does. The first row is the page setting, and the others are settings of the module or used settings, with at most 8 values each. The text of a used setting gives its `values`. INSTALL leaves out the row of an optional used setting that no module has. Fn in ADJ opens this page.
 
 Each module also has a row in the GRKit section of MENU. It opens Enable, then the rows of the settings page, or the row of the page setting for a page without settings rows. See [GRKit section of MENU](architecture.md#grkit-section-of-menu).
 

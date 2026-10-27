@@ -186,6 +186,8 @@ const SITES: &[Site] = &[
     // gate (0x535131c0, plan +0x24).
     ("grain_particle", 0x535031b0, "9537d5e5"),
     ("grain_gate", 0x5351361c, "e7feffeb"),
+    // The granulation (0x5367ad3c): the BL to its noise fill (0x5368a92c).
+    ("grain_fill", 0x5367ae14, "c43e00eb"),
 ];
 
 const CONTEXTS: &[(u32, &str)] = &[

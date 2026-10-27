@@ -113,7 +113,7 @@ Each feature is a module, `<ID>.GRM`. The same file runs on each camera, because
 | `FRAMING` | a page of `CORE.ASPECT`, the mask, and the ratio label |
 | `GUIDES` | its style, a page, and the guides |
 | `DATE` | its style and look, a page with a native settings page, and the date |
-| `GRAIN` | a page of `CORE.GRAIN` |
+| `GRAIN` | a page of `CORE.GRAIN` with a row of `CORE.GRAIN_SIZE` |
 
 At power-on, INSTALL links each module (`runtime/module_link.h`). It copies the code after the tail, in an area that no firmware code uses, and the data into a script array. It relocates the module, fills each import with a core service, and registers the page, the layers, and the plane filters. A module that does not link is skipped, and the others load.
 
@@ -124,6 +124,7 @@ The core keeps the value of each module setting (`runtime/settings.h`). The capa
 | `CORE.TONE` | the effect (see [Film Look](#film-look)) |
 | `CORE.ASPECT` | the aspect of still pictures (see [Framing](#framing)) |
 | `CORE.GRAIN` | the grain level of recorded pictures |
+| `CORE.GRAIN_SIZE` | the grain size of recorded pictures |
 
 The core calls module code at these points:
 
@@ -170,7 +171,7 @@ The live-view labels are rendered at build time in the style of the native live-
 
 ## Recorded pictures
 
-A hook on the JPEG encode processes the main picture, the screennail, and the thumbnail. It applies the selective color of the effect, then the plane filters of the modules. Each still build stores its effect with its shot settings, so continuous shooting keeps the effect of each shot. `CORE.GRAIN` sets the native grain stage, so the live view and DNG files have no grain.
+A hook on the JPEG encode processes the main picture, the screennail, and the thumbnail. It applies the selective color of the effect, then the plane filters of the modules. Each still build stores its effect with its shot settings, so continuous shooting keeps the effect of each shot. `CORE.GRAIN` sets the native grain stage, so the live view and DNG files have no grain. `CORE.GRAIN_SIZE` sets the grain size: the native sizes on GR IV, and a blur of the grain noise on GR III.
 
 ## Relocation
 

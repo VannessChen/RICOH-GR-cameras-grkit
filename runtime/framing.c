@@ -365,7 +365,7 @@ static void paint_canvas(volatile u32 *h,u32 canvas,u32 bitmap) {
     cue=full && cue_shown(h) && native_display()!=DISPLAY_OFF ? full : 0;
     area=capture_area(h);
     SHOWN_AREA(data,area);
-    if(!data && !cue) { ++h[GRKIT_HOST_FRAME_SKIPPED/4]; return; }
+    if(!data && !cue) return;
     if(data) {
         surface.data=data; surface.stride=HALF(bitmap,0x18); surface.area=area; surface.box=photo_boxes[area];
         module_layers_paint(h,&surface,0);

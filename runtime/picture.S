@@ -107,6 +107,37 @@ grain_gate:
     bx lr
 #endif
 
+#if defined(HOOK_GRAIN_SIZE) || defined(HOOK_GRAIN_FILL)
+// r0 = the float bits of the APEX Sv of the shot. Returns in r0 the size 0
+// small, 1 medium, or 2 large of CORE.GRAIN_SIZE: 1 to 3 give 0 to 2, and
+// Auto (0) follows the ISO: small to ISO 400, medium to ISO 800, large above.
+// The native ISO index is round((Sv - 1) * 3), so ISO 400 ends at Sv 43/6 and
+// ISO 800 at Sv 49/6. For a positive float, the bit patterns compare as the
+// values. A negative value, an infinity, or a NaN gives small grain. A patch of
+// PipelineGrainSize applies only with a module that uses CORE.GRAIN_SIZE, so
+// the header word is set. Changes r1 and the flags.
+grain_size_of:
+    ldr r1, =GRKIT_HEADER_REFERENCE
+    ldr r1, [r1, #GRKIT_HOST_GRAIN_SIZE]
+    sub r1, r1, #1
+    cmp r1, #2
+    movls r0, r1
+    bxls lr
+    ldr r1, =0x7f800000
+    cmp r0, r1
+    movhs r0, #0
+    bxhs lr
+    ldr r1, =0x40e55555
+    cmp r0, r1
+    movlo r0, #0
+    bxlo lr
+    ldr r1, =0x4102aaab
+    cmp r0, r1
+    movlo r0, #1
+    movhs r0, #2
+    bx lr
+#endif
+
 #ifdef HOOK_GRAIN_ENABLE
 // GR IV replaces `ldrb r3, [r4, #0x7b5]` (grain on). A cmp of r3 follows each
 // replaced load, so the hooks may change the flags.
@@ -127,48 +158,58 @@ grain_strength:
     pop {lr}
     ldrbhi r3, [r4, #0x7b7]
     bx lr
+#endif
 
-// Replaces `ldrb r3, [r4, #0x7b6]` (size 0..2). The size follows the ISO of
-// the shot: small to ISO 400, medium to ISO 800, large above. +0xba0 holds the
-// float APEX Sv that the EXIF ISO uses. The native ISO index is
-// round((Sv - 1) * 3), so ISO 400 ends at Sv 43/6 and ISO 800 at Sv 49/6.
-// For a positive float, the bit patterns compare as the values. A negative
-// value, an infinity, or a NaN gives small grain.
+#ifdef HOOK_GRAIN_SIZE
+// Replaces `ldrb r3, [r4, #0x7b6]` (size 0..2) with the size of
+// CORE.GRAIN_SIZE (grain_size_of). +0xba0 holds the float APEX Sv that the
+// EXIF ISO uses (0x537fe338).
 .global grain_size
 grain_size:
-    push {lr}
+    push {r0, r1, lr}
     bl grain_level
-    pop {lr}
     ldrbhi r3, [r4, #0x7b6]
-    bxhi lr
-    ldr r12, [r4, #0xba0]
-    ldr r3, =0x7f800000
-    cmp r12, r3
-    movhs r3, #0
-    bxhs lr
-    ldr r3, =0x40e55555
-    cmp r12, r3
-    movlo r3, #0
-    bxlo lr
-    ldr r3, =0x4102aaab
-    cmp r12, r3
-    movlo r3, #1
-    movhs r3, #2
-    bx lr
+    bhi 1f
+    ldr r0, [r4, #0xba0]
+    bl grain_size_of
+    mov r3, r0
+1:  pop {r0, r1, pc}
 #endif
 
 #ifdef HOOK_GRAIN_PARTICLE
 // GR III replaces `ldrb r3, [r5, #0x795]` (Particle 0..3). The granulation
 // scales the noise amplitude by 256, 128, or 64 for Particle 1, 2, or 3
-// (0x5367ae28), so level 1..3 maps to Particle 3..1.
+// (0x5367ae28), so level 1..3 maps to Particle 3..1. The hook also stores
+// the grain of the shot for the noise fill: 0 for the native noise, else
+// the size 1 to 3.
 .global grain_particle
 grain_particle:
-    push {lr}
+    push {r0, r1, lr}
+#ifdef HOOK_GRAIN_FILL
     bl grain_level
-    pop {lr}
+    movhi r0, #0
+    bhi 1f
+    ldr r0, [r5, #GRAIN_SV]
+    bl grain_size_of
+    add r0, r0, #1
+1:  ldr r1, =GRKIT_HEADER_REFERENCE
+    str r0, [r1, #GRKIT_HOST_GRAIN_SHOT]
+#endif
+    bl grain_level
     rsbls r3, r3, #3
     ldrbhi r3, [r5, #0x795]
-    bx lr
+    pop {r0, r1, pc}
+#endif
+
+#ifdef HOOK_GRAIN_FILL
+// GR III replaces the BL to the noise fill of the granulation: r0 = the noise
+// plane, r1 = pitch x height. grain_noise (picture.c) also needs the pitch and
+// the height, which the granulation keeps in its frame.
+.global grain_fill
+grain_fill:
+    ldr r2, [fp, #-GRAIN_FILL_PITCH]
+    ldr r3, [fp, #-GRAIN_FILL_HEIGHT]
+    b grain_noise
 #endif
 
 /* Capture: record the effect of this shot as the Image Control tag. Replaces

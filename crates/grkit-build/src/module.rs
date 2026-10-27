@@ -631,7 +631,7 @@ fn choice_page(directory: &Path, m: &Manifest, page: &PageSpec, c: &mut String) 
         !page.options || values <= OPTION_VALUES,
         "A page with options has at most {OPTION_VALUES} values"
     );
-    let rows = setting_rows(m, page, &setting, values)?;
+    let rows = setting_rows(directory, m, page, &setting, values)?;
     for (l, language) in Language::ALL.into_iter().enumerate() {
         choice_text(directory, page, values, &rows, l, language, c)?;
     }
@@ -661,9 +661,11 @@ fn choice_page(directory: &Path, m: &Manifest, page: &PageSpec, c: &mut String) 
 
 /// The rows of the native settings page. Row 0 is the page setting, also a
 /// used one such as CORE.ASPECT: its values are the rows of the page. The
-/// other rows are settings of the module. INSTALL writes the handle of each
-/// row.
+/// other rows are settings of the module or used settings. INSTALL writes
+/// the handle of each row, and leaves out the row of an optional used
+/// setting that the camera does not have.
 fn setting_rows(
+    directory: &Path,
     m: &Manifest,
     page: &PageSpec,
     setting: &str,
@@ -682,17 +684,13 @@ fn setting_rows(
                 "The first native settings row is the page setting"
             );
             (setting.to_owned(), values)
-        } else {
-            let index = m
-                .settings
-                .iter()
-                .position(|s| &s.key == key)
-                .with_context(|| {
-                    format!(
-                        "A native settings row names {key}, which is not a setting of the module"
-                    )
-                })?;
+        } else if let Some(index) = m.settings.iter().position(|s| &s.key == key) {
             (index.to_string(), m.settings[index].values as usize)
+        } else {
+            let (reference, _) = setting_reference(m, key).with_context(|| {
+                format!("A native settings row names {key}, which the module neither has nor uses")
+            })?;
+            (reference, used_values(directory, key)?)
         };
         ensure!(
             count <= grkit_core::runtime::NATIVE_SETTING_VALUES,
@@ -706,6 +704,29 @@ fn setting_rows(
         });
     }
     Ok(rows)
+}
+
+/// The number of values of a used setting in a settings row: that of a
+/// capability of the core, else the number of its value texts in English.
+/// INSTALL checks it against the setting.
+fn used_values(directory: &Path, key: &str) -> Result<usize> {
+    if let Some(capability) = grkit_core::capabilities::CAPABILITIES
+        .iter()
+        .find(|capability| capability.name() == *key)
+    {
+        ensure!(
+            capability.values > 0,
+            "{key} cannot be a native settings row"
+        );
+        return Ok(capability.values as usize);
+    }
+    let path = text_path(directory, Language::ALL[0]);
+    let text: PageText = read_toml(&path)?;
+    text.settings
+        .get(key)
+        .and_then(|row| row.values.as_ref())
+        .map(Vec::len)
+        .with_context(|| format!("{} gives no values of {key}", path.display()))
 }
 
 /// The texts of a choice page in the language with index `l`: the title, a

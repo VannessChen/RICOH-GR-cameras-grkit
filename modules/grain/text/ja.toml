@@ -3,3 +3,7 @@ rows = ["オフ", "弱", "中", "強"]
 
 [settings."CORE.GRAIN"]
 label = "強さ"
+
+[settings."CORE.GRAIN_SIZE"]
+label = "サイズ"
+values = ["オート", "小", "中", "大"]

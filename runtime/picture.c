@@ -278,3 +278,220 @@ void picture_encode(u32 process,u32 message) {
     encode_shot(h,message);
     profile_end(h,start,GRKIT_PROFILE_PICTURE_ENCODE);
 }
+
+#ifdef GRAIN_FILL_PITCH
+/* The noise of the GR III grain stage. The granulation blends one random
+   byte into each Y sample, so its grain is one sample wide, and it averages
+   away when the picture shows smaller. For a GRKit shot this fill writes the
+   random bytes itself: CORE.GRAIN_SIZE small keeps them, medium and large
+   blur them with a separable binomial filter of 3 or 5 taps and bring their
+   standard deviation back to that of one random byte, so the grain is wider
+   at the same strength. The fill seeds a xorshift128 generator from the
+   generic timer, so each shot gets its own pattern; the native fill seeds
+   from the clock seconds, and shots in the same second repeat it. */
+#ifndef GRAIN_NATIVE_FILL
+#define GRAIN_NATIVE_FILL(buffer,size) ((void (*)(u32,u32))FW_GRAIN_NOISE)(buffer,size)
+#define GRAIN_ALLOCATE(size) ((u32 (*)(u32))FW_ALLOCATE)(size)
+#define GRAIN_RELEASE(block) ((void (*)(u32))FW_RELEASE)(block)
+#define GRAIN_MAP(address) ((u8 *)(address))
+#endif
+#ifndef GRAIN_COUNTER
+#ifdef __arm__
+/* CNTPCT, the 64-bit count of the generic timer. */
+static u32 grain_counter(u32 *high) {
+    u32 low,hi;
+    __asm__ volatile("mrrc p15, 0, %0, %1, c14" : "=r"(low), "=r"(hi));
+    *high=hi;
+    return low;
+}
+#else
+/* A host build has no camera timer. */
+static u32 grain_counter(u32 *high) { *high=0; return 0; }
+#endif
+#define GRAIN_COUNTER(high) grain_counter(high)
+#endif
+#ifndef GRAIN_COUNTER_MHZ
+#define GRAIN_COUNTER_MHZ SYSTEM_COUNTER_MHZ
+#endif
+#define GRAIN_ROW_MAX 8192U
+#if defined(__ARM_NEON) && !defined(GRAIN_SCALAR)
+#include <arm_neon.h>
+#define GRAIN_NEON 1
+#endif
+/* Four xorshift128 generators side by side: generator i gives bytes 4i to
+   4i + 3 of each 16 bytes, in little-endian order. */
+typedef struct { u32 a[4],b[4],c[4],d[4]; } GrainRandom;
+/* splitmix32 of the count, so that close counts give unrelated states. */
+static u32 grain_mix(u32 *x) {
+    u32 z=(*x+=0x9e3779b9U);
+    z=(z^(z>>16))*0x85ebca6bU;
+    z=(z^(z>>13))*0xc2b2ae35U;
+    return z^(z>>16);
+}
+static void grain_seed(GrainRandom *r,u32 seed) {
+    u32 i;
+    for(i=0;i<4;++i) { r->a[i]=grain_mix(&seed); r->b[i]=grain_mix(&seed); r->c[i]=grain_mix(&seed); r->d[i]=grain_mix(&seed)|1U; }
+}
+#ifdef GRAIN_NEON
+/* One step of the four generators: the next 16 bytes from the oldest state
+   word `a` and the newest `d`. */
+static inline __attribute__((always_inline)) uint32x4_t grain_step(uint32x4_t a,uint32x4_t d) {
+    uint32x4_t t=veorq_u32(a,vshlq_n_u32(a,11));
+    return veorq_u32(veorq_u32(d,vshrq_n_u32(d,19)),veorq_u32(t,vshrq_n_u32(t,8)));
+}
+#endif
+/* `pitch` random bytes; a pitch is a multiple of 16. */
+static void grain_random_row(GrainRandom *r,u8 *row,u32 pitch) {
+    u32 x=0;
+#ifdef GRAIN_NEON
+    uint32x4_t a=vld1q_u32(r->a),b=vld1q_u32(r->b),c=vld1q_u32(r->c),d=vld1q_u32(r->d),d1,d2,d3,d4;
+    /* Four steps rename the state instead of moving it: a b c d become the
+       four outputs. */
+    for(;x+64<=pitch;x+=64) {
+        d1=grain_step(a,d); d2=grain_step(b,d1); d3=grain_step(c,d2); d4=grain_step(d,d3);
+        vst1q_u8(row+x,vreinterpretq_u8_u32(d1)); vst1q_u8(row+x+16,vreinterpretq_u8_u32(d2));
+        vst1q_u8(row+x+32,vreinterpretq_u8_u32(d3)); vst1q_u8(row+x+48,vreinterpretq_u8_u32(d4));
+        a=d1; b=d2; c=d3; d=d4;
+    }
+    for(;x+16<=pitch;x+=16) {
+        d1=grain_step(a,d);
+        a=b; b=c; c=d; d=d1;
+        vst1q_u8(row+x,vreinterpretq_u8_u32(d1));
+    }
+    vst1q_u32(r->a,a); vst1q_u32(r->b,b); vst1q_u32(r->c,c); vst1q_u32(r->d,d);
+#else
+    u32 i,t,v;
+    for(;x+16<=pitch;x+=16) for(i=0;i<4;++i) {
+        t=r->a[i]^(r->a[i]<<11);
+        r->a[i]=r->b[i]; r->b[i]=r->c[i]; r->c[i]=r->d[i];
+        v=r->d[i]=r->d[i]^(r->d[i]>>19)^t^(t>>8);
+        row[x+4*i]=(u8)v; row[x+4*i+1]=(u8)(v>>8); row[x+4*i+2]=(u8)(v>>16); row[x+4*i+3]=(u8)(v>>24);
+    }
+#endif
+}
+/* One output row from the random bytes of the rows above and below it, with
+   the weights 1 2 1 or 1 4 6 4 1 down the column, then along the row, and
+   the edge sample repeated. The weights of the two passes sum to 16 for 3
+   taps and to 256 for 5 taps, so the mean of random bytes is 128 times that
+   sum. The filter scales the standard deviation by the sum of the squared
+   weights of one pass, 6 or 70, so the deviation from the mean divided by 6
+   or 70 has the standard deviation of one random byte. The division is a
+   rounded doubling high multiply (VQRDMULH) by 5461 (1 / 6.0004) or 468
+   (1 / 70.02), then the output is 128 plus that, limited to 0..255. Every
+   sum is exact in 16 bits: at most 16 x 16 x 255. */
+#define GRAIN_GAIN(taps) ((taps)==3 ? 5461 : 468)
+#ifdef GRAIN_NEON
+/* The column sums of 16 samples at x. */
+static inline __attribute__((always_inline)) void grain_column16(const u8 *const *rows,u32 x,u32 taps,uint16x8_t *lo,uint16x8_t *hi) {
+    if(taps==3) {
+        uint8x16_t r0=vld1q_u8(rows[0]+x),r1=vld1q_u8(rows[1]+x),r2=vld1q_u8(rows[2]+x);
+        *lo=vaddq_u16(vaddl_u8(vget_low_u8(r0),vget_low_u8(r2)),vshll_n_u8(vget_low_u8(r1),1));
+        *hi=vaddq_u16(vaddl_u8(vget_high_u8(r0),vget_high_u8(r2)),vshll_n_u8(vget_high_u8(r1),1));
+    } else {
+        uint8x16_t r0=vld1q_u8(rows[0]+x),r1=vld1q_u8(rows[1]+x),r2=vld1q_u8(rows[2]+x),
+                   r3=vld1q_u8(rows[3]+x),r4=vld1q_u8(rows[4]+x);
+        uint16x8_t l=vshlq_n_u16(vaddl_u8(vget_low_u8(r1),vget_low_u8(r3)),2),
+                   h=vshlq_n_u16(vaddl_u8(vget_high_u8(r1),vget_high_u8(r3)),2);
+        l=vaddq_u16(l,vaddl_u8(vget_low_u8(r0),vget_low_u8(r4)));
+        h=vaddq_u16(h,vaddl_u8(vget_high_u8(r0),vget_high_u8(r4)));
+        *lo=vmlal_u8(l,vget_low_u8(r2),vdup_n_u8(6));
+        *hi=vmlal_u8(h,vget_high_u8(r2),vdup_n_u8(6));
+    }
+}
+/* The row sums of 8 column sums `c`, whose left and right neighbours are in
+   `left` and `right`, then the output bytes. */
+static inline __attribute__((always_inline)) uint8x8_t grain_row8(uint16x8_t left,uint16x8_t c,uint16x8_t right,u32 taps) {
+    uint16x8_t s=vaddq_u16(vextq_u16(left,c,7),vextq_u16(c,right,1));
+    int16x8_t d;
+    if(taps==3) {
+        s=vaddq_u16(s,vshlq_n_u16(c,1));
+        d=vsubq_s16(vreinterpretq_s16_u16(s),vdupq_n_s16(128*16));
+    } else {
+        s=vaddq_u16(vshlq_n_u16(s,2),vaddq_u16(vextq_u16(left,c,6),vextq_u16(c,right,2)));
+        s=vmlaq_n_u16(s,c,6);
+        /* s - 32768 as a signed value: flip the top bit. */
+        d=vreinterpretq_s16_u16(veorq_u16(s,vdupq_n_u16(0x8000)));
+    }
+    d=vqrdmulhq_s16(d,vdupq_n_s16(GRAIN_GAIN(taps)));
+    return vqmovun_s16(vaddq_s16(d,vdupq_n_s16(128)));
+}
+static inline __attribute__((always_inline)) void grain_output_row(const u8 *const *rows,u8 *out,u32 width,u32 taps) {
+    uint16x8_t lo,hi,next_lo,next_hi,left;
+    u32 x;
+    grain_column16(rows,0,taps,&lo,&hi);
+    left=vdupq_lane_u16(vget_low_u16(lo),0);
+    for(x=0;x<width;x+=16) {
+        if(x+16<width) grain_column16(rows,x+16,taps,&next_lo,&next_hi);
+        else next_lo=next_hi=vdupq_lane_u16(vget_high_u16(hi),3);
+        vst1q_u8(out+x,vcombine_u8(grain_row8(left,lo,hi,taps),grain_row8(lo,hi,next_lo,taps)));
+        left=hi; lo=next_lo; hi=next_hi;
+    }
+}
+#else
+static u32 grain_clamp(int x,u32 width) { return x<0 ? 0 : x>(int)width-1 ? width-1 : (u32)x; }
+static void grain_output_row(const u8 *const *rows,u8 *out,u32 width,u32 taps) {
+    static const int k3[3]={1,2,1},k5[5]={1,4,6,4,1};
+    const int *k=taps==3 ? k3 : k5;
+    int half=(int)taps/2,i,j,sum,v;
+    u32 x;
+    for(x=0;x<width;++x) {
+        sum=-128*(taps==3 ? 16 : 256);
+        for(j=0;j<(int)taps;++j) for(i=-half;i<=half;++i) sum+=k[j]*k[i+half]*rows[j][grain_clamp((int)x+i,width)];
+        v=128+((2*sum*GRAIN_GAIN(taps)+32768)>>16);
+        out[x]=(u8)(v<0 ? 0 : v>255 ? 255 : v);
+    }
+}
+#endif
+/* The ring slot of a row. The core has no division routine, and a constant
+   divisor compiles to a multiply. */
+static u32 grain_slot(u32 row,u32 taps) { return taps==3 ? row%3U : row%5U; }
+/* The noise plane `plane` of `pitch` x `height` samples, blurred with `taps`
+   taps. `ring` holds the random bytes of `taps` rows: row y gets its random
+   bytes, then row y - taps / 2 of the plane gets its output, from rows
+   y - taps + 1 .. y with the edge rows repeated. The plane gets one write. */
+static inline __attribute__((always_inline)) void grain_blur_taps(u8 *plane,u32 pitch,u32 height,u32 taps,u8 *ring,GrainRandom *r) {
+    u32 half=taps/2,y,j;
+    const u8 *rows[5];
+    for(y=0;y<height+half;++y) {
+        if(y<height) grain_random_row(r,ring+grain_slot(y,taps)*pitch,pitch);
+        if(y<half) continue;
+        for(j=0;j<taps;++j) {
+            int row=(int)(y-half)+(int)j-(int)half;
+            if(row<0) row=0;
+            if(row>(int)height-1) row=(int)height-1;
+            rows[j]=ring+grain_slot((u32)row,taps)*pitch;
+        }
+        grain_output_row(rows,plane+(y-half)*pitch,pitch,taps);
+    }
+}
+static void grain_blur(u8 *plane,u32 pitch,u32 height,u32 taps,u8 *ring,GrainRandom *r) {
+    if(taps==3) grain_blur_taps(plane,pitch,height,3,ring,r);
+    else grain_blur_taps(plane,pitch,height,5,ring,r);
+}
+/* Replaces the noise fill of the granulation (grain_fill in picture.S). The
+   profile counts the microseconds of the generic timer, which all cores
+   share: the fill takes a few hundred milliseconds, and the task can move to
+   another core, whose cycle counter is another one (runtime/profile.h). */
+void grain_noise(u32 buffer,u32 size,u32 pitch,u32 height) {
+    volatile u32 *h=framing_header();
+    u32 shot=h[GRKIT_HOST_GRAIN_SHOT/4],table=h[GRKIT_HOST_PROFILE/4],high,low,taps,ring,y;
+    GrainRandom r;
+    if(!shot || shot>3 || !pitch || pitch%16 || pitch>GRAIN_ROW_MAX || pitch*height!=size || height<1) {
+        GRAIN_NATIVE_FILL(buffer,size);
+        return;
+    }
+    low=GRAIN_COUNTER(&high);
+    grain_seed(&r,low^high*0x27d4eb2dU);
+    taps=shot==2 ? 3 : 5;
+    ring=shot==1 ? 0 : GRAIN_ALLOCATE(taps*pitch);
+    if(!ring) {
+        /* Small, or no memory for the row sums: one random byte each. */
+        for(y=0;y<height;++y) grain_random_row(&r,GRAIN_MAP(buffer)+y*pitch,pitch);
+    } else {
+        grain_blur(GRAIN_MAP(buffer),pitch,height,taps,GRAIN_MAP(ring),&r);
+        GRAIN_RELEASE(ring);
+    }
+    if(table) profile_add(table,GRKIT_PROFILE_PICTURE_GRAIN,core_divide(GRAIN_COUNTER(&high)-low,GRAIN_COUNTER_MHZ));
+}
+#endif
+

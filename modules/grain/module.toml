@@ -12,11 +12,12 @@ tiles = [
     "tiles/2-medium.png",
     "tiles/3-strong.png",
 ]
-# 0 Off, 1 weak, 2 medium, 3 strong.
-uses = ["CORE.GRAIN"]
+# CORE.GRAIN: 0 Off, 1 weak, 2 medium, 3 strong. CORE.GRAIN_SIZE: 0 Auto
+# (by ISO), 1 small, 2 medium, 3 large.
+uses = ["CORE.GRAIN", "CORE.GRAIN_SIZE"]
 
 [page]
 setting = "CORE.GRAIN"
 off_row = true
-# One native settings row: the MENU row of the module names the level.
-settings = ["CORE.GRAIN"]
+# The level, then the size.
+settings = ["CORE.GRAIN", "CORE.GRAIN_SIZE"]

@@ -438,12 +438,14 @@ static int grm_registrations(const struct grm_module *m, const u8 *code, u32 bas
                     return GRM_BAD_DESCRIPTOR;
                 /* Row 0 is the page setting, also a used one, with a text for
                    each row of the page. The others are settings of the
-                   module. */
+                   module or used settings. The installer checks the value
+                   texts of a used row, whose values it knows. */
                 for (u32 r = 0; r < setting_rows; ++r) {
                     const u8 *row = list + r * GRM_ROW;
-                    u32 own = grm_word(row + GRM_ROW_SETTING_AT);
-                    u32 values = r ? (own < setting_count ? settings[own].values : 0) : rows;
-                    if (grm_word(row) < GRM_ROW || (r ? own >= setting_count : own != setting) ||
+                    u32 named = grm_word(row + GRM_ROW_SETTING_AT), used = r && (named & GRM_USED);
+                    u32 values = !r ? rows : used ? 1 : named < setting_count ? settings[named].values : 0;
+                    if (grm_word(row) < GRM_ROW ||
+                        (r ? !grm_setting_reference(named, setting_count, use_count) : named != setting) ||
                         !values || values > GRM_SETTING_ROW_VALUES ||
                         !grm_texts(m, code, base, grm_word(row + GRM_ROW_LABEL_AT), GRM_LANGUAGES) ||
                         !grm_texts(m, code, base, grm_word(row + GRM_ROW_VALUES_AT), values * GRM_LANGUAGES))

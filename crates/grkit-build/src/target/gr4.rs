@@ -12,7 +12,7 @@ use super::Family;
 use crate::components::{
     b, bl, HookSpec,
     Part::{Framing, Menu, Processing},
-    Point::{CaptureAspect, MenuPage, PipelineGrain, Tuning},
+    Point::{CaptureAspect, MenuPage, PipelineGrain, PipelineGrainSize, Tuning},
 };
 
 pub const FAMILY: Family = Family {
@@ -67,10 +67,10 @@ const LIVE_VIEW: &[HookSpec] = &[
 ];
 
 /// DigitalFilterProcess SetEffectParameter: the grain on, strength, and size
-/// loads, then the BL to the stage gate.
+/// loads, then the BL to the stage gate. The size load gives CORE.GRAIN_SIZE.
 const GRAIN: &[HookSpec] = &[
     bl("grain_enable", Framing, PipelineGrain),
     bl("grain_strength", Framing, PipelineGrain),
-    bl("grain_size", Framing, PipelineGrain),
+    bl("grain_size", Framing, PipelineGrainSize),
     bl("grain_gate", Framing, PipelineGrain),
 ];

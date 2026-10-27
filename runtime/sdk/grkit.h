@@ -100,6 +100,8 @@ void overlay_label(const Surface *s, u32 label, u32 left, u32 top);
                   it. A page of CORE.TONE gets its rows from the core.
      CORE.GRAIN   4 values: the grain of recorded pictures, 0 Off, 1 weak,
                   2 medium, 3 strong.
+     CORE.GRAIN_SIZE  4 values: the grain size, 0 Auto (by the ISO of the
+                  shot), 1 small, 2 medium, 3 large.
      CORE.ASPECT  7 values: the aspect of still pictures, 0 native 3:2, 1
                   XPan 65:24, 2 16:9, 3 4:3, 4 2.35:1, 5 1:1, 6 5:4. Each
                   camera offers some of them, and a choice page shows only
@@ -159,8 +161,10 @@ static inline const GrkitContext *grkit_context(void)
 #define GRKIT_TILE_BYTES 6400U
 
 /* A row of a native settings page (GrkitPage.settings): a setting of this
-   module (an index, not GRKIT_USE), its label, and the text of each of its
-   values. A setting has at most GRKIT_SETTING_ROW_VALUES values. */
+   module (an index) or a used setting (GRKIT_USE), its label, and the text
+   of each of its values. A setting has at most GRKIT_SETTING_ROW_VALUES
+   values. The installer leaves out the row of an optional used setting that
+   no module has. */
 #define GRKIT_SETTING_ROW_VALUES 8U
 typedef struct {
     u32 size;

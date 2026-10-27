@@ -266,6 +266,21 @@
 #define FW_YCBCR_CALC FIRMWARE(0x536e4720)
 /* DigitalFilterProcess plan: the grain stage flag that the stage gate sets. */
 #define GRAIN_GATE_FLAG 0x24
+/* Grain size. The shot settings hold the float APEX Sv of the shot at
+   GRAIN_SV, which the EXIF ISO also uses (0x535f5e80). The granulation
+   (0x5367ad3c) keeps the pitch and the height of its noise plane at
+   fp - GRAIN_FILL_PITCH and fp - GRAIN_FILL_HEIGHT when it calls the noise
+   fill FW_GRAIN_NOISE (buffer, pitch x height), which writes a random byte
+   for each sample. FW_RELEASE frees a block of FW_ALLOCATE. */
+#define GRAIN_SV 0xb68
+#define GRAIN_FILL_PITCH 0x650
+#define GRAIN_FILL_HEIGHT 0x644
+#define FW_GRAIN_NOISE FIRMWARE(0x5368a92c)
+#define FW_RELEASE FIRMWARE(0x536af2e4)
+/* The system counter behind the generic timer of the cores runs at 40 MHz
+   (the GR III device tree and kernel log). Only Linux writes CNTFRQ, so the
+   RTOS cores read 0 there. */
+#define SYSTEM_COUNTER_MHZ 40U
 #define FW_CACHE_FLUSH FIRMWARE(0x5383c8a8)
 #define FW_CLOCK FIRMWARE(0x536bd838)
 #define FW_LOCAL_TIME FIRMWARE(0x536b6510)
