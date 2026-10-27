@@ -3,11 +3,16 @@
 
 use super::*;
 use crate::abi::{
-    HOST_PROCESSING_CALLS, HOST_PROFILE, MODULE_SLOTS, PROFILE, PROFILE_KINDS, PROFILE_MODULE_SIZE,
-    PROFILE_POINTS, PROFILE_SLOTS, PROFILE_SLOT_SIZE,
+    HOST_PROCESSING_CALLS, HOST_PROFILE, MAILBOX_FAILED, MAILBOX_INSTALLED, MAILBOX_PLAN,
+    MAILBOX_RESULT, MAILBOX_STATUS, MAILBOX_WORDS, MODULE_SLOTS, PLAN_COUNT, PLAN_HEADER_WORDS,
+    PLAN_ICON_CHUNKS, PLAN_MAGIC, PLAN_MODULE_TILES, PLAN_MODULE_WORDS, PROFILE, PROFILE_KINDS,
+    PROFILE_MODULE_SIZE, PROFILE_POINTS, PROFILE_SLOTS, PROFILE_SLOT_SIZE,
 };
 use crate::capabilities::{self, StateFile};
-use crate::card::{DATA_FOLDER, LINUX_DIRECTORY, RTOS_PACKAGE_FOLDER};
+use crate::card::{
+    DATA_FOLDER, LINUX_CARD, LINUX_DIRECTORY, LINUX_LOAD_COPY, LINUX_MOUNT, PACKAGE_DIRECTORY,
+    RTOS_PACKAGE_FOLDER,
+};
 
 /// The resident loader reads the selections at this interval. It writes the
 /// state file when two reads in a row agree, so a change reaches the card
@@ -20,8 +25,8 @@ pub const PROFILE_POLLS: u32 = 5;
 
 /// Polls for Linux and camera readiness instead of waiting a fixed time.
 /// `lcmd` requests are synchronous: each returns after the Linux command ends,
-/// or with NG when Linux is not ready. The loader checks the result file after
-/// each request and repeats it after a short pause.
+/// or with NG when Linux is not ready. The loader checks the mailbox array
+/// after each request and repeats it after a short pause.
 ///
 /// The only fixed wait comes before `lcmd_resp on`. The RTOS builds its host
 /// command tables on a worker task after the script starts, and the
@@ -29,68 +34,87 @@ pub const PROFILE_POLLS: u32 = 5;
 /// stops the camera at power-on. The script cannot ask for the tables. A wait
 /// of 1 s or more before `lcmd_resp on` avoids the fault, so the loader waits
 /// 2 s.
+///
+/// The camera mounts the card on Linux about 2 s after Linux runs commands.
+/// The first request does not wait for that: unless Linux has mounted a
+/// card folder, it mounts the card itself and runs `LOAD.SH`, which copies
+/// the package and the data folder into RAM, unmounts the card, and scans
+/// the copy (`runtime::files`). The command starts with a throwaway token:
+/// the RTOS drops the first token of a request that starts with `-`.
+///
+/// A request of the RTOS is cut after about 245 bytes, and the RTOS removes
+/// double quotes from it, so the long request stays below `REQUEST_MAX`
+/// bytes and has no quotes.
 pub fn loader() -> Vec<u8> {
     loader_for(ICON_STRIDE)
+}
+
+/// The most bytes of an `lcmd` request after `lcmd `: the RTOS cuts a
+/// request after about 245 bytes.
+pub const REQUEST_MAX: usize = 220;
+
+/// The first request of the loader: the Linux side of the start. The script
+/// runs from a copy in RAM, because a shell reads a script while it runs it,
+/// and the script unmounts the card. The request removes the mount point
+/// after the script, and the script leaves a file in it. So a retry after a
+/// failed mount mounts again, and a retry after the script does not: each
+/// mount is a chance to collide with the mount of the camera.
+fn load_request() -> String {
+    format!(
+        ": -q ; d={PACKAGE_DIRECTORY}/LOAD.SH; if grep -q storage /proc/mounts; then sh {LINUX_CARD}$d; \
+         else mkdir {LINUX_MOUNT} && mount -t ipcufs mnt {LINUX_MOUNT} -ofs=1 && cp {LINUX_MOUNT}$d {LINUX_LOAD_COPY} \
+         && sh {LINUX_LOAD_COPY} {LINUX_MOUNT}; rmdir {LINUX_MOUNT}; :; fi"
+    )
 }
 
 /// The loader for a target with `icon_stride`-byte icon slots.
 pub fn loader_for(icon_stride: usize) -> Vec<u8> {
     let path = core_path;
-    let (plan, done, failed) = (path("PLAN.BIN"), path("INSTALL.OK"), path("INSTALL.ERR"));
+    let mailbox = |offset: usize| format!("mailbox[{}]", offset / 4);
+    let plan_word = |field: usize| mailbox(MAILBOX_PLAN + field);
+    let (result, status) = (mailbox(MAILBOX_RESULT), mailbox(MAILBOX_STATUS));
     // Wait for the host command tables of the RTOS before lcmd_resp.
     let mut lines: Vec<String> = vec!["mpause 2000".into(), "sendln 'lcmd_resp on'".into()];
-    for name in [
-        "PLAN.BIN",
-        "PLAN.TMP",
-        "INSTALL.OK",
-        "INSTALL.ERR",
-        "INSTALL.LCK",
-    ] {
+    // The results of the last start, which FINISH.SH copies to the card.
+    for name in ["INSTALL.OK", "INSTALL.ERR"] {
         lines.push(format!("filedelete '{}'", path(name)));
     }
     lines.extend([
-        format!("filesearch '{plan}'"),
-        "if result != 0 goto reject".into(),
-        format!("filesearch '{done}'"),
-        "if result != 0 goto reject".into(),
-        // Early requests fail before Linux mounts the card. Give up after 150 attempts.
+        // The mailbox (`abi::MAILBOX_FIELDS`): the first script array, which
+        // SCAN and INSTALL find through the array table.
+        format!("intdim mailbox {MAILBOX_WORDS}"),
+        format!("{} = 0", plan_word(PLAN_MAGIC)),
+        format!("{result} = 0"),
+        format!("{status} = 0"),
+        // Early requests fail before Linux runs commands. A failed SCAN stops
+        // the loader; give up after 150 attempts without a plan.
         "attempts = 0".into(),
         ":scan".into(),
-        format!("sendln 'lcmd sh {LINUX_DIRECTORY}/SCAN.SH'"),
-        format!("filesearch '{plan}'"),
-        "if result != 0 goto plan_ready".into(),
+        format!("sendln 'lcmd {}'", load_request()),
+        format!("posted = {result}"),
+        format!("if posted = {MAILBOX_FAILED} goto reject"),
+        format!("posted = {}", plan_word(PLAN_MAGIC)),
+        format!(
+            "if posted = {} goto plan_ready",
+            crate::abi::PLAN_MAGIC_VALUE
+        ),
         "mpause 200".into(),
         "attempts = attempts + 1".into(),
         "if attempts < 150 goto scan".into(),
         "goto reject".into(),
         ":plan_ready".into(),
-        format!("fileopen fh '{plan}' 0"),
-        "if fh < 0 goto reject".into(),
-        "call readword".into(),
-        // The words of the plan header in order (`abi::PLAN_FIELDS`).
-        format!(
-            "if value != {} goto reject_close",
-            crate::abi::PLAN_MAGIC_VALUE
-        ),
-        "call readword".into(),
-        "count = value".into(),
-        "if count < 0 goto reject_close".into(),
-        format!("if count > {MAX_COUNT} goto reject_close"),
-        "call readword".into(),
-        "words = value".into(),
-        "call readword".into(),
-        "chunks = value".into(),
-        // The plan size, then the script words of the modules.
-        "call readword".into(),
-        "call readword".into(),
-        "modulewords = value".into(),
-        "if modulewords < 0 goto reject_close".into(),
-        format!("if modulewords > {MODULE_ARRAY_WORDS} goto reject_close"),
-        "call readword".into(),
-        "moduletiles = value".into(),
-        "if moduletiles < 0 goto reject_close".into(),
-        format!("if moduletiles > {MODULE_TILES_MAX} goto reject_close"),
-        "fileclose fh".into(),
+        // The words of the plan header (`abi::PLAN_FIELDS`).
+        format!("count = {}", plan_word(PLAN_COUNT)),
+        "if count < 0 goto reject".into(),
+        format!("if count > {MAX_COUNT} goto reject"),
+        format!("words = {}", plan_word(PLAN_HEADER_WORDS)),
+        format!("chunks = {}", plan_word(PLAN_ICON_CHUNKS)),
+        format!("modulewords = {}", plan_word(PLAN_MODULE_WORDS)),
+        "if modulewords < 0 goto reject".into(),
+        format!("if modulewords > {MODULE_ARRAY_WORDS} goto reject"),
+        format!("moduletiles = {}", plan_word(PLAN_MODULE_TILES)),
+        "if moduletiles < 0 goto reject".into(),
+        format!("if moduletiles > {MODULE_TILES_MAX} goto reject"),
         format!(
             "expected = {} + count * {}",
             HEADER_SIZE / 4,
@@ -129,38 +153,25 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         "attempts = 0".into(),
         ":install".into(),
         format!("sendln 'lcmd sh {LINUX_DIRECTORY}/INSTALL.SH'"),
-        format!("filesearch '{done}'"),
-        "if result != 0 goto resident".into(),
-        format!("filesearch '{failed}'"),
-        "if result != 0 goto reject".into(),
+        format!("posted = {result}"),
+        format!("if posted = {MAILBOX_INSTALLED} goto installed"),
+        format!("if posted = {MAILBOX_FAILED} goto reject"),
         "mpause 500".into(),
         "attempts = attempts + 1".into(),
         "if attempts > 60 mpause 9500".into(),
         "goto install".into(),
+        // The results go to the card after the camera mounts it.
+        ":installed".into(),
+        format!("sendln 'lcmd sh {LINUX_DIRECTORY}/FINISH.SH'"),
     ]);
     lines.extend(state_script());
     lines.extend(profile_script());
-    lines.extend(
-        [
-            ":reject_close",
-            "fileclose fh",
-            ":reject",
-            "dispstr 'GR_MODULE_LOADER_REJECTED'",
-            "end",
-            ":readword",
-            "value = 0",
-            "weight = 1",
-            "for byteindex 0 3",
-            "fileread fh 1 octet",
-            "if result != 0 goto reject_close",
-            "str2code bytevalue octet",
-            "value = value + bytevalue * weight",
-            "if byteindex < 3 weight = weight * 256",
-            "next",
-            "return",
-        ]
-        .map(String::from),
-    );
+    lines.extend([
+        ":reject".into(),
+        format!("sendln 'lcmd sh {LINUX_DIRECTORY}/FINISH.SH'"),
+        "dispstr 'GR_MODULE_LOADER_REJECTED'".into(),
+        "end".into(),
+    ]);
     (lines.join("\r\n") + "\r\n").into_bytes()
 }
 
@@ -662,6 +673,52 @@ mod tests {
             writes.iter().all(|l| l.contains("C:\\GRKIT\\")),
             "{writes:?}"
         );
+    }
+
+    /// The RTOS cuts a request after about 245 bytes and removes its double
+    /// quotes. The first request mounts the card only when Linux has mounted
+    /// no card folder, and always leaves the mount point behind for a retry.
+    #[test]
+    fn the_requests_fit_the_rtos() {
+        let script = loader();
+        let script = String::from_utf8_lossy(&script);
+        let requests: Vec<_> = script
+            .lines()
+            .filter_map(|l| l.strip_prefix("sendln 'lcmd ")?.strip_suffix('\''))
+            .collect();
+        assert_eq!(requests.len(), 4, "{requests:?}");
+        for request in &requests {
+            assert!(request.len() <= REQUEST_MAX, "{}: {request}", request.len());
+            assert!(
+                !request.contains('"') && !request.contains('\''),
+                "{request}"
+            );
+        }
+        let load = requests[0];
+        assert!(load.starts_with(": -q ; "));
+        assert!(load.contains("if grep -q storage /proc/mounts; then sh /media/storage1$d; else mkdir /tmp/m && mount -t ipcufs mnt /tmp/m -ofs=1 && cp /tmp/m$d /tmp/l && sh /tmp/l /tmp/m; rmdir /tmp/m; :; fi"));
+        assert!(load.contains("d=/SCRIPT/GRKIT/LOAD.SH;"));
+        // SCAN and INSTALL run from the RAM copy of the card.
+        assert_eq!(requests[1], "sh /tmp/gc/SCRIPT/GRKIT/INSTALL.SH");
+        assert_eq!(requests[2], "sh /tmp/gc/SCRIPT/GRKIT/FINISH.SH");
+        assert_eq!(requests[3], requests[2]);
+        // The loader waits on the mailbox, the first array, not on card files.
+        let mailbox = script
+            .lines()
+            .position(|l| l == "intdim mailbox 16")
+            .unwrap();
+        assert!(script
+            .lines()
+            .take(mailbox)
+            .all(|l| !l.starts_with("intdim")));
+        assert!(script.contains("posted = mailbox[10]\r\nif posted = 2 goto reject"));
+        assert!(script.contains(&format!(
+            "posted = mailbox[0]\r\nif posted = {} goto plan_ready",
+            crate::abi::PLAN_MAGIC_VALUE
+        )));
+        assert!(script.contains("if posted = 1 goto installed"));
+        assert!(!script.contains("filesearch 'C:\\SCRIPT\\GRKIT\\PLAN.BIN'"));
+        assert!(!script.contains("fileopen fh"));
     }
 
     /// INSTALL restores the state before the hooks start (runtime/state.h),

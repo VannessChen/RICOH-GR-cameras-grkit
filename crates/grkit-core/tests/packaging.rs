@@ -859,43 +859,50 @@ fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
         assert_eq!(files[path], testing::marked_installer(target), "{path}");
     }
     let script = String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"].clone()).unwrap();
+    // The scripts run on the RAM copy of the card, the root of each installer.
     assert_eq!(
         script,
         "for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
-         \x20 /media/storage1/SCRIPT/GRKIT/$core --known\n\
+         \x20 /tmp/gc/SCRIPT/GRKIT/$core --known /tmp/gc\n\
          \x20 status=$?\n\
          \x20 case $status in 48) ;; *) break ;; esac\n\
          done\n\
          case $status in 48)\n\
          \x20 for core in CORE1.BIN CORE2.BIN; do\n\
-         \x20   /media/storage1/SCRIPT/GRKIT/$core --try\n\
+         \x20   /tmp/gc/SCRIPT/GRKIT/$core --try /tmp/gc\n\
          \x20   status=$?\n\
          \x20   case $status in 47) ;; *) break ;; esac\n\
          \x20 done\n\
-         \x20 case $status in 47) /media/storage1/SCRIPT/GRKIT/CORE3.BIN --install; status=$? ;; esac\n\
+         \x20 case $status in 47) /tmp/gc/SCRIPT/GRKIT/CORE3.BIN --install /tmp/gc; status=$? ;; esac\n\
          \x20 ;;\n\
          esac\n\
          echo GR_MODULE_INSTALL_EXIT_$status\n\
          exit 0\n"
     );
-    // The first core file scans: the plan is the same for each build. First
-    // the script looks up the other core files.
+    // The first core file scans: the plan is the same for each build.
     assert_eq!(
         String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"].clone()).unwrap(),
-        "for core in CORE2.BIN CORE3.BIN; do [ -e /media/storage1/SCRIPT/GRKIT/$core ]; done\n\
-         /media/storage1/SCRIPT/GRKIT/CORE1.BIN --scan\n\
+        "/tmp/gc/SCRIPT/GRKIT/CORE1.BIN --scan /tmp/gc\n\
          status=$?\n\
          echo GR_MODULE_SCAN_EXIT_$status\n\
-         exit 0\n"
+         exit $status\n"
     );
+    // LOAD.SH copies each core file into the RAM copy.
+    let load = String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/LOAD.SH"].clone()).unwrap();
+    assert!(load.contains("FINISH.SH CORE1.BIN CORE2.BIN CORE3.BIN; do cp $src/SCRIPT/GRKIT/$f /tmp/gc/SCRIPT/GRKIT/; done\n"));
     let gr3 = unpack(&package());
     assert_eq!(
         gr3["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"],
-        b"/media/storage1/SCRIPT/GRKIT/CORE.BIN --scan\nstatus=$?\necho GR_MODULE_SCAN_EXIT_$status\nexit 0\n"
+        b"/tmp/gc/SCRIPT/GRKIT/CORE.BIN --scan /tmp/gc\nstatus=$?\necho GR_MODULE_SCAN_EXIT_$status\nexit $status\n"
     );
     assert_eq!(
         gr3["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"],
-        b"/media/storage1/SCRIPT/GRKIT/CORE.BIN --install\nstatus=$?\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
+        b"/tmp/gc/SCRIPT/GRKIT/CORE.BIN --install /tmp/gc\nstatus=$?\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
+    );
+    assert!(
+        String::from_utf8(gr3["SD_ROOT/SCRIPT/GRKIT/LOAD.SH"].clone())
+            .unwrap()
+            .contains("FINISH.SH CORE.BIN; do cp ")
     );
     assert!(gr3.contains_key("SD_ROOT/SCRIPT/GRKIT/CORE.BIN"));
     assert!(!gr3.contains_key("SD_ROOT/SCRIPT/GRKIT/CORE1.BIN"));

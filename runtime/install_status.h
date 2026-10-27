@@ -55,6 +55,9 @@ enum install_status {
        the core does not name that build. */
     STATUS_RELOCATION = 47,
     STATUS_OTHER_BUILD = 48,
+    /* SCAN needs the effect folders in the RAM copy of the card for a new
+       plan: LOAD.SH copies them and runs SCAN again. */
+    STATUS_PLAN_STALE = 49,
     /* 50 to 55: the module statuses of runtime/module_link.h (GRM_*). */
 };
 #endif

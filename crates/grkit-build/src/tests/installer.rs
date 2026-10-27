@@ -30,23 +30,30 @@ fn generated_header_matches_fixed_synthetic_contract() -> Result<()> {
     };
     validate_plan(&plan)?;
     let header = loader::header(&plan, &synthetic_gr3(), TEST_VERSION)?;
-    // The card layout: the package in SCRIPT/GRKIT, the data in GRKIT.
+    // The card layout under the root that the installer takes: the package
+    // in SCRIPT/GRKIT, the data in GRKIT. The card of the camera is the root
+    // without an argument.
     for line in [
-        "#define PLAN_PATH \"/media/storage1/SCRIPT/GRKIT/PLAN.BIN\"",
-        "#define INBOX_PATH \"/media/storage1/SCRIPT/GRKIT/EFFECTS\"",
-        "#define PACKAGE_PATH \"/media/storage1/SCRIPT/GRKIT/PACKAGE.TXT\"",
-        "#define IMPORTED_PATH \"/media/storage1/GRKIT/IMPORTED.TXT\"",
-        "#define PACKAGE_MODULES_PATH \"/media/storage1/SCRIPT/GRKIT/MODULES\"",
-        "#define LIBRARY_PATH \"/media/storage1/GRKIT/EFFECTS\"",
-        "#define STATE_PATH \"/media/storage1/GRKIT/STATE.TXT\"",
-        "#define REPORT_PATH \"/media/storage1/GRKIT/REPORT.TXT\"",
-        "#define SAFE_PATH \"/media/storage1/GRKIT/SAFE\"",
-        "#define SAFE_TEXT_PATH \"/media/storage1/GRKIT/SAFE.TXT\"",
-        "#define PROFILE_PATH \"/media/storage1/GRKIT/PROFILE\"",
-        "#define PROFILE_TEXT_PATH \"/media/storage1/GRKIT/PROFILE.TXT\"",
-        "#define MODULES_PATH \"/media/storage1/GRKIT/MODULES\"",
-        "#define LEGACY_STATE_PATH \"/media/storage1/SCRIPT/PLUGINS/STATE.TXT\"",
-        "#define LEGACY_EFFECTS_PATH \"/media/storage1/SCRIPT/PLUGINS/EFFECTS\"",
+        "#define CARD_ROOT \"/media/storage1\"",
+        "#define CARD_ROOT_MAX 32U",
+        "#define PLAN_PATH \"/SCRIPT/GRKIT/PLAN.BIN\"",
+        "#define INBOX_PATH \"/SCRIPT/GRKIT/EFFECTS\"",
+        "#define PACKAGE_PATH \"/SCRIPT/GRKIT/PACKAGE.TXT\"",
+        "#define IMPORTED_PATH \"/GRKIT/IMPORTED.TXT\"",
+        "#define PACKAGE_MODULES_PATH \"/SCRIPT/GRKIT/MODULES\"",
+        "#define LIBRARY_PATH \"/GRKIT/EFFECTS\"",
+        "#define STATE_PATH \"/GRKIT/STATE.TXT\"",
+        "#define REPORT_PATH \"/GRKIT/REPORT.TXT\"",
+        "#define RELOCATION_PATH \"/GRKIT/RELOC.BIN\"",
+        "#define PLAN_KEY_PATH \"/GRKIT/PLAN.KEY\"",
+        "#define LIST_PATH \"/GRKIT/LIST.TXT\"",
+        "#define SAFE_PATH \"/GRKIT/SAFE\"",
+        "#define SAFE_TEXT_PATH \"/GRKIT/SAFE.TXT\"",
+        "#define PROFILE_PATH \"/GRKIT/PROFILE\"",
+        "#define PROFILE_TEXT_PATH \"/GRKIT/PROFILE.TXT\"",
+        "#define MODULES_PATH \"/GRKIT/MODULES\"",
+        "#define LEGACY_STATE_PATH \"/SCRIPT/PLUGINS/STATE.TXT\"",
+        "#define LEGACY_EFFECTS_PATH \"/SCRIPT/PLUGINS/EFFECTS\"",
         "#define LEGACY_STATE_COUNT 6U",
     ] {
         assert!(header.lines().any(|l| l == line), "{line}");
@@ -143,13 +150,15 @@ fn menu_assembly_symbols_are_typed_functions() {
 #[test]
 fn production_scripts_and_activation_match_fixed_contracts() {
     let files = grkit_core::runtime::runtime_files(b"ELF");
-    assert_eq!(files.len(), 5);
+    assert_eq!(files.len(), 7);
     assert_eq!(files["SCRIPT/GRKIT/CORE.BIN"], b"ELF");
     for (path, name) in [
         ("SCRIPT/STARTUP.TTL", "STARTUP.TTL"),
         ("SCRIPT/GRKIT/LOADER.TTL", "LOADER.TTL"),
+        ("SCRIPT/GRKIT/LOAD.SH", "LOAD.SH"),
         ("SCRIPT/GRKIT/SCAN.SH", "SCAN.SH"),
         ("SCRIPT/GRKIT/INSTALL.SH", "INSTALL.SH"),
+        ("SCRIPT/GRKIT/FINISH.SH", "FINISH.SH"),
     ] {
         snapshot(name, std::str::from_utf8(&files[path]).unwrap());
     }

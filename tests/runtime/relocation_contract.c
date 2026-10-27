@@ -86,10 +86,11 @@ static void pinned(void)
 
 static u32 window_at[4], symbol_at[8];
 static struct relocation_state state;
+static const u32 *hint;
 static int resolve(void)
 {
     memset(&state, 0, sizeof(state));
-    state.read = read_word; state.window_at = window_at; state.symbol_at = symbol_at;
+    state.read = read_word; state.window_at = window_at; state.symbol_at = symbol_at; state.hint = hint;
     return relocation_resolve(&tables, &state);
 }
 
@@ -101,9 +102,10 @@ int main(void)
     assert(relocation_mask(0xe3051610U) == 0xe3001000U);
     assert(relocation_mask(0xe1a0c00dU) == 0xe1a0c00dU);
 
-    /* The pinned image resolves to itself. */
+    /* The pinned image resolves to itself, without a search. */
     pinned();
     assert(resolve());
+    assert(!state.searched);
     assert(state.image_end == 0x53020100U && state.tail == 0x53021000U);
     for (u32 i = 0; i < 7; ++i) assert(symbol_at[i] == symbols[i]);
 
@@ -123,6 +125,17 @@ int main(void)
     assert(state.image_end == 0x53024100U && symbol_at[5] == 0x53025000U);
     assert(symbol_at[6] == 0x53010500U);
     assert(relocation_delta(&tables, &state, 0) == 0x300U);
+    assert(state.searched);
+
+    /* The addresses of that search as a hint: the resolve checks the windows
+       there and does not search. A wrong hint falls back to the search. */
+    u32 found[4];
+    memcpy(found, window_at, sizeof(found));
+    hint = found;
+    assert(resolve() && !state.searched && symbol_at[0] == 0x53010308U);
+    found[1] += 4;
+    assert(resolve() && state.searched && symbol_at[0] == 0x53010308U);
+    hint = 0;
 
     /* A changed instruction in the function: the window is not found. */
     put(0x5301030cU, 0xe5900008U);

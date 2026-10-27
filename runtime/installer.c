@@ -30,6 +30,9 @@ static long syscall6(u32 number, u32 a, u32 b, u32 c, u32 d, u32 e, u32 f)
                      "r"(r4), "r"(r5), "r"(r7) : "memory", "cc");
     return (long)r0;
 }
+/* The mapping of the RTOS memory. No step unmaps it: the exit of the process
+   does. An unmap before the camera has mounted the card blocked until that
+   mount, 1.5 s on the emulator. */
 static volatile u8 *mapping;
 /* One profile more than MAX_COUNT shows that the effects do not all fit. */
 static u8 profiles[MAX_COUNT + 1][GRKIT_GRF_MAX_SIZE];
@@ -44,32 +47,56 @@ static u32 count, size, icon_chunks;
    the state, the report, the effects library, and the modules that the
    person adds. A copy of a new package, by replace or by merge, therefore
    keeps the data. */
-static const char library_path[] = LIBRARY_PATH;
-static const char inbox_path[] = INBOX_PATH;
-static const char package_path[] = PACKAGE_PATH;
-static const char imported_path[] = IMPORTED_PATH;
-static const char data_path[] = DATA_PATH;
-static const char plan_path[] = PLAN_PATH;
-static const char plan_tmp[] = PLAN_TMP_PATH;
-static const char lock_path[] = LOCK_PATH;
-static const char done_path[] = DONE_PATH;
-static const char failed_path[] = FAILED_PATH;
-/* A marker file of the safe mode or of the profile is NAME or NAME.TXT, as
-   a text editor adds the extension. */
-static const char safe_path[] = SAFE_PATH, safe_text_path[] = SAFE_TEXT_PATH;
-static const char profile_path[] = PROFILE_PATH, profile_text_path[] = PROFILE_TEXT_PATH;
-static const char state_path[] = STATE_PATH;
-static const char state_tmp_path[] = STATE_TMP_PATH;
-/* The folder of GRKit 1.2: INSTALL reads its state file when GRKIT has none,
-   and copies its effects when GRKIT has no effects library. */
-static const char legacy_state_path[] = LEGACY_STATE_PATH;
-static const char legacy_state_tmp_path[] = LEGACY_STATE_TMP_PATH;
-static const char legacy_effects_path[] = LEGACY_EFFECTS_PATH;
-static const char report_path[] = REPORT_PATH;
+/* Each path is under the card root, the argument of the installer (CARD_ROOT
+   without one). The loader runs SCAN and INSTALL on the RAM copy of the card
+   that LOAD.SH made, and the import on the card after the camera mounts it.
+   A marker file of the safe mode or of the profile is NAME or NAME.TXT, as a
+   text editor adds the extension. The folder of GRKit 1.2 (legacy): INSTALL
+   reads its state file when GRKIT has none, and copies its effects when
+   GRKIT has no effects library. */
+#define PATHS \
+    X(library_path, LIBRARY_PATH) \
+    X(inbox_path, INBOX_PATH) \
+    X(package_path, PACKAGE_PATH) \
+    X(imported_path, IMPORTED_PATH) \
+    X(data_path, DATA_PATH) \
+    X(plan_path, PLAN_PATH) \
+    X(plan_tmp, PLAN_TMP_PATH) \
+    X(lock_path, LOCK_PATH) \
+    X(done_path, DONE_PATH) \
+    X(failed_path, FAILED_PATH) \
+    X(safe_path, SAFE_PATH) \
+    X(safe_text_path, SAFE_TEXT_PATH) \
+    X(profile_path, PROFILE_PATH) \
+    X(profile_text_path, PROFILE_TEXT_PATH) \
+    X(state_path, STATE_PATH) \
+    X(state_tmp_path, STATE_TMP_PATH) \
+    X(legacy_state_path, LEGACY_STATE_PATH) \
+    X(legacy_state_tmp_path, LEGACY_STATE_TMP_PATH) \
+    X(legacy_effects_path, LEGACY_EFFECTS_PATH) \
+    X(report_path, REPORT_PATH) \
+    X(relocation_path, RELOCATION_PATH) \
+    X(plan_key_path, PLAN_KEY_PATH) \
+    X(list_path, LIST_PATH) \
+    X(modules_path, MODULES_PATH) \
+    X(package_modules_path, PACKAGE_MODULES_PATH)
+#define X(name, suffix) static char name[CARD_ROOT_MAX + sizeof(suffix)];
+PATHS
+#undef X
 static volatile u8 *at(u32 physical) { return mapping + physical - MAP_BASE; }
 static u32 word(u32 p) { return *(volatile u32 *)at(p); }
 static void store(u32 p, u32 v) { *(volatile u32 *)at(p) = v; }
 #include "install_io.h"
+/* Set each path under `root`. Return 0 for a root that does not fit. */
+static int set_root(const char *root)
+{
+    u32 n = length(root);
+    if (!n || n > CARD_ROOT_MAX) return 0;
+#define X(name, suffix) copy((u8 *)name, (const u8 *)root, n); copy((u8 *)name + n, (const u8 *)suffix, sizeof(suffix));
+    PATHS
+#undef X
+    return 1;
+}
 #define GRKIT_GRF_EMBEDDED
 #include "grf.c"
 #include "catalog.h"
@@ -111,25 +138,72 @@ static u32 chunk_count(u32 chunk)
     return left < ICONS_PER_CHUNK ? left : ICONS_PER_CHUNK;
 }
 #include "install_plan.h"
+/* The key of the plan of a start (PLAN.KEY in the data folder): the core,
+   the listing of the effect and module folders of the card that LOAD.SH
+   writes (LIST.TXT), the package list, the mode markers, and the saved
+   values that the plan depends on. Two starts with the same key get the
+   same plan, so a start keeps the plan of an earlier start and reads no
+   effect file. Without a listing there is no key. */
+#define PLAN_KEY_MAGIC 0x4b4c5047U
+static u32 fnv_more(u32 hash, const u8 *data, u32 size)
+{
+    for (u32 i = 0; i < size; ++i) { hash ^= data[i]; hash *= 0x01000193; }
+    return hash;
+}
+static int plan_key(u32 *key)
+{
+    static u8 text[16384];
+    long n = read_text(list_path, text, sizeof(text));
+    if (n <= 0) return 0;
+    u32 hash = fnv_more(fnv((const u8 *)GRKIT_VERSION, length(GRKIT_VERSION)), (const u8 *)target_marker, length(target_marker));
+    hash = fnv_more(hash, text, (u32)n);
+    n = read_text(package_path, text, sizeof(text));
+    hash = fnv_more(hash, (const u8 *)"|", 1);
+    hash = fnv_more(hash, text, n < 0 ? 0 : (u32)n);
+    u8 modes = (u8)((safe_mode ? 1 : 0) | (profile_mode ? 2 : 0));
+    hash = fnv_more(hash, &modes, 1);
+    for (u32 p = 0; p < saved_state.pairs; ++p) {
+        u32 pair[2] = {saved_state.ids[p], saved_state.values[p]};
+        if (plan_independent(pair[0])) continue;
+        hash = fnv_more(hash, (const u8 *)pair, sizeof(pair));
+    }
+    *key = hash;
+    return 1;
+}
+static int plan_key_matches(void)
+{
+    u32 words[2], key;
+    return read_text(plan_key_path, (u8 *)words, sizeof(words)) == (long)sizeof(words) &&
+           words[0] == PLAN_KEY_MAGIC && plan_key(&key) && words[1] == key;
+}
+static void write_plan_key(void)
+{
+    u32 words[2] = {PLAN_KEY_MAGIC, 0};
+    if (!plan_key(&words[1])) return;
+    long made = syscall6(39, (u32)data_path, 0755, 0, 0, 0, 0);
+    if (made < 0 && made != -17) return;
+    write_file(plan_key_path, (const u8 *)words, sizeof(words));
+}
 static int scan(void)
 {
-    /* An earlier attempt of this power-on wrote the plan: the loader deletes
-       it at power-on. A second plan would replace it in a rename, which the
-       camera's Linux does not do. */
-    long fd = syscall6(5, (u32)plan_path, 0x8800, 0, 0, 0, 0);
-    if (fd >= 0) { syscall6(6, fd, 0, 0, 0, 0, 0); return 0; }
-    /* O_EXCL: the loader resends SCAN until a plan appears, so attempts can
-       overlap. Only the attempt that creates the temporary plan moves the
-       inbox and lists the effects. */
-    fd = syscall6(5, (u32)plan_tmp, 0xc1, 0600, 0, 0, 0);
-    if (fd == -17) return STATUS_BUSY;
-    if (fd < 0) return STATUS_PLAN_WRITE;
-    /* The marker files of the safe mode and of the profile. */
+    /* The modules of the RAM copy, and the saved values (plan_modules reads
+       the state), then the marker files of the safe mode and of the
+       profile: the key of the plan depends on them. */
+    plan_modules();
     safe_mode = present(safe_path) || present(safe_text_path);
     profile_mode = present(profile_path) || present(profile_text_path);
-    /* The modules first: the effects install only for a module that uses
-       CORE.TONE. */
-    plan_modules();
+    /* The plan of an earlier start, which LOAD.SH copies from the card with
+       its key: it is the plan of this start when the keys are equal. */
+    if (present(plan_path)) {
+        if (plan_key_matches()) { print("GR_MODULE_PLAN_KEPT\n"); return 0; }
+        syscall6(10, (u32)plan_path, 0, 0, 0, 0, 0);
+    }
+    /* A new plan needs the effect folders in the RAM copy. */
+    if (!present(inbox_path)) return STATUS_PLAN_STALE;
+    long fd = syscall6(5, (u32)plan_tmp, 0xc1, 0600, 0, 0, 0);
+    if (fd == -17) return STATUS_BUSY;
+    if (fd < 0) return STATUS_PLAN_WRITE;
+    /* The effects install only for a module that uses CORE.TONE. */
     collect();
     int status = discover();
     if (status) {
@@ -170,6 +244,7 @@ static int scan(void)
         syscall6(10, (u32)plan_tmp, 0, 0, 0, 0, 0);
         return STATUS_PLAN_WRITE;
     }
+    write_plan_key();
     print("GR_MODULE_SCANNED "); number(count); print("\n");
     return 0;
 }
@@ -220,6 +295,33 @@ static void publish(struct patch *p, const u8 *bytes)
 static u32 window_at[RELOCATION_WINDOW_COUNT];
 static struct relocation_state relocation;
 static u32 read_word(u32 address) { return word(address); }
+/* The window addresses that a search of the running build found, kept in
+   RELOC.BIN of the data folder: three key words, then the address of each
+   window. A later start checks the windows at these addresses instead of a
+   search, which takes seconds on a camera (runtime/relocation.h). */
+#define HINT_MAGIC 0x524b5247U
+#define HINT_KEY 3U
+static u32 hint_words[HINT_KEY + RELOCATION_WINDOW_COUNT];
+static void prepare_relocation(void)
+{
+    relocation.read = read_word;
+    relocation.window_at = window_at;
+    relocation.symbol_at = relocated;
+    relocation.hint = 0;
+    if (read_text(relocation_path, (u8 *)hint_words, sizeof(hint_words)) == (long)sizeof(hint_words) &&
+        hint_words[0] == HINT_MAGIC && hint_words[1] == RELOCATION_WINDOW_COUNT && hint_words[2] == word(RTOS_IDENTITY))
+        relocation.hint = hint_words + HINT_KEY;
+}
+/* After a search: its addresses for the next start. */
+static void keep_relocation(void)
+{
+    if (!relocation.searched) return;
+    hint_words[0] = HINT_MAGIC; hint_words[1] = RELOCATION_WINDOW_COUNT; hint_words[2] = word(RTOS_IDENTITY);
+    copy((u8 *)(hint_words + HINT_KEY), (const u8 *)window_at, RELOCATION_WINDOW_COUNT * 4);
+    long made = syscall6(39, (u32)data_path, 0755, 0, 0, 0, 0);
+    if (made < 0 && made != -17) return;
+    write_file(relocation_path, (const u8 *)hint_words, sizeof(hint_words));
+}
 static u32 symbol_delta(u32 symbol) { return relocation_delta(&relocation_tables, &relocation, symbol); }
 static u32 pair_value(u32 address)
 {
@@ -228,10 +330,9 @@ static u32 pair_value(u32 address)
 }
 static int relocate(void)
 {
-    relocation.read = read_word;
-    relocation.window_at = window_at;
-    relocation.symbol_at = relocated;
+    prepare_relocation();
     if (!relocation_resolve(&relocation_tables, &relocation)) return STATUS_RELOCATION;
+    keep_relocation();
     /* Patched firmware can keep data after the image end that the startup
        literals give, where the private code goes. */
     for (u32 i = 0; i < GUARD_PAIR_COUNT; ++i) {
@@ -361,18 +462,28 @@ static void apply_state(u32 base, u32 table)
     }
 }
 /* The script arrays that the loader allocated (grkit_core::runtime::loader):
-   the registry, the icon chunks, the module array, then the tail. */
+   the mailbox, the registry, the icon chunks, the module array, then the
+   tail. Entry i of the array table holds the words of array i, then its
+   address. */
 struct arrays { u32 base, tail, module_array, icon_bases[MAX_CHUNKS]; };
+#define ARRAY_ENTRY(i) (ARRAY_TABLE + (i) * 8U)
+/* The mailbox (GRKIT_MAILBOX_*), the first array, or 0 without one. */
+static u32 mailbox(void)
+{
+    u32 box = word(ARRAY_ENTRY(0) + 4);
+    if (!*(volatile u16 *)at(ARRAY_COUNT) || word(ARRAY_ENTRY(0)) != GRKIT_MAILBOX_WORDS || !heap(box, GRKIT_MAILBOX_WORDS * 4)) return 0;
+    return box;
+}
 /* Check that each array has its planned size and that no two overlap. */
 static int check_arrays(struct arrays *a)
 {
-    if (*(volatile u16 *)at(ARRAY_COUNT) != 2 + icon_chunks + (module_words != 0) || word(ARRAY_TABLE) != size / 4) return STATUS_ARRAYS;
-    u32 base = a->base = word(ARRAY_TABLE + 4), *icon_bases = a->icon_bases;
+    if (!mailbox() || *(volatile u16 *)at(ARRAY_COUNT) != 3 + icon_chunks + (module_words != 0) || word(ARRAY_ENTRY(1)) != size / 4) return STATUS_ARRAYS;
+    u32 base = a->base = word(ARRAY_ENTRY(1) + 4), *icon_bases = a->icon_bases;
     if (!heap(base, size)) return STATUS_ARRAY_MEMORY;
     for (u32 i = 0; i < icon_chunks; ++i) {
         u32 bytes = chunk_count(i) * ICON_STRIDE;
-        u32 ptr = word(ARRAY_TABLE + (i + 1) * 8 + 4);
-        if (word(ARRAY_TABLE + (i + 1) * 8) != bytes / 4 || !heap(ptr, bytes) ||
+        u32 ptr = word(ARRAY_ENTRY(i + 2) + 4);
+        if (word(ARRAY_ENTRY(i + 2)) != bytes / 4 || !heap(ptr, bytes) ||
             (ptr < base + size && base < ptr + bytes)) return STATUS_ARRAY_MEMORY;
         for (u32 j = 0; j < i; ++j)
             if (ptr < icon_bases[j] + chunk_count(j) * ICON_STRIDE && icon_bases[j] < ptr + bytes) return STATUS_ARRAY_MEMORY;
@@ -381,7 +492,7 @@ static int check_arrays(struct arrays *a)
     /* The module array follows the icon chunks. */
     u32 module_array = a->module_array = 0;
     if (module_words) {
-        u32 entry = ARRAY_TABLE + (1 + icon_chunks) * 8, bytes = module_words * 4;
+        u32 entry = ARRAY_ENTRY(2 + icon_chunks), bytes = module_words * 4;
         module_array = a->module_array = word(entry + 4);
         if (word(entry) != module_words || !heap(module_array, bytes) ||
             (module_array < base + size && base < module_array + bytes)) return STATUS_ARRAY_MEMORY;
@@ -389,8 +500,9 @@ static int check_arrays(struct arrays *a)
             if (module_array < icon_bases[j] + chunk_count(j) * ICON_STRIDE && icon_bases[j] < module_array + bytes) return STATUS_ARRAY_MEMORY;
     }
     /* The tail follows the other arrays and overlaps none of them. */
-    u32 tail = a->tail = word(ARRAY_TABLE + (2 + icon_chunks + (module_words != 0) - 1) * 8 + 4);
-    if (word(ARRAY_TABLE + (2 + icon_chunks + (module_words != 0) - 1) * 8) != GRKIT_TAIL_SIZE / 4 ||
+    u32 last = ARRAY_ENTRY(2 + icon_chunks + (module_words != 0));
+    u32 tail = a->tail = word(last + 4);
+    if (word(last) != GRKIT_TAIL_SIZE / 4 ||
         !heap(tail, GRKIT_TAIL_SIZE) || (tail < base + size && base < tail + GRKIT_TAIL_SIZE) ||
         (module_array && tail < module_array + module_words * 4 && module_array < tail + GRKIT_TAIL_SIZE)) return STATUS_ARRAY_MEMORY;
     for (u32 j = 0; j < icon_chunks; ++j)
@@ -672,7 +784,7 @@ static int select_profile(const char *id)
     relocation.window_at = window_at;
     relocation.symbol_at = relocated;
     if (!relocation_resolve(&relocation_tables, &relocation)) return STATUS_RELOCATION;
-    u32 base = word(ARRAY_TABLE + 4);
+    u32 base = word(ARRAY_ENTRY(1) + 4);
     if (!heap(base, GRKIT_HOST_HEADER_SIZE) || word(base + GRKIT_HOST_MAGIC) != GRKIT_HOST_MAGIC_VALUE || word(base + GRKIT_HOST_VERSION) != GRKIT_HOST_VERSION_VALUE) return STATUS_NO_HEADER;
     u32 n = word(base + GRKIT_HOST_COUNT), records = word(base + GRKIT_HOST_RECORDS), selected = 0;
     if (n > MAX_COUNT || records != base + GRKIT_HOST_HEADER_SIZE || !heap(base, GRKIT_HOST_HEADER_SIZE + n * GRKIT_RECORD_SIZE)) return STATUS_NO_HEADER;
@@ -749,10 +861,10 @@ static int names_build(void)
 }
 static int relocation_found(void)
 {
-    relocation.read = read_word;
-    relocation.window_at = window_at;
-    relocation.symbol_at = relocated;
-    return relocation_resolve(&relocation_tables, &relocation);
+    prepare_relocation();
+    if (!relocation_resolve(&relocation_tables, &relocation)) return 0;
+    keep_relocation();
+    return 1;
 }
 /* Whether the running build is not the one of `mode`. A failure to read the
    RTOS is left to the install attempt, which reports it. */
@@ -764,19 +876,75 @@ static int other_build(enum install_mode mode)
     if ((u32)mapped < 0xfffff001U) {
         mapping = (volatile u8 *)mapped;
         other = mode == INSTALL_KNOWN ? !names_build() : !relocation_found();
-        syscall6(91, (u32)mapping, MAP_SIZE, 0, 0, 0, 0);
     }
     syscall6(6, fd, 0, 0, 0, 0, 0);
     return other;
+}
+/* The result of SCAN or INSTALL into the mailbox, which the loader polls:
+   the plan header of a scan, or a final status, which stops the loader. */
+static void post_failure(u32 box, int status)
+{
+    store(box + GRKIT_MAILBOX_STATUS, (u32)status);
+    store(box + GRKIT_MAILBOX_RESULT, GRKIT_MAILBOX_FAILED);
+    sync_alias(box, GRKIT_MAILBOX_WORDS * 4);
+}
+static void post_plan(u32 box)
+{
+    copy(at(box + GRKIT_MAILBOX_PLAN + 4), plan + 4, GRKIT_PLAN_HEADER_SIZE - 4);
+    store(box + GRKIT_MAILBOX_RESULT, 0);
+    store(box + GRKIT_MAILBOX_PLAN, GRKIT_PLAN_MAGIC_VALUE);
+    sync_alias(box, GRKIT_MAILBOX_WORDS * 4);
+}
+/* SCAN, then its result into the mailbox. An attempt that found the plan of
+   an earlier attempt posts that plan again. A SCAN that needs the effect
+   folders posts nothing: LOAD.SH runs it again. The array table is a
+   firmware address, so the mailbox needs the relocation first. */
+static int scan_and_post(void)
+{
+    int status = scan();
+    if (status == STATUS_BUSY || status == STATUS_PLAN_STALE) return status;
+    long fd = syscall6(5, (u32)"/dev/mem", 0x101002, 0, 0, 0, 0);
+    if (fd < 0) return STATUS_NO_MEMORY;
+    long mapped = syscall6(192, 0, MAP_SIZE, 3, 1, fd, MAP_BASE >> 12);
+    if ((u32)mapped < 0xfffff001U) {
+        mapping = (volatile u8 *)mapped;
+        u32 box = relocation_found() ? mailbox() : 0;
+        if (!box) status = status ? status : STATUS_ARRAYS;
+        else {
+            if (!status) status = read_plan();
+            if (status) post_failure(box, status);
+            else post_plan(box);
+        }
+    } else status = STATUS_NO_MAPPING;
+    syscall6(6, fd, 0, 0, 0, 0, 0);
+    return status;
+}
+/* After the camera mounts the card: the new effects of the package go into
+   the effects library, as SCAN copied them in the RAM copy of the card. */
+static int import_effects(void)
+{
+    read_package_list();
+    collect();
+    return 0;
 }
 __attribute__((used)) void start(u32 *stack)
 {
     u32 argc = stack[0]; char **argv = (char **)(stack + 1); int status = STATUS_USAGE;
     enum install_mode mode = INSTALL_LAST;
+    /* The card root follows the mode: the RAM copy of the card, or the card. */
+    const char *root = CARD_ROOT;
+#ifdef MODULE_DIAGNOSTICS
+    int selecting = argc == 3 && text_equal(argv[1], "--select");
+#else
+    int selecting = 0;
+#endif
+    if (argc == 3 && !selecting) { root = argv[2]; argc = 2; }
     if (argc == 2 && text_equal(argv[1], "--known")) mode = INSTALL_KNOWN;
     else if (argc == 2 && text_equal(argv[1], "--try")) mode = INSTALL_TRY;
     int installing = argc == 2 && (mode != INSTALL_LAST || text_equal(argv[1], "--install"));
-    if (argc == 2 && text_equal(argv[1], "--scan")) status = scan();
+    if (!set_root(root)) status = STATUS_USAGE;
+    else if (argc == 2 && text_equal(argv[1], "--scan")) status = scan_and_post();
+    else if (argc == 2 && text_equal(argv[1], "--import")) status = import_effects();
     else if (installing
 #ifdef MODULE_DIAGNOSTICS
              || (argc == 3 && text_equal(argv[1], "--select") && length(argv[2]) <= 31)
@@ -793,16 +961,24 @@ __attribute__((used)) void start(u32 *stack)
             status = STATUS_NO_MAPPING;
             if ((u32)mapped < 0xfffff001U) {
                 mapping = (volatile u8 *)mapped;
-                if (argc == 2) status = install();
+                if (argc == 2) {
+                    status = install();
+                    /* The loader polls the mailbox: it retries after
+                       not-ready, and stops after a result. */
+                    u32 box = mailbox();
+                    if (box && !not_ready(status)) {
+                        if (status) post_failure(box, status);
+                        else { store(box + GRKIT_MAILBOX_RESULT, GRKIT_MAILBOX_INSTALLED); sync_alias(box, GRKIT_MAILBOX_WORDS * 4); }
+                    }
+                }
 #ifdef MODULE_DIAGNOSTICS
                 else status = select_profile(argv[2]);
 #endif
-                syscall6(91, (u32)mapping, MAP_SIZE, 0, 0, 0, 0);
             }
             syscall6(6, fd, 0, 0, 0, 0, 0);
         }
-        /* The loader polls these files: retry after not-ready, stop after a result.
-           Another build leaves the next installer to run. */
+        /* The result files, which FINISH.SH copies to the card: none after
+           not-ready. Another build leaves the next installer to run. */
         if (argc == 2 && status != STATUS_BUSY && !other) {
             if (not_ready(status)) syscall6(10, (u32)lock_path, 0, 0, 0, 0, 0);
             else {

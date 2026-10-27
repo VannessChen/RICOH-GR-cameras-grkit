@@ -58,6 +58,10 @@ struct relocation_state {
     /* The startup literals of the running image. */
     u32 data_source, data_size, bss_start, bss_end, image_end, tail;
     u32 *window_at, *symbol_at;
+    /* The window addresses that an earlier search of the same build found,
+       or 0. After a resolve, `searched` tells whether the search ran. */
+    const u32 *hint;
+    u32 searched;
     u32 failures;
     struct relocation_failure failure[RELOCATION_REPORT];
 };
@@ -137,9 +141,31 @@ static int relocation_startup(const struct relocation_tables *t, struct relocati
     return 1;
 }
 
+/* Whether each searched window lies at the address that `at` gives it: its
+   pinned start, or the address that an earlier search of the same build
+   found (`hint`). A camera reads the image uncached, so the search of a
+   moved build takes seconds, and a check at known addresses milliseconds.
+   The build checked that each window is unique in the pinned image, and
+   the search checked it in the build of the hint. */
+static int relocation_known(const struct relocation_tables *t, struct relocation_state *s, const u32 *at)
+{
+    for (u32 w = 0; w < t->window_count; ++w) {
+        const struct relocation_window *window = &t->windows[w];
+        s->window_at[w] = 0;
+        if (!window->search) continue;
+        u32 address = at ? at[w] : window->start;
+        if (!address || !relocation_matches(t, s, w, address)) return 0;
+        s->window_at[w] = address;
+    }
+    return 1;
+}
+
 /* Finds each searched window once within the radius of its pinned start. */
 static void relocation_search(const struct relocation_tables *t, struct relocation_state *s)
 {
+    s->searched = 0;
+    if (relocation_known(t, s, 0) || (s->hint && relocation_known(t, s, s->hint))) return;
+    s->searched = 1;
     for (u32 w = 0; w < t->window_count; ++w) {
         const struct relocation_window *window = &t->windows[w];
         s->window_at[w] = 0;

@@ -57,12 +57,13 @@ GR IIIx 1.60 runs the RTOS code of GR III 2.10. GR III 2.20 and GR IIIx 1.70 mov
 
 ## Installation
 
-At power-on, the loader script waits until Linux mounts the card. Then it runs two steps:
+At power-on, the loader script waits until Linux runs commands, which is about 2 s before the camera mounts the card on Linux. It does not wait for that mount. The loader allocates a small mailbox array, and then runs three steps on Linux:
 
-1. SCAN lists the modules and the effects, and writes an allocation plan. The loader allocates the arrays and stays resident, so the arrays stay allocated.
-2. INSTALL links the modules, writes the effect records and the icons, restores the saved state, and installs the hooks last. It writes `INSTALL.OK`, or `INSTALL.ERR` with a status, and then `GRKIT/REPORT.TXT`.
+1. `LOAD.SH` copies the card into RAM. Unless Linux has mounted a card folder, the loader mounts the card itself, and the script copies the package folder and the data folder into a folder in RAM, unmounts the card, and runs SCAN there. The camera's own mount of the card fails while another mount holds it, and an unmount after that failure stops Linux. So the window with the mount is short, and if the camera tried its mount during the window, the script moves its mount to the camera's path instead of an unmount.
+2. SCAN lists the modules and the effects, writes an allocation plan, and writes the plan header into the mailbox. The loader allocates the arrays and stays resident, so the arrays stay allocated. The plan goes to `GRKIT/PLAN.BIN` on the card with a key: the listing of the effect and module folders, the package list, the modes, and the saved values that the plan depends on. A later start with the same key keeps that plan and reads no effect file, which saves the copy of each effect file through the card file system.
+3. INSTALL links the modules, writes the effect records and the icons, restores the saved state, and installs the hooks last. It writes its result into the mailbox, and `INSTALL.OK`, or `INSTALL.ERR` with a status, and `GRKIT/REPORT.TXT` into the RAM copy. `FINISH.SH` copies them to the card after the camera mounts it, and imports the new effects of the package into the effects library on the card.
 
-When a camera has several targets, its package holds the installer of each, and `INSTALL.SH` selects one by the identity of the running build, or by [relocation](#relocation).
+Each installer takes the card root as its argument: the RAM copy, or the card for the import. When a camera has several targets, its package holds the installer of each, and `INSTALL.SH` selects one by the identity of the running build, or by [relocation](#relocation).
 
 INSTALL changes nothing on a firmware that it does not expect. Each firmware address must resolve in the running image, and each hook site must hold its stock instruction. Each hook belongs to one extension point, and INSTALL installs only the points that the loaded modules need.
 
@@ -177,7 +178,7 @@ A hook on the JPEG encode processes the main picture, the screennail, and the th
 
 ## Relocation
 
-Some cameras show a supported version but run another build of it. Each runtime is built from one pinned image. For each firmware address (`FIRMWARE(address)`), the build stores a window of the pinned image that is unique. INSTALL (`runtime/relocation.h`) finds each window once in the running image and moves each reference. A failure stops INSTALL with status 47 before it changes the firmware, and `INSTALL.ERR` lists the addresses that failed.
+Some cameras show a supported version but run another build of it. Each runtime is built from one pinned image. For each firmware address (`FIRMWARE(address)`), the build stores a window of the pinned image that is unique. INSTALL (`runtime/relocation.h`) finds each window once in the running image and moves each reference. A camera reads the image uncached, so the search takes seconds. INSTALL therefore checks each window at a known address first: its pinned address, or the address that an earlier search of the same build found, which INSTALL keeps in `GRKIT/RELOC.BIN`. Only a build without such addresses gets the search, which also checks that each window is unique. A failure stops INSTALL with status 47 before it changes the firmware, and `INSTALL.ERR` lists the addresses that failed. SCAN resolves the same addresses to find the mailbox.
 
 ## Porting
 

@@ -15,12 +15,14 @@ use crate::{
     modules, runtime, Files,
 };
 
-pub const RUNTIME_PATHS: [&str; 5] = [
+pub const RUNTIME_PATHS: [&str; 7] = [
     "SCRIPT/STARTUP.TTL",
     card::LOADER_FILE,
     card::CORE_FILE,
+    card::LOAD_FILE,
     card::SCAN_FILE,
     card::INSTALL_FILE,
+    card::FINISH_FILE,
 ];
 pub const MAX_ENTRIES: usize = 200;
 pub const MAX_FILE_SIZE: usize = 16 * 1024 * 1024;
@@ -239,7 +241,13 @@ fn package_runtime(runtimes: &[VerifiedRuntime], camera: &Camera) -> Result<File
     let files = runtime::package_runtime_files(&binaries, runtime::icon_stride(targets[0])?);
     // The builds of a camera share every file but the core file. The package
     // has its own scripts that run the core files.
-    let own = [card::CORE_FILE, card::INSTALL_FILE, card::SCAN_FILE];
+    let own = [
+        card::CORE_FILE,
+        card::LOAD_FILE,
+        card::INSTALL_FILE,
+        card::SCAN_FILE,
+        card::FINISH_FILE,
+    ];
     for runtime in runtimes {
         for (name, blob) in runtime.files() {
             ensure!(

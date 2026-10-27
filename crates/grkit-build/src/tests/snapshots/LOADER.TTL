@@ -1,46 +1,34 @@
 mpause 2000
 sendln 'lcmd_resp on'
-filedelete 'C:\SCRIPT\GRKIT\PLAN.BIN'
-filedelete 'C:\SCRIPT\GRKIT\PLAN.TMP'
 filedelete 'C:\SCRIPT\GRKIT\INSTALL.OK'
 filedelete 'C:\SCRIPT\GRKIT\INSTALL.ERR'
-filedelete 'C:\SCRIPT\GRKIT\INSTALL.LCK'
-filesearch 'C:\SCRIPT\GRKIT\PLAN.BIN'
-if result != 0 goto reject
-filesearch 'C:\SCRIPT\GRKIT\INSTALL.OK'
-if result != 0 goto reject
+intdim mailbox 16
+mailbox[0] = 0
+mailbox[10] = 0
+mailbox[11] = 0
 attempts = 0
 :scan
-sendln 'lcmd sh /media/storage1/SCRIPT/GRKIT/SCAN.SH'
-filesearch 'C:\SCRIPT\GRKIT\PLAN.BIN'
-if result != 0 goto plan_ready
+sendln 'lcmd : -q ; d=/SCRIPT/GRKIT/LOAD.SH; if grep -q storage /proc/mounts; then sh /media/storage1$d; else mkdir /tmp/m && mount -t ipcufs mnt /tmp/m -ofs=1 && cp /tmp/m$d /tmp/l && sh /tmp/l /tmp/m; rmdir /tmp/m; :; fi'
+posted = mailbox[10]
+if posted = 2 goto reject
+posted = mailbox[0]
+if posted = 827150919 goto plan_ready
 mpause 200
 attempts = attempts + 1
 if attempts < 150 goto scan
 goto reject
 :plan_ready
-fileopen fh 'C:\SCRIPT\GRKIT\PLAN.BIN' 0
-if fh < 0 goto reject
-call readword
-if value != 827150919 goto reject_close
-call readword
-count = value
-if count < 0 goto reject_close
-if count > 20 goto reject_close
-call readword
-words = value
-call readword
-chunks = value
-call readword
-call readword
-modulewords = value
-if modulewords < 0 goto reject_close
-if modulewords > 65536 goto reject_close
-call readword
-moduletiles = value
-if moduletiles < 0 goto reject_close
-if moduletiles > 64 goto reject_close
-fileclose fh
+count = mailbox[1]
+if count < 0 goto reject
+if count > 20 goto reject
+words = mailbox[2]
+chunks = mailbox[3]
+modulewords = mailbox[5]
+if modulewords < 0 goto reject
+if modulewords > 65536 goto reject
+moduletiles = mailbox[6]
+if moduletiles < 0 goto reject
+if moduletiles > 64 goto reject
 expected = 128 + count * 1088
 if words != expected goto reject
 expectedchunks = (count + moduletiles + 43) / 40
@@ -68,15 +56,16 @@ intdim modulecode modulewords
 intdim tailarea 45743
 attempts = 0
 :install
-sendln 'lcmd sh /media/storage1/SCRIPT/GRKIT/INSTALL.SH'
-filesearch 'C:\SCRIPT\GRKIT\INSTALL.OK'
-if result != 0 goto resident
-filesearch 'C:\SCRIPT\GRKIT\INSTALL.ERR'
-if result != 0 goto reject
+sendln 'lcmd sh /tmp/gc/SCRIPT/GRKIT/INSTALL.SH'
+posted = mailbox[10]
+if posted = 1 goto installed
+if posted = 2 goto reject
 mpause 500
 attempts = attempts + 1
 if attempts > 60 mpause 9500
 goto install
+:installed
+sendln 'lcmd sh /tmp/gc/SCRIPT/GRKIT/FINISH.SH'
 :resident
 stateok = 1
 foldersearch 'C:\GRKIT'
@@ -1124,19 +1113,7 @@ filewriteln pfh ''
 fileclose pfh
 :profile_write_end
 return
-:reject_close
-fileclose fh
 :reject
+sendln 'lcmd sh /tmp/gc/SCRIPT/GRKIT/FINISH.SH'
 dispstr 'GR_MODULE_LOADER_REJECTED'
 end
-:readword
-value = 0
-weight = 1
-for byteindex 0 3
-fileread fh 1 octet
-if result != 0 goto reject_close
-str2code bytevalue octet
-value = value + bytevalue * weight
-if byteindex < 3 weight = weight * 256
-next
-return

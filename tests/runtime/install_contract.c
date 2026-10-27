@@ -216,6 +216,7 @@ static void store(u32 p, u32 v) { *(volatile u32 *)at(p) = v; }
 static const char library_path[] = LIBRARY_PATH, inbox_path[] = INBOX_PATH, package_path[] = PACKAGE_PATH;
 static const char imported_path[] = IMPORTED_PATH, data_path[] = DATA_PATH;
 static const char legacy_effects_path[] = LEGACY_EFFECTS_PATH, state_path[] = STATE_PATH;
+static const char modules_path[] = MODULES_PATH, package_modules_path[] = PACKAGE_MODULES_PATH;
 static u8 profiles[MAX_COUNT + 1][GRKIT_GRF_MAX_SIZE], temporary[GRKIT_GRF_MAX_SIZE];
 static u8 directory_entries[4096];
 static u32 count;

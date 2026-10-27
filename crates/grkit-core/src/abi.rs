@@ -372,6 +372,27 @@ fields!(PLAN_FIELDS {
     PLAN_LISTED = 36, 4;
 });
 
+/// The mailbox: the first script array of the loader, which the installer
+/// finds through the array table. SCAN writes the plan header into it and
+/// INSTALL its result, so the loader waits on memory, not on card files: the
+/// card is in a RAM copy on Linux until the camera mounts it.
+pub const MAILBOX_WORDS: usize = 16;
+/// `MAILBOX_RESULT` after INSTALL installed the hooks, or after SCAN or
+/// INSTALL stopped with a status.
+pub const MAILBOX_INSTALLED: u32 = 1;
+pub const MAILBOX_FAILED: u32 = 2;
+
+fields!(MAILBOX_FIELDS {
+    /// The plan header (`PLAN_FIELDS`), with its magic word last.
+    MAILBOX_PLAN = 0, 40;
+    /// GRKIT_MAILBOX_INSTALLED or GRKIT_MAILBOX_FAILED, else 0.
+    MAILBOX_RESULT = 40, 4;
+    /// The status of a failure.
+    MAILBOX_STATUS = 44, 4;
+});
+const _: () = assert!(MAILBOX_PLAN + PLAN_HEADER_SIZE == MAILBOX_RESULT);
+const _: () = assert!(MAILBOX_STATUS + 4 <= MAILBOX_WORDS * 4);
+
 /// A listed effect in the plan.
 pub const PLANNED_EFFECT_SIZE: usize = 92;
 
@@ -739,6 +760,16 @@ pub fn header() -> String {
     writeln!(out, "#define GRKIT_PLAN_SAFE {PLAN_SAFE}U").unwrap();
     writeln!(out, "#define GRKIT_PLAN_PROFILE {PLAN_PROFILE}U").unwrap();
     table(&mut out, PLAN_FIELDS, false);
+    define(
+        &mut out,
+        "The mailbox: the first script array of the loader. SCAN writes the plan \
+         header into it, and INSTALL its result.",
+        "MAILBOX_WORDS",
+        MAILBOX_WORDS,
+    );
+    writeln!(out, "#define GRKIT_MAILBOX_INSTALLED {MAILBOX_INSTALLED}U").unwrap();
+    writeln!(out, "#define GRKIT_MAILBOX_FAILED {MAILBOX_FAILED}U").unwrap();
+    table(&mut out, MAILBOX_FIELDS, false);
     writeln!(
         out,
         "#define GRKIT_PLANNED_EFFECT_SIZE {PLANNED_EFFECT_SIZE}"
@@ -951,6 +982,10 @@ mod tests {
     fn the_plan_fields_cover_the_plan_header_and_entry() {
         check(PLAN_FIELDS, PLAN_HEADER_SIZE, true);
         check(PLANNED_FIELDS, PLANNED_EFFECT_SIZE, true);
+        // The mailbox holds the plan header, then the result of INSTALL.
+        check(MAILBOX_FIELDS, MAILBOX_WORDS * 4, false);
+        assert_eq!(MAILBOX_PLAN, 0);
+        assert_eq!(MAILBOX_RESULT, PLAN_HEADER_SIZE);
         // The loader reads the words up to PLAN_MODULE_TILES in this order.
         assert_eq!(
             [

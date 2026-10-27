@@ -174,7 +174,7 @@ const en = {
       '.',
     ],
     [
-      'Turn the camera on. GRKit loads about 5 to 12 seconds after power-on. Then press the ADJ lever while you shoot and select the sixth entry, GRK.',
+      'Turn the camera on. GRKit loads about 3 to 6 seconds after power-on. Then press the ADJ lever while you shoot and select the sixth entry, GRK.',
     ],
     ['Optional: delete ', '`{modeset}', ' and ', '`DEVELOP.MOD', ' from the card root. Updates do not need them.'],
   ] as readonly RichText[],
@@ -191,7 +191,7 @@ const en = {
     {
       q: 'GRK does not show up in ADJ.',
       a: [
-        'GRKit loads about 5 to 12 seconds after power-on, and takes longest on GR IV. Wait, then press the ADJ lever while you shoot and select the sixth entry, GRK. The first time, SD scripts must be on: hold MENU while you turn the camera on.',
+        'GRKit loads about 3 to 6 seconds after power-on, and takes longest on GR IV. Wait, then press the ADJ lever while you shoot and select the sixth entry, GRK. The first time, SD scripts must be on: hold MENU while you turn the camera on.',
       ],
     },
     {
@@ -497,7 +497,7 @@ const zhHans: Strings = {
     ['关闭相机。'],
     ['打开 GRKit.zip（有的浏览器会自动解压），把 ', '`SD_ROOT', ' 里面的内容（不是这个文件夹本身）复制到存储卡根目录。复制后，根目录里应有 ', '`SCRIPT', ' 文件夹。'],
     ['插入存储卡。仅首次使用时：按住 MENU 按钮开机，等待相机自动关机。这一步需要 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
-    ['正常开机。GRKit 在开机后约 5 到 12 秒加载，之后在拍摄时按 ADJ 拨杆，选择第 6 项 GRK。'],
+    ['正常开机。GRKit 在开机后约 3 到 6 秒加载，之后在拍摄时按 ADJ 拨杆，选择第 6 项 GRK。'],
     ['可选：从存储卡根目录删除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '，以后更新也不需要它们。'],
   ],
   update: '更新',
@@ -512,7 +512,7 @@ const zhHans: Strings = {
   faq: [
     {
       q: 'ADJ 里没有 GRK？',
-      a: ['GRKit 在开机后约 5 到 12 秒加载，GR IV 最慢。稍等片刻，然后在拍摄时按 ADJ 拨杆，选择第 6 项 GRK。首次使用前，需要按住 MENU 开机，打开 SD 脚本。'],
+      a: ['GRKit 在开机后约 3 到 6 秒加载，GR IV 最慢。稍等片刻，然后在拍摄时按 ADJ 拨杆，选择第 6 项 GRK。首次使用前，需要按住 MENU 开机，打开 SD 脚本。'],
     },
     {
       q: '为什么开机后头几张照片没有胶片效果？',
@@ -799,7 +799,7 @@ const zhHant: Strings = {
     ['關閉相機。'],
     ['開啟 GRKit.zip（有些瀏覽器會自動解壓縮），把 ', '`SD_ROOT', ' 裡面的內容（不是這個資料夾本身）複製到記憶卡根目錄。複製後，根目錄裡應有 ', '`SCRIPT', ' 資料夾。'],
     ['插入記憶卡。僅首次使用時：按住 MENU 按鈕開機，等待相機自動關機。這一步需要 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '。'],
-    ['正常開機。GRKit 在開機後約 5 到 12 秒載入，之後在拍攝時按 ADJ 撥桿，選擇第 6 項 GRK。'],
+    ['正常開機。GRKit 在開機後約 3 到 6 秒載入，之後在拍攝時按 ADJ 撥桿，選擇第 6 項 GRK。'],
     ['選用：從記憶卡根目錄刪除 ', '`{modeset}', ' 和 ', '`DEVELOP.MOD', '，以後更新也不需要它們。'],
   ],
   update: '更新',
@@ -814,7 +814,7 @@ const zhHant: Strings = {
   faq: [
     {
       q: 'ADJ 裡沒有 GRK？',
-      a: ['GRKit 在開機後約 5 到 12 秒載入，GR IV 最慢。稍等片刻，然後在拍攝時按 ADJ 撥桿，選擇第 6 項 GRK。首次使用前，需要按住 MENU 開機，開啟 SD 腳本。'],
+      a: ['GRKit 在開機後約 3 到 6 秒載入，GR IV 最慢。稍等片刻，然後在拍攝時按 ADJ 撥桿，選擇第 6 項 GRK。首次使用前，需要按住 MENU 開機，開啟 SD 腳本。'],
     },
     {
       q: '為什麼開機後頭幾張照片沒有底片效果？',
@@ -1103,7 +1103,7 @@ const ja: Strings = {
     ['カメラの電源を切ります。'],
     ['GRKit.zip を開きます（ブラウザーによっては自動で展開されます）。', '`SD_ROOT', ' フォルダーそのものではなく、その中身をカードのルートにコピーします。コピー後、カードのルートに ', '`SCRIPT', ' フォルダーがあれば OK です。'],
     ['カードを入れます。初回のみ：MENU ボタンを押したまま電源を入れ、電源が自動で切れるまで待ちます。この手順で ', '`{modeset}', ' と ', '`DEVELOP.MOD', ' を使います。'],
-    ['電源を入れます。GRKit は電源を入れてから約 5〜12 秒で読み込まれます。その後、撮影中に ADJ レバーを押し、6 番目の項目「GRK」を選びます。'],
+    ['電源を入れます。GRKit は電源を入れてから約 3〜6 秒で読み込まれます。その後、撮影中に ADJ レバーを押し、6 番目の項目「GRK」を選びます。'],
     ['任意：カードのルートから ', '`{modeset}', ' と ', '`DEVELOP.MOD', ' を削除します。アップデートでは使いません。'],
   ],
   update: 'アップデート',
@@ -1118,7 +1118,7 @@ const ja: Strings = {
   faq: [
     {
       q: 'ADJ に GRK が表示されない',
-      a: ['GRKit は電源を入れてから約 5〜12 秒で読み込まれ、GR IV がいちばん時間がかかります。少し待ってから、撮影中に ADJ レバーを押し、6 番目の項目「GRK」を選びます。初回は SD スクリプトをオンにする必要があります。MENU ボタンを押したまま電源を入れてください。'],
+      a: ['GRKit は電源を入れてから約 3〜6 秒で読み込まれ、GR IV がいちばん時間がかかります。少し待ってから、撮影中に ADJ レバーを押し、6 番目の項目「GRK」を選びます。初回は SD スクリプトをオンにする必要があります。MENU ボタンを押したまま電源を入れてください。'],
     },
     {
       q: '電源を入れた直後の写真にフィルムルックがかからない',
