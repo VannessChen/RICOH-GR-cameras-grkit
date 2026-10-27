@@ -1,4 +1,5 @@
-import { effectUrl, siteUrl, type Effect, type ImportedEffect } from './catalog';
+import type { CardFile } from './card';
+import { effectUrl, siteUrl, type Effect, type PackageEffect } from './catalog';
 import { effectFilename } from './import/names';
 import wasmUrl from './wasm/grkit_wasm_bg.wasm?url';
 
@@ -94,9 +95,8 @@ export function loadWasm(): Promise<Wasm> {
 const buildUrl = (target: string) => siteUrl(`runtime/${target}/build.json`);
 const guideUrl = (camera: string, language: string) => siteUrl(`guides/${camera}/${language}.pdf`);
 const runtimeUrl = (target: string, path: string) => siteUrl(`runtime/${target}/sd/${path}`);
-/** The release publishes each official module once, for every camera. */
-/** The site file of an official module, which a person can also copy to GRKIT/MODULES. */
-export const moduleUrl = (id: string) => siteUrl(`modules/${id}.GRM`);
+/** The site file of an official module. The release publishes each one once, for every camera. */
+const moduleUrl = (id: string) => siteUrl(`modules/${id}.GRM`);
 
 /**
  * The runtime paths that `build.json` lists, read without the packager so that the files can
@@ -138,23 +138,26 @@ async function sha256(bytes: Uint8Array): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+type Packager = InstanceType<Wasm['Package']>;
+
 /**
- * Builds GRKit.zip in the browser from the published runtime of each build in `targets`, in
- * release order, and the selected effects. The builds of a camera have the same effects, so the
- * effects come from the first build.
+ * Assembles the package in the browser from the published runtime of each build in `targets`, in
+ * release order, and the selected effects, then passes the packager to `finish`. The builds of a
+ * camera have the same effects, so the effects come from the first build.
  * `camera` selects the ModeSet file. `modules` names the module files that the package holds.
  * `language` selects the installation guide, which the site publishes as `guides/<camera>/<language>.pdf`.
  * grkit-wasm checks each runtime file against `build.json` and each effect's format.
  * `onProgress` receives the number of bytes of the files of this package that have arrived.
  */
-export async function buildPackage(
+async function assemble<T>(
   targets: readonly string[],
   camera: string,
-  effects: readonly Effect[],
+  effects: readonly PackageEffect[],
   modules: readonly string[],
   language: string,
   onProgress: (received: number) => void,
-): Promise<Blob> {
+  finish: (builder: Packager) => T,
+): Promise<T> {
   const used = new Set<string>([wasmUrl]);
   const use = (url: string) => {
     used.add(url);
@@ -180,7 +183,11 @@ export async function buildPackage(
     moduleBytes.catch(ignore);
     const effectBytes = Promise.all(
       effects.map((effect) =>
-        effect.imported ? Promise.resolve(effect.imported.blob) : use(effectUrl(targets[0]!, effect.file)),
+        effect.card
+          ? Promise.resolve(effect.card.bytes)
+          : effect.imported
+            ? Promise.resolve(effect.imported.blob)
+            : use(effectUrl(targets[0]!, effect.file)),
       ),
     );
     // The build awaits the effects later. Until then, a failure is not an unhandled rejection.
@@ -206,8 +213,8 @@ export async function buildPackage(
       }
       for (const [index, blob] of (await effectBytes).entries()) {
         const effect = effects[index]!;
-        // An imported effect comes from this page, so it has no site file to check.
-        if (!effect.imported && (await sha256(blob)) !== effect.sha256) {
+        // An imported effect or an effect from the card has no site file to check.
+        if (!effect.imported && !effect.card && (await sha256(blob)) !== effect.sha256) {
           throw new Error(`Effect checksum mismatch: ${effect.id}`);
         }
         builder.addEffect(blob);
@@ -215,8 +222,7 @@ export async function buildPackage(
       for (const bytes of await moduleBytes) {
         builder.addModule(bytes);
       }
-      const zip = builder.build();
-      return new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' });
+      return finish(builder);
     } finally {
       builder.free();
     }
@@ -231,6 +237,75 @@ export async function buildPackage(
   }
 }
 
+/** Builds GRKit.zip in the browser. See `assemble` for the arguments. */
+export function buildPackage(
+  targets: readonly string[],
+  camera: string,
+  effects: readonly PackageEffect[],
+  modules: readonly string[],
+  language: string,
+  onProgress: (received: number) => void,
+): Promise<Blob> {
+  return assemble(targets, camera, effects, modules, language, onProgress, (builder) => {
+    const zip = builder.build();
+    return new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' });
+  });
+}
+
+/**
+ * The files that the same package puts on the card, at their paths from the card root: the
+ * `SD_ROOT` of the verified GRKit.zip. See `assemble` for the arguments.
+ */
+export function buildCardFiles(
+  targets: readonly string[],
+  camera: string,
+  effects: readonly PackageEffect[],
+  modules: readonly string[],
+  language: string,
+  onProgress: (received: number) => void,
+): Promise<CardFile[]> {
+  return assemble(targets, camera, effects, modules, language, onProgress, (builder) =>
+    builder.cardFiles().map((file) => {
+      const item = { path: file.path, bytes: file.bytes };
+      file.free();
+      return item;
+    }),
+  );
+}
+
+/** The file name of an effect on the card, the same in a package and in the library. */
+export async function effectFile(effect: Effect): Promise<string> {
+  return effect.imported ? effectFilename(effect.id) : effect.file;
+}
+
+/** The label of an effect file on a card, or null for a file that is not an effect. */
+export async function effectLabel(
+  bytes: Uint8Array,
+): Promise<{ id: string; name: string; icon: Uint8Array; monochrome: boolean } | null> {
+  const wasm = await loadWasm();
+  let label;
+  try {
+    label = wasm.effectLabel(bytes);
+  } catch {
+    return null;
+  }
+  try {
+    return { id: label.id, name: label.name, icon: label.icon, monochrome: label.monochrome };
+  } finally {
+    label.free();
+  }
+}
+
+/** The files that turn SD scripts off on `camera`, at their paths from the card root. */
+export async function scriptsOffCardFiles(camera: string): Promise<CardFile[]> {
+  const wasm = await loadWasm();
+  return wasm.scriptsOffFiles(camera).map((file) => {
+    const item = { path: file.path, bytes: file.bytes };
+    file.free();
+    return item;
+  });
+}
+
 /** The ZIP that turns SD scripts off on `camera`: its ModeSet file with the disable command. */
 export async function buildScriptsOff(camera: string): Promise<Blob> {
   const module = await loadWasm();
@@ -240,11 +315,6 @@ export async function buildScriptsOff(camera: string): Promise<Blob> {
 }
 
 /** Starts the download of a blob as a file. */
-/** Saves the `.GRF` file of an imported effect under the file name that a package gives it. */
-export async function saveImported(effect: ImportedEffect): Promise<void> {
-  save(new Blob([effect.imported.blob as Uint8Array<ArrayBuffer>]), await effectFilename(effect.id));
-}
-
 export function save(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

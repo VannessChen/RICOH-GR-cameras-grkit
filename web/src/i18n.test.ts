@@ -30,6 +30,7 @@ describe('STRINGS', () => {
   it('gives each language the same install steps and effect looks', () => {
     const shape = (language: keyof typeof STRINGS) => ({
       steps: STRINGS[language].steps.map((parts) => parts.filter((p) => p.startsWith('`'))),
+      updateSteps: STRINGS[language].updateSteps.map((parts) => parts.filter((p) => p.startsWith('`'))),
       looks: Object.keys(STRINGS[language].looks).sort(),
     });
     expect(shape('zh-Hans')).toEqual(shape('en'));
@@ -37,10 +38,14 @@ describe('STRINGS', () => {
     expect(shape('ja')).toEqual(shape('en'));
   });
 
-  it('names the ModeSet file through the camera token once in each language', () => {
+  it('names the ModeSet file only through the camera token, as often in each language', () => {
+    const tokens = (language: keyof typeof STRINGS) =>
+      STRINGS[language].steps.flat().filter((part) => part === MODESET_TOKEN).length;
+    expect(tokens('en')).toBeGreaterThan(0);
     for (const language of Object.keys(STRINGS) as (keyof typeof STRINGS)[]) {
-      const parts = STRINGS[language].steps.flat();
-      expect(parts.filter((part) => part === MODESET_TOKEN)).toHaveLength(1);
+      expect(tokens(language)).toBe(tokens('en'));
+      const text = [...STRINGS[language].steps, ...STRINGS[language].updateSteps].flat().join('');
+      expect(text).not.toMatch(/\d{8}\.\d{3}/);
     }
   });
 });

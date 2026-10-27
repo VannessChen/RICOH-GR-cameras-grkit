@@ -5,89 +5,74 @@
 [![Tests](https://github.com/ahonn/grkit/actions/workflows/tests.yml/badge.svg)](https://github.com/ahonn/grkit/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-GRKit は、RICOH GR カメラにフィルムルックと撮影ツールを追加します。メモリーカードから読み込まれ、カメラのファームウェアには書き込みません。
+GRKit は、RICOH GR III・GR IIIx・GR IV に、フィルム風の色、XPan などの比率、日付写し込み、粒状感を追加するツールです。SD カードから動作し、ファームウェアは書き換えません。カードを抜けば、カメラは元の状態に戻ります。
 
-![ADJ モードの GRKit のページ](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.jpg)
+<p>
+  <img src="https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.ja.jpg" alt="ADJ モードの GRKit ページ" width="49%">
+  <img src="https://github.com/ahonn/grkit/raw/main/resources/images/grkit-menu.ja.jpg" alt="MENU のカスタマイズタブにある GRKit" width="49%">
+</p>
 
-写真：nagi usano による [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)、[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)。
+写真：nagi usano「[Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/)」、[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)
 
 ## 機能
 
-GRKit は ADJ モードに 6 番目の項目 GRK を追加します。GRK には 5 つのモジュールがあります。
+撮影中に ADJ レバーを押し、6 番目の項目「GRK」を選びます。
 
-- **フィルムルック（Film Look）**：Portra 400、Velvia 100、Tri-X 400 などのフィルムの色です。撮影画面でルックをプレビューできます。
-- **フレーミング（Framing）**：すべての機種で XPan（65:24）、2.35:1、16:9、4:3、5:4、1:1 の写真を撮影できます。どの比率でも、撮影画面は 3:2 のままで写真の範囲外が暗く表示されます。
-- **構図ガイド（Guides）**：9 分割、画面中央、黄金比、対角線の線を表示します。
-- **日付入れ撮影（Date Imprint）**：フィルムカメラのデータバックのように、写真にオレンジ色の日付を入れます。
-- **粒状感（Grain）**：写真にフィルムの粒状感を加えます。強さは 3 段階です。
+- **フィルムルック**：Portra 400、Velvia 100、Tri-X 400 など。撮影画面でそのまま確認できます。[grkit.app](https://grkit.app) で手持ちの `.cube` LUT や Lightroom プリセットも読み込めます。各ルックはオープンソースのフィルム LUT をもとに近似したもので、元の LUT とまったく同じではありません（[出典](effects/NOTICE.md)）。
+- **フレーミング**：XPan、2.35:1、16:9、4:3、5:4、1:1。撮影画面にマスクか枠線で範囲を表示します。
+- **構図ガイド**：9 分割、画面中央、黄金比、対角線。
+- **日付入れ撮影**：クラシック、GR1s のドット、GR II の 3 種類の書体で写真に日付を入れます。
+- **粒状感**：強さは弱・中・強、粒の大きさは自動・小・中・大から選べます。
 
-MENU のカスタマイズタブの最後にある GRKit に、すべての設定があります。各モジュールの設定と有効、ADJ でのモジュールの順番、バージョンとプロジェクトのアドレスがある「GRKit について」です。
-
-モジュールはパッケージの作成時に選びます。メニューには、選んだモジュールだけが表示されます。モジュールの作り方は [Writing a module](docs/modules.md) を参照してください。
+GRKit の読み込みには、電源を入れてから 5〜12 秒かかります。それまではカメラ本来の設定で撮影されます。すべての設定は MENU のカスタマイズタブの最後にある GRKit にあります。モジュールを自作する場合は [Writing a module](docs/modules.md)（英語）をご覧ください。
 
 ## 対応カメラ
 
-| カメラ | ファームウェア | 状態 |
+| カメラ | 実機で確認済み | 対応 |
 | --- | --- | --- |
-| RICOH GR III | 2.10 | 実機でテスト済み |
-| RICOH GR III | 2.20 | 試験的 |
-| RICOH GR III HDF | 2.10 | 対応済み |
-| RICOH GR III HDF | 2.20 | 試験的 |
-| RICOH GR IIIx | 1.60 | 対応済み |
-| RICOH GR IIIx | 1.70 | 試験的 |
-| RICOH GR IIIx HDF | 1.60 | 対応済み |
-| RICOH GR IIIx HDF | 1.70 | 試験的 |
-| RICOH GR IV | 1.11 | 実機でテスト済み |
-| RICOH GR IV | 1.20 | 試験的 |
-| RICOH GR IV HDF | 1.11 | 対応済み |
-| RICOH GR IV HDF | 1.20 | 試験的 |
-| RICOH GR IV Monochrome | 1.00 | 対応済み。フィルムルックなし |
-| RICOH GR IV Monochrome | 1.10 | 試験的。フィルムルックなし |
+| GR III、GR III HDF | 2.10、2.20 | — |
+| GR IIIx、GR IIIx HDF | 1.60、1.70 | — |
+| GR IV、GR IV HDF | 1.11、1.20 | — |
+| GR IV Monochrome | 1.00 | 1.10 |
 
-「対応済み」のカメラは、実機でテスト済みのカメラと同じランタイムで動作しますが、そのカメラ自体はテストしていません。「試験的」のファームウェアバージョンは、実機でテストしていません。
-
-GR III 2.20 と GR IIIx 1.70 は、2.10 と 1.60 と同じパッケージを使います。GR IV 1.11 と 1.20 は同じパッケージを使い、GRKit は起動のたびにカメラのファームウェアを識別します。HDF モデルはベースのカメラと同じファームウェアで動作し、同じパッケージを使います。GR IV Monochrome は GR IV のファームウェアで動作し、独自のバージョンを表示します。1.00 は GR IV 1.11、1.10 は GR IV 1.20 です。ほかの機種やファームウェアのバージョンには対応していません。ファームウェアのバージョンは、カメラのメニューで確認できます。
-
-対応するファームウェアのバージョンにも、別のビルドがあることがあります。対応するカメラで GRKit が読み込まれない場合は、[ファームウェア書き出しガイド](resources/DUMP.ja.md)の手順でファームウェアイメージを送ってください。
+GR IV Monochrome ではフィルムルックは使えません。ほかの機種やファームウェアには対応していません。対応カメラで GRKit が読み込まれない場合は、[ファームウェア書き出しガイド](resources/DUMP.ja.md)をご覧ください。
 
 > [!WARNING]
-> GRKit は試験的なプロジェクトです。自己責任で使用してください。
-> GRKit がカメラのメモリーを変更するのは、電源を切るまでの間だけです。インストールするとカメラの SD スクリプトの設定がオンになり、オフにするまでオンのままです。
-> GRKit に問題が起きると、起動の途中でカメラが止まることがあります。インストールの前に[復旧ガイド](resources/RECOVERY.ja.md)を読んでください。
+> GRKit は試験的なプロジェクトです。ご利用は自己責任でお願いします。
+> インストールするとカメラの SD スクリプト設定がオンになり、オフにするまでそのままです。GRKit に問題があるとカメラが起動中に止まることがあるため、インストール前に[復旧ガイド](resources/RECOVERY.ja.md)をお読みください。
 
 ## インストール
 
-パッケージを作成するには、[grkit.app](https://grkit.app) を開きます。カメラ、モジュール、エフェクトを選び、`GRKit.zip` をダウンロードします。
+[grkit.app](https://grkit.app) でカメラ、モジュール、エフェクトを選び、次のどちらかでインストールします。
 
-各パッケージには、そのカメラのインストールガイドが、選んだ言語の PDF で入っています。復旧ガイドはその末尾にあります。ソースファイルは次のとおりです。
+- **SD カードに直接書き込む**：パソコンの Chrome か Edge で行います。アップデートやアンインストール、モジュールやエフェクトの追加・削除もサイトからできます。
+- **GRKit.zip をダウンロード**：中の PDF ガイドの手順に従います（[GR III・GR IIIx](resources/INSTALLATION.ja.md)、[GR IV](resources/INSTALLATION-GR4.ja.md)）。
 
-- [GR III、GR IIIx とそれぞれの HDF モデル](resources/INSTALLATION.ja.md)
-- [GR IV、GR IV HDF、GR IV Monochrome](resources/INSTALLATION-GR4.ja.md)
+MENU ボタンを押しながら電源を入れるのは初回だけです。ZIP でアップデートするときは、カードの `SCRIPT` フォルダーを入れ替えてください。設定は `GRKIT` に残ります。カードをフォーマットすると GRKit も消えるので、先に `GRKIT` をパソコンにコピーしておいてください。
 
-GRKit をアップデートするには、新しいパッケージの `SD_ROOT` の中身をカードにコピーし、古いファイルを上書きします。設定とエフェクトは `GRKIT` に残ります。
-GRKit を削除するには、カメラの電源を切ってから、カードの `SCRIPT` フォルダーと `GRKIT` フォルダーを削除します。`GRKIT` には GRKit の設定が入っています。
-SD スクリプトの設定をオフにするには、[grkit.app](https://grkit.app) のインストール手順の下にあるファイルを使います。手順はインストールガイドにあります。
+GRK が表示されないときは、まず [grkit.app](https://grkit.app) の FAQ をご覧ください。それでも解決しない場合は、`GRKIT/REPORT.TXT` と `SCRIPT/GRKIT/INSTALL.ERR`（ある場合）を添えて[デバイスレポート](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)を送ってください。
 
 ## ソースからのビルド
 
-Rust 1.92 以降、ARM に対応した Clang と LLD、Ricoh の公式ファームウェアファイルが必要です。リポジトリにはファームウェアは含まれていません。
+Rust 1.92 以降、ARM 対応の Clang と LLD、リコー公式のファームウェアファイルが必要です（ファームウェアはリポジトリに含まれていません）。
 
 ```sh
 cargo install --path crates/grkit-cli --locked
 grkit effects build --source effects --out build/effects
 grkit build --target gr3-2.10 --firmware firmware/fwdc239b.bin --out build/runtime
+for module in modules/*/; do grkit module build --dir "$module" --out "build/modules/$(basename "$module").GRM"; done
 sh .github/scripts/install-guide-tools.sh build/guide-tools
 sh .github/scripts/build-guides.sh grkit build/guide-tools build/guides
-grkit package --build build/runtime --effects build/effects --guide build/guides/gr3/en.pdf --out dist/GRKit.zip
+grkit package --build build/runtime --effects build/effects $(for m in build/modules/*.GRM; do printf -- '--module %s ' "$m"; done) \
+  --guide build/guides/gr3/en.pdf --out dist/GRKit.zip
 grkit verify dist/GRKit.zip
 ```
 
-`install-guide-tools.sh` は Typst とフォントをダウンロードします。Linux x86_64 と macOS arm64 に対応しています。ほかのカメラ、プラグインを減らす場合、ほかの言語のガイドについては [CONTRIBUTING.md](CONTRIBUTING.md#build-packages)（英語）を参照してください。
+ほかのカメラ、一部のモジュールだけのパッケージ、ほかの言語のガイドについては [Build packages](CONTRIBUTING.md#build-packages)（英語）をご覧ください。
 
 ## コントリビューション
 
-セットアップ、テスト、プルリクエストのルールは [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
-GRKit を実機でテストした場合は、Device report の Issue を作成し、成功か失敗かの結果を報告してください。GR IIIx と HDF モデルの報告が特に役立ちます。
+[CONTRIBUTING.md](CONTRIBUTING.md)（英語）をご覧ください。動いた場合も動かなかった場合も、デバイスレポートを歓迎します。特にまだ実機で確認できていないファームウェアの報告は助かります。機能の要望は[機能リクエストフォーム](https://tally.so/r/Z9jRgB)へどうぞ。プロジェクトを応援したい方は [Buy Me a Coffee](https://buymeacoffee.com/yuexunjiang) からどうぞ。
 
 ## ドキュメント（英語）
 
@@ -99,10 +84,10 @@ GRKit を実機でテストした場合は、Device report の Issue を作成�
 
 ## ライセンス
 
-コードは [MIT ライセンス](LICENSE)で提供されています。各パッケージには、含まれるファイルのライセンスを記載した `LICENSES.md` が入っています。
+コードは [MIT ライセンス](LICENSE)です。各パッケージには、収録ファイルのライセンスをまとめた `LICENSES.md` が入っています。
 
-- エフェクトのライセンスは CC BY-SA 4.0 または MIT です。各エフェクトのライセンスは [effects/NOTICE.md](effects/NOTICE.md) に記載されています。
-- メニューアイコンとライブビューの文字には、[Roboto Condensed](https://github.com/googlefonts/roboto-classic) 書体を [SIL Open Font License 1.1](crates/grkit-core/assets/RobotoCondensed-LICENSE.txt) のもとで使用しています。
-- エフェクトのフィッティング手法は、[gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) から [MIT ライセンス](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)のもとで移植したものです。
+- エフェクトのライセンスは CC BY-SA 4.0 または MIT です。詳しくは [effects/NOTICE.md](effects/NOTICE.md) をご覧ください。
+- メニューと撮影画面の文字には [Roboto Condensed](https://github.com/googlefonts/roboto-classic) を [SIL Open Font License 1.1](crates/grkit-core/assets/RobotoCondensed-LICENSE.txt) のもとで使用しています。
+- エフェクトのフィッティング手法は [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) から [MIT ライセンス](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt)のもとで移植しました。
 
-RICOH および GR は、Ricoh Company, Ltd. の商標です。フィルム名は、それぞれの所有者の商標です。GRKit は独立したプロジェクトであり、Ricoh やフィルムメーカーとは提携しておらず、承認や支援も受けていません。
+RICOH および GR は Ricoh Company, Ltd. の商標です。フィルム名はそれぞれの所有者の商標です。GRKit は独立したプロジェクトであり、リコーやフィルムメーカーとは関係ありません。

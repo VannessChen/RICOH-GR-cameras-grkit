@@ -132,7 +132,7 @@ export function CoverIcon({ cover }: { cover: Cover }) {
 }
 
 /** The ADJ icon of an effect. A film cover draws with web fonts, other icons with camera pixels. */
-export function EffectIcon({ effect }: { effect: Effect }) {
+export function EffectIcon({ effect }: { effect: Pick<Effect, 'icon' | 'cover'> }) {
   const { icon, cover } = effect;
   const draw = useCallback((canvas: HTMLCanvasElement | null) => paint(canvas, icon), [icon]);
   if (cover) {

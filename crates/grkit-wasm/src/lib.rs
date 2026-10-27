@@ -259,6 +259,32 @@ impl Builder {
         )?;
         Ok(package.bytes)
     }
+
+    /// The files that the package puts on the card, at their paths from the card root:
+    /// the `SD_ROOT` entries of the verified package that `build` returns.
+    pub fn card_files(&self) -> Result<Files> {
+        packaging::card_files(&self.build()?)
+    }
+}
+
+/// What the page shows of an effect file on a card.
+pub struct Label {
+    pub id: String,
+    pub name: String,
+    /// The ADJ icon: 40 x 40 RGBA pixels.
+    pub icon: Vec<u8>,
+    pub monochrome: bool,
+}
+
+/// The label of a compiled `.GRF` effect, for an effect file on a card.
+pub fn effect_label(blob: &[u8]) -> Result<Label> {
+    let (effect, icon) = effects::decode(blob)?;
+    Ok(Label {
+        id: effect.id,
+        name: effect.name,
+        icon,
+        monochrome: effect.flags & effects::MONOCHROME != 0,
+    })
 }
 
 /// Builds a GRKit SD package from the runtime build of each firmware build of
@@ -342,6 +368,77 @@ impl Package {
     pub fn build(&self) -> Result<Vec<u8>, JsError> {
         self.0.build().map_err(js_error)
     }
+
+    /// Returns the files that the verified package puts on the card, at their paths from
+    /// the card root, in path order.
+    #[wasm_bindgen(js_name = cardFiles)]
+    pub fn card_files(&self) -> Result<Vec<CardFile>, JsError> {
+        self.0
+            .card_files()
+            .map(|files| {
+                files
+                    .into_iter()
+                    .map(|(path, bytes)| CardFile { path, bytes })
+                    .collect()
+            })
+            .map_err(js_error)
+    }
+}
+
+/// One file of a package on the card. See `Package.cardFiles`.
+#[wasm_bindgen]
+pub struct CardFile {
+    path: String,
+    bytes: Vec<u8>,
+}
+
+#[wasm_bindgen]
+impl CardFile {
+    /// The path from the card root, such as `SCRIPT/GRKIT/CORE.BIN`.
+    #[wasm_bindgen(getter)]
+    pub fn path(&self) -> String {
+        self.path.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn bytes(&self) -> Vec<u8> {
+        self.bytes.clone()
+    }
+}
+
+/// The label of an effect file on a card. See `effectLabel`.
+#[wasm_bindgen(js_name = EffectLabel)]
+pub struct EffectLabel(Label);
+
+#[wasm_bindgen(js_class = EffectLabel)]
+impl EffectLabel {
+    #[wasm_bindgen(getter)]
+    pub fn id(&self) -> String {
+        self.0.id.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn name(&self) -> String {
+        self.0.name.clone()
+    }
+
+    /// The ADJ icon: 40 x 40 RGBA pixels.
+    #[wasm_bindgen(getter)]
+    pub fn icon(&self) -> Vec<u8> {
+        self.0.icon.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn monochrome(&self) -> bool {
+        self.0.monochrome
+    }
+}
+
+/// The ID, the name, the icon, and the color type of a compiled `.GRF` effect. It fails for a
+/// file that is not an effect.
+#[wasm_bindgen(js_name = effectLabel)]
+pub fn effect_label_js(blob: &[u8]) -> Result<EffectLabel, JsError> {
+    effect_label(blob).map(EffectLabel).map_err(js_error)
 }
 
 /// Returns the ZIP that turns SD scripts off on a camera, by
@@ -350,6 +447,20 @@ impl Package {
 pub fn scripts_off_package(camera: &str) -> Result<Vec<u8>, JsError> {
     grkit_core::camera::find(camera)
         .and_then(grkit_core::packaging::assemble_scripts_off)
+        .map_err(js_error)
+}
+
+/// The files that turn SD scripts off on a camera, at their paths from the card root: its ModeSet
+/// file with the disable command and `DEVELOP.MOD`. `camera` is a key of `CAMERA_RELEASES`.
+#[wasm_bindgen(js_name = scriptsOffFiles)]
+pub fn scripts_off_files(camera: &str) -> Result<Vec<CardFile>, JsError> {
+    grkit_core::camera::find(camera)
+        .map(|camera| {
+            grkit_core::runtime::deactivation_files(camera)
+                .into_iter()
+                .map(|(path, bytes)| CardFile { path, bytes })
+                .collect()
+        })
         .map_err(js_error)
 }
 

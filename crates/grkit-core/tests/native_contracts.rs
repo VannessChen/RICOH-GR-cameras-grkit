@@ -138,7 +138,9 @@ fn compile_with(
             .arg(source)
             .args(extra_sources)
             .arg("-o")
-            .arg(executable),
+            .arg(executable)
+            // A harness can call sqrt. On Linux it is in libm, after the sources.
+            .arg("-lm"),
     );
 }
 

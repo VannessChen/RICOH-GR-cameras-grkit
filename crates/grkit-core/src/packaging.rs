@@ -721,6 +721,25 @@ fn write_zip(contents: Files) -> Result<Vec<u8>> {
 
 /// Checks a package ZIP: its entries, its contents (`validate_contents`), and `SHA256SUMS`.
 pub fn verify_package(bytes: &[u8]) -> Result<Contents> {
+    Ok(read_package(bytes)?.0)
+}
+
+/// The files that a package puts on the card: its `SD_ROOT` entries, at their
+/// paths from the card root. The page writes them to a card as a merge copy of
+/// `SD_ROOT` does. The ZIP is checked as `verify_package` checks it.
+pub fn card_files(bytes: &[u8]) -> Result<Files> {
+    Ok(read_package(bytes)?
+        .1
+        .into_iter()
+        .filter_map(|(name, blob)| {
+            name.strip_prefix("SD_ROOT/")
+                .map(|path| (path.to_owned(), blob))
+        })
+        .collect())
+}
+
+/// Reads and checks a package ZIP, and returns what it holds and its entries.
+fn read_package(bytes: &[u8]) -> Result<(Contents, Files)> {
     let declared_entries = declared_entry_count(bytes)?;
     let mut archive = ZipArchive::new(Cursor::new(bytes)).context("Invalid ZIP archive")?;
     // zip indexes names in a map. Check the raw count so duplicate names cannot disappear.
@@ -769,7 +788,7 @@ pub fn verify_package(bytes: &[u8]) -> Result<Contents> {
         contents["SHA256SUMS"] == checksum_list(&contents),
         "SHA256SUMS differs from package"
     );
-    Ok(result)
+    Ok((result, contents))
 }
 
 fn declared_entry_count(bytes: &[u8]) -> Result<usize> {

@@ -53,8 +53,15 @@ button {
   color: inherit;
 }
 
+/* One focus ring for every control. A hidden file input shows it on its label. */
 :focus-visible {
-  outline: none;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.upload:has(+ input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .visually-hidden {
@@ -122,6 +129,18 @@ button {
   cursor: progress;
 }
 
+/* The other choice next to a primary action: the same size, outlined. */
+.download.outline {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.download.outline:disabled {
+  border-color: var(--line);
+  background: var(--paper);
+}
+
 /* A download that most visitors do not need, below the install steps. */
 .download.secondary {
   min-height: 44px;
@@ -153,11 +172,6 @@ button {
   justify-content: center;
   width: 44px;
   height: 44px;
-}
-
-.github:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .languages > div {
@@ -257,6 +271,10 @@ button {
   max-width: 22em;
 }
 
+.masthead .lead-line {
+  display: block;
+}
+
 /* Sections */
 
 .section {
@@ -285,6 +303,7 @@ button {
 
 .note {
   margin: 0;
+  max-width: 72ch;
   font-size: 13px;
   line-height: 1.6;
   color: var(--muted);
@@ -972,11 +991,17 @@ td input[type='checkbox'] {
 .package-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 24px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 14px;
+}
+
+/* The links look like the other buttons of the site. */
+.package-links .button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 
 .steps {
@@ -1093,4 +1118,422 @@ code {
 .import-about strong {
   color: var(--ink-2);
   font-weight: 600;
+}
+
+/* SD card */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+}
+
+.card-lead {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.card-actions .download {
+  width: auto;
+}
+
+/* Two choices side by side, as wide as the wider one. */
+.card-actions.pair {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  width: fit-content;
+}
+
+@media (max-width: 640px) {
+  .card-actions.pair {
+    grid-auto-flow: row;
+    width: auto;
+  }
+}
+
+.card-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  row-gap: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.card-facts dt {
+  color: var(--muted);
+}
+
+.card-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.card-status:empty {
+  display: none;
+}
+
+.card-changes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.card-changes .card-facts {
+  flex: 1 1 320px;
+}
+
+/* What a write to the card does with a module or an effect. */
+.change {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+
+.change.add {
+  color: var(--ink);
+}
+
+.change.remove {
+  color: var(--warning);
+}
+
+
+.link-button {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* The install modes reuse the camera cards. */
+.mode-text {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.camera:has(input:disabled) .mode-text {
+  color: var(--muted);
+}
+
+/* After a write: what was done and the camera steps. */
+.card-done {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card-done-title {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 22px;
+}
+
+.card-done .steps {
+  flex: none;
+}
+
+/* Remove GRKit with a card */
+.card-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-block + .card-block {
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.card-heading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.card-check {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.card-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.card-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.button.danger {
+  border-color: var(--warning);
+  background: var(--warning);
+  color: var(--paper);
+}
+
+/* The two cameras that one build runs on, in the card facts. */
+.card-cameras {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* A short confirmation, such as the removal of GRKit from a card. */
+.dialog.confirm {
+  width: min(460px, calc(100vw - 32px));
+}
+
+/* Effects: a grid of the camera icons. A click on a tile previews it. The checkbox and the
+   change badge sit on the corners, so a badge does not move the tiles. */
+.effects-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.effect-tile {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.effect-tile[data-checked] {
+  background: var(--selected);
+}
+
+.effect-tile[data-previewed] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.tile-body {
+  width: 100%;
+  height: 100%;
+  padding: 30px 8px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+button.tile-body {
+  cursor: pointer;
+}
+
+.tile-body .effect-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.tile-name {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tile-type {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tile-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.tile-badge {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+}
+
+.tile-badge .change {
+  margin-left: 0;
+  background: var(--paper);
+}
+
+.tile-remove {
+  display: block;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .effects-grid {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  }
+}
+
+.previewing-look {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* The photo of the preview: its source, the DNG button, and the notes. */
+.photo-field {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* Import a LUT sits with the selection buttons, because it adds an effect to the grid. */
+.toolbar .upload {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+/* A new preview on its way: the old picture dims under a status line. */
+.frame[aria-busy='true'] .image-comparison {
+  filter: brightness(0.7);
+  transition: filter 120ms;
+}
+
+.frame-status {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 8px 14px;
+  background: rgba(11, 11, 11, 0.82);
+  color: var(--paper);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+.frame-placeholder .spinner {
+  margin-right: 10px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+}
+
+/* FAQ: one question on each line, the answer under it when it is open. */
+.section-body.faq {
+  max-width: 760px;
+  border-top: none;
+}
+
+.faq details {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+  list-style: none;
+}
+
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq summary::after {
+  content: '+';
+  flex: none;
+  font-family: var(--mono);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.faq details[open] summary::after {
+  content: '−';
+}
+
+.faq p {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink-2);
 }
