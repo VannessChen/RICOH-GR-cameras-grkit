@@ -392,13 +392,16 @@ fields!(PLANNED_FIELDS {
 pub const PICTURE_MASKS: usize = 141376;
 /// Entries of the shot ring.
 pub const SHOT_ENTRIES: usize = 8;
-/// The shot ring: a write count, a pad word, then entry n at
-/// `SHOT_ENTRY + SHOT_STRIDE * n`, which holds the key at `SHOT_KEY` and the
-/// record at `SHOT_RECORD`.
+/// The shot ring: a write count, the turns of the last shot with a known
+/// posture (`SHOT_LAST_TURNS`), then entry n at `SHOT_ENTRY + SHOT_STRIDE * n`,
+/// which holds the key at `SHOT_KEY`, the record at `SHOT_RECORD`, and the
+/// posture of the electronic level at `SHOT_POSTURE`.
+pub const SHOT_LAST_TURNS: usize = 4;
 pub const SHOT_ENTRY: usize = 8;
-pub const SHOT_STRIDE: usize = 8;
+pub const SHOT_STRIDE: usize = 16;
 pub const SHOT_KEY: usize = 0;
 pub const SHOT_RECORD: usize = 4;
+pub const SHOT_POSTURE: usize = 8;
 /// The picture scratch after the records: the masks, then the shot ring.
 pub const PICTURE_SCRATCH: usize = PICTURE_MASKS + SHOT_ENTRY + SHOT_STRIDE * SHOT_ENTRIES;
 /// Bytes of the live-view labels after the menu text (`artwork::overlay_labels`).
@@ -766,9 +769,11 @@ pub fn header() -> String {
          by its shot settings pointer, which the maker-note setter (+0x18) and the \
          JPEG encode configuration (+0x34) also hold. A later shot can start \
          processing before an earlier one is written, so a single \"last build\" \
-         word is not enough. Word 0 counts the writes. Entry n is at GRKIT_SHOT_ENTRY \
-         + GRKIT_SHOT_STRIDE n and holds the key at GRKIT_SHOT_KEY and the record at \
-         GRKIT_SHOT_RECORD.",
+         word is not enough. Word 0 counts the writes, and word 1 \
+         (GRKIT_SHOT_LAST_TURNS) holds the turns of the last shot with a known posture. \
+         Entry n is at GRKIT_SHOT_ENTRY + GRKIT_SHOT_STRIDE n and holds the key at \
+         GRKIT_SHOT_KEY, the record at GRKIT_SHOT_RECORD, and the posture of the \
+         electronic level at GRKIT_SHOT_POSTURE (runtime/processing.h).",
         "SHOT_RING",
         PICTURE_MASKS,
     );
@@ -778,6 +783,8 @@ pub fn header() -> String {
         ("STRIDE", SHOT_STRIDE),
         ("KEY", SHOT_KEY),
         ("RECORD", SHOT_RECORD),
+        ("POSTURE", SHOT_POSTURE),
+        ("LAST_TURNS", SHOT_LAST_TURNS),
     ] {
         writeln!(out, "#define GRKIT_SHOT_{name} {value}").unwrap();
     }

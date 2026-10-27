@@ -171,19 +171,39 @@ static u32 plane_of(u32 image,u32 code,Plane *p) {
            p->y>=0x40000000U && p->y<0xc0000000U-p->pitch*p->height &&
            p->c>=0x40000000U && p->c<0xc0000000U-p->pitch*p->height;
 }
-/* The record that the still build of a shot applied, from the shot ring
-   (runtime/abi.h), or 0. Newer entries come first. The key is read again after
-   the record, because the build writes the ring from another task. */
-static u32 shot_record(volatile u32 *h,u32 shot) {
-    u32 ring=PICTURE_SCRATCH(h)+GRKIT_SHOT_RING, n=WORD(ring,0), i, entry, record;
+/* A word of the shot ring entry (runtime/abi.h) of the still build of a
+   shot: 1 with the word in `out`, or 0 without an entry. Newer entries come
+   first. The key is read again after the word, because the build writes the
+   ring from another task. */
+static u32 shot_word(volatile u32 *h,u32 shot,u32 field,u32 *out) {
+    u32 ring=PICTURE_SCRATCH(h)+GRKIT_SHOT_RING, n=WORD(ring,0), i, entry, value;
     for(i=1;shot && i<=GRKIT_SHOT_ENTRIES;++i) {
         entry=ring+GRKIT_SHOT_ENTRY+((n-i)&(GRKIT_SHOT_ENTRIES-1))*GRKIT_SHOT_STRIDE;
         if(WORD(entry,GRKIT_SHOT_KEY)!=shot) continue;
-        record=WORD(entry,GRKIT_SHOT_RECORD);
+        value=WORD(entry,field);
         PICTURE_BARRIER();
-        if(WORD(entry,GRKIT_SHOT_KEY)==shot) return record;
+        if(WORD(entry,GRKIT_SHOT_KEY)==shot) { *out=value; return 1; }
     }
     return 0;
+}
+/* The record that the still build of a shot applied, or 0. */
+static u32 shot_record(volatile u32 *h,u32 shot) {
+    u32 record;
+    return shot_word(h,shot,GRKIT_SHOT_RECORD,&record) ? record : 0;
+}
+/* The quarter turns clockwise that show the picture of a shot upright, as
+   its EXIF Orientation does (1: 0, 6: 1, 3: 2, 8: 3), from the posture of the
+   electronic level at its still build (LEVEL_POSTURE in runtime/targets).
+   With the lens up or down, or without a posture, the turns of the last shot
+   with a known posture stay; the ring word is noise after power-on, so a
+   value out of range counts as 0. */
+static u32 picture_turns(volatile u32 *h,u32 shot) {
+    static const u8 turns[4]={0,2,1,3};
+    u32 ring=PICTURE_SCRATCH(h)+GRKIT_SHOT_RING, last=WORD(ring,GRKIT_SHOT_LAST_TURNS), posture;
+    if(last>3) last=0;
+    if(!shot_word(h,shot,GRKIT_SHOT_POSTURE,&posture) || posture<1 || posture>4) return last;
+    WORD(ring,GRKIT_SHOT_LAST_TURNS)=turns[posture-1];
+    return turns[posture-1];
 }
 /* For picture_capture_tone: the record of a shot, or 0. */
 u32 picture_capture_record(u32 shot) { return shot_record(framing_header(),shot); }
@@ -229,6 +249,7 @@ static void encode_shot(volatile u32 *h,u32 message) {
     set.record=0;
     set.mono=0;
     set.scratch=PICTURE_MAP(PICTURE_SCRATCH(h));
+    set.turns=picture_turns(h,WORD(config,0x34));
     if(owned(h,record)) {
         set.record=record;
         set.mono=WORD(record,GRKIT_RECORD_MONOCHROME)&1;

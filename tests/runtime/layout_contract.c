@@ -142,5 +142,6 @@ LIKE(PictureSet, CorePictureSet, count);
 AT(CorePictureSet, record, __builtin_offsetof(PictureSet, reserved));
 LIKE(PictureSet, CorePictureSet, mono);
 LIKE(PictureSet, CorePictureSet, scratch);
+LIKE(PictureSet, CorePictureSet, turns);
 /* A plane filter may use all of the scratch that the core gives each call. */
 SAME(GRKIT_PLANE_SCRATCH, GRKIT_PICTURE_MASKS);

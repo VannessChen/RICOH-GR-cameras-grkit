@@ -101,12 +101,14 @@ gamma_hash:
     bx lr
 
 // Store r0, the record of a non-live-view build (0 for native processing),
-// in the shot ring under the shot settings pointer r7. The live view (context
-// kind 1) stores nothing. A reader in another task checks the key again after
-// it reads the record, so the key is cleared while the record changes.
+// and the posture of the electronic level in the shot ring under the shot
+// settings pointer r7. The live view (context kind 1) stores nothing. A reader
+// in another task checks the key again after it reads the record, so the key
+// is cleared while the entry changes. FW_LEVEL is a static object whose second
+// word points to the electronic level, or holds 0 before the level exists.
 // Preserves all registers.
-.if GRKIT_SHOT_STRIDE != 1 << 3
-.error "The shot ring index shift assumes 8-byte entries"
+.if GRKIT_SHOT_STRIDE != 1 << 4
+.error "The shot ring index shift assumes 16-byte entries"
 .endif
 .Lshot_store:
     push {r0-r3, r12, lr}
@@ -122,11 +124,16 @@ gamma_hash:
     add r12, r2, #1
     str r12, [r3]
     and r2, r2, #(GRKIT_SHOT_ENTRIES - 1)
-    add r2, r3, r2, lsl #3
+    add r2, r3, r2, lsl #4
     mov r12, #0
     str r12, [r2, #(GRKIT_SHOT_ENTRY + GRKIT_SHOT_KEY)]
     dmb ish
     str r0, [r2, #(GRKIT_SHOT_ENTRY + GRKIT_SHOT_RECORD)]
+    ldr r1, =FW_LEVEL
+    ldr r1, [r1, #4]
+    cmp r1, #0
+    ldrne r1, [r1, #LEVEL_POSTURE]
+    str r1, [r2, #(GRKIT_SHOT_ENTRY + GRKIT_SHOT_POSTURE)]
     dmb ish
     str r7, [r2, #(GRKIT_SHOT_ENTRY + GRKIT_SHOT_KEY)]
 shot_done:

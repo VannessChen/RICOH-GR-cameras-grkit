@@ -7,3 +7,7 @@ label = "日期樣式"
 [settings.LOOK]
 label = "日期字體"
 values = ["經典", "GR1s", "GR II"]
+
+[settings.POSITION]
+label = "日期位置"
+values = ["底片", "擺正"]

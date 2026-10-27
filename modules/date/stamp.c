@@ -300,18 +300,20 @@ static void blend_row(u8 *out,const u8 *core,const u8 *halo,u32 mw,u32 f,u32 ste
    that scales up (ss 1), the blends of two rows of each (blend_row). */
 static u32 stamp_bytes(u32 mw,u32 mh,u32 f,u32 ss) { return mw*mh*2+(ss==1 ? 4*mw*f : 0); }
 /* A rendered stamp mask and where it lies on its picture: one cell spans
-   f / ss pixels, and cell (0,0) is at pixel (ox, oy). */
+   f / ss pixels, and cell (0,0) is at (ox, oy) of the visible area turned
+   upright (upright), whose top left is (0, 0). */
 typedef struct { const u8 *core,*halo; u32 mw,mh,f,ss; int ox,oy; u32 look; } Stamp;
-/* The mask looks at the bottom right of the visible area (look_size). Small
-   pictures (the screennail that playback shows first, and the thumbnail) render
-   the mask at twice their resolution and average 2 x 2 cells per pixel, so their
-   strokes stay as sharp as on the main picture: there, one mask cell spans
-   several pixels instead. Returns 1 and describes the mask in `out` when it drew. */
-static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 look,Stamp *out) {
-    u32 width=p->right-p->left, height=p->bottom-p->top, size, f, ss=1, m, pad, cw, mw, mh, margin, rise;
-    u32 i, x, y, sy, dy, step, total;
+/* The mask of a stamp at the bottom right of an upright visible area of
+   width x height pixels (look_size), in `scratch`. Small pictures (the
+   screennail that playback shows first, and the thumbnail) render the mask at
+   twice their resolution and average 2 x 2 cells per pixel, so their strokes
+   stay as sharp as on the main picture: there, one mask cell spans several
+   pixels instead. Returns 0 when the mask does not fit. */
+static u32 stamp_mask(u8 *scratch,u32 width,u32 height,const char *text,u32 n,u32 look,Stamp *out) {
+    u32 size, f, ss=1, m, pad, cw, mw, mh, margin, rise;
+    u32 i, x, y, total;
     int caret;
-    u8 *core=scratch, *halo, lit[BLUR_WIDTH];
+    u8 *core=scratch, *halo;
     size=((width<height ? width : height)*look_size(look))>>16;
     if(size<look_least(look)) size=look_least(look);
     for(i=0;i<2;++i) {
@@ -341,6 +343,18 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 
         if(look!=LOOK_DOTS) blur_line(core+x,mw,mh,1);
         blur_line(halo+x,mw,mh,look_halo(m,look));
     }
+    *out=(Stamp){core,halo,mw,mh,f,ss,(int)width-(int)margin-(int)(((mw-pad)*f)>>(ss-1)),
+                 (int)height-(int)rise-(int)(((mh-pad)*f)>>(ss-1)),look};
+    return 1;
+}
+/* The stamp on the main picture of a landscape shot, in the layout of its
+   mask. Returns 1 and describes the mask in `out` when it drew. */
+static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 look,Stamp *out) {
+    u32 x, y, sy, dy, step, mw, mh, f, ss;
+    const u8 *core, *halo;
+    u8 lit[BLUR_WIDTH];
+    if(!stamp_mask(scratch,p->right-p->left,p->bottom-p->top,text,n,look,out)) return 0;
+    core=out->core; halo=out->halo; mw=out->mw; mh=out->mh; f=out->f; ss=out->ss;
     /* Whether each mask row has light, in the core or in the halo. A pixel
        that samples only empty rows, or only empty cells, stays as it is. */
     for(y=0;y<mh;++y) {
@@ -351,9 +365,9 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 
     }
     if(ss==2) {
         /* Pixel origin of the mask, on an even column so CbCr pairs line up. */
-        int ox=(int)p->right-(int)margin-(int)((mw-pad)>>1), oy=(int)p->bottom-(int)rise-(int)((mh-pad)>>1);
+        int ox=(int)p->left+out->ox, oy=(int)p->top+out->oy;
         ox&=~1;
-        *out=(Stamp){core,halo,mw,mh,f,ss,ox,oy,look};
+        out->ox=ox-(int)p->left;
         for(y=0;2*y+1<mh;++y) {
             int py=oy+(int)y;
             u32 chroma=!p->half || !(py&1);
@@ -377,16 +391,16 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 
     }
     /* Pixel origin of the mask, on an even column so CbCr pairs line up. */
     {
-        int ox=(int)p->right-(int)margin-(int)((mw-pad)*f), oy=(int)p->bottom-(int)rise-(int)((mh-pad)*f);
+        int ox=(int)p->left+out->ox, oy=(int)p->top+out->oy;
         u32 cols=mw*f;
         /* The horizontal blends of the two mask rows that a picture row
            samples, for each column: f picture rows sample the same pair, so
            each row of the pair blends once (`top`, `bottom`). They follow the
            masks in the scratch. */
-        u8 *top=halo+mw*mh, *bottom=top+2*cols;
+        u8 *top=(u8 *)halo+mw*mh, *bottom=top+2*cols;
         u32 shown=0xffffffffU;
         ox&=~1;
-        *out=(Stamp){core,halo,mw,mh,f,ss,ox,oy,look};
+        out->ox=ox-(int)p->left;
         step=divide(65536,f);
         for(y=0,sy=0,dy=0;y<mh*f;++y) {
             int py=oy+(int)y;
@@ -420,6 +434,31 @@ static u32 stamp(u8 *scratch,const Plane *p,const char *text,u32 n,u32 mono,u32 
     }
     return 1;
 }
+/* The upright point (Q16) of a point (x, y) (Q16) of the visible area of `p`,
+   for a picture that `turns` quarter turns clockwise show upright: the
+   visible area turned upright, with its top left at (0, 0). */
+static void upright(const Plane *p,u32 turns,long long x,long long y,long long *u,long long *v) {
+    long long w=(long long)(p->right-p->left)<<16, h=(long long)(p->bottom-p->top)<<16;
+    x-=(long long)p->left<<16;
+    y-=(long long)p->top<<16;
+    switch(turns&3) {
+    case 0: *u=x; *v=y; break;
+    case 1: *u=h-y; *v=x; break;
+    case 2: *u=w-x; *v=h-y; break;
+    default: *u=y; *v=w-x; break;
+    }
+}
+/* The box of `p` (left, top, right, bottom) that shows the upright box
+   [u0, u1) x [v0, v1) (upright). */
+static void stored_box(const Plane *p,u32 turns,int u0,int v0,int u1,int v1,int *box) {
+    int l=(int)p->left, t=(int)p->top, w=(int)(p->right-p->left), h=(int)(p->bottom-p->top);
+    switch(turns&3) {
+    case 0: box[0]=l+u0; box[1]=t+v0; box[2]=l+u1; box[3]=t+v1; break;
+    case 1: box[0]=l+v0; box[1]=t+h-u1; box[2]=l+v1; box[3]=t+h-u0; break;
+    case 2: box[0]=l+w-u1; box[1]=t+h-v1; box[2]=l+w-u0; box[3]=t+h-v0; break;
+    default: box[0]=l+w-v1; box[1]=t+u0; box[2]=l+w-v0; box[3]=t+u1; break;
+    }
+}
 /* Bilinear mask value at cell coordinates (Q16, cell centers at +0.5), or 0 outside. */
 static u32 mask_at(const u8 *mask,u32 mw,u32 mh,int cx,int cy) {
     int x=cx-32768, y=cy-32768, i=x>>16, j=y>>16;
@@ -431,20 +470,24 @@ static u32 mask_at(const u8 *mask,u32 mw,u32 mh,int cx,int cy) {
     d=i+1<(int)mw && j+1<(int)mh ? mask[(j+1)*mw+i+1] : 0;
     return (((a*(65536-tx)+b*tx)>>16)*(65536-ty)+((c*(65536-tx)+d*tx)>>16)*ty)>>16;
 }
-/* The stamp of `src` scaled onto the smaller picture `dst`: each pixel of dst
-   samples the source mask at four points, so the stamp keeps the same place
-   and the same total width as on the main picture, only softer. */
-static void stamp_scaled(const Plane *dst,const Plane *src,const Stamp *st,u32 mono) {
+/* The stamp of the main picture `src` on the picture `dst`: each pixel of
+   dst samples the mask at four points, so the stamp keeps the same place and
+   the same total width as on the main picture, only softer on a smaller
+   picture. A picture that `turns` quarter turns show upright gets the stamp
+   at the bottom right of its upright view, turned with it. */
+static void stamp_sample(const Plane *dst,const Plane *src,const Stamp *st,u32 mono,u32 turns) {
     u32 sw=src->right-src->left, sh=src->bottom-src->top, dw=dst->right-dst->left, dh=dst->bottom-dst->top;
     u32 kx=divide(sw<<16,dw), ky=divide(sh<<16,dh), rx=divide(dw<<16,sw), ry=divide(dh<<16,sh);
     u32 rf=divide(65536,st->f), x, y, k;
-    /* Q16 cell coordinate of a Q16 source pixel coordinate. */
+    /* Q16 cell coordinate of a Q16 upright coordinate. */
     #define CELL(v,o) ((int)(((long long)((v)-((long long)(o)<<16))*(long long)(st->ss*rf))>>16))
-    int ext=(int)((st->mw*st->f)>>(st->ss-1)), eyt=(int)((st->mh*st->f)>>(st->ss-1));
-    int x0=(int)dst->left+(int)((((long long)(st->ox-(int)src->left))*rx)>>16)-2;
-    int x1=(int)dst->left+(int)((((long long)(st->ox+ext-(int)src->left))*rx)>>16)+2;
-    int y0=(int)dst->top+(int)((((long long)(st->oy-(int)src->top))*ry)>>16)-2;
-    int y1=(int)dst->top+(int)((((long long)(st->oy+eyt-(int)src->top))*ry)>>16)+2;
+    int ext=(int)((st->mw*st->f)>>(st->ss-1)), eyt=(int)((st->mh*st->f)>>(st->ss-1)), box[4];
+    int x0, x1, y0, y1;
+    stored_box(src,turns,st->ox,st->oy,st->ox+ext,st->oy+eyt,box);
+    x0=(int)dst->left+(int)((((long long)(box[0]-(int)src->left))*rx)>>16)-2;
+    x1=(int)dst->left+(int)((((long long)(box[2]-(int)src->left))*rx)>>16)+2;
+    y0=(int)dst->top+(int)((((long long)(box[1]-(int)src->top))*ry)>>16)-2;
+    y1=(int)dst->top+(int)((((long long)(box[3]-(int)src->top))*ry)>>16)+2;
     if(x0<(int)dst->left) x0=(int)dst->left;
     if(y0<(int)dst->top) y0=(int)dst->top;
     if(x1>(int)dst->right) x1=(int)dst->right;
@@ -461,7 +504,10 @@ static void stamp_scaled(const Plane *dst,const Plane *src,const Stamp *st,u32 m
                 for(q=0;q<4;++q) {
                     long long px=sx+(q&1 ? (long long)(kx>>2) : -(long long)(kx>>2));
                     long long py=sy+(q&2 ? (long long)(ky>>2) : -(long long)(ky>>2));
-                    int cx=CELL(px,st->ox), cy=CELL(py,st->oy);
+                    long long u, v;
+                    int cx, cy;
+                    upright(src,turns,px,py,&u,&v);
+                    cx=CELL(u,st->ox); cy=CELL(v,st->oy);
                     core+=mask_at(st->core,st->mw,st->mh,cx,cy);
                     halo+=mask_at(st->halo,st->mw,st->mh,cx,cy);
                 }
@@ -516,19 +562,21 @@ static u32 gr2_ink(const char *text,u32 n,u32 x,u32 y) {
 #define GR2_Y 146
 #define GR2_CB 46
 #define GR2_CR 225
-static void gr2_paint(const Plane *dst,const Plane *src,const char *text,u32 n,u32 mono) {
+static void gr2_paint(const Plane *dst,const Plane *src,const char *text,u32 n,u32 mono,u32 turns) {
     u32 sw=src->right-src->left, sh=src->bottom-src->top, dw=dst->right-dst->left, dh=dst->bottom-dst->top;
     u32 short_side=sw<sh ? sw : sh, s=short_side>GR2_SHORT ? divide(short_side<<16,GR2_SHORT) : 65536;
     u32 kx, ky, rs, x, y, k, q;
-    int bx, by, x0, x1, y0, y1;
-    bx=(int)src->right-(int)((16*(n+3)*s)>>16); by=(int)src->bottom-(int)((72*s)>>16);
-    if(bx<(int)src->left || by<(int)src->top) return;
+    int bx, by, x0, x1, y0, y1, box[4];
+    /* The text box in the upright view (upright). */
+    bx=(int)(turns&1 ? sh : sw)-(int)((16*(n+3)*s)>>16); by=(int)(turns&1 ? sw : sh)-(int)((72*s)>>16);
+    if(bx<0 || by<0) return;
     kx=divide(sw<<16,dw); ky=divide(sh<<16,dh); rs=divide(0xffffffffU,s)+1;
     /* The box of the ink rows in dst pixels. */
-    x0=(int)dst->left+(int)divide((u32)(bx-(int)src->left)<<8,(kx+128)>>8)-1;
-    x1=(int)dst->left+(int)divide((u32)(bx+(int)((16*n*s)>>16)-(int)src->left)<<8,(kx+128)>>8)+2;
-    y0=(int)dst->top+(int)divide((u32)(by+(int)((3*s)>>16)-(int)src->top)<<8,(ky+128)>>8)-1;
-    y1=(int)dst->top+(int)divide((u32)(by+(int)((21*s)>>16)-(int)src->top)<<8,(ky+128)>>8)+2;
+    stored_box(src,turns,bx,by+(int)((3*s)>>16),bx+(int)((16*n*s)>>16),by+(int)((21*s)>>16),box);
+    x0=(int)dst->left+(int)divide((u32)(box[0]-(int)src->left)<<8,(kx+128)>>8)-1;
+    x1=(int)dst->left+(int)divide((u32)(box[2]-(int)src->left)<<8,(kx+128)>>8)+2;
+    y0=(int)dst->top+(int)divide((u32)(box[1]-(int)src->top)<<8,(ky+128)>>8)-1;
+    y1=(int)dst->top+(int)divide((u32)(box[3]-(int)src->top)<<8,(ky+128)>>8)+2;
     if(x0<(int)dst->left) x0=(int)dst->left;
     if(y0<(int)dst->top) y0=(int)dst->top;
     if(x1>(int)dst->right) x1=(int)dst->right;
@@ -544,7 +592,10 @@ static void gr2_paint(const Plane *dst,const Plane *src,const char *text,u32 n,u
                     /* Q16 source pixel of a sample, then its glyph pixel. */
                     u32 px=(src->left<<16)+(x+k-dst->left)*kx+(q&1 ? (3*kx)>>2 : kx>>2);
                     u32 py=(src->top<<16)+(y-dst->top)*ky+(q&2 ? (3*ky)>>2 : ky>>2);
-                    int gx=(int)(px>>16)-bx, gy=(int)(py>>16)-by;
+                    long long u, v;
+                    int gx, gy;
+                    upright(src,turns,px,py,&u,&v);
+                    gx=(int)(u>>16)-bx; gy=(int)(v>>16)-by;
                     if(gx>=0 && gy>=0) cover[k]+=gr2_ink(text,n,((u32)gx*rs)>>16,((u32)gy*rs)>>16);
                 }
                 if(cover[k]>most) most=cover[k];
@@ -571,6 +622,9 @@ void date_apply(PictureSet *set, u32 style)
     GrkitDateTime now;
     const u8 *dt = (const u8 *)&now;
     u32 n, i, main = 0, look = setting_get(SETTING_LOOK);
+    /* Upright: the stamp follows the posture of the camera. Film: it stays
+       at the bottom right of the sensor frame, as on film. */
+    u32 turns = setting_get(SETTING_POSITION) ? set->turns & 3 : 0;
     char text[20];
     Stamp st;
     local_time(&now);
@@ -578,12 +632,21 @@ void date_apply(PictureSet *set, u32 style)
         if (set->planes[i].width * set->planes[i].height > set->planes[main].width * set->planes[main].height) main = i;
     if (look == LOOK_GR2) {
         n = gr2_text(text, dt, style);
-        for (i = 0; i < set->count; ++i) gr2_paint(&set->planes[i], &set->planes[main], text, n, set->mono);
+        for (i = 0; i < set->count; ++i) gr2_paint(&set->planes[i], &set->planes[main], text, n, set->mono, turns);
         return;
     }
     n = date_text(text, dt, style, look == LOOK_DOTS);
-    if (stamp(set->scratch, &set->planes[main], text, n, set->mono, look, &st)) {
-        for (i = 0; i < set->count; ++i)
-            if (i != main) stamp_scaled(&set->planes[i], &set->planes[main], &st, set->mono);
+    if (!turns) {
+        if (stamp(set->scratch, &set->planes[main], text, n, set->mono, look, &st))
+            for (i = 0; i < set->count; ++i)
+                if (i != main) stamp_sample(&set->planes[i], &set->planes[main], &st, set->mono, 0);
+        return;
+    }
+    /* A turned picture samples the mask on each picture, the main one too. */
+    {
+        const Plane *p = &set->planes[main];
+        u32 w = p->right - p->left, h = p->bottom - p->top;
+        if (stamp_mask(set->scratch, turns & 1 ? h : w, turns & 1 ? w : h, text, n, look, &st))
+            for (i = 0; i < set->count; ++i) stamp_sample(&set->planes[i], p, &st, set->mono, turns);
     }
 }

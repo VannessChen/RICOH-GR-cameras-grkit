@@ -29,12 +29,21 @@ values = 3
 saved = true
 public = true
 
-# Where the camera has a native settings page, it shows the style and the
-# look.
+# Where the date goes on a vertical picture: 0 film (the bottom right of the
+# sensor frame, as a film data back prints it), 1 upright (the bottom right of
+# the picture turned upright).
+[[settings]]
+key = "POSITION"
+values = 2
+saved = true
+public = true
+
+# Where the camera has a native settings page, it shows the style, the look,
+# and the position.
 [page]
 setting = "STYLE"
 off_row = true
-settings = ["STYLE", "LOOK"]
+settings = ["STYLE", "LOOK", "POSITION"]
 # The Options row in MENU turns each style on or off in ADJ.
 options = true
 

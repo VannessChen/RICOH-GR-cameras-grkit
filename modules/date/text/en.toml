@@ -7,3 +7,7 @@ label = "Date Style"
 [settings.LOOK]
 label = "Date Font"
 values = ["Classic", "GR1s", "GR II"]
+
+[settings.POSITION]
+label = "Date Position"
+values = ["Film", "Upright"]

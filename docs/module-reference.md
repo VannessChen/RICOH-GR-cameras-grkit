@@ -214,6 +214,7 @@ A plane filter changes the YCbCr planes of each recorded picture. The core calls
 | `PictureSet.count` | the number of planes |
 | `PictureSet.mono` | set for a monochrome picture |
 | `PictureSet.scratch` | `GRKIT_PLANE_SCRATCH` bytes of scratch memory for this call |
+| `PictureSet.turns` | the quarter turns clockwise that show the picture upright, from the posture of the camera at the shot: 0, 1, 2, or 3, as EXIF `Orientation` 1, 6, 3, or 8. The planes keep the landscape layout of the sensor. |
 | `Plane.y`, `Plane.c` | the addresses of the luma rows and of the interleaved CbCr rows |
 | `Plane.width`, `Plane.height`, `Plane.pitch` | the size, and the distance between rows in bytes |
 | `Plane.half` | set when there is one CbCr row for every second luma row. `chroma_row(p, y)` gives the CbCr row of luma row y. |

@@ -49,7 +49,7 @@ static uint32_t ifd_entry, ifd_writes, ifd_values[32];
 /* The module settings: those of Date Imprint, STYLE (handle 0, 6 values) and
    LOOK (handle 1, 3 values). */
 #define TEST_SETTINGS 0x5f000000U
-static uint32_t settings_memory[2 + 2 * 3];
+static uint32_t settings_memory[2 + 3 * 3];
 static volatile uint32_t *mapped_settings(uint32_t address)
 {
     assert(address == TEST_SETTINGS);
@@ -58,6 +58,7 @@ static volatile uint32_t *mapped_settings(uint32_t address)
 #define MODULE_SETTINGS_MAP(address) mapped_settings(address)
 #define STAMP_STYLE settings_memory[3]
 #define STAMP_LOOK settings_memory[6]
+#define STAMP_POSITION settings_memory[9]
 #define DATE_STAMP_STYLE_MAX 5U
 /* The plane filter of Date Imprint (modules/date): the harness maps its
    apply address to the module function. */
@@ -90,9 +91,12 @@ const GrkitContext grkit_self = {0, 2, 0};
 u32 setting_get(u32 handle) { return setting_value(header, handle); }
 void local_time(GrkitDateTime *out) { PICTURE_DATE(out); }
 u32 divide(u32 n, u32 d) { return core_divide(n, d); }
+/* The turns of the last plane set that the date filter got. */
+static uint32_t applied_turns = 0xffffffffU;
 static void test_apply(uint32_t address, void *set, uint32_t value)
 {
     assert(address == TEST_DATE_APPLY);
+    applied_turns = ((PictureSet *)set)->turns;
     date_apply(set, value);
 }
 /* Register the plane filter of Date Imprint, as INSTALL does, or none. */
@@ -118,7 +122,7 @@ static void reset(void)
     header[GRKIT_HOST_RECORDS / 4] = RECORDS;
     /* Date Imprint is loaded, and its settings are 0. */
     memset(settings_memory, 0, sizeof(settings_memory));
-    settings_memory[0] = 2; settings_memory[4] = 6; settings_memory[7] = 3;
+    settings_memory[0] = 3; settings_memory[4] = 6; settings_memory[7] = 3; settings_memory[10] = 2;
     header[GRKIT_HOST_MODULE_SETTINGS / 4] = TEST_SETTINGS;
     date_module(1);
     /* The Framing module uses CORE.ASPECT, so a stored crop applies. */
@@ -167,15 +171,18 @@ static void picture(uint32_t index, uint32_t width, uint32_t height, uint32_t pi
 }
 /* The shot settings pointer of the encoded pictures. */
 #define SHOT (ARENA + 0x9000)
-/* Record r for a shot in the shot ring, as the still build stores it. */
-static void store_shot(uint32_t shot, uint32_t r)
+/* Record r and the posture of the electronic level for a shot in the shot
+   ring, as the still build stores them. */
+static void store_posed(uint32_t shot, uint32_t r, uint32_t posture)
 {
     uint32_t ring = SCRATCH + GRKIT_SHOT_RING, n = WORD(ring, 0);
     uint32_t entry = ring + GRKIT_SHOT_ENTRY + (n & (GRKIT_SHOT_ENTRIES - 1)) * GRKIT_SHOT_STRIDE;
     WORD(entry, GRKIT_SHOT_KEY) = shot;
     WORD(entry, GRKIT_SHOT_RECORD) = r;
+    WORD(entry, GRKIT_SHOT_POSTURE) = posture;
     WORD(ring, 0) = n + 1;
 }
+static void store_shot(uint32_t shot, uint32_t r) { store_posed(shot, r, 1); }
 static void still(uint32_t r) { store_shot(SHOT, r); }
 static void encode_setup(void)
 {
@@ -488,6 +495,56 @@ int main(void)
             assert(b.left > p->width / 3 && b.top > p->height / 2);
         }
     }
+    /* The turns of a shot follow the posture of the electronic level at its
+       still build: 1 landscape, 3 and 4 the vertical postures, 2 upside
+       down. With the lens up or down (5, 6), the last turns stay. */
+    {
+        static const u32 posture[7] = {3, 6, 2, 5, 4, 1, 6};
+        static const u32 turns[7] = {1, 1, 2, 2, 3, 0, 0};
+        encode_setup();
+        fill_planes(40, 128, 128);
+        STAMP_STYLE = 1;
+        for (u32 k = 0; k < 7; ++k) {
+            store_posed(SHOT, 0, posture[k]);
+            picture_encode(0, MESSAGE);
+            assert(applied_turns == turns[k]);
+        }
+        /* The ring holds noise after power-on: without a known posture, a
+           shot gets no turns. */
+        encode_setup();
+        fill_planes(40, 128, 128);
+        STAMP_STYLE = 1;
+        WORD(SCRATCH + GRKIT_SHOT_RING, GRKIT_SHOT_LAST_TURNS) = 0x77;
+        store_posed(SHOT, 0, 6);
+        picture_encode(0, MESSAGE);
+        assert(applied_turns == 0);
+    }
+    /* Upright position: on each plane the stamp goes to the bottom right of
+       the picture turned upright, which is the top right of the frame for
+       one quarter turn, and its text runs along the long side of its box.
+       The film position keeps it at the bottom right of the frame. */
+    for (u32 position = 0; position < 2; ++position)
+        for (u32 k = 0; k < 4; ++k) {
+            static const u32 posture_of[4] = {1, 3, 2, 4};
+            u32 corner = position ? k : 0;
+            encode_setup();
+            fill_planes(40, 128, 128);
+            STAMP_STYLE = 2;
+            STAMP_POSITION = position;
+            store_posed(SHOT, 0, posture_of[k]);
+            picture_encode(0, MESSAGE);
+            for (u32 i = 0; i < 3; ++i) {
+                const struct test_plane *p = &planes[i];
+                struct box b = changes(i, 0);
+                assert(b.lit && b.lighter);
+                assert((corner <= 1) == (b.left > p->width / 2));
+                assert((corner >= 1 && corner <= 2) == (b.bottom < p->height / 2));
+            }
+            {
+                struct box b = changes(0, 0);
+                assert((corner & 1) == (b.bottom - b.top > b.right - b.left));
+            }
+        }
     /* Longer styles reach further left. */
     encode_setup();
     fill_planes(40, 128, 128);
@@ -746,7 +803,7 @@ int main(void)
             Plane small = {planes[1].y, planes[1].c, 720, 480, planes[1].pitch, 0, 0, 0, 720, 480};
             encode_setup();
             fill_planes(40, 128, 128);
-            gr2_paint(&small, &main, "2026/10/17", 10, 0);
+            gr2_paint(&small, &main, "2026/10/17", 10, 0, 0);
             struct box g = changes(1, 0);
             assert(g.lit && g.top >= 449 && g.top <= 450 && g.bottom >= 457 && g.bottom <= 459);
             assert(g.right <= 699 && g.right >= 696);

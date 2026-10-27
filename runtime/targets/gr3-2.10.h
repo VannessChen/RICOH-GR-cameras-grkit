@@ -45,6 +45,9 @@
 /* LiveViewController::UpdateLevelAlarm(controller, 1): sets the warning again
    while LIVEVIEW_LEVEL_PENDING is set. */
 #define FW_LIVEVIEW_LEVEL_UPDATE FIRMWARE(0x5317645c)
+/* The electronic level: a static object whose second word points to the
+   level, or holds 0 before the level exists (runtime/processing.h). */
+#define FW_LEVEL FIRMWARE(0x5536e7f0)
 #define FW_VIEW_SET_VISIBLE FIRMWARE(0x533ad3c0)
 #define FW_LINE_VIEW_INIT FIRMWARE(0x53393d84)
 #define FW_LINE_VIEW_SET_STYLE FIRMWARE(0x53393e00)
@@ -257,6 +260,10 @@
 /* LiveViewController: the byte that makes UpdateLevelAlarm set the
    highlight warning again (FW_LIVEVIEW_LEVEL_UPDATE). */
 #define LIVEVIEW_LEVEL_PENDING 0x4df
+/* The posture word of the electronic level: 1 landscape, 2 upside down, 3
+   and 4 the two vertical postures, 5 and 6 the lens down or up
+   (runtime/picture.c: picture_turns). */
+#define LEVEL_POSTURE 0x7c
 /* Picture processing. GAMMA_BUILT: the word of the gamma object that is 1
    after the native curves are built. */
 #define GAMMA_BUILT 0x3230

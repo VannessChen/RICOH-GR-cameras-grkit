@@ -224,13 +224,17 @@ typedef struct {
 typedef struct { u32 y, c, width, height, pitch, half, left, top, right, bottom; } Plane;
 /* The planes of one encode: the main picture, the screennail, and the
    thumbnail, without duplicates. `mono` is set for a monochrome picture.
-   `scratch` holds GRKIT_PLANE_SCRATCH bytes for this call. */
+   `scratch` holds GRKIT_PLANE_SCRATCH bytes for this call. The planes keep
+   the landscape layout of the sensor in each posture of the camera; `turns`
+   is the quarter turns clockwise that show the picture upright, as its EXIF
+   Orientation does: 0 (Orientation 1), 1 (6), 2 (3), or 3 (8). */
 typedef struct {
     Plane planes[4];
     u32 count;
     u32 reserved;
     u32 mono;
     u8 *scratch;
+    u32 turns;
 } PictureSet;
 /* The address of the chroma row of luma row y. */
 static inline u32 chroma_row(const Plane *p, u32 y) { return p->c + (p->half ? y >> 1 : y) * p->pitch; }

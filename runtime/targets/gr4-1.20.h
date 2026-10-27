@@ -50,6 +50,9 @@
 /* LiveViewController::UpdateLevelAlarm(controller, 1): sets the warning again
    while LIVEVIEW_LEVEL_PENDING is set. */
 #define FW_LIVEVIEW_LEVEL_UPDATE FIRMWARE(0x5318f1a4)
+/* The electronic level: a static object whose second word points to the
+   level, or holds 0 before the level exists (runtime/processing.h). */
+#define FW_LEVEL FIRMWARE(0x553a31a0)
 #define FW_VIEW_SET_VISIBLE FIRMWARE(0x535acd84)
 #define FW_LINE_VIEW_INIT FIRMWARE(0x53593388)
 #define FW_LINE_VIEW_SET_STYLE FIRMWARE(0x53593404)

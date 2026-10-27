@@ -391,16 +391,20 @@
    its shot settings pointer, which the maker-note setter (+0x18) and the JPEG
    encode configuration (+0x34) also hold. A later shot can start processing
    before an earlier one is written, so a single "last build" word is not
-   enough. Word 0 counts the writes. Entry n is at GRKIT_SHOT_ENTRY +
-   GRKIT_SHOT_STRIDE n and holds the key at GRKIT_SHOT_KEY and the record at
-   GRKIT_SHOT_RECORD. */
+   enough. Word 0 counts the writes, and word 1 (GRKIT_SHOT_LAST_TURNS) holds
+   the turns of the last shot with a known posture. Entry n is at
+   GRKIT_SHOT_ENTRY + GRKIT_SHOT_STRIDE n and holds the key at GRKIT_SHOT_KEY,
+   the record at GRKIT_SHOT_RECORD, and the posture of the electronic level at
+   GRKIT_SHOT_POSTURE (runtime/processing.h). */
 #define GRKIT_SHOT_RING 141376
 #define GRKIT_SHOT_ENTRIES 8
 #define GRKIT_SHOT_ENTRY 8
-#define GRKIT_SHOT_STRIDE 8
+#define GRKIT_SHOT_STRIDE 16
 #define GRKIT_SHOT_KEY 0
 #define GRKIT_SHOT_RECORD 4
-#define GRKIT_PICTURE_SCRATCH 141448
+#define GRKIT_SHOT_POSTURE 8
+#define GRKIT_SHOT_LAST_TURNS 4
+#define GRKIT_PICTURE_SCRATCH 141512
 
 /* Menu text after the picture scratch, in each menu language: 0 English, 1
    Simplified Chinese, 2 Traditional Chinese, 3 Japanese. The installer copies
@@ -421,7 +425,7 @@
    GRKIT_PROFILE_SLOT_COUNT slots of GRKIT_PROFILE_SLOT_SIZE bytes: calls,
    cycles, and the cycles of the largest call. The core points come first, then
    GRKIT_PROFILE_KINDS slots for each module slot. */
-#define GRKIT_PROFILE 182408
+#define GRKIT_PROFILE 182472
 #define GRKIT_PROFILE_SIZE 500
 #define GRKIT_PROFILE_MODULE_SIZE 16
 #define GRKIT_PROFILE_NAME_BYTES 8
@@ -441,7 +445,7 @@
 #define GRKIT_PROFILE_FILTER 1
 #define GRKIT_PROFILE_CALL 2
 /* Everything after the records: the script array must hold it. */
-#define GRKIT_TAIL_SIZE 182908
+#define GRKIT_TAIL_SIZE 182972
 #define GRKIT_TEXT_SUMMARY 8192
 /* The parameter page title of a GRKit session, after the summaries: the page,
    its vtable, and the descriptor of the effect name. */

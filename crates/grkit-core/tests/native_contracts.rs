@@ -952,10 +952,11 @@ fn native_picture_contract_applies_post_matrix_and_stamp() {
     };
     let temporary = tempfile::tempdir().unwrap();
     // The header that `grkit module build` generates for modules/date: the
-    // handles of its settings STYLE and LOOK.
+    // handles of its settings STYLE, LOOK, and POSITION.
     fs::write(
         temporary.path().join("grkit_module.h"),
-        "#define SETTING_STYLE GRKIT_SETTING(0)\n#define SETTING_LOOK GRKIT_SETTING(1)\n",
+        "#define SETTING_STYLE GRKIT_SETTING(0)\n#define SETTING_LOOK GRKIT_SETTING(1)\n\
+         #define SETTING_POSITION GRKIT_SETTING(2)\n",
     )
     .unwrap();
     for (index, target) in targets().iter().enumerate() {

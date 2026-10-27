@@ -224,6 +224,10 @@
 /* LiveViewController: the byte that makes UpdateLevelAlarm set the
    highlight warning again (FW_LIVEVIEW_LEVEL_UPDATE). */
 #define LIVEVIEW_LEVEL_PENDING 0x4e3
+/* The posture word of the electronic level: 1 landscape, 2 upside down, 3
+   and 4 the two vertical postures, 5 and 6 the lens down or up
+   (runtime/picture.c: picture_turns). */
+#define LEVEL_POSTURE 0x64
 /* Picture processing. GAMMA_BUILT: the word of the gamma object that is 1
    after the native curves are built. */
 #define GAMMA_BUILT 0x382c

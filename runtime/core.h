@@ -136,13 +136,15 @@ typedef struct { u32 y,c,width,height,pitch,half,left,top,right,bottom; } Plane;
 static inline u32 chroma_row(const Plane *p,u32 y) { return p->c+(p->half ? y>>1 : y)*p->pitch; }
 /* The deduplicated planes of one encode. `record` is the processing record of
    the shot, or 0 for native processing, and `mono` is set for a monochrome
-   record or a native monochrome Image Control type. `scratch` holds GRKIT_PICTURE_MASKS bytes for this call. */
+   record or a native monochrome Image Control type. `scratch` holds GRKIT_PICTURE_MASKS bytes for this call.
+   `turns` is the quarter turns clockwise that show the picture upright. */
 typedef struct {
     Plane planes[4];
     u32 count;
     u32 record;
     u32 mono;
     u8 *scratch;
+    u32 turns;
 } PictureSet;
 /* Core services for the planes. */
 /* Unsigned division: the freestanding link has no division helper. */
