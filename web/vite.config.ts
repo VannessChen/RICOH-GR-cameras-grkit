@@ -17,7 +17,7 @@ function workspaceVersion(): string {
 }
 
 /** The paths that CI writes into the site next to the web build. */
-const DATA_PATH = /^\/(runtime|effects|guides)\//;
+const DATA_PATH = /^\/(runtime|effects|guides|modules)\//;
 
 /**
  * Serves runtime and effect files from a local site-data directory during `dev` and `preview`.
@@ -66,6 +66,35 @@ function woff2Only(): Plugin {
 }
 
 /**
+ * The fonts of the first screen. The page renders only after its script runs, so without a
+ * preload the browser finds these fonts late, paints a system font first, and the text moves
+ * when they arrive.
+ */
+const FIRST_SCREEN_FONTS =
+  /^assets\/ibm-plex-(sans-latin-(400|500|600)|sans-condensed-latin-700|mono-latin-400)-normal-[\w-]+\.woff2$/;
+
+/** Preloads the fonts of the first screen, so they download with the script and the styles. */
+function preloadFonts(): Plugin {
+  return {
+    name: 'grkit-preload-fonts',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(_html, context) {
+        return Object.keys(context.bundle ?? {})
+          .filter((file) => FIRST_SCREEN_FONTS.test(file))
+          .sort()
+          .map((file) => ({
+            tag: 'link',
+            attrs: { rel: 'preload', href: `/${file}`, as: 'font', type: 'font/woff2', crossorigin: '' },
+            injectTo: 'head' as const,
+          }));
+      },
+    },
+  };
+}
+
+/**
  * Adds Plausible analytics to the build when PLAUSIBLE_HOST gives the Plausible origin, and
  * extends the Content-Security-Policy of `_headers` for it. The Release workflow sets it.
  */
@@ -93,6 +122,7 @@ export default defineConfig({
   plugins: [
     react(),
     woff2Only(),
+    preloadFonts(),
     siteData(process.env.GRKIT_SITE_DATA ?? '../dist/site-data'),
     plausible(process.env.PLAUSIBLE_HOST || undefined),
   ],

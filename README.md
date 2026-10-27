@@ -5,72 +5,56 @@ English | [简体中文](README.zh-Hans.md) | [繁體中文](README.zh-Hant.md) 
 [![Tests](https://github.com/ahonn/grkit/actions/workflows/tests.yml/badge.svg)](https://github.com/ahonn/grkit/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-GRKit adds film looks and shooting tools to RICOH GR cameras. It loads from the SD card and does not write the camera firmware.
+GRKit adds film looks, XPan and other crops, date stamps, and grain to RICOH GR III, GR IIIx, and GR IV. It runs from the SD card and never writes to the firmware. Take the card out and the camera is back to stock.
 
-![The GRKit page in the ADJ menu](https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.jpg)
+<p>
+  <img src="https://github.com/ahonn/grkit/raw/main/resources/images/grkit-root.jpg" alt="The GRKit page in the ADJ menu" width="49%">
+  <img src="https://github.com/ahonn/grkit/raw/main/resources/images/grkit-menu.jpg" alt="The GRKit section in the Customize tab of MENU" width="49%">
+</p>
 
 Photo: [Snow in Akihabara](https://www.flickr.com/photos/cafetricot/51803682755/) by nagi usano, [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/).
 
 ## Features
 
-GRKit adds a sixth entry, GRK, to the ADJ menu. It has five modules:
+Press the ADJ lever while shooting and pick the sixth item, GRK.
 
-- **Film Look**: the colors of films such as Portra 400, Velvia 100, and Tri-X 400. The viewfinder previews the look.
-- **Framing**: XPan (65:24), 2.35:1, 16:9, 4:3, 5:4, or 1:1 photos, on every camera. For each ratio, the viewfinder stays 3:2 and dims the area outside the photo.
-- **Guides**: thirds, center, golden ratio, or diagonal lines.
-- **Date Imprint**: an orange date on the photo, like a film camera's data back.
-- **Grain**: film grain on the photo, in three strengths.
+- **Film Look**: Portra 400, Velvia 100, Tri-X 400, and more, with a live preview. You can also import your own `.cube` LUT or Lightroom preset on [grkit.app](https://grkit.app). Each look is fitted from an open-source film LUT, so it comes close to the original but isn't identical ([sources](effects/NOTICE.md)).
+- **Framing**: XPan, 2.35:1, 16:9, 4:3, 5:4, and 1:1, with a mask or frame lines in the viewfinder.
+- **Guides**: thirds, center, golden ratio, or diagonals.
+- **Date Imprint**: the date on the photo in classic, GR1s dot-matrix, or GR II style.
+- **Grain**: film grain in three strengths and four sizes (Auto, Small, Medium, Large).
 
-The GRKit section at the end of the Customize tab of MENU has all the settings. It has the settings of each module with its Enable row, the order of the modules in ADJ, and About GRKit with the version and the project address.
-
-You select the modules when you make a package. The menu shows only those modules. To write a module, see [Writing a module](docs/modules.md).
+GRKit takes 5 to 12 seconds to load after power-on. Until then, the camera uses its own settings. All the settings are in the GRKit section at the end of the Customize tab in MENU. To write your own module, see [Writing a module](docs/modules.md).
 
 ## Supported cameras
 
-| Camera | Firmware | Status |
+| Camera | Tested on a camera | Supported |
 | --- | --- | --- |
-| RICOH GR III | 2.10 | Tested on a camera |
-| RICOH GR III | 2.20 | Experimental |
-| RICOH GR III HDF | 2.10 | Supported |
-| RICOH GR III HDF | 2.20 | Experimental |
-| RICOH GR IIIx | 1.60 | Supported |
-| RICOH GR IIIx | 1.70 | Experimental |
-| RICOH GR IIIx HDF | 1.60 | Supported |
-| RICOH GR IIIx HDF | 1.70 | Experimental |
-| RICOH GR IV | 1.11 | Tested on a camera |
-| RICOH GR IV | 1.20 | Experimental |
-| RICOH GR IV HDF | 1.11 | Supported |
-| RICOH GR IV HDF | 1.20 | Experimental |
-| RICOH GR IV Monochrome | 1.00 | Supported, without Film Look |
-| RICOH GR IV Monochrome | 1.10 | Experimental, without Film Look |
+| GR III, GR III HDF | 2.10, 2.20 | — |
+| GR IIIx, GR IIIx HDF | 1.60, 1.70 | — |
+| GR IV, GR IV HDF | 1.11, 1.20 | — |
+| GR IV Monochrome | 1.00 | 1.10 |
 
-A supported camera runs the same runtime as a tested camera, but is not tested itself. An experimental firmware version has not been tested on a camera.
-
-GR III 2.20 and GR IIIx 1.70 use the same package as 2.10 and 1.60. GR IV 1.11 and 1.20 use one package: at each power-on, GRKit finds the firmware of the camera. Each HDF model runs the firmware of its base camera and uses the same package. GR IV Monochrome runs the firmware of GR IV and shows its own version: 1.00 is GR IV 1.11, and 1.10 is GR IV 1.20. Other models and firmware versions are not supported. To see the firmware version, open the camera menu.
-
-A camera can run another build of a supported firmware version. If GRKit does not load on a supported camera, the [firmware dump guide](resources/DUMP.md) tells you how to send its firmware image.
+GR IV Monochrome has no Film Look. Other models and firmware versions aren't supported. If GRKit doesn't load on a supported camera, see the [firmware dump guide](resources/DUMP.md).
 
 > [!WARNING]
 > GRKit is experimental. Use it at your own risk.
-> GRKit changes the camera memory only until the camera turns off. The installation turns on the camera's SD script setting, and this setting stays on until you turn it off.
-> If GRKit fails, the camera can stop during startup. Read the [recovery guide](resources/RECOVERY.md) before you install GRKit.
+> Installing it turns on the camera's SD script setting, which stays on until you turn it off. If GRKit fails, the camera can hang at startup, so read the [recovery guide](resources/RECOVERY.md) first.
 
 ## Install
 
-To make a package, go to [grkit.app](https://grkit.app). Select the camera, the modules, and the effects, then download `GRKit.zip`.
+Pick your camera, modules, and effects on [grkit.app](https://grkit.app), then either:
 
-Each package contains the installation guide for its camera as a PDF, in the language that you select. The recovery guide is at its end. The sources are:
+- **Write to the SD card** from Chrome or Edge on a computer. The site can also update or uninstall GRKit and add or remove modules and effects.
+- **Download GRKit.zip** and follow the PDF guide inside it ([GR III and GR IIIx](resources/INSTALLATION.md), [GR IV](resources/INSTALLATION-GR4.md)).
 
-- [GR III, GR IIIx, and their HDF models](resources/INSTALLATION.md)
-- [GR IV, GR IV HDF, and GR IV Monochrome](resources/INSTALLATION-GR4.md)
+The first time only, hold MENU while you turn the camera on. To update from a ZIP, replace the `SCRIPT` folder on the card. Your settings stay in `GRKIT`. Formatting the card removes GRKit, so copy `GRKIT` to a computer first.
 
-To update GRKit, copy the contents of `SD_ROOT` of the new package over the old files. Your settings and effects stay in `GRKIT`.
-To remove GRKit, turn the camera off and delete the `SCRIPT` and `GRKIT` folders from the card. `GRKIT` holds your GRKit settings.
-To turn the SD script setting off, use the files that [grkit.app](https://grkit.app) gives below the installation steps. The installation guide gives the steps.
+If GRK doesn't show up, check the FAQ on [grkit.app](https://grkit.app). If that doesn't help, send `GRKIT/REPORT.TXT` and `SCRIPT/GRKIT/INSTALL.ERR` (if it exists) in a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml).
 
 ## Build from source
 
-You need Rust 1.92 or later, Clang and LLD with ARM support, and the official firmware file from Ricoh. The repository does not contain firmware.
+You need Rust 1.92 or later, Clang and LLD with ARM support, and the official Ricoh firmware file, which this repository doesn't include.
 
 ```sh
 cargo install --path crates/grkit-cli --locked
@@ -84,12 +68,11 @@ grkit package --build build/runtime --effects build/effects $(for m in build/mod
 grkit verify dist/GRKit.zip
 ```
 
-`install-guide-tools.sh` downloads Typst and the fonts, on Linux x86_64 or macOS arm64. For other cameras, fewer modules, and other guide languages, see [Build packages](CONTRIBUTING.md#build-packages).
+For other cameras, fewer modules, or other guide languages, see [Build packages](CONTRIBUTING.md#build-packages).
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for the setup, the tests, and the pull request rules.
-If you test GRKit on a camera, open a device report issue with the result, as a pass or a failure. Reports for GR IIIx and the HDF models are the most useful.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Device reports are welcome whether GRKit worked or not, especially for firmware that hasn't been tested on a camera yet. Send feature ideas through the [feature request form](https://tally.so/r/Z9jRgB), and you can support the project by [buying me a coffee](https://buymeacoffee.com/yuexunjiang).
 
 ## Documentation
 
@@ -101,10 +84,10 @@ If you test GRKit on a camera, open a device report issue with the result, as a 
 
 ## License
 
-The code is licensed under the [MIT License](LICENSE). Each package contains `LICENSES.md`, which gives the licenses of its files.
+The code is under the [MIT License](LICENSE). Each package includes `LICENSES.md` with the licenses of its files.
 
-- The effects are licensed under CC BY-SA 4.0 or MIT. [effects/NOTICE.md](effects/NOTICE.md) gives the license of each effect.
-- The text of the menu icons and of the live view uses the [Roboto Condensed](https://github.com/googlefonts/roboto-classic) typeface under the [SIL Open Font License 1.1](crates/grkit-core/assets/RobotoCondensed-LICENSE.txt).
-- The effect fit is ported from [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) under the [MIT License](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt).
+- The effects are under CC BY-SA 4.0 or MIT. See [effects/NOTICE.md](effects/NOTICE.md).
+- The menu and live view text uses [Roboto Condensed](https://github.com/googlefonts/roboto-classic) under the [SIL Open Font License 1.1](crates/grkit-core/assets/RobotoCondensed-LICENSE.txt).
+- The effect fitting is ported from [gr3-film-mods](https://github.com/idontknownihil/gr3-film-mods) under the [MIT License](crates/grkit-core/GR3_FILM_MODS_LICENSE.txt).
 
-RICOH and GR are trademarks of Ricoh Company, Ltd. Film names are trademarks of their owners. GRKit is an independent project. It is not affiliated with, endorsed by, or supported by Ricoh or by a film manufacturer.
+RICOH and GR are trademarks of Ricoh Company, Ltd. Film names are trademarks of their respective owners. GRKit is an independent project and is not affiliated with Ricoh or any film manufacturer.

@@ -229,3 +229,37 @@ fn a_package_adds_each_build_of_the_camera() {
         ["gr4-1.11", "gr4-1.20", "gr4-1.20-0528"]
     );
 }
+
+#[test]
+fn the_card_files_are_the_sd_root_of_the_package() {
+    let files = runtime_files();
+    let mut builder = builder_with_runtime(&files);
+    builder.add_effect(&effect("test-a")).unwrap();
+    let card = builder.card_files().unwrap();
+    // Each runtime file, the ModeSet files, the effect, each module, and the package list.
+    for path in files.keys() {
+        assert_eq!(card[path], files[path], "{path}");
+    }
+    assert!(card.contains_key("SCRIPT/GRKIT/PACKAGE.TXT"));
+    assert!(card
+        .keys()
+        .any(|path| path.starts_with("SCRIPT/GRKIT/EFFECTS/")));
+    assert!(card
+        .keys()
+        .any(|path| path.starts_with("SCRIPT/GRKIT/MODULES/")));
+    // The guide, the licenses, and the checksums stay out of the card.
+    assert!(card.keys().all(|path| !path.ends_with(".pdf")));
+    assert!(!card.contains_key("LICENSES.md") && !card.contains_key("SHA256SUMS"));
+    let package = builder.build().unwrap();
+    assert_eq!(card, packaging::card_files(&package).unwrap());
+}
+
+#[test]
+fn an_effect_label_gives_the_id_the_name_and_the_icon() {
+    let label = grkit_wasm::effect_label(&effect("test-a")).unwrap();
+    assert_eq!(label.id, "test-a");
+    assert!(!label.name.is_empty());
+    assert_eq!(label.icon.len(), 40 * 40 * 4);
+    assert!(!label.monochrome);
+    assert!(error(grkit_wasm::effect_label(b"not an effect")).contains("GRFX0001"));
+}

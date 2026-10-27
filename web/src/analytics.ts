@@ -46,6 +46,22 @@ export function trackDownload(
   track('Download', downloadProps(camera, plan, effectCount, language));
 }
 
+/** Records a write to a connected card: a first install, an update, or a change of the selection. */
+export function trackCardWrite(
+  camera: Camera,
+  plan: ModulePlan,
+  effectCount: number,
+  language: Language,
+  kind: 'install' | 'update' | 'change',
+): void {
+  track('Card Write', { ...downloadProps(camera, plan, effectCount, language), kind });
+}
+
+/** Records an uninstall from a connected card. */
+export function trackCardUninstall(camera: Camera, data: boolean, scriptsOff: boolean): void {
+  track('Card Uninstall', { camera: camera.key, data: data ? 'yes' : 'no', scriptsOff: scriptsOff ? 'yes' : 'no' });
+}
+
 /** Records a saved package that turns SD scripts off. */
 export function trackScriptsOff(camera: Camera): void {
   track('Scripts Off', { camera: camera.key });

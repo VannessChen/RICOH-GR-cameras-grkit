@@ -92,3 +92,57 @@ export const CAMERAS: readonly Camera[] = [
 
 /** The token in the install steps that stands for the camera's ModeSet file. */
 export const MODESET_TOKEN = '`{modeset}';
+
+/**
+ * The camera entries that fit a card with GRKit: `builds` are the runtime builds of its GRKit, and
+ * `rootNames` are the names at the card root, which can hold the ModeSet file of a camera. An
+ * entry fits when it runs each build. One build can run on two entries, such as GR III and
+ * GR IIIx, so the result can have more than one. It is null when the card tells nothing: no build
+ * and no single ModeSet file.
+ */
+export function camerasForCard(builds: readonly string[], rootNames: readonly string[]): Camera[] | null {
+  const upper = new Set(rootNames.map((name) => name.toUpperCase()));
+  const modesets = [
+    ...new Set(
+      CAMERAS.flatMap((camera) =>
+        camera.support && upper.has(camera.support.modeset.toUpperCase()) ? [camera.support.modeset] : [],
+      ),
+    ),
+  ];
+  if (builds.length === 0 && modesets.length !== 1) return null;
+  return CAMERAS.filter(
+    (camera) =>
+      !!camera.support &&
+      builds.every((build) => camera.support!.targets.includes(build)) &&
+      (modesets.length !== 1 || camera.support.modeset === modesets[0]),
+  );
+}
+
+/**
+ * The camera entry to select for a card: `current` when it fits, else the first entry that fits,
+ * else null for an unknown build. A card that tells nothing keeps `current`.
+ */
+export function cameraForCard(
+  current: Camera,
+  builds: readonly string[],
+  rootNames: readonly string[],
+): Camera | null {
+  const fitting = camerasForCard(builds, rootNames);
+  if (!fitting) return current;
+  return fitting.includes(current) ? current : (fitting[0] ?? null);
+}
+
+/**
+ * The firmware versions of `camera` that run the runtime build `target`, as the camera entry
+ * shows them. An entry that shows its own versions, such as GR IV Monochrome, keeps them.
+ */
+export function firmwareForTarget(camera: Camera, target: string | null): string {
+  const support = camera.support;
+  if (!support) return '';
+  const own = releases(camera.id);
+  if (!target || support.firmware !== own.firmware) return support.firmware;
+  const versions = CAMERA_RELEASES[camera.id].releases
+    .filter((release) => release.target === target)
+    .map((release) => release.firmware);
+  return versions.length > 0 ? [...new Set(versions)].join(' / ') : support.firmware;
+}

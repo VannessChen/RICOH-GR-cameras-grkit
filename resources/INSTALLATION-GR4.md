@@ -22,12 +22,13 @@ After the installation, you can remove `00078560.636` and `DEVELOP.MOD` from the
 ## Update
 
 1. Turn the camera off.
-2. Copy the contents of `SD_ROOT` of the new package to the root of the SD card. Replace or merge the existing files.
-3. Turn the camera on normally.
+2. Delete the `SCRIPT` folder from the card.
+3. Copy the `SCRIPT` folder of `SD_ROOT` of the new package to the root of the SD card.
+4. Turn the camera on normally. You do not need to hold MENU.
 
-The package holds only the `SCRIPT` folder. GRKit keeps your settings, your effects, and the modules that you added in the `GRKIT` folder, so the update keeps them.
+GRKit keeps your settings, your effects, and the modules that you added in the `GRKIT` folder, so the update keeps them.
 
-To keep the settings and the effects of GRKit 1.2, merge the files in step 2. Do not replace them. In Finder, hold Option and click Merge. At the first start, GRKit copies them into the `GRKIT` folder. After that start, you can delete the `SCRIPT/PLUGINS` folder.
+Deleting `SCRIPT` also deletes the settings and the effects of GRKit 1.2. To keep them, update on [grkit.app](https://grkit.app) in Chrome or Edge on a computer, with the card in a card reader.
 
 ## Use
 

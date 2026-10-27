@@ -36,6 +36,7 @@ export interface CatalogEffect extends EffectFields {
   /** The preview table path, relative to the catalog. */
   preview: string;
   imported?: undefined;
+  card?: undefined;
 }
 
 /** An effect that this page fitted from a LUT. It has no site files. */
@@ -44,7 +45,24 @@ export interface ImportedEffect extends EffectFields {
   /** The key of the preview table in the preview cache (`provideTable`). */
   preview: string;
   imported: Imported;
+  card?: undefined;
 }
+
+/**
+ * An effect file on the connected card that the catalog and the imports do not have, such as an
+ * import from an earlier visit. The page shows it without a preview.
+ */
+export interface CardEffect extends EffectFields {
+  imported?: undefined;
+  card: {
+    /** The path of the file from the card root. */
+    path: string;
+    bytes: Uint8Array;
+  };
+}
+
+/** An effect that a package can hold. */
+export type PackageEffect = Effect | CardEffect;
 
 /** `imported` tells the two kinds apart. */
 export type Effect = CatalogEffect | ImportedEffect;
