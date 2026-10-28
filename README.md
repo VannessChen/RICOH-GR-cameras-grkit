@@ -22,7 +22,7 @@ Press the ADJ lever while shooting and pick the sixth item, GRK.
 - **Framing**: XPan, 2.35:1, 16:9, 4:3, 5:4, 7:6, and 1:1, with a mask or frame lines in the viewfinder.
 - **Guides**: thirds, center, golden ratio, or diagonals.
 - **Date Imprint**: the date on the photo in classic, GR1s dot-matrix, or GR II style.
-- **Grain**: film grain in three strengths and four sizes (Auto, Small, Medium, Large).
+- **Grain**: film grain in four strengths and four sizes (Auto, Small, Medium, Large).
 
 GRKit takes 3 to 6 seconds to load after power-on. Until then, the camera uses its own settings. All the settings are in the GRKit section at the end of the Customize tab in MENU. To write your own module, see [Writing a module](docs/modules.md).
 

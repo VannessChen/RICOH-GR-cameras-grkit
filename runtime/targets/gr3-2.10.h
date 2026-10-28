@@ -277,6 +277,8 @@
 #define FW_YCBCR_CALC FIRMWARE(0x536e4720)
 /* DigitalFilterProcess plan: the grain stage flag that the stage gate sets. */
 #define GRAIN_GATE_FLAG 0x24
+/* The granulation after its amplitude choice (grain_amplitude). */
+#define FW_GRAIN_AMPLITUDE_DONE FIRMWARE(0x5367ae40)
 /* Grain size. The shot settings hold the float APEX Sv of the shot at
    GRAIN_SV, which the EXIF ISO also uses (0x535f5e80). The granulation
    (0x5367ad3c) keeps the pitch and the height of its noise plane at

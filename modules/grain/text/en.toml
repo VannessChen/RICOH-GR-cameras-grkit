@@ -1,5 +1,5 @@
 title = "Grain"
-rows = ["Off", "Weak", "Medium", "Strong"]
+rows = ["Off", "Weak", "Medium", "Strong", "Extra Strong"]
 
 [settings."CORE.GRAIN"]
 label = "Strength"

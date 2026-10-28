@@ -1,5 +1,5 @@
 title = "입자감"
-rows = ["꺼짐", "약", "중", "강"]
+rows = ["꺼짐", "약", "중", "강", "매우 강"]
 
 [settings."CORE.GRAIN"]
 label = "강도"

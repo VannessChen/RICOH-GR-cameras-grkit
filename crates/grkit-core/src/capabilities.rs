@@ -121,10 +121,11 @@ pub const CAPABILITIES: [Capability; 4] = [
         points: &[Point::ViewfinderOverlay, Point::CaptureAspect],
     },
     Capability {
-        // 0 Off, 1 weak, 2 medium, 3 strong, in the native grain stage of
-        // recorded pictures.
+        // 0 Off, 1 weak, 2 medium, 3 strong, 4 extra strong, in the native
+        // grain stage of recorded pictures. Extra strong is strong with
+        // larger grain tables (runtime/picture.S: grain_amplitude).
         key: "GRAIN",
-        values: 4,
+        values: 5,
         state: State::Word(HOST_GRAIN),
         points: &[Point::PipelineGrain],
     },

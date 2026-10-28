@@ -50,9 +50,11 @@ const ICONS: &[HookSpec] = &[
 
 /// DigitalFilterProcess SetEffectParameter: the Particle load, then the BL to
 /// the stage gate. The granulation: the BL to its noise fill, which gives
-/// CORE.GRAIN_SIZE.
+/// CORE.GRAIN_SIZE, and the first test of its amplitude choice, which gives
+/// Extra Strong.
 const GRAIN: &[HookSpec] = &[
     bl("grain_particle", Framing, PipelineGrain),
     bl("grain_gate", Framing, PipelineGrain),
     bl("grain_fill", Framing, PipelineGrainSize),
+    b("grain_amplitude", Framing, PipelineGrain),
 ];

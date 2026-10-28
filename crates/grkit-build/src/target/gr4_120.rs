@@ -202,6 +202,8 @@ const SITES: &[Site] = &[
     ("grain_strength", 0x53726790, "b737d4e5"),
     ("grain_size", 0x537267b4, "b637d4e5"),
     ("grain_gate", 0x53739f40, "c5feffeb"),
+    // The grain tables: `mov r0, #0x200` after the luma amplitude load.
+    ("grain_amplitude", 0x538c5cd8, "020ca0e3"),
 ];
 
 /// The stock instructions around the processing hooks.

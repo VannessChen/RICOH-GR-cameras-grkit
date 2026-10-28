@@ -192,6 +192,8 @@ const SITES: &[Site] = &[
     ("grain_gate", 0x5351361c, "e7feffeb"),
     // The granulation (0x5367ad3c): the BL to its noise fill (0x5368a92c).
     ("grain_fill", 0x5367ae14, "c43e00eb"),
+    // The granulation (0x5367ad3c): the first test of its amplitude choice.
+    ("grain_amplitude", 0x5367ae28, "020055e3"),
 ];
 
 const CONTEXTS: &[(u32, &str)] = &[

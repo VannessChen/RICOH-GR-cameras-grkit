@@ -245,7 +245,7 @@ static void install_page(u32 slot, const char *title, const char *const *names, 
     test_header[GRKIT_HOST_MODULE_PAGES / 4 + slot * 3 + 1] = handle;
     test_header[GRKIT_HOST_MODULE_PAGES / 4 + slot * 3 + 2] = tile;
 }
-static const char *const grain_names[] = {"Off", "Weak", "Medium", "Strong"};
+static const char *const grain_names[] = {"Off", "Weak", "Medium", "Strong", "Extra Strong"};
 /* The summaries of Framing, which name the ratios shorter. */
 static const char *const ratio_values[] = {"Off", "XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4", "7:6"};
 static const char *const stamp_names[] = {"Off", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"};
@@ -312,7 +312,7 @@ static void install_modules(void)
     install_page(2, "Guides", guide_names, 6, 0, 7);
     install_page(3, "Date Imprint", stamp_names, 6, 1, 13);
     install_setting_rows(3);
-    install_page(4, "Grain", grain_names, 4, GRKIT_CORE_GRAIN, 19);
+    install_page(4, "Grain", grain_names, 5, GRKIT_CORE_GRAIN, 19);
     /* The labels of Framing name the ratios in full. */
     for (u32 value = 0; value < 8; ++value)
         for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language)
@@ -965,10 +965,10 @@ static void the_grain_page_changes_only_the_grain_word(void)
     assert(PAGE_ICON(GRAIN_MODULE, GRAIN_ROW) == GRAIN_TILE(2));
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == GRAIN_MODULE);
-    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2 && count(test_header) == 4);
+    assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == 2 && count(test_header) == 5);
     assert(same(current_module(test_header)->title(test_header), "Grain"));
     const u32 guide_style = GUIDE_STYLE, module_changes = settings_memory[1];
-    for (u32 row = 0; row < 4; ++row) {
+    for (u32 row = 0; row < 5; ++row) {
         test_header[GRKIT_HOST_MENU_CURSOR / 4] = row;
         menu_confirm(test_header);
         assert(test_header[GRKIT_HOST_GRAIN / 4] == row);
@@ -980,11 +980,11 @@ static void the_grain_page_changes_only_the_grain_word(void)
         assert(GUIDE_STYLE == guide_style && settings_memory[1] == module_changes);
     }
     assert(menu_back(test_header) && test_header[GRKIT_HOST_MENU_CURSOR / 4] == GRAIN_ROW);
-    assert(same(current_module(test_header)->summary(test_header), "Grain: Strong"));
+    assert(same(current_module(test_header)->summary(test_header), "Grain: Extra Strong"));
     /* A value out of range reads as Off, and a store out of range does nothing. */
     test_header[GRKIT_HOST_GRAIN / 4] = 999;
-    assert(setting_value(test_header, GRKIT_CORE_GRAIN) == 0 && setting_limit(test_header, GRKIT_CORE_GRAIN) == 4);
-    setting_store(test_header, GRKIT_CORE_GRAIN, 4);
+    assert(setting_value(test_header, GRKIT_CORE_GRAIN) == 0 && setting_limit(test_header, GRKIT_CORE_GRAIN) == 5);
+    setting_store(test_header, GRKIT_CORE_GRAIN, 5);
     assert(test_header[GRKIT_HOST_GRAIN / 4] == 999);
     setting_store(test_header, GRKIT_CORE_GRAIN, 1);
     assert(test_header[GRKIT_HOST_GRAIN / 4] == 1);

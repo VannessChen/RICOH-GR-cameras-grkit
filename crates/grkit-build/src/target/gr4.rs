@@ -68,9 +68,12 @@ const LIVE_VIEW: &[HookSpec] = &[
 
 /// DigitalFilterProcess SetEffectParameter: the grain on, strength, and size
 /// loads, then the BL to the stage gate. The size load gives CORE.GRAIN_SIZE.
+/// The grain tables: the `mov r0, #0x200` after the load of their luma
+/// amplitude, which gives Extra Strong.
 const GRAIN: &[HookSpec] = &[
     bl("grain_enable", Framing, PipelineGrain),
     bl("grain_strength", Framing, PipelineGrain),
     bl("grain_size", Framing, PipelineGrainSize),
     bl("grain_gate", Framing, PipelineGrain),
+    bl("grain_amplitude", Framing, PipelineGrain),
 ];

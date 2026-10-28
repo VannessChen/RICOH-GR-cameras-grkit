@@ -77,11 +77,17 @@ dirty_resume:
    recorded pictures only. SetEffectParameter reads the grain settings from the
    shot settings (r4 on GR IV, r5 on GR III); these hooks replace each load with
    the Grain level, and Off keeps the native value. The stage gate ignores grain
-   for Standard, so the gate wrapper turns the stage on for any level. */
+   for Standard, so the gate wrapper turns the stage on for any level. Extra
+   Strong (level 4) takes the native strong grain, and the amplitude hooks
+   scale its tables by GRAIN_EXTRA / 256. */
+#ifndef GRAIN_EXTRA
+#define GRAIN_EXTRA 384
+#endif
 #if defined(HOOK_GRAIN_ENABLE) || defined(HOOK_GRAIN_PARTICLE)
-// r3 = the level minus 1, or a value above 2 for Off. Flags change. Without
-// a module that uses CORE.GRAIN, as after a soft Off of Grain
-// (runtime/manage.h), the level is Off.
+// r3 = the level minus 1: 0 to 3 for Weak to Extra Strong, or a value above 3
+// for Off. The flags are those of `cmp r3, #3`. Without a module that uses
+// CORE.GRAIN, as after a soft Off of Grain (runtime/manage.h), the level is
+// Off.
 grain_level:
     ldr r3, =GRKIT_HEADER_REFERENCE
     ldr r3, [r3, #GRKIT_HOST_CAPABILITIES]
@@ -89,8 +95,8 @@ grain_level:
     ldrne r3, =GRKIT_HEADER_REFERENCE
     ldrne r3, [r3, #GRKIT_HOST_GRAIN]
     subne r3, r3, #1
-    moveq r3, #3
-    cmp r3, #2
+    mvneq r3, #0
+    cmp r3, #3
     bx lr
 
 // Replaces the BL to the stage gate. r0 = plan, r1 = shot settings. The caller
@@ -151,13 +157,36 @@ grain_enable:
     bx lr
 
 // Replaces `ldrb r3, [r4, #0x7b7]` (strength 0..2): weak, medium, strong.
+// Extra Strong takes strong.
 .global grain_strength
 grain_strength:
     push {lr}
     bl grain_level
     pop {lr}
     ldrbhi r3, [r4, #0x7b7]
+    bxhi lr
+    cmp r3, #2
+    movhi r3, #2
     bx lr
+
+#ifdef HOOK_GRAIN_AMPLITUDE
+// GR IV replaces `mov r0, #0x200` after the load of the luma amplitude r5 of
+// the grain tables (the 3 x 3 tables at 0x53b4bf3c by strength and size).
+// Each table entry is the input plus or minus min(input, 255 - input, r5),
+// so a larger r5 stays inside 0..255. Extra Strong scales r5.
+.global grain_amplitude
+grain_amplitude:
+    push {r3, lr}
+    bl grain_level
+    cmp r3, #3
+    bne 1f
+    mov r3, #GRAIN_EXTRA
+    mul r5, r3, r5
+    lsr r5, r5, #8
+1:  pop {r3, lr}
+    mov r0, #0x200
+    bx lr
+#endif
 #endif
 
 #ifdef HOOK_GRAIN_SIZE
@@ -179,7 +208,8 @@ grain_size:
 #ifdef HOOK_GRAIN_PARTICLE
 // GR III replaces `ldrb r3, [r5, #0x795]` (Particle 0..3). The granulation
 // scales the noise amplitude by 256, 128, or 64 for Particle 1, 2, or 3
-// (0x5367ae28), so level 1..3 maps to Particle 3..1. The hook also stores
+// (0x5367ae28), so level 1..3 maps to Particle 3..1, and Extra Strong to
+// Particle 1 (grain_amplitude then scales it). The hook also stores
 // the grain of the shot for the noise fill: 0 for the native noise, else
 // the size 1 to 3.
 .global grain_particle
@@ -196,9 +226,33 @@ grain_particle:
     str r0, [r1, #GRKIT_HOST_GRAIN_SHOT]
 #endif
     bl grain_level
-    rsbls r3, r3, #3
     ldrbhi r3, [r5, #0x795]
-    pop {r0, r1, pc}
+    bhi 2f
+    cmp r3, #2
+    movhi r3, #2
+    rsb r3, r3, #3
+2:  pop {r0, r1, pc}
+
+#ifdef HOOK_GRAIN_AMPLITUDE
+// GR III replaces `cmp r5, #2`, the first test of the amplitude choice by the
+// Particle r5 (256, 128, or 64), and goes on after it (0x5367ae40) with r6 =
+// the amplitude. Extra Strong takes GRAIN_EXTRA. r3 and lr are free here.
+.global grain_amplitude
+grain_amplitude:
+    push {r3, lr}
+    bl grain_level
+    cmp r3, #3
+    moveq r6, #GRAIN_EXTRA
+    beq 1f
+    cmp r5, #2
+    moveq r6, #0x80
+    beq 1f
+    cmp r5, #3
+    moveq r6, #0x40
+    movne r6, #0x100
+1:  pop {r3, lr}
+    ldr pc, =FW_GRAIN_AMPLITUDE_DONE
+#endif
 #endif
 
 #ifdef HOOK_GRAIN_FILL

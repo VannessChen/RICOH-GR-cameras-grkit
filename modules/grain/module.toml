@@ -11,9 +11,10 @@ tiles = [
     "tiles/1-weak.png",
     "tiles/2-medium.png",
     "tiles/3-strong.png",
+    "tiles/4-extra.png",
 ]
-# CORE.GRAIN: 0 Off, 1 weak, 2 medium, 3 strong. CORE.GRAIN_SIZE: 0 Auto
-# (by ISO), 1 small, 2 medium, 3 large.
+# CORE.GRAIN: 0 Off, 1 weak, 2 medium, 3 strong, 4 extra strong.
+# CORE.GRAIN_SIZE: 0 Auto (by ISO), 1 small, 2 medium, 3 large.
 uses = ["CORE.GRAIN", "CORE.GRAIN_SIZE"]
 
 [page]

@@ -1,5 +1,5 @@
 title = "颗粒感"
-rows = ["关闭", "弱", "中", "强"]
+rows = ["关闭", "弱", "中", "强", "特强"]
 
 [settings."CORE.GRAIN"]
 label = "强度"

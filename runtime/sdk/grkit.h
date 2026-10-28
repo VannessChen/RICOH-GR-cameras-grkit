@@ -103,8 +103,8 @@ void overlay_label(const Surface *s, u32 label, u32 left, u32 top);
                   then each installed effect in the order of Image Control.
                   The core installs the effects only for a module that uses
                   it. A page of CORE.TONE gets its rows from the core.
-     CORE.GRAIN   4 values: the grain of recorded pictures, 0 Off, 1 weak,
-                  2 medium, 3 strong.
+     CORE.GRAIN   5 values: the grain of recorded pictures, 0 Off, 1 weak,
+                  2 medium, 3 strong, 4 extra strong.
      CORE.GRAIN_SIZE  4 values: the grain size, 0 Auto (by the ISO of the
                   shot), 1 small, 2 medium, 3 large.
      CORE.ASPECT  8 values: the aspect of still pictures, 0 native 3:2, 1
