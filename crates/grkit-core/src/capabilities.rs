@@ -111,12 +111,12 @@ pub const CAPABILITIES: [Capability; 4] = [
     },
     Capability {
         // The aspect of still pictures (runtime/aspect.h): 0 native 3:2, then
-        // XPan 65:24, 16:9, 4:3, 2.35:1, 1:1, 5:4. Each target offers some of
+        // XPan 65:24, 16:9, 4:3, 2.35:1, 1:1, 5:4, 7:6. Each target offers some of
         // them. The value comes from the native aspect and the crop, and the
         // word holds the crop. The overlay keeps the live view of a crop in
         // sync with the capture.
         key: "ASPECT",
-        values: 7,
+        values: 8,
         state: State::Word(HOST_FRAME_RATIO),
         points: &[Point::ViewfinderOverlay, Point::CaptureAspect],
     },

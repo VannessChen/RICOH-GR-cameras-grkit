@@ -86,9 +86,10 @@ void picture_post(u32 object,u32 context,u32 settings) {
 #error "The family header defines PICTURE_NATIVE_ID"
 #endif
 /* Visible-area id of the capture: 0 3:2, 1 4:3, 2 16:9, 3 1:1, 4 XPan,
-   5 2.35:1, 6 5:4. By crop value: Off, XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
-static const u8 picture_area_ids[7]={0,4,2,1,5,3,6};
-#define PICTURE_CROP_AREA(ratio) ((ratio)<7 ? picture_area_ids[ratio] : 0)
+   5 2.35:1, 6 5:4, 7 7:6. By crop value: Off, XPan, 16:9, 4:3, 2.35:1, 1:1,
+   5:4, 7:6. */
+static const u8 picture_area_ids[8]={0,4,2,1,5,3,6,7};
+#define PICTURE_CROP_AREA(ratio) ((ratio)<8 ? picture_area_ids[ratio] : 0)
 #ifdef FRAMING_XPAN_NATIVE
 /* Framing ratio values (runtime/firmware.h) apply to native 3:2 captures.
    XPan and 2.35:1 also apply to native FRAMING_XPAN_NATIVE photos. Other
@@ -148,9 +149,9 @@ static u32 module_filters(volatile u32 *h) {
 /* Visible area of a preview picture: black bars depend on the capture aspect. */
 static void visible_area(volatile u32 *h,Plane *p) {
     /* Screennail and thumbnail insets for ids 0 (3:2), 1 (4:3), 2 (16:9), 3 (1:1), then XPan,
-       2.35:1, and 5:4 (runtime/framing.S). */
-    static const u8 screennail[7][2]={{0,0},{40,0},{0,38},{120,0},{0,107},{0,87},{60,0}};
-    static const u8 thumbnail[7][2]={{0,8},{0,0},{0,16},{20,0},{0,30},{0,26},{6,0}};
+       2.35:1, 5:4, and 7:6 (runtime/framing.S). */
+    static const u8 screennail[8][2]={{0,0},{40,0},{0,38},{120,0},{0,107},{0,87},{60,0},{80,0}};
+    static const u8 thumbnail[8][2]={{0,8},{0,0},{0,16},{20,0},{0,30},{0,26},{6,0},{10,0}};
     /* The capture area: the crop of CORE.ASPECT when a module uses it. */
     u32 ratio=CAPABILITY_USED(h,GRKIT_CORE_ASPECT) ? h[GRKIT_HOST_FRAME_RATIO/4] : 0;
     u32 native=PICTURE_NATIVE_ASPECT(), id;

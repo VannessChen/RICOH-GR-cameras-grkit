@@ -194,11 +194,11 @@ static int same(const u16 *actual, const char *expected)
 }
 /* Framing labels and summaries by ratio value, and the ratio value of each
    row of the target. */
-static const char *const ratio_names[] = {"Off", "XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4"};
+static const char *const ratio_names[] = {"Off", "XPan 65:24", "16:9", "4:3", "2.35:1", "1:1", "5:4", "7:6"};
 static const char *const ratio_summaries[] = {"Framing: Off", "Framing: XPan", "Framing: 16:9", "Framing: 4:3",
-                                              "Framing: 2.35:1", "Framing: 1:1", "Framing: 5:4"};
+                                              "Framing: 2.35:1", "Framing: 1:1", "Framing: 5:4", "Framing: 7:6"};
 /* A value that no target offers. */
-#define UNKNOWN_RATIO 7
+#define UNKNOWN_RATIO 8
 static const u32 ratio_rows[] = {FRAMING_RATIO_ROWS};
 #define ROW_COUNT ((u32)(sizeof(ratio_rows) / sizeof(ratio_rows[0])))
 /* XPan: row 1, and a crop on every camera. */
@@ -247,7 +247,7 @@ static void install_page(u32 slot, const char *title, const char *const *names, 
 }
 static const char *const grain_names[] = {"Off", "Weak", "Medium", "Strong"};
 /* The summaries of Framing, which name the ratios shorter. */
-static const char *const ratio_values[] = {"Off", "XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4"};
+static const char *const ratio_values[] = {"Off", "XPan", "16:9", "4:3", "2.35:1", "1:1", "5:4", "7:6"};
 static const char *const stamp_names[] = {"Off", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"};
 static const char *const look_names[] = {"Classic", "GR1s", "GR II"};
 /* The rows of the native settings page of Date Imprint: STYLE, then LOOK. */
@@ -308,13 +308,13 @@ static void install_guide_rows(u32 slot)
 static void install_modules(void)
 {
     install_page(0, "Film Look", 0, 0, GRKIT_CORE_TONE, 0);
-    install_page(1, "Framing", ratio_values, 7, GRKIT_CORE_ASPECT, 0);
+    install_page(1, "Framing", ratio_values, 8, GRKIT_CORE_ASPECT, 0);
     install_page(2, "Guides", guide_names, 6, 0, 7);
     install_page(3, "Date Imprint", stamp_names, 6, 1, 13);
     install_setting_rows(3);
     install_page(4, "Grain", grain_names, 4, GRKIT_CORE_GRAIN, 19);
     /* The labels of Framing name the ratios in full. */
-    for (u32 value = 0; value < 7; ++value)
+    for (u32 value = 0; value < 8; ++value)
         for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language)
             *page_at(PAGE_WORD(TEST_PAGE + TEST_PAGE_SIZE, PAGE_LABELS) + (value * GRKIT_TEXT_LANGUAGES + language) * 4) =
                 page_text(ratio_names[value]);
@@ -700,7 +700,7 @@ static void the_framing_page_sets_the_ratios_of_the_target(void)
     menu_confirm(test_header);
     assert(test_header[GRKIT_HOST_MENU_LEVEL / 4] == MENU_MODULE && test_header[GRKIT_HOST_MODULE / 4] == FRAMING_MODULE);
     assert(test_header[GRKIT_HOST_MENU_CURSOR / 4] == CROP_ROW);
-    assert(count(test_header) == ROW_COUNT && ROW_COUNT == 7);
+    assert(count(test_header) == ROW_COUNT && ROW_COUNT == 8);
     assert(same(current_module(test_header)->title(test_header), "Framing"));
     for (u32 row = 0; row < ROW_COUNT; ++row) {
         u32 value = ratio_rows[row];

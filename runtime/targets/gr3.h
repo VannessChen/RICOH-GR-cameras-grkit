@@ -13,7 +13,7 @@
    native aspects 3:2 and 1:1. Framing captures each ratio through a hidden
    aspect id from native 3:2, so the live view stays in 3:2. 5:4 and 1:1 use
    the 4:3 id with narrower widths. */
-#define FRAMING_RATIO_ROWS 0,1,4,2,3,6,5
+#define FRAMING_RATIO_ROWS 0,1,4,2,3,6,7,5
 /* Requested capture StillAspectRatio (CommonProperty +0x7b6). The property
    setter writes the next copy at [property+4]; readers see the current copy
    at [property] only after a later commit. Comparing the next copy sends
@@ -51,16 +51,18 @@
 #define XPAN_SIZES 6000, 2216, 4800, 1776, 3360, 1240, 1920, 712
 #define SCOPE_SIZES 6000, 2552, 4800, 2040, 3360, 1432, 1920, 816
 /* GetResolution id 1: the stock 4:3 width, the 5:4 width (height x 5 / 4),
-   and the 1:1 width of each size. The pipeline crops the width from the
-   center. The 1:1 sizes are the native 1:1 sizes, so the XS 1:1 also takes
-   its own height (NARROW_HEIGHT_3: the stock 4:3 and the 1:1 XS height). */
-#define NARROW_WIDTH_0 5328, 5000, 4000
-#define NARROW_WIDTH_1 4272, 4000, 3200
-#define NARROW_WIDTH_2 2992, 2800, 2240
-#define NARROW_WIDTH_3 1920, 1800, 1280
+   the 1:1 width, and the 7:6 width (height x 7 / 6, rounded to a multiple
+   of 8) of each size. The pipeline crops the width from the center. The
+   1:1 sizes are the native 1:1 sizes, so the XS 1:1 also takes its own
+   height (NARROW_HEIGHT_3: the stock 4:3 and the 1:1 XS height). */
+#define NARROW_WIDTH_0 5328, 5000, 4000, 4664
+#define NARROW_WIDTH_1 4272, 4000, 3200, 3736
+#define NARROW_WIDTH_2 2992, 2800, 2240, 2616
+#define NARROW_WIDTH_3 1920, 1800, 1280, 1680
 #define NARROW_HEIGHT_3 1440, 1280
-/* The 5:4 sizes (width, height), largest first. */
-#define NARROW_SIZES 5000, 4000, 4000, 3200, 2800, 2240, 1800, 1440
+/* The 5:4 sizes, then the 7:6 sizes (width, height), largest first. */
+#define NARROW_SIZES 5000, 4000, 4000, 3200, 2800, 2240, 1800, 1440, \
+    4664, 4000, 3736, 3200, 2616, 2240, 1680, 1440
 /* The size classifier at its aspect BL: the frame is {r4-r7,fp,ip,lr,pc},
    r7 = width, r4 = height, r6 = class pointer. */
 #define CLASSIFY_WIDTH r7

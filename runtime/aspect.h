@@ -2,7 +2,7 @@
 #define GRKIT_ASPECT_H
 /* The capability CORE.ASPECT (grkit_core::capabilities): the aspect of still
    pictures. Its value is a ratio value: 0 for the native 3:2, then XPan
-   65:24, 16:9, 4:3, 2.35:1, 1:1, and 5:4 (GRKIT_CORE_ASPECT_VALUES). Each
+   65:24, 16:9, 4:3, 2.35:1, 1:1, 5:4, and 7:6 (GRKIT_CORE_ASPECT_VALUES). Each
    target offers the ratios of FRAMING_RATIO_ROWS.
 
    The core crops each ratio, also one that the camera has natively, so each

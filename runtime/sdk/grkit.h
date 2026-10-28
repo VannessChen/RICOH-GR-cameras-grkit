@@ -102,8 +102,8 @@ void overlay_label(const Surface *s, u32 label, u32 left, u32 top);
                   2 medium, 3 strong.
      CORE.GRAIN_SIZE  4 values: the grain size, 0 Auto (by the ISO of the
                   shot), 1 small, 2 medium, 3 large.
-     CORE.ASPECT  7 values: the aspect of still pictures, 0 native 3:2, 1
-                  XPan 65:24, 2 16:9, 3 4:3, 4 2.35:1, 5 1:1, 6 5:4. Each
+     CORE.ASPECT  8 values: the aspect of still pictures, 0 native 3:2, 1
+                  XPan 65:24, 2 16:9, 3 4:3, 4 2.35:1, 5 1:1, 6 5:4, 7 7:6. Each
                   camera offers some of them, and a choice page shows only
                   those. A ratio that the camera has natively sets the native
                   aspect. The core crops the others (Surface.area). */

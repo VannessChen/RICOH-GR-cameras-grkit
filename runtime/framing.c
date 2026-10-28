@@ -104,11 +104,11 @@ __attribute__((used)) void grkit_export_overlay_label(const Surface *s,u32 label
 __attribute__((used)) u32 grkit_export_setting_get(u32 handle) { return setting_value(framing_header(),handle); }
 
 /* The capture aspect id of the crop: 0 = 3:2, 1 = 4:3, 2 = 16:9. XPan and
-   2.35:1 use id 2 with their own heights, and 5:4 and 1:1 use id 1 with their
-   own widths (runtime/framing.S). GR III hides ids 1 and 2 from its menu, but
+   2.35:1 use id 2 with their own heights, and 5:4, 1:1, and 7:6 use id 1
+   with their own widths (runtime/framing.S). GR III hides ids 1 and 2 from its menu, but
    its capture and playback code support them. */
 static __attribute__((unused)) u32 framing_capture_id(volatile u32 *h) {
-    static const u8 ids[]={0,2,2,1,2,1,1};
+    static const u8 ids[]={0,2,2,1,2,1,1,1};
     return ids[framing_crop(h)];
 }
 /* ---- Load cue -----------------------------------------------------------
@@ -313,9 +313,9 @@ static u32 canvas_pixels(u32 canvas,u32 bitmap) {
     return canvas_bitmap(canvas,bitmap);
 }
 /* Photo area {left,top,right,bottom} on the 720x480 canvas for each capture
-   area: 3:2, XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
-static const u16 photo_boxes[7][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
-                                    {0,87,720,393},{120,0,600,480},{60,0,660,480}};
+   area: 3:2, XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4, 7:6. */
+static const u16 photo_boxes[8][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
+                                    {0,87,720,393},{120,0,600,480},{60,0,660,480},{80,0,640,480}};
 /* The ADJ canvas of the preview, or 0 (runtime/modules.h: frame_preview). */
 static u32 preview_canvas(volatile u32 *h) {
     u32 adj=h[GRKIT_HOST_FRAME_PREVIEW_ADJ/4];

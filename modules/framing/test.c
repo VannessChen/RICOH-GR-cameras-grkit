@@ -29,7 +29,7 @@ int main(void)
        settings rows, and two layers. */
     assert(grkit_module.setting_count == 2 && grkit_module.use_count == 1);
     assert(SETTING_MASK == GRKIT_SETTING(0) && SETTING_LABEL == GRKIT_SETTING(1));
-    assert(grkit_module.registration_count == 3 && grkit_module.tile_count == 7);
+    assert(grkit_module.registration_count == 3 && grkit_module.tile_count == 8);
     /* The mask covers each pixel outside the photo area, and no other. */
     check_mask(xpan, 1);
     check_mask(four_three, 3);

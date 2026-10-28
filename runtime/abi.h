@@ -225,7 +225,7 @@
 #define GRKIT_CORE_TONE_VALUES 0U
 #define GRKIT_CORE_TONE_BIT 0x1
 #define GRKIT_CORE_ASPECT 0x101U
-#define GRKIT_CORE_ASPECT_VALUES 7U
+#define GRKIT_CORE_ASPECT_VALUES 8U
 #define GRKIT_CORE_ASPECT_BIT 0x2
 #define GRKIT_CORE_GRAIN 0x102U
 #define GRKIT_CORE_GRAIN_VALUES 4U
@@ -234,7 +234,7 @@
 #define GRKIT_CORE_GRAIN_SIZE_VALUES 4U
 #define GRKIT_CORE_GRAIN_SIZE_BIT 0x8
 #define GRKIT_CORE_SETTING_WORDS 0,208,48,240
-#define GRKIT_CORE_SETTING_VALUES 0,7,4,4
+#define GRKIT_CORE_SETTING_VALUES 0,8,4,4
 
 /* An Image Control record. The records follow the header. */
 #define GRKIT_RECORD_SIZE 0x1100
@@ -481,7 +481,7 @@
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_TAIL/4]+GRKIT_PICTURE_SCRATCH)
 #define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)
-#define GRKIT_LABEL_COUNT 7
+#define GRKIT_LABEL_COUNT 8
 /* String IDs of the label table, in grkit_core::menu_text order. A run of IDs
    follows the rows or values that it names. */
 #define TEXT_OFF 0

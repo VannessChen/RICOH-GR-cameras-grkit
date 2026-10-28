@@ -144,14 +144,14 @@ static void register_layers(u32 framing)
     header[GRKIT_HOST_MODULE_LAYER_COUNT/4] = n;
     header[GRKIT_HOST_CAPABILITIES/4] = framing ? ASPECT_BIT : 0;
 }
-/* 5:4: a crop on every camera, and the last crop row. */
-#define LAST_RATIO 6U
+/* 7:6: a crop on every camera, and the highest ratio value. */
+#define LAST_RATIO 7U
 /* Off, and each ratio value that the target offers. The core crops each
    ratio, also one that the camera has natively. */
 static u32 cropped(u32 value) { return value == 0 || framing_row(value); }
 /* The capture aspect id of each crop value: 3:2, then 16:9 for XPan and
-   16:9, 4:3, 16:9 for 2.35:1, and 4:3 for 1:1 and 5:4. */
-static const u32 capture_ids[] = {0, 2, 2, 1, 2, 1, 1};
+   16:9, 4:3, 16:9 for 2.35:1, and 4:3 for 1:1, 5:4, and 7:6. */
+static const u32 capture_ids[] = {0, 2, 2, 1, 2, 1, 1, 1};
 
 static void reset(void)
 {
@@ -232,15 +232,15 @@ static u32 expected_badge(u32 ratio,u32 x,u32 y,u32 background)
 /* Independent guide fixtures. Each value is a division, and its 2-pixel line
    covers the pixel before it and the pixel at it, as the native grid does.
    Thirds are at multiples of floor(span / 3). The golden section is rounded. */
-/* By ratio value: 3:2 (Off), XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4. */
+/* By ratio value: 3:2 (Off), XPan, 16:9, 4:3, 2.35:1, 1:1, 5:4, 7:6. */
 static const u32 boxes[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
-                             {0,87,720,393},{120,0,600,480},{60,0,660,480}};
+                             {0,87,720,393},{120,0,600,480},{60,0,660,480},{80,0,640,480}};
 static const u32 thirds[][4]={{240,480,160,320},{240,480,195,283},{240,480,172,307},{253,466,160,320},
-                              {240,480,189,291},{280,440,160,320},{260,460,160,320}};
+                              {240,480,189,291},{280,440,160,320},{260,460,160,320},{266,452,160,320}};
 static const u32 golden[][4]={{275,445,183,297},{275,445,209,271},{275,445,192,287},{284,436,183,297},
-                              {275,445,204,276},{303,417,183,297},{289,431,183,297}};
+                              {275,445,204,276},{303,417,183,297},{289,431,183,297},{294,426,183,297}};
 /* The number of ratio values. It is also a value that no target offers. */
-#define RATIO_VALUES 7U
+#define RATIO_VALUES 8U
 static u32 on_line(u32 value,u32 line) { return value==line-1 || value==line; }
 static u32 expected_guide(u32 ratio,u32 style,u32 x,u32 y)
 {
@@ -403,7 +403,7 @@ int main(void)
     the_histogram_follows_the_effect_white();
     /* Fixed rectangles are independent expected output, not a second renderer. */
     const u32 rectangles[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
-                               {0,87,720,393},{120,0,600,480},{60,0,660,480}};
+                               {0,87,720,393},{120,0,600,480},{60,0,660,480},{80,0,640,480}};
     for (u32 ratio=0; ratio<RATIO_VALUES; ++ratio) {
         if(!cropped(ratio)) continue;
         reset();

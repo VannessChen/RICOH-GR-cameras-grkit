@@ -27,7 +27,7 @@
    The capture request hook maps the 3:2 request to that id, and the
    live-view hooks keep the live view in 3:2. In a native 16:9 that the user
    sets in the camera menu, XPan and 2.35:1 also crop the native 16:9 photos. */
-#define FRAMING_RATIO_ROWS 0,1,4,2,3,6,5
+#define FRAMING_RATIO_ROWS 0,1,4,2,3,6,7,5
 #define FRAMING_XPAN_NATIVE 2
 /* FW_CAPTURE_ASPECT_GET reads the capture aspect (property 0xdf,
    CommonProperty +0x7da); the live-view mode function and the mode check call
@@ -57,16 +57,18 @@
 #define XPAN_SIZES 6192, 2288, 4944, 1824, 3504, 1296, 1920, 712
 #define SCOPE_SIZES 6192, 2632, 4944, 2104, 3504, 1488, 1920, 816
 /* GetResolution id 1: the stock 4:3 width, the 5:4 width (height x 5 / 4),
-   and the 1:1 width of each size. The pipeline crops the width from the
-   center. The 1:1 sizes are the native 1:1 sizes, so the XS 1:1 also takes
-   its own height (NARROW_HEIGHT_3: the stock 4:3 and the 1:1 XS height). */
-#define NARROW_WIDTH_0 5504, 5160, 4128
-#define NARROW_WIDTH_1 4400, 4120, 3296
-#define NARROW_WIDTH_2 3120, 2920, 2336
-#define NARROW_WIDTH_3 1920, 1800, 1280
+   the 1:1 width, and the 7:6 width (height x 7 / 6, rounded to a multiple
+   of 8) of each size. The pipeline crops the width from the center. The
+   1:1 sizes are the native 1:1 sizes, so the XS 1:1 also takes its own
+   height (NARROW_HEIGHT_3: the stock 4:3 and the 1:1 XS height). */
+#define NARROW_WIDTH_0 5504, 5160, 4128, 4816
+#define NARROW_WIDTH_1 4400, 4120, 3296, 3848
+#define NARROW_WIDTH_2 3120, 2920, 2336, 2728
+#define NARROW_WIDTH_3 1920, 1800, 1280, 1680
 #define NARROW_HEIGHT_3 1440, 1280
-/* The 5:4 sizes (width, height), largest first. */
-#define NARROW_SIZES 5160, 4128, 4120, 3296, 2920, 2336, 1800, 1440
+/* The 5:4 sizes, then the 7:6 sizes (width, height), largest first. */
+#define NARROW_SIZES 5160, 4128, 4120, 3296, 2920, 2336, 1800, 1440, \
+    4816, 4128, 3848, 3296, 2728, 2336, 1680, 1440
 /* The size classifier at its aspect BL: the frame is {r3-r6,fp,ip,lr,pc},
    r6 = width, r4 = height, r5 = class pointer. */
 #define CLASSIFY_WIDTH r6

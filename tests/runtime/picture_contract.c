@@ -750,6 +750,21 @@ int main(void)
         }
         assert(square.lit && square.right <= 720 - 120 && square.left > 360 && square.top > 240);
         assert(square.right < crop.right);
+        /* 7:6: between the 5:4 and the 1:1 bars, 80 pixels and 10 in the
+           thumbnail. */
+        {
+            struct box seven, th;
+            encode_setup();
+            fill_planes(40, 128, 128);
+            STAMP_STYLE = 3;
+            header[GRKIT_HOST_FRAME_RATIO / 4] = 7;
+            picture_encode(0, MESSAGE);
+            seven = changes(1, 0);
+            th = changes(2, 0);
+            assert(th.lit && th.right <= 160 - 10 && th.right > 160 - 20 && th.left > 80);
+            assert(seven.lit && seven.right <= 720 - 80 && seven.left > 360 && seven.top > 240);
+            assert(seven.right < crop.right && seven.right > square.right);
+        }
     }
     /* A monochrome GRKit effect keeps neutral chroma: the stamp lights only Y. */
     encode_setup();
