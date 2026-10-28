@@ -72,7 +72,7 @@ grkit verify dist/GRKit.zip
 
 ## コントリビューション
 
-[CONTRIBUTING.md](CONTRIBUTING.md)（英語）をご覧ください。動いた場合も動かなかった場合も、デバイスレポートを歓迎します。特にまだ実機で確認できていないファームウェアの報告は助かります。機能の要望は[機能リクエストフォーム](https://tally.so/r/Z9jRgB)へどうぞ。プロジェクトを応援したい方は [Buy Me a Coffee](https://buymeacoffee.com/yuexunjiang) からどうぞ。
+[CONTRIBUTING.md](CONTRIBUTING.md)（英語）をご覧ください。動いた場合も動かなかった場合も、デバイスレポートを歓迎します。特にまだ実機で確認できていないファームウェアの報告は助かります。不具合、機能の要望、質問は[フィードバックフォーム](https://tally.so/r/Z9jRgB)からお送りください。プロジェクトを応援したい方は [Buy Me a Coffee](https://buymeacoffee.com/yuexunjiang) からどうぞ。
 
 ## ドキュメント（英語）
 

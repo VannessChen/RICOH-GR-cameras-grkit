@@ -72,7 +72,7 @@ For other cameras, fewer modules, or other guide languages, see [Build packages]
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Device reports are welcome whether GRKit worked or not, especially for firmware that hasn't been tested on a camera yet. Send feature ideas through the [feature request form](https://tally.so/r/Z9jRgB), and you can support the project by [buying me a coffee](https://buymeacoffee.com/yuexunjiang).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Device reports are welcome whether GRKit worked or not, especially for firmware that hasn't been tested on a camera yet. Send problems, feature ideas, and questions through the [feedback form](https://tally.so/r/Z9jRgB), and you can support the project by [buying me a coffee](https://buymeacoffee.com/yuexunjiang).
 
 ## Documentation
 

@@ -72,7 +72,7 @@ grkit verify dist/GRKit.zip
 
 ## 參與貢獻
 
-請見 [CONTRIBUTING.md](CONTRIBUTING.md)（英文）。不論能不能用，都歡迎提交裝置回報，尤其是還沒經過實機測試的韌體。功能想法可以填寫[功能建議表單](https://tally.so/r/Z9jRgB)，也歡迎[請我喝杯咖啡](https://buymeacoffee.com/yuexunjiang)支持這個專案。
+請見 [CONTRIBUTING.md](CONTRIBUTING.md)（英文）。不論能不能用，都歡迎提交裝置回報，尤其是還沒經過實機測試的韌體。遇到問題、有功能想法或疑問，可以填寫[回饋表單](https://tally.so/r/Z9jRgB)，也歡迎[請我喝杯咖啡](https://buymeacoffee.com/yuexunjiang)支持這個專案。
 
 ## 文件（英文）
 

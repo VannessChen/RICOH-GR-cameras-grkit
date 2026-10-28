@@ -52,8 +52,8 @@ import {
 import { resolveSelection, type Selection } from './selection';
 
 const REPOSITORY = 'https://github.com/ahonn/grkit';
-/** The Tally form for feature requests. A plain link, so the page loads nothing from Tally. */
-const FEATURE_REQUEST_FORM = 'https://tally.so/r/Z9jRgB';
+/** The Tally form for problems, feature ideas, and questions. A plain link, so the page loads nothing from Tally. */
+const FEEDBACK_FORM = 'https://tally.so/r/Z9jRgB';
 const DONATE = 'https://buymeacoffee.com/yuexunjiang';
 /** The release page of the GRKit version that the site packages. */
 const RELEASE_URL = `${REPOSITORY}/releases/tag/v${__GRKIT_VERSION__}`;
@@ -480,8 +480,8 @@ export function App({
   const packageLinks = (
     <ul className="package-links">
       <li>
-        <a className="button" href={FEATURE_REQUEST_FORM}>
-          {t.featureRequest}
+        <a className="button" href={FEEDBACK_FORM}>
+          {t.feedback}
         </a>
       </li>
       <li>
@@ -901,7 +901,7 @@ export function App({
           </ul>
           <ul>
             <li>
-              <a href={FEATURE_REQUEST_FORM}>{t.featureRequest}</a>
+              <a href={FEEDBACK_FORM}>{t.feedback}</a>
             </li>
             <li>
               <a href={DONATE}>{t.donate}</a>
