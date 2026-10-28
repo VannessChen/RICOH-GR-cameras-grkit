@@ -79,8 +79,8 @@ static const u16 grkit_title[] = {'G','R','K','i','t',0};
 #define MENU_TEXT(address) ((const u16 *)(address))
 #endif
 #ifndef MENU_LANGUAGE
-/* The camera's UI language byte (runtime/targets): 0 is English, 18
-   Traditional Chinese, 19 Simplified Chinese, and 20 Japanese. */
+/* The camera's UI language byte (runtime/targets): 0 is English, 17
+   Korean, 18 Traditional Chinese, 19 Simplified Chinese, and 20 Japanese. */
 static u32 camera_language(void) {
 #if defined(UI_SETTINGS_SLOT)
     u32 settings=WORD(UI_SETTINGS_SLOT,0);
@@ -97,6 +97,7 @@ static u32 camera_menu_language(void) {
     case 19: return 1;
     case 18: return 2;
     case 20: return 3;
+    case 17: return 4;
     default: return 0;
     }
 }
@@ -106,16 +107,26 @@ static u32 menu_language(void) {
     u32 language=MENU_LANGUAGE();
     return language<GRKIT_TEXT_LANGUAGES ? language : 0;
 }
+/* Whether the menu language puts spaces between words and uses ASCII
+   parentheses, as English and Korean do. Chinese and Japanese do not. */
+static u32 menu_spaced(void) {
+    u32 language=menu_language();
+    return language==0 || language==4;
+}
 /* The language table index that the text hooks of menu.S pass on for GRKit
-   text. It selects the font: a Chinese or Japanese font draws that text, and
-   the Latin table index 1 draws English. Chinese or Japanese text with index 1
+   text. It selects the font: a Chinese, Japanese, or Korean font draws that
+   text, and the Latin table index 1 draws English. Such text with index 1
    shows "?" glyphs. The firmware maps the UI language byte to this index:
-   Chinese keeps 18 and 19, and Japanese (byte 20) uses index 0. */
+   Korean and Chinese keep their bytes 17, 18, and 19, and Japanese (byte 20)
+   uses index 0.
+   The Korean font draws ASCII and the Hangul of KS X 1001 only
+   (Language::undrawable). */
 A32_ENTRY u32 menu_table_index(void) {
     switch (menu_language()) {
     case 1: return 19;
     case 2: return 18;
     case 3: return 0;
+    case 4: return 17;
     default: return 1;
     }
 }

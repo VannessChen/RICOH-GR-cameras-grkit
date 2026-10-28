@@ -1,0 +1,17 @@
+title = "구도 가이드"
+rows = ["꺼짐", "9분할", "화면 중앙", "황금비", "대각선", "9분할+화면 중앙"]
+
+[settings.STYLE]
+label = "종류"
+
+[settings.COLOR]
+label = "색상"
+values = ["검정", "흰색", "노랑"]
+
+[settings.OPACITY]
+label = "불투명도"
+values = ["50%", "100%"]
+
+[settings.DISP]
+label = "DISP로 숨기기"
+values = ["켜짐", "꺼짐"]

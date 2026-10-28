@@ -8,9 +8,9 @@ name: Site
 # not released yet, the type check fails and the site stays as it is. The page
 # loads the packager with a dynamic import, so the Vite build alone does not
 # find a missing export. If a camera entry of web/ on main needs a runtime build
-# that the release does not have, or web/ names an official module that the
-# release does not have, the run deploys nothing; the release that has it
-# deploys the page.
+# that the release does not have, web/ names an official module that the
+# release does not have, or web/ offers a language without guides in the
+# release, the run deploys nothing; the release that has it deploys the page.
 on:
   push:
     branches: [main]
@@ -72,6 +72,18 @@ jobs:
           missing=$(comm -23 <(echo "$modules") <(echo "$shipped") | tr '\n' ' ')
           if [ -n "$tag" ] && [ -n "${missing// /}" ]; then
             echo "::notice::$tag has no module ${missing% }, which web/ of main names. The site stays as it is until a release has it."
+            tag=
+          fi
+          # Each language of web/ on main needs its installation guides, and a
+          # packager that knows it, in the release.
+          languages=$(gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$GITHUB_REPOSITORY/contents/web/src/i18n.ts?ref=$GITHUB_SHA" 2>/dev/null \
+            | grep -o "{ code: '[A-Za-z-]*'" | cut -d "'" -f 2 | sort -u || true)
+          guides=$(tar -tzf "$RUNNER_TEMP/release-check/$archive" \
+            | sed -n 's#^\(\./\)\{0,1\}guides/[^/]*/\([A-Za-z-]*\)\.pdf$#\2#p' | sort -u)
+          missing=$(comm -23 <(echo "$languages") <(echo "$guides") | tr '\n' ' ')
+          if [ -n "$tag" ] && [ -n "${missing// /}" ]; then
+            echo "::notice::$tag has no guides in ${missing% }, which web/ of main offers. The site stays as it is until a release has them."
             tag=
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"

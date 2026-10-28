@@ -1,0 +1,13 @@
+title = "날짜 각인"
+rows = ["꺼짐", "'YY M D", "'YY M D H:MM", "M D 'YY", "D M 'YY", "D M 'YY H:MM"]
+
+[settings.STYLE]
+label = "날짜 서식"
+
+[settings.LOOK]
+label = "날짜 글꼴"
+values = ["클래식", "GR1s", "GR II"]
+
+[settings.POSITION]
+label = "날짜 위치"
+values = ["필름", "정방향"]

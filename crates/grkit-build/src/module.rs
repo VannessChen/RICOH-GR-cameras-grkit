@@ -407,6 +407,30 @@ fn text_path(directory: &Path, language: Language) -> PathBuf {
     directory.join(format!("text/{}.toml", language.code()))
 }
 
+/// The page text of `language` and its path. Each text must be one that the
+/// camera's font of that language draws.
+fn read_text(directory: &Path, language: Language) -> Result<(PathBuf, PageText)> {
+    let path = text_path(directory, language);
+    let text: PageText = read_toml(&path)?;
+    let rows = text
+        .settings
+        .values()
+        .flat_map(|row| std::iter::once(&row.label).chain(row.values.iter().flatten()));
+    for item in std::iter::once(&text.title)
+        .chain(&text.rows)
+        .chain(text.summaries.iter().flatten())
+        .chain(rows)
+    {
+        if let Some(c) = language.undrawable(item) {
+            bail!(
+                "{}: the camera cannot draw {c:?} of {item:?}",
+                path.display()
+            );
+        }
+    }
+    Ok((path, text))
+}
+
 /// The names `<prefix>_<language index>` of a text in each language, in the
 /// order of `Language::ALL`.
 fn per_language(prefix: String) -> impl Iterator<Item = String> {
@@ -572,8 +596,7 @@ fn core_page(directory: &Path, m: &Manifest, page: &PageSpec, c: &mut String) ->
         page.setting
     );
     for (l, language) in Language::ALL.into_iter().enumerate() {
-        let path = text_path(directory, language);
-        let text: PageText = read_toml(&path)?;
+        let (path, text) = read_text(directory, language)?;
         ensure!(
             text.rows.is_empty() && text.summaries.is_none() && text.settings.is_empty(),
             "{}: the core gives the rows of {}, so the text has only the title",
@@ -741,8 +764,7 @@ fn choice_text(
     language: Language,
     c: &mut String,
 ) -> Result<()> {
-    let path = text_path(directory, language);
-    let text: PageText = read_toml(&path)?;
+    let (path, text) = read_text(directory, language)?;
     ensure!(
         text.rows.len() == values,
         "{} has {} rows, and {} has {values} values",

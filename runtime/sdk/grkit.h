@@ -19,7 +19,7 @@ typedef unsigned char u8;
 /* The ABI of this file. The installer loads a module whose major version
    equals that of the core and whose minor version is not larger. A minor
    version only adds functions and registration types. */
-#define GRKIT_ABI_MAJOR 1U
+#define GRKIT_ABI_MAJOR 2U
 #define GRKIT_ABI_MINOR 0U
 #define GRKIT_ABI (GRKIT_ABI_MAJOR << 16 | GRKIT_ABI_MINOR)
 
@@ -155,8 +155,8 @@ static inline const GrkitContext *grkit_context(void)
 /* ---- menu.page ------------------------------------------------------------ */
 
 /* The menu languages, in this order: English, Simplified Chinese,
-   Traditional Chinese, Japanese. */
-#define GRKIT_LANGUAGES 4U
+   Traditional Chinese, Japanese, Korean. */
+#define GRKIT_LANGUAGES 5U
 /* A 40 x 40 tile in RGBA order. */
 #define GRKIT_TILE_BYTES 6400U
 

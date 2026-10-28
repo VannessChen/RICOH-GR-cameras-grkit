@@ -23,6 +23,9 @@ importers:
       '@fontsource/noto-sans-jp':
         specifier: 5.3.1
         version: 5.3.1
+      '@fontsource/noto-sans-kr':
+        specifier: 5.3.1
+        version: 5.3.1
       '@fontsource/noto-sans-sc':
         specifier: 5.3.1
         version: 5.3.1
@@ -80,6 +83,9 @@ packages:
 
   '@fontsource/noto-sans-jp@5.3.1':
     resolution: {integrity: sha512-9NNBB/M9PextLYVXGSfIaLZsPnrt5UDw8g2B6T0M775H2yb/oekApSjuS1XKOP7FPcMMEnTavR5rJGDM66qKtA==}
+
+  '@fontsource/noto-sans-kr@5.3.1':
+    resolution: {integrity: sha512-aKnPug5P6zBHaiLbGEVNyBQesyOeEUYl6C3Xedb00xO3iAHJZPQs2JOsPNVqHanKSVe1fTVmTPuYIao4noImXw==}
 
   '@fontsource/noto-sans-sc@5.3.1':
     resolution: {integrity: sha512-YxZ/VWAWo9FWzH08Q6fGTzIW6vYNP2TMhUFCnfhlimbhdXnWrxJLrzX3KWt2FKnV0s8XiM5vjpGHQiyFRlTj0w==}
@@ -664,6 +670,8 @@ snapshots:
   '@fontsource/ibm-plex-sans@5.3.0': {}
 
   '@fontsource/noto-sans-jp@5.3.1': {}
+
+  '@fontsource/noto-sans-kr@5.3.1': {}
 
   '@fontsource/noto-sans-sc@5.3.1': {}
 

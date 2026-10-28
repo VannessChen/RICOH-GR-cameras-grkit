@@ -18,7 +18,7 @@ The sources of each contract:
 | Path | Required | Contents |
 | --- | --- | --- |
 | `module.toml` | yes | the manifest |
-| `text/<language>.toml` | with a page | the page text in one menu language: `en`, `zh-Hans`, `zh-Hant`, `ja` |
+| `text/<language>.toml` | with a page | the page text in one menu language: `en`, `zh-Hans`, `zh-Hant`, `ja`, `ko` |
 | C sources | no | the code that `sources` names. A module with only data has none. |
 | `test.c` | with C sources | the host test of `grkit module test` |
 | tiles | with a choice page | the 40 x 40 PNG files that `tiles` names |
@@ -100,7 +100,7 @@ At most one table. It registers the event subscriber of the module.
 
 ## Text files
 
-A module with a page has one text file for each menu language: `text/en.toml`, `text/zh-Hans.toml`, `text/zh-Hant.toml`, and `text/ja.toml`. An unknown key is an error.
+A module with a page has one text file for each menu language: `text/en.toml`, `text/zh-Hans.toml`, `text/zh-Hant.toml`, `text/ja.toml`, and `text/ko.toml`. An unknown key is an error.
 
 | Key | Type | Description |
 | --- | --- | --- |
@@ -291,7 +291,7 @@ The UI services work only in an event handler, a timer callback, or a UI callbac
 
 ## ABI and compatibility
 
-**ABI version.** `GRKIT_ABI` is 1.0: the major version in the high 16 bits, the minor version in the low 16 bits. The build writes it into the file header and into the descriptor. The installer loads a module whose major version equals that of the core and whose minor version is not larger. A minor version only adds functions and registration types.
+**ABI version.** `GRKIT_ABI` is 2.0: the major version in the high 16 bits, the minor version in the low 16 bits. The build writes it into the file header and into the descriptor. The installer loads a module whose major version equals that of the core and whose minor version is not larger. A minor version only adds functions and registration types. A major version changes a layout. In 2.0, each text list also has a Korean text, so the installer rejects a module with ABI 1.0 (status 51). Build such a module again with a `text/ko.toml`.
 
 **File format.** A module file is GRM version 1 (`grkit_core::grm`): a header, the code, the data, the relocations, and the imports. The build compiles each source as Thumb code for ARMv7-A with `-Os`. The installer only moves absolute 32-bit words and fills the imports by name hash. The build rejects other relocation types and each undefined symbol that is not a service or `grkit_self`.
 

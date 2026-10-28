@@ -7,7 +7,7 @@ import { loadImports } from './import/store';
 import { loadFonts } from './fonts';
 import { initialLanguage, showLanguage } from './i18n';
 // The site serves its fonts itself, so a page view sends no request to a font host.
-// loadFonts adds the Chinese or Japanese fonts when a page in that language needs them.
+// loadFonts adds the Chinese, Japanese, or Korean fonts when a page in that language needs them.
 import '@fontsource/ibm-plex-sans/400.css';
 import '@fontsource/ibm-plex-sans/500.css';
 import '@fontsource/ibm-plex-sans/600.css';

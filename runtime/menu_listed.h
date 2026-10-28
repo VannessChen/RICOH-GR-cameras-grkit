@@ -108,11 +108,11 @@ static volatile u32 *value_entry(volatile u32 *h,u32 k) {
     return services_word(h,SERVICES_MENU+MENU_ROWS_VALUES+k*MENU_VALUE_SIZE);
 }
 /* The text of option `k` in its entry: its label, then Off for an option
-   that is off, in parentheses: "16:9 (Off)", "16:9（关闭）". */
+   that is off, in parentheses: "16:9 (Off)", "16:9 (끔)", "16:9（关闭）". */
 static const u16 *entry_text(volatile u32 *h,u32 k,const u16 *label,u32 off_text) {
     volatile u16 *to=(volatile u16 *)(value_entry(h,k)+MENU_VALUE_TEXT/4);
     const u16 *off=text(h,TEXT_OFF);
-    u32 n=0, wide=menu_language()!=0;
+    u32 n=0, wide=!menu_spaced();
     while(n<MENU_VALUE_UNITS-12 && label[n]) { to[n]=label[n]; ++n; }
     if(off_text) {
         if(!wide) to[n++]=' ';

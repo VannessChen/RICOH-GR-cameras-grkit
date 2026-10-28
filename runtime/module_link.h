@@ -20,7 +20,7 @@
 #define GRM_DATA_LOCATION 0x80000000U
 #define GRM_MAX_SEGMENT 0x10000U
 /* The ABI of the core (runtime/sdk/grkit.h). */
-#define GRM_ABI_MAJOR 1U
+#define GRM_ABI_MAJOR 2U
 #define GRM_ABI_MINOR 0U
 #define GRM_POINT_OVERLAY_LAYER 1U
 #define GRM_POINT_MENU_PAGE 2U
@@ -39,7 +39,7 @@
 #define GRM_MAX_LAYER_ORDER 0xffffU
 /* The menu languages, the tile size, the most tiles of one module, and the
    most rows of a choice page and UTF-16 units of one text. */
-#define GRM_LANGUAGES 4U
+#define GRM_LANGUAGES 5U
 #define GRM_TILE_BYTES 6400U
 #define GRM_TILES 64U
 #define GRM_PAGE_ROWS 64U

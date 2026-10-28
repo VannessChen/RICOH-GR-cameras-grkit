@@ -119,6 +119,15 @@ fn module_template_passes_its_host_test() -> Result<()> {
         &directory.path().join("build"),
         &cc
     )?);
+    // The camera's Korean font has no 똠, so the build rejects it.
+    fs::write(
+        folder.join("text/ko.toml"),
+        "title = \"똠\"\nrows = [\"꺼짐\", \"켜짐\"]\n",
+    )?;
+    let error = test_module_manifest(&folder, &directory.path().join("build-ko"), &cc)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("cannot draw '똠'"), "{error}");
     Ok(())
 }
 

@@ -18,7 +18,7 @@ The [README](README.md#build-from-source) builds a GR III package. For other pac
 - GR IV: build with `--target gr4-1.11` from `fwdc248b.bin`, then package with `--camera gr4` and `--guide build/guides/gr4/en.pdf`.
 - GR IV Monochrome: package as for GR IV, without the Film Look module (`FILMLOOK.GRM`) and without `--effects`.
 - Fewer modules: give `--module` only for the modules to install. Effects need the Film Look module.
-- Guide language: add `--language zh-Hans`, `--language zh-Hant`, or `--language ja`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
+- Guide language: add `--language zh-Hans`, `--language zh-Hant`, `--language ja`, or `--language ko`, and give the guide in that language, for example `build/guides/gr3/zh-Hans.pdf`.
 
 ## Test
 
@@ -74,7 +74,7 @@ For the web site, see [web/README.md](web/README.md).
 - Add a change file in `.changeset/` for each change that a user can see. [docs/releasing.md](docs/releasing.md#record-a-change) describes the format.
 - Keep firmware, build outputs, archives, and local paths out of Git.
 - Keep third-party notices. Review each new effect input and its license.
-- Change the English, Simplified Chinese, Traditional Chinese, and Japanese guides in `resources/` together, with their headings and steps in the same order. Use only the Markdown that `grkit guides` converts to Typst: headings, paragraphs, lists, images, strong text, code spans, and links. To check the PDFs, run `.github/scripts/build-guides.sh`.
+- Change the English, Simplified Chinese, Traditional Chinese, Japanese, and Korean guides in `resources/` together, with their headings and steps in the same order. Use only the Markdown that `grkit guides` converts to Typst: headings, paragraphs, lists, images, strong text, code spans, and links. To check the PDFs, run `.github/scripts/build-guides.sh`.
 
 ## License of contributions
 

@@ -28,6 +28,12 @@
   word-break: auto-phrase;
 }
 
+:root[lang='ko'] {
+  --cjk: 'Noto Sans KR';
+  /* Breaks Korean lines between words, as Korean text does, not inside a word. */
+  word-break: keep-all;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -200,7 +206,11 @@ button {
   font-family: 'Noto Sans JP', sans-serif;
 }
 
-/* A phone has no room for four buttons in a row, so it shows one menu instead. */
+.languages .button:lang(ko) {
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
+/* A phone has no room for five buttons in a row, so it shows one menu instead. */
 .language-select {
   display: none;
   position: relative;

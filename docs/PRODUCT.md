@@ -34,4 +34,4 @@ Precise, quiet, trustworthy. The site should feel like the GR's own menus: squar
 
 ## Accessibility & Inclusion
 
-WCAG 2.2 AA. Visible keyboard focus on all controls. Respect reduced motion. Four languages (English, Simplified Chinese, Traditional Chinese, Japanese), so layouts must hold longer and shorter strings.
+WCAG 2.2 AA. Visible keyboard focus on all controls. Respect reduced motion. Five languages (English, Simplified Chinese, Traditional Chinese, Japanese, Korean), so layouts must hold longer and shorter strings.

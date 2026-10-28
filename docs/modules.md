@@ -85,7 +85,7 @@ A module can also use a setting of another module or a capability of the core, s
 
 ## Write the text and the tiles
 
-A page has text in the four menu languages: `text/en.toml`, `text/zh-Hans.toml`, `text/zh-Hant.toml`, and `text/ja.toml`.
+A page has text in the five menu languages: `text/en.toml`, `text/zh-Hans.toml`, `text/zh-Hant.toml`, `text/ja.toml`, and `text/ko.toml`.
 
 ```toml
 title = "Guides"

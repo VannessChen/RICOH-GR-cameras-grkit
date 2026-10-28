@@ -4,7 +4,7 @@
 //! The menu shows the language of the camera if it is a menu language, and
 //! English otherwise. Effect names stay as their definitions give them.
 
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 
 use crate::language::Language;
 
@@ -37,6 +37,9 @@ const NAME_UNITS: usize = 16;
 /// native Image Control.
 /// The Date Imprint names follow the GR II menu (Date Imprint, 日付入れ撮影 in
 /// its firmware), with the short Chinese name 加印日期.
+/// The Korean words use the camera terms too (켜짐/꺼짐, 약/중/강, 입자감,
+/// 화상비율, 9분할, 화면 중앙). The camera's Korean font draws only the 2350
+/// Hangul syllables of KS X 1001 and ASCII, so each Korean text keeps to them.
 /// The camera's Chinese and Japanese fonts draw each of these characters only
 /// while the camera language is that language, which is when the menu shows
 /// them.
@@ -156,6 +159,26 @@ const JAPANESE: Words = Words {
     back: "戻る",
 };
 
+const KOREAN: Words = Words {
+    separator: ": ",
+    image_control: "필름 룩",
+    version: "버전",
+    off: "꺼짐",
+    modules: "모듈",
+    restart: "재시작 후 적용",
+    safe_mode: "안전 모드",
+    enable: "사용",
+    on: "켜짐",
+    adj_order: "ADJ 메뉴 순서",
+    options: "옵션",
+    about: "GRKit 정보",
+    project: "프로젝트",
+    adjustments: "파라미터",
+    film: "필름 종류",
+    turn: "전환",
+    back: "뒤로",
+};
+
 /// The text between a page title and its value in a root row summary, such
 /// as "Guides: Thirds".
 pub fn separator(language: Language) -> &'static str {
@@ -168,6 +191,7 @@ fn words(language: Language) -> &'static Words {
         Language::SimplifiedChinese => &SIMPLIFIED_CHINESE,
         Language::TraditionalChinese => &TRADITIONAL_CHINESE,
         Language::Japanese => &JAPANESE,
+        Language::Korean => &KOREAN,
     }
 }
 
@@ -318,6 +342,9 @@ pub fn table(version: &str) -> Result<Vec<u8>> {
             list.len()
         );
         for text in &list {
+            if let Some(c) = language.undrawable(text) {
+                bail!("The camera cannot draw {c:?} of the menu text {text:?}");
+            }
             let encoded = units(text);
             ensure!(
                 encoded.len() < SUMMARY_UNITS,

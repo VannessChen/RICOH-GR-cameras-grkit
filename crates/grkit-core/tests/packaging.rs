@@ -550,6 +550,10 @@ fn the_guide_names_the_camera_once_and_the_modeset_file_twice() {
             Language::Japanese,
             include_str!("../../../resources/INSTALLATION.ja.md"),
         ),
+        (
+            Language::Korean,
+            include_str!("../../../resources/INSTALLATION.ko.md"),
+        ),
     ] {
         // The resource names the first GR III release; the package guide
         // names each release of the runtime build.
@@ -587,6 +591,10 @@ fn the_gr4_guide_names_each_release_once() {
         (
             Language::Japanese,
             include_str!("../../../resources/INSTALLATION-GR4.ja.md"),
+        ),
+        (
+            Language::Korean,
+            include_str!("../../../resources/INSTALLATION-GR4.ko.md"),
         ),
     ] {
         let phrase = language.camera_phrase(&camera::GR4, &["1.11"]);
@@ -629,6 +637,7 @@ fn a_package_has_the_guide_of_its_language_only() {
             "GRKit 安装指南.pdf",
             "GRKit 安裝指南.pdf",
             "GRKit インストールガイド.pdf",
+            "GRKit 설치 가이드.pdf",
         ]
     );
     // The GR IV guide names both releases of GR IV; each has its own build.
@@ -669,6 +678,7 @@ fn a_package_has_exactly_one_pdf_guide() {
     .is_err());
     assert!(Language::parse("fr").is_err());
     assert_eq!(Language::parse("ja").unwrap(), Language::Japanese);
+    assert_eq!(Language::parse("ko").unwrap(), Language::Korean);
 }
 
 #[test]

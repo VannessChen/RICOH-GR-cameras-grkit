@@ -209,6 +209,8 @@ static void ascii(unsigned short *to, const char *from)
     while ((*to++ = (u8)*from++)) {}
 }
 static u32 text_count;
+/* The bytes of one text list: a pointer for each language. */
+#define TEXT_LIST (GRKIT_TEXT_LANGUAGES * 4U)
 /* The camera address of a new page text. */
 static u32 page_text(const char *text)
 {
@@ -222,20 +224,20 @@ static u32 page_text(const char *text)
    the core. */
 static void install_page(u32 slot, const char *title, const char *const *names, u32 rows, u32 handle, u32 tile)
 {
-    u32 page = TEST_PAGE + slot * TEST_PAGE_SIZE, titles = page + 0x28, summaries = titles + 16,
-        labels = summaries + rows * 16;
+    u32 page = TEST_PAGE + slot * TEST_PAGE_SIZE, titles = page + 0x28, summaries = titles + TEXT_LIST,
+        labels = summaries + rows * TEXT_LIST;
     char summary[64];
-    assert(slot < TEST_PAGE_SLOTS && labels + rows * 16 <= page + 0x200);
+    assert(slot < TEST_PAGE_SLOTS && labels + rows * TEXT_LIST <= page + 0x200);
     const unsigned fields[] = {40, 1, 0, names ? 1 : 2, titles, names ? summaries : 0, names ? labels : 0, rows, 0, 0};
     for (u32 i = 0; i < 10; ++i) *page_at(page + i * 4) = fields[i];
-    for (u32 language = 0; language < 4; ++language) {
+    for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language) {
         *page_at(titles + language * 4) = page_text(title);
         for (u32 value = 0; value < rows; ++value) {
             strcpy(summary, title);
             strcat(summary, ": ");
             strcat(summary, names[value]);
-            *page_at(summaries + (value * 4 + language) * 4) = page_text(summary);
-            *page_at(labels + (value * 4 + language) * 4) = page_text(names[value]);
+            *page_at(summaries + (value * GRKIT_TEXT_LANGUAGES + language) * 4) = page_text(summary);
+            *page_at(labels + (value * GRKIT_TEXT_LANGUAGES + language) * 4) = page_text(names[value]);
         }
     }
     if (test_header[GRKIT_HOST_MODULE_PAGE_COUNT / 4] <= slot) test_header[GRKIT_HOST_MODULE_PAGE_COUNT / 4] = slot + 1;
@@ -262,13 +264,13 @@ static void install_setting_rows(u32 slot)
         /* INSTALL writes the handle of each row: STYLE is handle 1. */
         *page_at(rows + r * 16 + ROW_SETTING) = r + 1;
         *page_at(rows + r * 16 + ROW_LABEL) = texts;
-        for (u32 language = 0; language < 4; ++language) *page_at(texts + language * 4) = page_text(labels[r]);
-        texts += 16;
+        for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language) *page_at(texts + language * 4) = page_text(labels[r]);
+        texts += TEXT_LIST;
         *page_at(rows + r * 16 + ROW_VALUES) = texts;
         for (u32 value = 0; value < counts[r]; ++value)
-            for (u32 language = 0; language < 4; ++language)
-                *page_at(texts + (value * 4 + language) * 4) = page_text(values[r][value]);
-        texts += counts[r] * 16;
+            for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language)
+                *page_at(texts + (value * GRKIT_TEXT_LANGUAGES + language) * 4) = page_text(values[r][value]);
+        texts += counts[r] * TEXT_LIST;
     }
     assert(texts <= page + TEST_PAGE_SIZE);
 }
@@ -288,13 +290,13 @@ static void install_guide_rows(u32 slot)
         *page_at(rows + r * 16) = 16;
         *page_at(rows + r * 16 + ROW_SETTING) = handles[r];
         *page_at(rows + r * 16 + ROW_LABEL) = texts;
-        for (u32 language = 0; language < 4; ++language) *page_at(texts + language * 4) = page_text(labels[r]);
-        texts += 16;
+        for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language) *page_at(texts + language * 4) = page_text(labels[r]);
+        texts += TEXT_LIST;
         *page_at(rows + r * 16 + ROW_VALUES) = texts;
         for (u32 value = 0; value < counts[r]; ++value)
-            for (u32 language = 0; language < 4; ++language)
-                *page_at(texts + (value * 4 + language) * 4) = page_text(values[r][value]);
-        texts += counts[r] * 16;
+            for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language)
+                *page_at(texts + (value * GRKIT_TEXT_LANGUAGES + language) * 4) = page_text(values[r][value]);
+        texts += counts[r] * TEXT_LIST;
     }
     assert(texts <= page + TEST_PAGE_SIZE);
 }
@@ -313,8 +315,8 @@ static void install_modules(void)
     install_page(4, "Grain", grain_names, 4, GRKIT_CORE_GRAIN, 19);
     /* The labels of Framing name the ratios in full. */
     for (u32 value = 0; value < 7; ++value)
-        for (u32 language = 0; language < 4; ++language)
-            *page_at(PAGE_WORD(TEST_PAGE + TEST_PAGE_SIZE, PAGE_LABELS) + (value * 4 + language) * 4) =
+        for (u32 language = 0; language < GRKIT_TEXT_LANGUAGES; ++language)
+            *page_at(PAGE_WORD(TEST_PAGE + TEST_PAGE_SIZE, PAGE_LABELS) + (value * GRKIT_TEXT_LANGUAGES + language) * 4) =
                 page_text(ratio_names[value]);
     memset(settings_memory, 0, sizeof settings_memory);
     settings_memory[0] = 3; settings_memory[4] = 6; settings_memory[7] = 6; settings_memory[10] = 3;
@@ -414,6 +416,8 @@ static void each_language_reads_its_own_texts_and_font(void)
     assert(menu_table_index() == 19);
     test_language = 3;
     assert(menu_table_index() == 0);
+    test_language = 4;
+    assert(menu_table_index() == 17);
     test_language = 7;
     assert(menu_table_index() == 1);
     test_language = 0;
@@ -1681,6 +1685,11 @@ static void the_options_page_toggles_its_values(void)
            ((u32)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TEXTS + 8) | 1U));
     menu_text_override(view, row_texts[1]);
     assert(((const u16 *)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TITLE))[6] == text(h, TEXT_OPTIONS)[0]);
+    /* Korean puts a space between the words, as English does. */
+    test_language = 4;
+    menu_text_override(view, row_texts[1]);
+    assert(((const u16 *)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TITLE))[6] == ' ');
+    assert(((const u16 *)services_word(h, SERVICES_MENU + MENU_ROWS_PAGE_TITLE))[7] == text(h, TEXT_OPTIONS)[0]);
     test_language = 0;
     /* Each option keeps the view and the text of its row. */
     for (u32 k = 0; k < 5; ++k) {
@@ -1695,6 +1704,15 @@ static void the_options_page_toggles_its_values(void)
     assert(menu_settings_apply(1, 0, 1) == 1);
     assert(settings_memory[2 + 11 * 3 + 1] == 1U << 2);
     assert(same((const u16 *)(value_entry(h, 1) + MENU_VALUE_TEXT / 4), "Center (Off)"));
+    /* Korean writes Off as English does: a space and ASCII parentheses. */
+    test_language = 4;
+    {
+        const u16 *korean = option_text(h, 1), *off = text(h, TEXT_OFF);
+        assert(korean[6] == ' ' && korean[7] == '(' && korean[8] == off[0] && korean[9] == off[1]);
+        assert(!off[2] && korean[10] == ')' && !korean[11]);
+    }
+    test_language = 0;
+    assert(same(option_text(h, 1), "Center (Off)"));
     assert(menu[MENU_ROWS_STAY / 4] && menu[MENU_ROWS_STAY_ROW / 4] == 1);
     assert(menu_settings_current(1, 0, 1) == 2 && menu_settings_current(0, 0, 1) == 1);
     assert(menu_settings_controller(pages[1]) == 0 && !menu[MENU_ROWS_STAY / 4]);

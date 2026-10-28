@@ -29,7 +29,7 @@ pub const DATA_LOCATION: u32 = 0x8000_0000;
 /// The ABI of the core that the module needs: major in the high half, minor
 /// in the low half. The installer loads a module whose major equals its own
 /// and whose minor is not larger than its own (`runtime/sdk/grkit.h`).
-pub const ABI_MAJOR: u32 = 1;
+pub const ABI_MAJOR: u32 = 2;
 pub const ABI_MINOR: u32 = 0;
 /// The largest code, data, or BSS size of one module that the installer
 /// accepts.
@@ -449,6 +449,7 @@ int main(void)
             Language::SimplifiedChinese => r#"["关闭", "开启"]"#,
             Language::TraditionalChinese => r#"["關閉", "開啟"]"#,
             Language::Japanese => r#"["オフ", "オン"]"#,
+            Language::Korean => r#"["꺼짐", "켜짐"]"#,
         };
         files.insert(
             format!("text/{}.toml", language.code()),

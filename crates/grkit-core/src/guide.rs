@@ -24,6 +24,7 @@ impl Language {
             Language::SimplifiedChinese => "GRKit 安装指南",
             Language::TraditionalChinese => "GRKit 安裝指南",
             Language::Japanese => "GRKit インストールガイド",
+            Language::Korean => "GRKit 설치 가이드",
         }
     }
 
@@ -53,6 +54,10 @@ impl Language {
             (true, Language::Japanese) => {
                 include_str!("../../../resources/INSTALLATION-GR4.ja.md")
             }
+            (false, Language::Korean) => include_str!("../../../resources/INSTALLATION.ko.md"),
+            (true, Language::Korean) => {
+                include_str!("../../../resources/INSTALLATION-GR4.ko.md")
+            }
         }
     }
 
@@ -65,6 +70,7 @@ impl Language {
             Language::SimplifiedChinese => ("和", "固件", " 或 "),
             Language::TraditionalChinese => ("與", "韌體", " 或 "),
             Language::Japanese => ("および", "ファームウェア", " または "),
+            Language::Korean => ("및", "펌웨어", " 또는 "),
         };
         format!(
             "{} {and} {} {word} {}",
@@ -137,6 +143,7 @@ fn recovery_guide(language: Language) -> &'static str {
         Language::SimplifiedChinese => include_str!("../../../resources/RECOVERY.zh-Hans.md"),
         Language::TraditionalChinese => include_str!("../../../resources/RECOVERY.zh-Hant.md"),
         Language::Japanese => include_str!("../../../resources/RECOVERY.ja.md"),
+        Language::Korean => include_str!("../../../resources/RECOVERY.ko.md"),
     }
 }
 
@@ -149,6 +156,7 @@ fn text_settings(language: Language) -> &'static str {
         Language::SimplifiedChinese => r#"font: "Noto Sans SC", lang: "zh", region: "cn""#,
         Language::TraditionalChinese => r#"font: "Noto Sans TC", lang: "zh", region: "tw""#,
         Language::Japanese => r#"font: "Noto Sans JP", lang: "ja""#,
+        Language::Korean => r#"font: "Noto Sans KR", lang: "ko""#,
     }
 }
 
@@ -254,9 +262,12 @@ fn flush(out: &mut String, paragraph: &mut String) {
     paragraph.clear();
 }
 
-/// Chinese text joins its source lines without a space.
+/// Chinese and Japanese text joins its source lines without a space. Korean
+/// puts spaces between words, so a Hangul line joins with a space.
 fn wide(c: char) -> bool {
     c >= '\u{2e80}'
+        && !('\u{3130}'..='\u{318f}').contains(&c)
+        && !('\u{ac00}'..='\u{d7af}').contains(&c)
 }
 
 fn ends_wide(text: &str) -> bool {
@@ -353,6 +364,14 @@ mod tests {
         assert_eq!(
             markdown("第一行。\n第二行。\n", None).unwrap(),
             "第一行。第二行。\n"
+        );
+    }
+
+    #[test]
+    fn korean_lines_join_with_a_space() {
+        assert_eq!(
+            markdown("카드를 넣습니다.\n전원을 켭니다.\n", None).unwrap(),
+            "카드를 넣습니다. 전원을 켭니다.\n"
         );
     }
 

@@ -428,12 +428,12 @@
 #define GRKIT_PICTURE_SCRATCH 141512
 
 /* Menu text after the picture scratch, in each menu language: 0 English, 1
-   Simplified Chinese, 2 Traditional Chinese, 3 Japanese. The installer copies
-   the label table of the build to offset 0: for each language,
-   GRKIT_TEXT_STRINGS u16 byte offsets from the text start, then NUL-terminated
-   UTF-16 strings. At GRKIT_TEXT_SUMMARY, the installer writes the Image
-   Control summary of each record in each language, GRKIT_SUMMARY_UNITS units
-   each, language-major. */
+   Simplified Chinese, 2 Traditional Chinese, 3 Japanese, 4 Korean. The
+   installer copies the label table of the build to offset 0: for each
+   language, GRKIT_TEXT_STRINGS u16 byte offsets from the text start, then
+   NUL-terminated UTF-16 strings. At GRKIT_TEXT_SUMMARY, the installer writes
+   the Image Control summary of each record in each language,
+   GRKIT_SUMMARY_UNITS units each, language-major. */
 #define GRKIT_TEXT_SIZE 24576
 /* Live-view labels after the menu text. The installer copies the label table
    of the build (grkit_core::artwork::overlay_labels): for label n, a u16
@@ -477,7 +477,7 @@
    title: the borrowed submenu entry, the text descriptors, and the views that
    show settings (runtime/menu.c). */
 #define GRKIT_TEXT_SETTINGS 24048
-#define GRKIT_TEXT_LANGUAGES 4
+#define GRKIT_TEXT_LANGUAGES 5
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_TAIL/4]+GRKIT_PICTURE_SCRATCH)
 #define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)

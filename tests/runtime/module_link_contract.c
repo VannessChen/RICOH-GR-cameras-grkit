@@ -20,14 +20,17 @@ enum {
     USES = 36,       /* one name pointer */
     USE_NAME = 37,   /* "?CORE.ASPECT" */
     PAGE = 41,       /* {size, kind, setting, flags, title, summaries, labels, rows, setting rows, settings} */
-    TITLE = 51,      /* 4 text pointers */
-    SUMMARIES = 55,  /* 2 values x 4 */
-    LABELS = 63,     /* 2 values x 4 */
-    ROWS = 71,       /* {size, setting, label, values} x 2 */
-    ROW_TEXTS = 79,  /* row 0: 4 labels, 2 values x 4; row 1: 4 labels, 3 values x 4 */
-    FILTER = 107,    /* {size, stage, setting, apply} */
-    TEXT = 111,      /* u"Hi" */
-    TILES = 112,     /* 2 tiles */
+    /* Each text list has one pointer for each language (L). */
+    TITLE = 51,                     /* L text pointers */
+    SUMMARIES = TITLE + GRM_LANGUAGES,   /* 2 values x L */
+    LABELS = SUMMARIES + 2 * GRM_LANGUAGES, /* 2 values x L */
+    ROWS = LABELS + 2 * GRM_LANGUAGES,   /* {size, setting, label, values} x 2 */
+    /* Row 0: L labels, 2 values x L; row 1: L labels, 3 values x L. */
+    ROW_TEXTS = ROWS + 8,
+    ROW1_TEXTS = ROW_TEXTS + 3 * GRM_LANGUAGES,
+    FILTER = ROW1_TEXTS + 4 * GRM_LANGUAGES, /* {size, stage, setting, apply} */
+    TEXT = FILTER + 4,              /* u"Hi" */
+    TILES = TEXT + 1,               /* 2 tiles */
     CODE_WORDS = TILES + 2 * GRM_TILE_BYTES / 4
 };
 static u32 code_words[CODE_WORDS], data_words[2];
@@ -85,8 +88,10 @@ static void reset(void)
     for (u32 i = TITLE; i < ROWS; ++i) pointer(i, TEXT, 0);
     /* The rows of a native settings page, which a page has only with
        setting_rows (PAGE + 8): MODE, then LOOK. */
-    code_words[ROWS] = 16; code_words[ROWS + 1] = 0; pointer(ROWS + 2, ROW_TEXTS, 0); pointer(ROWS + 3, ROW_TEXTS + 4, 0);
-    code_words[ROWS + 4] = 16; code_words[ROWS + 5] = 1; pointer(ROWS + 6, ROW_TEXTS + 12, 0); pointer(ROWS + 7, ROW_TEXTS + 16, 0);
+    code_words[ROWS] = 16; code_words[ROWS + 1] = 0;
+    pointer(ROWS + 2, ROW_TEXTS, 0); pointer(ROWS + 3, ROW_TEXTS + GRM_LANGUAGES, 0);
+    code_words[ROWS + 4] = 16; code_words[ROWS + 5] = 1;
+    pointer(ROWS + 6, ROW1_TEXTS, 0); pointer(ROWS + 7, ROW1_TEXTS + GRM_LANGUAGES, 0);
     for (u32 i = ROW_TEXTS; i < FILTER; ++i) pointer(i, TEXT, 0);
     pointer(PAGE + 9, ROWS, 0);
     code_words[FILTER] = 16; code_words[FILTER + 1] = GRM_STAGE_MARK; code_words[FILTER + 2] = 0;
