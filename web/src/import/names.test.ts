@@ -7,11 +7,19 @@ import {
   coverIcon,
   effectFilename,
   effectId,
+  lutAccept,
   nameFromFile,
   validCover,
   validCoverText,
   validName,
 } from './names';
+
+describe('LUT file input', () => {
+  it('filters by extension only on a device without touch', () => {
+    expect(lutAccept(false)).toBe('.cube,.png,.tif,.tiff');
+    expect(lutAccept(true)).toBeUndefined();
+  });
+});
 
 describe('imported effect names', () => {
   it('takes a valid name from the file name', () => {

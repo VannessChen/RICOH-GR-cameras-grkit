@@ -17,7 +17,14 @@ export const INPUT_NAMES: Readonly<Record<Input, string>> = {
 };
 
 /** The file types that `Cube::read` accepts. */
-export const LUT_ACCEPT = '.cube,.png,.tif,.tiff';
+const LUT_ACCEPT = '.cube,.png,.tif,.tiff';
+
+/**
+ * The `accept` of the LUT file input. A touch device gets none: iOS and Android filter the
+ * picker by system file types, and `.cube` has none there, so its files cannot be chosen.
+ * `Cube::read` tells the formats apart by content, so any file is safe to pass.
+ */
+export const lutAccept = (touch: boolean): string | undefined => (touch ? undefined : LUT_ACCEPT);
 
 const MAX_NAME = EFFECT_NAME_MAX;
 const MAX_ID = EFFECT_ID_MAX;

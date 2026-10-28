@@ -17,7 +17,7 @@ import {
   coverIcon,
   INPUT_NAMES,
   INPUTS,
-  LUT_ACCEPT,
+  lutAccept,
   nameFromFile,
   validCover,
   validCoverText,
@@ -55,6 +55,10 @@ type Status =
 type InputChoice = 'auto' | Input;
 
 const EMPTY_COVER: CoverFields = { brand: 'LUT', name: 'LUT', number: '', band: false };
+
+/** Any touch pointer, not only the primary one, so an iPad with a trackpad still counts. */
+const hasTouch = () =>
+  typeof window !== 'undefined' && (window.matchMedia?.('(any-pointer: coarse)').matches ?? false);
 
 /**
  * The LUT import dialog. `ref.open()` opens it, so several buttons on the page can open the
@@ -290,7 +294,7 @@ export function ImportDialog({ strings: t, baseGamma, taken, onImport, ref }: Pr
             id={`${ids}-file`}
             className="visually-hidden"
             type="file"
-            accept={LUT_ACCEPT}
+            accept={lutAccept(hasTouch())}
             disabled={importing}
             onChange={chooseFile}
           />
