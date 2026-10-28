@@ -363,9 +363,44 @@ static void the_highlight_warning_follows_the_effect_white(void)
     assert(BYTE(TEST_OWNER, LIVEVIEW_LEVEL_PENDING) == 0 && header[GRKIT_HOST_LEVEL_SCREEN/4] == 0);
     assert(level_updates == 1);
 }
+/* The live-view histogram: with an effect, the bins below the warning luma
+   fill bins 0 to 126, and the last bin, the red clipping line, counts the
+   luma that the highlight warning marks. */
+static void the_histogram_follows_the_effect_white(void)
+{
+    u32 bins[128], i;
+    reset();
+    header[GRKIT_HOST_CAPABILITIES/4] |= GRKIT_CORE_TONE_BIT;
+    for (i = 0; i < 128; ++i) bins[i] = i + 1;
+    /* Native processing keeps the bins. */
+    header[GRKIT_HOST_ACTIVE/4] = 0;
+    framing_histogram_remap(bins);
+    for (i = 0; i < 128; ++i) assert(bins[i] == i + 1);
+    /* A full white keeps the bins. */
+    header[GRKIT_HOST_ACTIVE/4] = TEST_RECORD;
+    record_white(16383, 16383, 16383);
+    framing_histogram_remap(bins);
+    for (i = 0; i < 128; ++i) assert(bins[i] == i + 1);
+    /* Warning luma 202: bins 101 to 127 hold luma 202 and up, and go to the
+       last bin. Bin j below it takes bin j * 202 / 254. */
+    record_white(13000, 13000, 13000);
+    assert(framing_level_value() == 202 << 8);
+    framing_histogram_remap(bins);
+    assert(bins[127] == (102 + 128) * 27 / 2);
+    assert(bins[0] == 1 && bins[1] == 1 && bins[2] == 2 && bins[64] == 51);
+    assert(bins[126] == 100 + 1);
+    for (i = 1; i < 127; ++i) assert(bins[i] >= bins[i - 1] && bins[i] <= 101);
+    /* Without a module that uses CORE.TONE, the processing is native. */
+    header[GRKIT_HOST_CAPABILITIES/4] &= ~GRKIT_CORE_TONE_BIT;
+    for (i = 0; i < 128; ++i) bins[i] = 7;
+    framing_histogram_remap(bins);
+    for (i = 0; i < 128; ++i) assert(bins[i] == 7);
+    header[GRKIT_HOST_ACTIVE/4] = 0;
+}
 int main(void)
 {
     the_highlight_warning_follows_the_effect_white();
+    the_histogram_follows_the_effect_white();
     /* Fixed rectangles are independent expected output, not a second renderer. */
     const u32 rectangles[][4]={{0,0,720,480},{0,107,720,373},{0,37,720,442},{40,0,680,480},
                                {0,87,720,393},{120,0,600,480},{60,0,660,480}};

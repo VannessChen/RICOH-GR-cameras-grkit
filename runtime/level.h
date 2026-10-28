@@ -32,6 +32,22 @@ static u32 level_threshold(volatile u32 *h) {
 /* framing_level_threshold (runtime/framing.S): the threshold of a warning
    that the camera turns on. */
 u32 framing_level_value(void) { return level_threshold(framing_header()); }
+/* framing_histogram (runtime/framing.S): the live-view histogram.
+   LiveViewController sums the 256 luma bins of the shown picture in pairs
+   into 128 bins, and HistogramView draws the last bin, luma 254 and 255, as
+   the red clipping line. A color effect ends below that white, so its
+   histogram stopped short and the line never showed. With an effect, the
+   bins below the warning luma stretch to fill bins 0 to 126, and the last bin
+   counts the luma that the highlight warning marks, so the histogram and the
+   warning agree. Each bin takes a bin at or below its own index, so the
+   stretch runs in place from the top. */
+void framing_histogram_remap(u32 *bins) {
+    u32 threshold=level_threshold(framing_header()), warn=threshold>>8, j, clipped=0;
+    if(threshold==0xfe00U || warn<2) return;
+    for(j=warn>>1;j<128;++j) clipped+=bins[j];
+    for(j=126;j>0;--j) bins[j]=bins[j*warn/254U];
+    bins[127]=clipped;
+}
 /* framing_level_mode: the screen and the mode of each warning setting. */
 void framing_level_record(u32 screen,u32 mode) {
     volatile u32 *h=framing_header();

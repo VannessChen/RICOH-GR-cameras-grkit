@@ -188,6 +188,9 @@ pub const PICTURE: &[HookSpec] = &[
     // before its tail call, where r4 is the screen and r6 the mode.
     bl("framing_level_threshold", Framing, Tuning),
     bl("framing_level_mode", Framing, Tuning),
+    // LiveViewController's live-view histogram update: the BL to the copy of
+    // the 256 luma bins into its 128 bins, which the histogram view draws.
+    bl("framing_histogram", Framing, Tuning),
 ];
 
 /// The number of hooks in `groups`.

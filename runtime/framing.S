@@ -321,4 +321,16 @@ framing_level_mode:
     mov r1, r6
     bx lr
 #endif
+#ifdef HOOK_FRAMING_HISTOGRAM
+/* LiveViewController's live-view histogram update (runtime/level.h). This
+   replaces the BL to the copy of the 256 luma bins into the controller's 128
+   bins at r2. The caller then marks the bins as new. */
+.global framing_histogram
+framing_histogram:
+    push {r2,lr}
+    ldr r12, =HOOK_FRAMING_HISTOGRAM_TARGET
+    blx r12
+    pop {r0,lr}
+    b framing_histogram_remap
+#endif
 .ltorg

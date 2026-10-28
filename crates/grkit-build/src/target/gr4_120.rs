@@ -194,6 +194,8 @@ const SITES: &[Site] = &[
     ("picture_capture_parameters", 0x53836c90, "163bffeb"),
     ("framing_level_threshold", 0x5392b148, "fe5ca0e3"),
     ("framing_level_mode", 0x5392b034, "0610a0e1"),
+    // LiveViewController histogram update: the BL to the 256-to-128 bin copy.
+    ("framing_histogram", 0x53188ce4, "046118eb"),
     // DigitalFilterProcess SetEffectParameter (0x53726594), and its stage
     // gate (0x53739a5c, plan +0x25).
     ("grain_enable", 0x53726770, "b537d4e5"),
