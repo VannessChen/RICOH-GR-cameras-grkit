@@ -71,7 +71,7 @@ const FINISH_WAIT_SECONDS: u32 = 60;
 
 /// The runtime files of a package with the core file of each runtime build of
 /// a camera, in release order, for `icon_stride`-byte icon slots. The builds of
-/// a camera have the same scripts and plan, so the first core file scans.
+/// a camera have the same scripts and plan.
 ///
 /// The loader runs the scripts on Linux (`crate::card`). `LOAD.SH` runs
 /// first, on the mount of the card that the loader made, or on the mount of
@@ -88,7 +88,10 @@ const FINISH_WAIT_SECONDS: u32 = 60;
 /// no core file names the build, it tries each one with `--try`, which runs
 /// the relocation, and the last one with `--install`, which writes
 /// `INSTALL.ERR` if it also fails. A known build thus installs without a relocation of
-/// another build, and an unknown build still gets each runtime.
+/// another build, and an unknown build still gets each runtime. `SCAN.SH`
+/// selects the core file in the same way with `--scan-known`, `--scan-try`,
+/// and `--scan`, because SCAN posts its plan to the mailbox, whose address
+/// only the runtime of the build resolves.
 ///
 /// `FINISH.SH` runs after INSTALL: it waits until the camera mounts the
 /// card, copies the results to it, imports the new effects of the package
@@ -121,21 +124,22 @@ pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
         )
     };
     let names = |range: std::ops::Range<usize>| range.map(name).collect::<Vec<_>>().join(" ");
-    let install = match count {
-        1 => single("install"),
-        count => format!(
+    // The core file of the build: each core with `known` first, then each
+    // with `tried`, then the last one with `last`.
+    let chain = |known: &str, tried_mode: &str, last_mode: &str| {
+        format!(
             "for core in {all}; do\n\
-             \x20 {LINUX_DIRECTORY}/$core --known {LINUX_STAGE}\n\
+             \x20 {LINUX_DIRECTORY}/$core --{known} {LINUX_STAGE}\n\
              \x20 status=$?\n\
              \x20 case $status in {other}) ;; *) break ;; esac\n\
              done\n\
              case $status in {other})\n\
              \x20 for core in {tried}; do\n\
-             \x20   {LINUX_DIRECTORY}/$core --try {LINUX_STAGE}\n\
+             \x20   {LINUX_DIRECTORY}/$core --{tried_mode} {LINUX_STAGE}\n\
              \x20   status=$?\n\
              \x20   case $status in {relocation}) ;; *) break ;; esac\n\
              \x20 done\n\
-             \x20 case $status in {relocation}) {LINUX_DIRECTORY}/{last} --install {LINUX_STAGE}; status=$? ;; esac\n\
+             \x20 case $status in {relocation}) {LINUX_DIRECTORY}/{last} --{last_mode} {LINUX_STAGE}; status=$? ;; esac\n\
              \x20 ;;\n\
              esac\n",
             all = names(0..count),
@@ -143,13 +147,20 @@ pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
             last = name(count - 1),
             other = STATUS_OTHER_BUILD,
             relocation = STATUS_RELOCATION,
+        )
+    };
+    let (scan, install) = match count {
+        1 => (single("scan"), single("install")),
+        _ => (
+            chain("scan-known", "scan-try", "scan"),
+            chain("known", "try", "install"),
         ),
     };
     let mut files = Files::from([
         ("SCRIPT/STARTUP.TTL".into(), startup.into_bytes()),
         (LOADER_FILE.into(), loader_for(icon_stride)),
         (LOAD_FILE.into(), load_script(count).into_bytes()),
-        (SCAN_FILE.into(), wrapper(single("scan"), "scan", "$status")),
+        (SCAN_FILE.into(), wrapper(scan, "scan", "$status")),
         (INSTALL_FILE.into(), wrapper(install, "install", "0")),
         (FINISH_FILE.into(), finish_script(&name(0)).into_bytes()),
     ]);

@@ -848,7 +848,9 @@ static int not_ready(int status)
    On another build, both read the RTOS only and leave each file as it is:
    after Linux deletes a file in the folder, the camera does not find the next
    name that it looks up there, such as the next installer. `--install` is the
-   last attempt and always leaves its result. */
+   last attempt and always leaves its result. SCAN posts to the mailbox, a
+   firmware address that only the runtime of the build resolves, so it has
+   the same three modes: `--scan-known`, `--scan-try`, and `--scan`. */
 enum install_mode { INSTALL_LAST, INSTALL_KNOWN, INSTALL_TRY };
 static int names_build(void)
 {
@@ -942,8 +944,16 @@ __attribute__((used)) void start(u32 *stack)
     if (argc == 2 && text_equal(argv[1], "--known")) mode = INSTALL_KNOWN;
     else if (argc == 2 && text_equal(argv[1], "--try")) mode = INSTALL_TRY;
     int installing = argc == 2 && (mode != INSTALL_LAST || text_equal(argv[1], "--install"));
+    enum install_mode scan_mode = INSTALL_LAST;
+    int scanning = argc == 2 && text_equal(argv[1], "--scan");
+    if (argc == 2 && text_equal(argv[1], "--scan-known")) { scanning = 1; scan_mode = INSTALL_KNOWN; }
+    else if (argc == 2 && text_equal(argv[1], "--scan-try")) { scanning = 1; scan_mode = INSTALL_TRY; }
     if (!set_root(root)) status = STATUS_USAGE;
-    else if (argc == 2 && text_equal(argv[1], "--scan")) status = scan_and_post();
+    else if (scanning) {
+        if (scan_mode != INSTALL_LAST && other_build(scan_mode))
+            status = scan_mode == INSTALL_KNOWN ? STATUS_OTHER_BUILD : STATUS_RELOCATION;
+        else status = scan_and_post();
+    }
     else if (argc == 2 && text_equal(argv[1], "--import")) status = import_effects();
     else if (installing
 #ifdef MODULE_DIAGNOSTICS

@@ -879,11 +879,25 @@ fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
          echo GR_MODULE_INSTALL_EXIT_$status\n\
          exit 0\n"
     );
-    // The first core file scans: the plan is the same for each build.
+    // SCAN selects the core file of the build as INSTALL does: it posts to
+    // the mailbox, which only the runtime of the build resolves. It exits
+    // with the status, for LOAD.SH.
     assert_eq!(
         String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"].clone()).unwrap(),
-        "/tmp/gc/SCRIPT/GRKIT/CORE1.BIN --scan /tmp/gc\n\
-         status=$?\n\
+        "for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
+         \x20 /tmp/gc/SCRIPT/GRKIT/$core --scan-known /tmp/gc\n\
+         \x20 status=$?\n\
+         \x20 case $status in 48) ;; *) break ;; esac\n\
+         done\n\
+         case $status in 48)\n\
+         \x20 for core in CORE1.BIN CORE2.BIN; do\n\
+         \x20   /tmp/gc/SCRIPT/GRKIT/$core --scan-try /tmp/gc\n\
+         \x20   status=$?\n\
+         \x20   case $status in 47) ;; *) break ;; esac\n\
+         \x20 done\n\
+         \x20 case $status in 47) /tmp/gc/SCRIPT/GRKIT/CORE3.BIN --scan /tmp/gc; status=$? ;; esac\n\
+         \x20 ;;\n\
+         esac\n\
          echo GR_MODULE_SCAN_EXIT_$status\n\
          exit $status\n"
     );
