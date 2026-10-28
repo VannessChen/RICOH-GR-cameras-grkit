@@ -1,3 +1,11 @@
+## 1.3.1 (2026-10-28)
+
+### Fixes
+
+- GRKit now loads in about 40% less time after power-on on GR III and GR IIIx, and in about half the time on GR IV.
+- On GR III and GR IIIx, medium and large grain no longer make the camera slow to save a photo, open playback, or turn off.
+- GRKit holds up to 10 modules, and ADJ Order lists all of them in one MENU row.
+
 ## 1.3.0 (2026-10-27)
 
 ### Features
