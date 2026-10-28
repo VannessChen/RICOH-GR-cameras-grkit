@@ -73,6 +73,7 @@ export function EffectsSection({
   const checked = resolveSelection(
     selection,
     catalog.effects.map((effect) => effect.id),
+    [...imported, ...cardEffects].map((effect) => effect.id),
   );
   const taken = new Set([...effects, ...cardEffects].map((effect) => effect.id));
   // The effect that the frame shows, which changes in a transition when its preview is ready, and

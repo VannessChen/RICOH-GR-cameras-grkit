@@ -49,7 +49,7 @@ import {
   save,
   scriptsOffCardFiles,
 } from './package';
-import { resolveSelection, type Selection } from './selection';
+import { loadSelection, resolveSelection, saveSelection, type Selection } from './selection';
 
 const REPOSITORY = 'https://github.com/ahonn/grkit';
 /** The Tally form for problems, feature ideas, and questions. A plain link, so the page loads nothing from Tally. */
@@ -82,7 +82,9 @@ export function App({
 }) {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [cameraKey, setCameraKey] = useState(CAMERAS[0]!.key);
-  const [selection, setSelection] = useState<Selection>(null);
+  // The ZIP download has no card to read the effects from, so the choice of the last visit
+  // comes back.
+  const [selection, setSelection] = useState<Selection>(() => loadSelection(browserStorage()));
   const [enabled, setEnabled] = useState<ReadonlySet<ModuleKey>>(ALL_MODULES);
   // Effects fitted from LUTs on this page. This browser keeps them for the next visit.
   const [imported, setImported] = useState<readonly ImportedEffect[]>(initialImports);
@@ -178,8 +180,13 @@ export function App({
     resetBuild();
   }
 
-  function changeSelection(next: ReadonlySet<string>) {
+  function keepSelection(next: ReadonlySet<string>) {
     setSelection(next);
+    saveSelection(browserStorage(), next);
+  }
+
+  function changeSelection(next: ReadonlySet<string>) {
+    keepSelection(next);
     resetBuild();
   }
 
@@ -231,11 +238,13 @@ export function App({
    */
   async function checkedEffects(): Promise<PackageEffect[]> {
     const catalog = (await loadCatalog(targets![0]!)).effects;
+    const others = [...imported, ...(card?.extra ?? [])];
     const checked = resolveSelection(
       selection,
       catalog.map((effect) => effect.id),
+      others.map((effect) => effect.id),
     );
-    return [...catalog, ...imported, ...(card?.extra ?? [])].filter((effect) => checked.has(effect.id));
+    return [...catalog, ...others].filter((effect) => checked.has(effect.id));
   }
 
   /** The effects of the package: the checked ones, or none while Film Look is off. */
@@ -289,7 +298,7 @@ export function App({
       const state = session.state;
       const fit = cameraForCard(camera, cardBuilds(state), state.rootNames) ?? camera;
       setCameraKey(fit.key);
-      if (state.install !== 'none') setSelection(new Set(session.effects.keys()));
+      if (state.install !== 'none') keepSelection(new Set(session.effects.keys()));
       if (state.install !== 'none') {
         const ids = new Set(cardModules(state));
         setEnabled(new Set(MODULES.filter((module) => ids.has(module.id)).map((module) => module.key)));
@@ -754,7 +763,10 @@ export function App({
                   {plan.includeEffects ? (
                     <ErrorBoundary resetKey={String(catalogAttempt)} fallback="—">
                       <Suspense fallback="—">
-                        <CheckedCount selection={selection} />
+                        <CheckedCount
+                          selection={selection}
+                          others={[...imported, ...(active?.extra ?? [])].map((effect) => effect.id)}
+                        />
                       </Suspense>
                     </ErrorBoundary>
                   ) : (
@@ -953,6 +965,15 @@ const oneBuild = (builds: readonly string[]) => (builds.length === 1 ? builds[0]
 
 const MODE_KEY = 'grkit.installMode';
 
+/** The storage of this site, or null when the browser blocks it. */
+function browserStorage(): Storage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
 /** The card mode where the browser can write to a card, unless the user chose the ZIP before. */
 function initialMode(): InstallMode {
   if (!canWriteCards()) return 'zip';
@@ -994,6 +1015,7 @@ function CardChangesSection({ strings: t, session, selection, imported, changes,
   const checked = resolveSelection(
     selection,
     catalog.effects.map((effect) => effect.id),
+    [...imported, ...session.extra].map((effect) => effect.id),
   );
   const effects = [...catalog.effects, ...imported, ...session.extra];
   const effectName = (id: string) => effects.find((effect) => effect.id === id)?.name ?? id;
@@ -1017,10 +1039,11 @@ function CardChangesSection({ strings: t, session, selection, imported, changes,
 }
 
 /** The number of checked effects. Before the first change, it needs the catalog. */
-function CheckedCount({ selection }: { selection: Selection }) {
+function CheckedCount({ selection, others }: { selection: Selection; others: readonly string[] }) {
   const catalog = use(loadCatalog(PREVIEW_TARGET));
   return resolveSelection(
     selection,
     catalog.effects.map((effect) => effect.id),
+    others,
   ).size;
 }
