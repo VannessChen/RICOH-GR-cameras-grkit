@@ -534,9 +534,14 @@ export function App({
       </div>
 
       <header className="masthead">
-        <h1>
-          GRK<span className="dot">i</span>t
-        </h1>
+        <div className="masthead-title">
+          <h1>
+            GRK<span className="dot">i</span>t
+          </h1>
+          <a className="masthead-version" href={RELEASE_URL}>
+            v{__GRKIT_VERSION__}
+          </a>
+        </div>
         <p className="lead">
           {t.lead.map((line) => (
             <span key={line} className="lead-line">

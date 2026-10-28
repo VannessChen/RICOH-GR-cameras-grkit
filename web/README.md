@@ -56,7 +56,7 @@ LibRaw is distributed under CDDL-1.0. `THIRD_PARTY_LICENSES.txt` includes its no
 
 ## LUT import
 
-The Import a LUT button next to the preview fits a `.cube` file or a LUT image into an effect. It uses the fit of `grkit effects import` ([Import a LUT](../effects/README.md#import-a-lut)). The page fits over the `base_gamma` of the `gr3-2.10` catalog. A catalog without it hides the button.
+The Import a LUT row at the end of the effect list, and the link under the selection buttons, open a dialog. The dialog fits a `.cube` file or a LUT image into an effect. It uses the fit of `grkit effects import` ([Import a LUT](../effects/README.md#import-a-lut)). The page fits over the `base_gamma` of the `gr3-2.10` catalog. A catalog without it hides the row and the link.
 
 1. The user selects a file. The dialog fills in the effect name and the icon from the file name.
 2. The Auto input is a guess from the LUT data. The dialog says what the guess cannot tell, so the user can select the input.

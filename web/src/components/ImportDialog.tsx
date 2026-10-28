@@ -1,4 +1,13 @@
-import { useCallback, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import {
+  useCallback,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type Ref,
+} from 'react';
 import { MAX_EFFECTS, type ImportedEffect } from '../catalog';
 import type { Strings } from '../i18n';
 import { trackHaldImage, trackImport } from '../analytics';
@@ -27,6 +36,12 @@ interface Props {
   /** Adds the effect to the page. Returns true when the effect stays unchecked because the
    * package already has `MAX_EFFECTS` checked effects. */
   onImport: (effect: ImportedEffect) => boolean;
+  ref?: Ref<ImportDialogHandle>;
+}
+
+/** Opens the dialog from a button elsewhere on the page. */
+export interface ImportDialogHandle {
+  open: () => void;
 }
 
 type Status =
@@ -42,11 +57,12 @@ type InputChoice = 'auto' | Input;
 const EMPTY_COVER: CoverFields = { brand: 'LUT', name: 'LUT', number: '', band: false };
 
 /**
- * A button that opens the LUT import dialog. The dialog fits the chosen file into an effect of
- * the page, with a film cover icon that the user can edit, then describes how closely the
- * effect follows the LUT and shows the warnings.
+ * The LUT import dialog. `ref.open()` opens it, so several buttons on the page can open the
+ * same dialog. The dialog fits the chosen file into an effect of the page, with a film cover
+ * icon that the user can edit, then describes how closely the effect follows the LUT and shows
+ * the warnings.
  */
-export function ImportDialog({ strings: t, baseGamma, taken, onImport }: Props) {
+export function ImportDialog({ strings: t, baseGamma, taken, onImport, ref }: Props) {
   const ids = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -107,6 +123,8 @@ export function ImportDialog({ strings: t, baseGamma, taken, onImport }: Props) 
     if (status.state === 'done' || status.state === 'failed') reset();
     dialog.current?.showModal();
   }
+
+  useImperativeHandle(ref, () => ({ open }));
 
   function close() {
     fit.cancel();
@@ -210,223 +228,203 @@ export function ImportDialog({ strings: t, baseGamma, taken, onImport }: Props) 
   const done = status.state === 'done' ? status : null;
 
   return (
-    <>
-      <button type="button" className="upload secondary" onClick={open}>
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <rect x="3" y="3" width="18" height="18" />
-          <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
-        </svg>
-        <span>{t.importOpen}</span>
-      </button>
+    <dialog
+      ref={ownDialog}
+      className="dialog"
+      aria-labelledby={`${ids}-title`}
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+    >
+      <div className="dialog-head">
+        <h3 id={`${ids}-title`} className="dialog-title">
+          {t.importTitle}
+        </h3>
+        <button type="button" className="button small" onClick={close}>
+          {t.close}
+        </button>
+      </div>
 
-      <dialog
-        ref={ownDialog}
-        className="dialog"
-        aria-labelledby={`${ids}-title`}
-        onCancel={(event) => {
-          event.preventDefault();
-          close();
-        }}
-      >
-        <div className="dialog-head">
-          <h3 id={`${ids}-title`} className="dialog-title">
-            {t.importTitle}
-          </h3>
-          <button type="button" className="button small" onClick={close}>
-            {t.close}
-          </button>
-        </div>
-
-        {done ? (
-          <div className="dialog-body">
-            <div className="import-done">
-              <CoverIcon cover={done.effect.cover} />
-              <div>
-                <p className="import-done-name">{done.effect.name}</p>
-                <p className="status">{t.fitText[done.effect.imported.grade]}</p>
-                <p className="status">{t.importUsed(INPUT_NAMES[done.effect.imported.input])}</p>
-              </div>
-            </div>
-            {done.full && <p className="status">{t.importUnchecked(MAX_EFFECTS)}</p>}
-            {done.effect.imported.warnings.length > 0 && (
-              <div className="import-result">
-                <p className="status error">{t.importWarnings}</p>
-                <ul className="import-warnings">
-                  {done.effect.imported.warnings.map((warning) => (
-                    <li key={warning} lang="en">
-                      {warning}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="dialog-actions">
-              <button type="button" className="button" onClick={reset}>
-                {t.importAnother}
-              </button>
-              <button type="button" className="button primary" onClick={close}>
-                {t.done}
-              </button>
+      {done ? (
+        <div className="dialog-body">
+          <div className="import-done">
+            <CoverIcon cover={done.effect.cover} />
+            <div>
+              <p className="import-done-name">{done.effect.name}</p>
+              <p className="status">{t.fitText[done.effect.imported.grade]}</p>
+              <p className="status">{t.importUsed(INPUT_NAMES[done.effect.imported.input])}</p>
             </div>
           </div>
-        ) : (
-          <form className="dialog-body" onSubmit={submit}>
-            <p className="note">{t.importNote}</p>
+          {done.full && <p className="status">{t.importUnchecked(MAX_EFFECTS)}</p>}
+          {done.effect.imported.warnings.length > 0 && (
+            <div className="import-result">
+              <p className="status error">{t.importWarnings}</p>
+              <ul className="import-warnings">
+                {done.effect.imported.warnings.map((warning) => (
+                  <li key={warning} lang="en">
+                    {warning}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="dialog-actions">
+            <button type="button" className="button" onClick={reset}>
+              {t.importAnother}
+            </button>
+            <button type="button" className="button primary" onClick={close}>
+              {t.done}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form className="dialog-body" onSubmit={submit}>
+          <p className="note">{t.importNote}</p>
 
-            <label htmlFor={`${ids}-file`} className="upload" aria-disabled={importing}>
-              <span className="import-file-name">{file?.name ?? t.importFile}</span>
+          <label htmlFor={`${ids}-file`} className="upload" aria-disabled={importing}>
+            <span className="import-file-name">{file?.name ?? t.importFile}</span>
+          </label>
+          <input
+            key={fileKey}
+            id={`${ids}-file`}
+            className="visually-hidden"
+            type="file"
+            accept={LUT_ACCEPT}
+            disabled={importing}
+            onChange={chooseFile}
+          />
+
+          <div className="import-fields">
+            <label className="field">
+              <span className="field-label">{t.importName}</span>
+              <input
+                className="import-text"
+                type="text"
+                value={name}
+                maxLength={16}
+                disabled={importing}
+                aria-invalid={badName}
+                aria-describedby={badName ? `${ids}-name-note` : undefined}
+                onChange={(event) => setName(event.target.value)}
+              />
+              {badName && (
+                <span id={`${ids}-name-note`} className="note error">
+                  {t.importNameNote}
+                </span>
+              )}
             </label>
-            <input
-              key={fileKey}
-              id={`${ids}-file`}
-              className="visually-hidden"
-              type="file"
-              accept={LUT_ACCEPT}
-              disabled={importing}
-              onChange={chooseFile}
-            />
-
-            <div className="import-fields">
-              <label className="field">
-                <span className="field-label">{t.importName}</span>
-                <input
-                  className="import-text"
-                  type="text"
-                  value={name}
-                  maxLength={16}
-                  disabled={importing}
-                  aria-invalid={badName}
-                  aria-describedby={badName ? `${ids}-name-note` : undefined}
-                  onChange={(event) => setName(event.target.value)}
-                />
-                {badName && (
-                  <span id={`${ids}-name-note`} className="note error">
-                    {t.importNameNote}
-                  </span>
-                )}
-              </label>
-              <label className="field">
-                <span className="field-label">{t.importInput}</span>
-                <select
-                  className="import-text"
-                  value={choice}
-                  disabled={importing}
-                  onChange={(event) => setChoice(event.target.value as InputChoice)}
-                >
-                  <option value="auto">
-                    {guessed === null ? t.inputAutoReading : t.inputAuto(INPUT_NAMES[guessed])}
-                  </option>
-                  {INPUTS.map((item) => (
-                    <option key={item} value={item}>
-                      {inputLabel(item)}
-                    </option>
-                  ))}
-                </select>
-                {choice === 'auto' && guessed !== null && (
-                  <span className="note">
-                    {guessed === 'standard' ? t.inputAutoStandard : t.inputAutoLog}
-                  </span>
-                )}
-              </label>
-            </div>
-
-            <fieldset className="import-icon" disabled={importing}>
-              <legend className="field-label">{t.iconHeading}</legend>
-              <div className="import-icon-preview">
-                <CoverIcon cover={coverIcon(cover)} />
-              </div>
-              <details className="import-icon-edit" open>
-                <summary>{t.iconEdit}</summary>
-                <div className="import-icon-fields">
-                  {(
-                    [
-                      ['brand', t.iconBrand, true],
-                      ['name', t.iconFilm, true],
-                      ['number', t.iconNumber, false],
-                    ] as const
-                  ).map(([key, label, required]) => (
-                    <label key={key} className="field">
-                      <span className="field-label">{label}</span>
-                      <input
-                        className="import-text"
-                        type="text"
-                        value={cover[key]}
-                        maxLength={12}
-                        aria-invalid={(required || cover[key] !== '') && !validCoverText(cover[key])}
-                        onChange={(event) => editCover(key, event.target.value)}
-                      />
-                    </label>
-                  ))}
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={cover.band}
-                      onChange={(event) => editCover('band', event.target.checked)}
-                    />
-                    <span>{t.iconBand}</span>
-                  </label>
-                  {badCover && <p className="note error">{t.iconNote}</p>}
-                </div>
-              </details>
-              {coverError && (
-                <p className="note error import-icon-error">{t.iconTooWide}</p>
-              )}
-            </fieldset>
-
-            <details className="hald">
-              <summary>{t.haldSummary}</summary>
-              <p className="note">{t.haldNote}</p>
-              <button
-                type="button"
-                className="button small"
-                onClick={() => void saveHaldImage().then(trackHaldImage)}
+            <label className="field">
+              <span className="field-label">{t.importInput}</span>
+              <select
+                className="import-text"
+                value={choice}
+                disabled={importing}
+                onChange={(event) => setChoice(event.target.value as InputChoice)}
               >
-                {t.haldDownload}
-              </button>
+                <option value="auto">
+                  {guessed === null ? t.inputAutoReading : t.inputAuto(INPUT_NAMES[guessed])}
+                </option>
+                {INPUTS.map((item) => (
+                  <option key={item} value={item}>
+                    {inputLabel(item)}
+                  </option>
+                ))}
+              </select>
+              {choice === 'auto' && guessed !== null && (
+                <span className="note">
+                  {guessed === 'standard' ? t.inputAutoStandard : t.inputAutoLog}
+                </span>
+              )}
+            </label>
+          </div>
+
+          <fieldset className="import-icon" disabled={importing}>
+            <legend className="field-label">{t.iconHeading}</legend>
+            <div className="import-icon-preview">
+              <CoverIcon cover={coverIcon(cover)} />
+            </div>
+            <details className="import-icon-edit" open>
+              <summary>{t.iconEdit}</summary>
+              <div className="import-icon-fields">
+                {(
+                  [
+                    ['brand', t.iconBrand, true],
+                    ['name', t.iconFilm, true],
+                    ['number', t.iconNumber, false],
+                  ] as const
+                ).map(([key, label, required]) => (
+                  <label key={key} className="field">
+                    <span className="field-label">{label}</span>
+                    <input
+                      className="import-text"
+                      type="text"
+                      value={cover[key]}
+                      maxLength={12}
+                      aria-invalid={(required || cover[key] !== '') && !validCoverText(cover[key])}
+                      onChange={(event) => editCover(key, event.target.value)}
+                    />
+                  </label>
+                ))}
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={cover.band}
+                    onChange={(event) => editCover('band', event.target.checked)}
+                  />
+                  <span>{t.iconBand}</span>
+                </label>
+                {badCover && <p className="note error">{t.iconNote}</p>}
+              </div>
             </details>
+            {coverError && (
+              <p className="note error import-icon-error">{t.iconTooWide}</p>
+            )}
+          </fieldset>
 
-            <div aria-live="polite">
-              {status.state === 'importing' && (
-                <div className="import-progress">
-                  <p className="status">{t.importing}</p>
-                  <progress max={1} value={status.fraction} aria-label={t.importing} />
-                  <span className="import-percent">{Math.round(status.fraction * 100)}%</span>
-                </div>
-              )}
-              {status.state === 'failed' && (
-                <p className="status error">
-                  {t.importError} {status.message}
-                </p>
-              )}
-            </div>
+          <details className="hald">
+            <summary>{t.haldSummary}</summary>
+            <p className="note">{t.haldNote}</p>
+            <button
+              type="button"
+              className="button small"
+              onClick={() => void saveHaldImage().then(trackHaldImage)}
+            >
+              {t.haldDownload}
+            </button>
+          </details>
 
-            <div className="dialog-actions">
-              <button type="submit" className="button primary" disabled={!ready} aria-busy={importing}>
-                {t.importButton}
-              </button>
-            </div>
-
-            <div className="import-about">
-              <p className="note">
-                <strong>{t.importHowTitle}</strong> {t.importHow}
+          <div aria-live="polite">
+            {status.state === 'importing' && (
+              <div className="import-progress">
+                <p className="status">{t.importing}</p>
+                <progress max={1} value={status.fraction} aria-label={t.importing} />
+                <span className="import-percent">{Math.round(status.fraction * 100)}%</span>
+              </div>
+            )}
+            {status.state === 'failed' && (
+              <p className="status error">
+                {t.importError} {status.message}
               </p>
-              <p className="note">
-                <strong>{t.importLimitsTitle}</strong> {t.importLimits}
-              </p>
-            </div>
-          </form>
-        )}
-      </dialog>
-    </>
+            )}
+          </div>
+
+          <div className="dialog-actions">
+            <button type="submit" className="button primary" disabled={!ready} aria-busy={importing}>
+              {t.importButton}
+            </button>
+          </div>
+
+          <div className="import-about">
+            <p className="note">
+              <strong>{t.importHowTitle}</strong> {t.importHow}
+            </p>
+            <p className="note">
+              <strong>{t.importLimitsTitle}</strong> {t.importLimits}
+            </p>
+          </div>
+        </form>
+      )}
+    </dialog>
   );
 }

@@ -27,7 +27,7 @@ import { resolveSelection, selectImport, type Selection } from '../selection';
 import { STOCKS } from '../stocks';
 import { EffectIcon } from './EffectIcon';
 import { ErrorBoundary } from './ErrorBoundary';
-import { ImportDialog } from './ImportDialog';
+import { ImportDialog, type ImportDialogHandle } from './ImportDialog';
 
 const DEFAULT_PREVIEW = 'portra-400-endura-v1';
 
@@ -81,6 +81,7 @@ export function EffectsSection({
   const [requestedId, setRequestedId] = useState(DEFAULT_PREVIEW);
   const [source, setSource] = useState<Source>(DEFAULT_SAMPLE);
   const photo = useRef<Source | null>(null);
+  const importer = useRef<ImportDialogHandle>(null);
   const [loader] = useState(() => new PhotoLoader());
   const [decoding, setDecoding] = useState(false);
   const ownPhoto = useCallback(
@@ -150,6 +151,10 @@ export function EffectsSection({
     return full;
   }
 
+  function openImport() {
+    importer.current?.open();
+  }
+
   function showSample() {
     loader.cancel();
     setDecoding(false);
@@ -189,7 +194,7 @@ export function EffectsSection({
   }
 
   return (
-    <div className="section-body" ref={ownPhoto}>
+    <div className="section-body effects-body" ref={ownPhoto}>
       <div className="preview-row">
         <div className="viewer">
           {shown && previewed && (
@@ -293,105 +298,125 @@ export function EffectsSection({
         </div>
       </div>
 
-      <div className="toolbar">
-        <p>
-          {t.count(MAX_EFFECTS)[0]}
-          <span className="count">{checked.size}</span>
-          {t.count(MAX_EFFECTS)[1]}
-        </p>
-        <div>
-          {catalog.baseGamma && (
-            <ImportDialog
-              strings={t}
-              baseGamma={catalog.baseGamma}
-              taken={taken}
-              onImport={importEffect}
-            />
-          )}
-          <button
-            type="button"
-            className="button"
-            onClick={() =>
-              onSelectionChange(
-                new Set(
-                  [...effects, ...cardEffects].map((effect) => effect.id).slice(0, MAX_EFFECTS),
-                ),
-              )
-            }
-          >
-            {t.selectAll}
-          </button>
-          <button type="button" className="button" onClick={() => onSelectionChange(new Set())}>
-            {t.clear}
-          </button>
-        </div>
-      </div>
-      {onCard && <p className="note">{t.effectsCardNote}</p>}
-
-      <ul className="effects-grid" aria-label={t.effects}>
-        {[...effects, ...cardEffects].map((effect) => {
-          const isChecked = checked.has(effect.id);
-          const previewed = effect.id === requested?.id;
-          const body = (
-            <>
-              <EffectIcon effect={effect} />
-              <span className="tile-name">{effect.name}</span>
-              <span className="tile-type">
-                {effect.card ? t.cardOnlyEffect : effect.monochrome ? t.mono : t.color}
-              </span>
-            </>
-          );
-          return (
-            <li
-              key={effect.id}
-              className="effect-tile"
-              data-checked={isChecked || undefined}
-              data-previewed={previewed || undefined}
+      <div className="effects-pick">
+        <div className="toolbar">
+          <p>
+            {t.count(MAX_EFFECTS)[0]}
+            <span className="count">{checked.size}</span>
+            {t.count(MAX_EFFECTS)[1]}
+          </p>
+          <div>
+            <button
+              type="button"
+              className="button"
+              onClick={() =>
+                onSelectionChange(
+                  new Set(
+                    [...effects, ...cardEffects].map((effect) => effect.id).slice(0, MAX_EFFECTS),
+                  ),
+                )
+              }
             >
-              {effect.card ? (
-                <div className="tile-body">{body}</div>
-              ) : (
-                <button
-                  type="button"
-                  className="tile-body"
-                  aria-pressed={previewed}
-                  aria-label={t.previewOf(effect.name)}
-                  onPointerEnter={() => prefetch(effect)}
-                  onFocus={() => prefetch(effect)}
-                  onPointerDown={() => startPreview(effect)}
-                  onClick={() => showEffect(effect)}
-                >
-                  {body}
-                </button>
-              )}
-              <input
-                className="tile-check"
-                type="checkbox"
-                checked={isChecked}
-                disabled={!isChecked && checked.size >= MAX_EFFECTS}
-                aria-label={effect.name}
-                onChange={() => toggle(effect)}
-              />
-              {onCard && (
-                <span className="tile-badge">
-                  <ChangeBadge on={onCard.has(effect.id)} checked={isChecked} strings={t} />
-                </span>
-              )}
-              {effect.imported && (
-                <button
-                  type="button"
-                  className="tile-remove"
-                  aria-label={t.removeOf(effect.name)}
-                  onClick={() => onRemove(effect)}
-                >
-                  {t.removeEffect}
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+              {t.selectAll}
+            </button>
+            <button type="button" className="button" onClick={() => onSelectionChange(new Set())}>
+              {t.clear}
+            </button>
+          </div>
+        </div>
+        {catalog.baseGamma && (
+          <p className="note">
+            {t.importHint}{' '}
+            <button type="button" className="link-button" onClick={openImport}>
+              {t.importOpen}
+            </button>
+          </p>
+        )}
+        {onCard && <p className="note">{t.effectsCardNote}</p>}
 
+        <ul className="effects-list" aria-label={t.effects}>
+          {[...effects, ...cardEffects].map((effect) => {
+            const isChecked = checked.has(effect.id);
+            const previewed = effect.id === requested?.id;
+            const stock = STOCKS[effect.id];
+            const body = (
+              <>
+                <EffectIcon effect={effect} />
+                <span className="row-text">
+                  <span className="row-name">{effect.name}</span>
+                  <span className="row-meta">
+                    {effect.card ? t.cardOnlyEffect : effect.monochrome ? t.mono : t.color}
+                    {stock && ` · ${stockText(stock, t)}`}
+                  </span>
+                </span>
+              </>
+            );
+            return (
+              <li
+                key={effect.id}
+                className="effect-row"
+                data-checked={isChecked || undefined}
+                data-previewed={previewed || undefined}
+              >
+                <input
+                  className="row-check"
+                  type="checkbox"
+                  checked={isChecked}
+                  disabled={!isChecked && checked.size >= MAX_EFFECTS}
+                  aria-label={effect.name}
+                  onChange={() => toggle(effect)}
+                />
+                {effect.card ? (
+                  <div className="row-body">{body}</div>
+                ) : (
+                  <button
+                    type="button"
+                    className="row-body"
+                    aria-pressed={previewed}
+                    aria-label={t.previewOf(effect.name)}
+                    onPointerEnter={() => prefetch(effect)}
+                    onFocus={() => prefetch(effect)}
+                    onPointerDown={() => startPreview(effect)}
+                    onClick={() => showEffect(effect)}
+                  >
+                    {body}
+                  </button>
+                )}
+                {onCard && <ChangeBadge on={onCard.has(effect.id)} checked={isChecked} strings={t} />}
+                {effect.imported && (
+                  <button
+                    type="button"
+                    className="row-remove"
+                    aria-label={t.removeOf(effect.name)}
+                    onClick={() => onRemove(effect)}
+                  >
+                    {t.removeEffect}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+          {catalog.baseGamma && (
+            <li className="effect-row import-row">
+              <button type="button" className="row-body" onClick={openImport}>
+                <span className="import-mark" aria-hidden="true">
+                  +
+                </span>
+                <span className="row-name">{t.importOpen}</span>
+              </button>
+            </li>
+          )}
+        </ul>
+        {catalog.baseGamma && (
+          <ImportDialog
+            ref={importer}
+            strings={t}
+            baseGamma={catalog.baseGamma}
+            taken={taken}
+            onImport={importEffect}
+          />
+        )}
+      </div>
     </div>
   );
 }
