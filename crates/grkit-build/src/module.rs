@@ -10,7 +10,7 @@
 use crate::{
     arm::{defined_symbols, elf_module, undefined_symbols},
     components::path,
-    toolchain::{run, Toolchain},
+    toolchain::{run, Toolchain, CAMERA_TARGET},
 };
 use anyhow::{bail, ensure, Context, Result};
 use grkit_core::{
@@ -70,28 +70,27 @@ fn build_with(
         }
         run(
             &tools.clang,
-            [
-                "--target=arm-none-eabi",
-                "-march=armv7-a",
-                "-mthumb",
-                "-Os",
-                "-ffreestanding",
-                "-fno-builtin",
-                "-fno-common",
-                "-fno-stack-protector",
-                "-fno-unwind-tables",
-                "-fno-asynchronous-unwind-tables",
-                "-mlong-calls",
-                "-mno-movt",
-                FRAME_LIMIT,
-                "-Werror=frame-larger-than",
-                "-c",
-                path(source)?,
-                "-o",
-                path(&object)?,
-            ]
-            .into_iter()
-            .chain(include_flags.iter().map(String::as_str)),
+            CAMERA_TARGET
+                .into_iter()
+                .chain([
+                    "-mthumb",
+                    "-Os",
+                    "-ffreestanding",
+                    "-fno-builtin",
+                    "-fno-common",
+                    "-fno-stack-protector",
+                    "-fno-unwind-tables",
+                    "-fno-asynchronous-unwind-tables",
+                    "-mlong-calls",
+                    "-mno-movt",
+                    FRAME_LIMIT,
+                    "-Werror=frame-larger-than",
+                    "-c",
+                    path(source)?,
+                    "-o",
+                    path(&object)?,
+                ])
+                .chain(include_flags.iter().map(String::as_str)),
         )?;
         objects.push(object);
     }

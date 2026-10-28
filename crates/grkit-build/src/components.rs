@@ -2,7 +2,7 @@ use crate::{
     arm::{branch, elf_text_relocations, undefined_symbols},
     firmware::FirmwareImage,
     target::{Target, HEADER_REFERENCE},
-    toolchain::{run, Toolchain},
+    toolchain::{run, Toolchain, CAMERA_TARGET},
     Anchor, Patch, Reference,
 };
 use anyhow::{bail, ensure, Context, Result};
@@ -279,19 +279,18 @@ pub fn processing(
     fs::write(&source_path, assembly)?;
     run(
         &tools.clang,
-        [
-            "--target=arm-none-eabi",
-            "-march=armv7-a",
-            "-marm",
-            "-I",
-            path(runtime)?,
-            "-c",
-            path(&source_path)?,
-            "-o",
-            path(&object)?,
-        ]
-        .into_iter()
-        .chain([layout.define]),
+        CAMERA_TARGET
+            .into_iter()
+            .chain([
+                "-marm",
+                "-I",
+                path(runtime)?,
+                "-c",
+                path(&source_path)?,
+                "-o",
+                path(&object)?,
+            ])
+            .chain([layout.define]),
     )?;
     // The firmware addresses are symbols, which the link resolves.
     let mut component = linked_component(
@@ -326,43 +325,41 @@ pub fn menu(
     fs::write(&source, include_str!("../../../runtime/menu.S"))?;
     run(
         &tools.clang,
-        [
-            "--target=arm-none-eabi",
-            "-march=armv7-a",
-            // Thumb-2 for size. menu.c keeps its firmware entry points in A32.
-            "-mthumb",
-            "-Oz",
-            "-ffreestanding",
-            "-fno-builtin",
-            "-fno-stack-protector",
-            "-fno-unwind-tables",
-            "-fno-asynchronous-unwind-tables",
-            MENU_FRAME_LIMIT,
-            "-Werror=frame-larger-than",
-            UNDEFINED_INTERNAL,
-            "-c",
-            path(&runtime.join("menu.c"))?,
-            "-o",
-            path(&object)?,
-        ]
-        .into_iter()
-        .chain(target_flags(layout)),
+        CAMERA_TARGET
+            .into_iter()
+            .chain([
+                // Thumb-2 for size. menu.c keeps its firmware entry points in A32.
+                "-mthumb",
+                "-Oz",
+                "-ffreestanding",
+                "-fno-builtin",
+                "-fno-stack-protector",
+                "-fno-unwind-tables",
+                "-fno-asynchronous-unwind-tables",
+                MENU_FRAME_LIMIT,
+                "-Werror=frame-larger-than",
+                UNDEFINED_INTERNAL,
+                "-c",
+                path(&runtime.join("menu.c"))?,
+                "-o",
+                path(&object)?,
+            ])
+            .chain(target_flags(layout)),
     )?;
     run(
         &tools.clang,
-        [
-            "--target=arm-none-eabi",
-            "-march=armv7-a",
-            "-marm",
-            "-I",
-            path(runtime)?,
-            "-c",
-            path(&source)?,
-            "-o",
-            path(&assembly_object)?,
-        ]
-        .into_iter()
-        .chain([layout.define]),
+        CAMERA_TARGET
+            .into_iter()
+            .chain([
+                "-marm",
+                "-I",
+                path(runtime)?,
+                "-c",
+                path(&source)?,
+                "-o",
+                path(&assembly_object)?,
+            ])
+            .chain([layout.define]),
     )?;
     let mut component = linked_component(
         directory,
@@ -404,28 +401,27 @@ pub fn framing(
     ] {
         run(
             &tools.clang,
-            [
-                "--target=arm-none-eabi",
-                "-march=armv7-a",
-                "-marm",
-                "-Os",
-                "-ffreestanding",
-                "-fno-builtin",
-                "-fno-stack-protector",
-                "-fno-unwind-tables",
-                "-fno-asynchronous-unwind-tables",
-                FRAMING_FRAME_LIMIT,
-                "-Werror=frame-larger-than",
-                UNDEFINED_INTERNAL,
-                "-I",
-                path(runtime)?,
-                "-c",
-                path(&runtime.join(source))?,
-                "-o",
-                path(object)?,
-            ]
-            .into_iter()
-            .chain(target_flags(layout)),
+            CAMERA_TARGET
+                .into_iter()
+                .chain([
+                    "-marm",
+                    "-Os",
+                    "-ffreestanding",
+                    "-fno-builtin",
+                    "-fno-stack-protector",
+                    "-fno-unwind-tables",
+                    "-fno-asynchronous-unwind-tables",
+                    FRAMING_FRAME_LIMIT,
+                    "-Werror=frame-larger-than",
+                    UNDEFINED_INTERNAL,
+                    "-I",
+                    path(runtime)?,
+                    "-c",
+                    path(&runtime.join(source))?,
+                    "-o",
+                    path(object)?,
+                ])
+                .chain(target_flags(layout)),
         )?;
     }
     let mut component = linked_component(

@@ -14,6 +14,18 @@ pub struct Toolchain {
     pub lld_version: String,
 }
 
+/// The target flags of each camera-side object: the core components and the
+/// modules. The float ABI is explicit because the default differs between
+/// clang builds of one version: the Ubuntu clang of the release builds turns
+/// the FPU off, and some other builds turn NEON on. The objects use no FPU,
+/// so a local build has the bytes of the release build, and no hook uses the
+/// VFP or NEON registers, which a firmware task may not save.
+pub const CAMERA_TARGET: [&str; 3] = [
+    "--target=arm-none-eabi",
+    "-march=armv7-a",
+    "-mfloat-abi=soft",
+];
+
 pub fn run<I, S>(program: &Path, args: I) -> Result<()>
 where
     I: IntoIterator<Item = S>,

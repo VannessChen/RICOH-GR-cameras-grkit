@@ -330,6 +330,10 @@ static u32 grain_counter(u32 *high) { *high=0; return 0; }
 #define GRAIN_COUNTER_MHZ SYSTEM_COUNTER_MHZ
 #endif
 #define GRAIN_ROW_MAX 8192U
+/* The camera build has no FPU (CAMERA_TARGET in crates/grkit-build), so the
+   camera runs the scalar code. The NEON code runs only in the host test on
+   an ARM host (tests/runtime/picture_contract.c), which compares the noise
+   with one reference, as it does for the scalar code on other hosts. */
 #if defined(__ARM_NEON) && !defined(GRAIN_SCALAR)
 #include <arm_neon.h>
 #define GRAIN_NEON 1
