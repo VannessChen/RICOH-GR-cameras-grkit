@@ -174,7 +174,7 @@ The live-view labels are rendered at build time in the style of the native live-
 
 ## Recorded pictures
 
-A hook on the JPEG encode processes the main picture, the screennail, and the thumbnail. It applies the selective color of the effect, then the plane filters of the modules. Each still build stores its effect with its shot settings, so continuous shooting keeps the effect of each shot. It also stores the posture of the electronic level. The planes keep the landscape layout of the sensor, and a plane filter gets the quarter turns that show the picture upright, as the EXIF `Orientation` of the photo does. `CORE.GRAIN` sets the native grain stage, so the live view and DNG files have no grain. `CORE.GRAIN_SIZE` sets the grain size: the native sizes on GR IV, and a blur of the grain noise on GR III.
+A hook on the JPEG encode processes the main picture, the screennail, and the thumbnail. It applies the selective color of the effect, then the plane filters of the modules. Each still build stores its effect with its shot settings, so continuous shooting keeps the effect of each shot. It also stores the posture of the electronic level. The planes keep the landscape layout of the sensor, and a plane filter gets the quarter turns that show the picture upright, as the EXIF `Orientation` of the photo does. `CORE.GRAIN` sets the native grain stage, so the live view and DNG files have no grain. `CORE.GRAIN_SIZE` sets the grain size: the native sizes on GR IV, and on GR III the sum of two repeating tiles of blurred noise, which each shot makes anew.
 
 ## Relocation
 

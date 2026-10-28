@@ -299,9 +299,9 @@ void picture_encode(u32 process,u32 message) {
    byte into each Y sample, so its grain is one sample wide, and it averages
    away when the picture shows smaller. For a GRKit shot this fill writes the
    random bytes itself: CORE.GRAIN_SIZE small keeps them, medium and large
-   blur them with a separable binomial filter of 3 or 5 taps and bring their
-   standard deviation back to that of one random byte, so the grain is wider
-   at the same strength. The fill seeds a xorshift128 generator from the
+   use blurred noise with the standard deviation of one random byte, so the
+   grain is wider at the same strength (grain_tile). The fill seeds a
+   xorshift128 generator from the
    generic timer, so each shot gets its own pattern; the native fill seeds
    from the clock seconds, and shots in the same second repeat it. */
 #ifndef GRAIN_NATIVE_FILL
@@ -384,112 +384,150 @@ static void grain_random_row(GrainRandom *r,u8 *row,u32 pitch) {
     }
 #endif
 }
-/* One output row from the random bytes of the rows above and below it, with
-   the weights 1 2 1 or 1 4 6 4 1 down the column, then along the row, and
-   the edge sample repeated. The weights of the two passes sum to 16 for 3
-   taps and to 256 for 5 taps, so the mean of random bytes is 128 times that
-   sum. The filter scales the standard deviation by the sum of the squared
-   weights of one pass, 6 or 70, so the deviation from the mean divided by 6
-   or 70 has the standard deviation of one random byte. The division is a
-   rounded doubling high multiply (VQRDMULH) by 5461 (1 / 6.0004) or 468
-   (1 / 70.02), then the output is 128 plus that, limited to 0..255. Every
-   sum is exact in 16 bits: at most 16 x 16 x 255. */
+/* Medium and large grain add two tiles of blurred noise. A blur of the whole
+   plane took about half a second for each shot on a GR III (GRKIT/PROFILE),
+   and the camera waited for it before playback and power-off. Each shot
+   blurs two new tiles of random bytes, 256 and 240 samples wide. Each tile
+   repeats across the plane from its own random place, and the plane gets
+   their sum. A tile wraps at its edges, so neither has a seam, and the sum
+   repeats only every 3840 samples, the least common multiple of the widths.
+   Each row and column of a tile then has the mean 128 (grain_center).
+   Patches of one tile left seams that showed as a grid in the photos.
+
+   The tile blur is the binomial filter of 1 2 1 or 1 4 6 4 1, down the
+   columns and then along the rows. The weights of the two passes sum to 16
+   for 3 taps and to 256 for 5 taps, so the mean of random bytes is 128 times
+   that sum. The filter scales the standard deviation by the sum of the
+   squared weights of one pass, 6 or 70, so the deviation from the mean
+   divided by 6 or 70 has the standard deviation of one random byte. The
+   division is a multiply by 5461 (1 / 6.0004) or 468 (1 / 70.02). A tile
+   keeps 128 plus half of that deviation, so it rarely reaches 0 or 255.
+   The plane gets 128 plus the sum of the two half deviations times sqrt 2:
+   the sum plus 13573 / 32768 (sqrt 2 - 1) of it, limited to 0..255 once,
+   with the standard deviation of one random byte. */
 #define GRAIN_GAIN(taps) ((taps)==3 ? 5461 : 468)
+#define GRAIN_SQRT2_PART 13573
+#define GRAIN_TILE_A 256U
+#define GRAIN_TILE_B 240U
+#define GRAIN_NOISE_BYTES (GRAIN_TILE_A*GRAIN_TILE_A+GRAIN_TILE_B*GRAIN_TILE_B+6U*GRAIN_TILE_A)
+_Static_assert(!(GRAIN_TILE_A%16U) && !(GRAIN_TILE_B%16U) && GRAIN_TILE_B<=GRAIN_TILE_A,
+               "Each tile row is whole 16-byte blocks, and the work rows fit both tiles");
+/* Copy `n` bytes, a multiple of 16. */
+static void grain_copy(u8 *out,const u8 *in,u32 n) {
+    u32 i;
 #ifdef GRAIN_NEON
-/* The column sums of 16 samples at x. */
-static inline __attribute__((always_inline)) void grain_column16(const u8 *const *rows,u32 x,u32 taps,uint16x8_t *lo,uint16x8_t *hi) {
-    if(taps==3) {
-        uint8x16_t r0=vld1q_u8(rows[0]+x),r1=vld1q_u8(rows[1]+x),r2=vld1q_u8(rows[2]+x);
-        *lo=vaddq_u16(vaddl_u8(vget_low_u8(r0),vget_low_u8(r2)),vshll_n_u8(vget_low_u8(r1),1));
-        *hi=vaddq_u16(vaddl_u8(vget_high_u8(r0),vget_high_u8(r2)),vshll_n_u8(vget_high_u8(r1),1));
-    } else {
-        uint8x16_t r0=vld1q_u8(rows[0]+x),r1=vld1q_u8(rows[1]+x),r2=vld1q_u8(rows[2]+x),
-                   r3=vld1q_u8(rows[3]+x),r4=vld1q_u8(rows[4]+x);
-        uint16x8_t l=vshlq_n_u16(vaddl_u8(vget_low_u8(r1),vget_low_u8(r3)),2),
-                   h=vshlq_n_u16(vaddl_u8(vget_high_u8(r1),vget_high_u8(r3)),2);
-        l=vaddq_u16(l,vaddl_u8(vget_low_u8(r0),vget_low_u8(r4)));
-        h=vaddq_u16(h,vaddl_u8(vget_high_u8(r0),vget_high_u8(r4)));
-        *lo=vmlal_u8(l,vget_low_u8(r2),vdup_n_u8(6));
-        *hi=vmlal_u8(h,vget_high_u8(r2),vdup_n_u8(6));
-    }
-}
-/* The row sums of 8 column sums `c`, whose left and right neighbours are in
-   `left` and `right`, then the output bytes. */
-static inline __attribute__((always_inline)) uint8x8_t grain_row8(uint16x8_t left,uint16x8_t c,uint16x8_t right,u32 taps) {
-    uint16x8_t s=vaddq_u16(vextq_u16(left,c,7),vextq_u16(c,right,1));
-    int16x8_t d;
-    if(taps==3) {
-        s=vaddq_u16(s,vshlq_n_u16(c,1));
-        d=vsubq_s16(vreinterpretq_s16_u16(s),vdupq_n_s16(128*16));
-    } else {
-        s=vaddq_u16(vshlq_n_u16(s,2),vaddq_u16(vextq_u16(left,c,6),vextq_u16(c,right,2)));
-        s=vmlaq_n_u16(s,c,6);
-        /* s - 32768 as a signed value: flip the top bit. */
-        d=vreinterpretq_s16_u16(veorq_u16(s,vdupq_n_u16(0x8000)));
-    }
-    d=vqrdmulhq_s16(d,vdupq_n_s16(GRAIN_GAIN(taps)));
-    return vqmovun_s16(vaddq_s16(d,vdupq_n_s16(128)));
-}
-static inline __attribute__((always_inline)) void grain_output_row(const u8 *const *rows,u8 *out,u32 width,u32 taps) {
-    uint16x8_t lo,hi,next_lo,next_hi,left;
-    u32 x;
-    grain_column16(rows,0,taps,&lo,&hi);
-    left=vdupq_lane_u16(vget_low_u16(lo),0);
-    for(x=0;x<width;x+=16) {
-        if(x+16<width) grain_column16(rows,x+16,taps,&next_lo,&next_hi);
-        else next_lo=next_hi=vdupq_lane_u16(vget_high_u16(hi),3);
-        vst1q_u8(out+x,vcombine_u8(grain_row8(left,lo,hi,taps),grain_row8(lo,hi,next_lo,taps)));
-        left=hi; lo=next_lo; hi=next_hi;
-    }
-}
+    for(i=0;i<n;i+=16) vst1q_u8(out+i,vld1q_u8(in+i));
 #else
-static u32 grain_clamp(int x,u32 width) { return x<0 ? 0 : x>(int)width-1 ? width-1 : (u32)x; }
-static void grain_output_row(const u8 *const *rows,u8 *out,u32 width,u32 taps) {
-    static const int k3[3]={1,2,1},k5[5]={1,4,6,4,1};
-    const int *k=taps==3 ? k3 : k5;
-    int half=(int)taps/2,i,j,sum,v;
-    u32 x;
-    for(x=0;x<width;++x) {
-        sum=-128*(taps==3 ? 16 : 256);
-        for(j=0;j<(int)taps;++j) for(i=-half;i<=half;++i) sum+=k[j]*k[i+half]*rows[j][grain_clamp((int)x+i,width)];
-        v=128+((2*sum*GRAIN_GAIN(taps)+32768)>>16);
-        out[x]=(u8)(v<0 ? 0 : v>255 ? 255 : v);
-    }
-}
+    for(i=0;i<n;++i) out[i]=in[i];
 #endif
-/* The ring slot of a row. The core has no division routine, and a constant
-   divisor compiles to a multiply. */
-static u32 grain_slot(u32 row,u32 taps) { return taps==3 ? row%3U : row%5U; }
-/* The noise plane `plane` of `pitch` x `height` samples, blurred with `taps`
-   taps. `ring` holds the random bytes of `taps` rows: row y gets its random
-   bytes, then row y - taps / 2 of the plane gets its output, from rows
-   y - taps + 1 .. y with the edge rows repeated. The plane gets one write. */
-static inline __attribute__((always_inline)) void grain_blur_taps(u8 *plane,u32 pitch,u32 height,u32 taps,u8 *ring,GrainRandom *r) {
-    u32 half=taps/2,y,j;
-    const u8 *rows[5];
-    for(y=0;y<height+half;++y) {
-        if(y<height) grain_random_row(r,ring+grain_slot(y,taps)*pitch,pitch);
-        if(y<half) continue;
+}
+/* Blur the random n x n tile in place, with its edges wrapped. `keep` holds
+   four rows of the random bytes: rows 0 and 1, which the last rows read, and
+   the two rows above the current one. `sums` holds the column sums of one
+   row. */
+static void grain_tile(u8 *tile,u32 n,u8 *keep,u16 *sums,u32 taps) {
+    static const u8 k3[3]={1,2,1},k5[5]={1,4,6,4,1};
+    const u8 *k=taps==3 ? k3 : k5, *rows[5];
+    u32 half=taps/2,x,y,j;
+    int s,v;
+    grain_copy(keep,tile,2*n);
+    for(y=0;y<n;++y) {
         for(j=0;j<taps;++j) {
-            int row=(int)(y-half)+(int)j-(int)half;
-            if(row<0) row=0;
-            if(row>(int)height-1) row=(int)height-1;
-            rows[j]=ring+grain_slot((u32)row,taps)*pitch;
+            int r=(int)y+(int)j-(int)half;
+            if(r<0) rows[j]=tile+(u32)(r+(int)n)*n;
+            else if((u32)r>=n) rows[j]=keep+((u32)r-n)*n;
+            else if((u32)r<y) rows[j]=keep+(2+((u32)r&1))*n;
+            else rows[j]=tile+(u32)r*n;
         }
-        grain_output_row(rows,plane+(y-half)*pitch,pitch,taps);
+        for(x=0;x<n;++x) {
+            u32 c=0;
+            for(j=0;j<taps;++j) c+=k[j]*rows[j][x];
+            sums[x]=(u16)c;
+        }
+        /* Row y - 2 has its last reader above. */
+        grain_copy(keep+(2+(y&1))*n,tile+y*n,n);
+        for(x=0;x<n;++x) {
+            /* Column x - half + j, wrapped: a runs from n - half to 2n - 1 + half. */
+            u32 a=x+n-half;
+            s=-128*(taps==3 ? 16 : 256);
+            for(j=0;j<taps;++j,++a) s+=k[j]*sums[a<n ? a : a-n<n ? a-n : a-2*n];
+            v=128+((2*s*GRAIN_GAIN(taps)+65536)>>17);
+            tile[y*n+x]=(u8)(v<0 ? 0 : v>255 ? 255 : v);
+        }
     }
 }
-static void grain_blur(u8 *plane,u32 pitch,u32 height,u32 taps,u8 *ring,GrainRandom *r) {
-    if(taps==3) grain_blur_taps(plane,pitch,height,3,ring,r);
-    else grain_blur_taps(plane,pitch,height,5,ring,r);
+/* The rounded mean of n values that sum to `sum`. */
+static int grain_mean(int sum,u32 n) {
+    return sum<0 ? -(int)core_divide((u32)-sum+n/2U,n) : (int)core_divide((u32)sum+n/2U,n);
+}
+static u8 grain_shift(u8 v,int d) { int s=(int)v-d; return (u8)(s<0 ? 0 : s>255 ? 255 : s); }
+/* Bring the mean of each row, then of each column, of the tile to 128. A
+   row of a tile repeats along the whole plane, so the small mean of its
+   samples did not average away and showed as a faint line across the photo;
+   a column did the same downwards. */
+static void grain_center(u8 *tile,u32 n) {
+    u32 x,y;
+    int s,d;
+    for(y=0;y<n;++y) {
+        for(x=0,s=0;x<n;++x) s+=(int)tile[y*n+x]-128;
+        d=grain_mean(s,n);
+        for(x=0;x<n;++x) tile[y*n+x]=grain_shift(tile[y*n+x],d);
+    }
+    for(x=0;x<n;++x) {
+        for(y=0,s=0;y<n;++y) s+=(int)tile[y*n+x]-128;
+        d=grain_mean(s,n);
+        for(y=0;y<n;++y) tile[y*n+x]=grain_shift(tile[y*n+x],d);
+    }
+}
+/* 16 samples of the plane from two half deviations. */
+static void grain_add16(u8 *out,const u8 *a,const u8 *b) {
+#ifdef GRAIN_NEON
+    uint8x16_t va=vld1q_u8(a),vb=vld1q_u8(b);
+    int16x8_t lo=vsubq_s16(vreinterpretq_s16_u16(vaddl_u8(vget_low_u8(va),vget_low_u8(vb))),vdupq_n_s16(256));
+    int16x8_t hi=vsubq_s16(vreinterpretq_s16_u16(vaddl_u8(vget_high_u8(va),vget_high_u8(vb))),vdupq_n_s16(256));
+    lo=vaddq_s16(vaddq_s16(lo,vqrdmulhq_s16(lo,vdupq_n_s16(GRAIN_SQRT2_PART))),vdupq_n_s16(128));
+    hi=vaddq_s16(vaddq_s16(hi,vqrdmulhq_s16(hi,vdupq_n_s16(GRAIN_SQRT2_PART))),vdupq_n_s16(128));
+    vst1q_u8(out,vcombine_u8(vqmovun_s16(lo),vqmovun_s16(hi)));
+#else
+    u32 i;
+    int v;
+    for(i=0;i<16;++i) {
+        int s=(int)a[i]+(int)b[i]-256;
+        v=128+s+((2*s*GRAIN_SQRT2_PART+32768)>>16);
+        out[i]=(u8)(v<0 ? 0 : v>255 ? 255 : v);
+    }
+#endif
+}
+/* Fill the plane with the sum of the two tiles, each from the place that
+   `place_a` and `place_b` give: the start column in 16-sample blocks in the
+   low half, the start row in the high half. */
+static void grain_layers(u8 *plane,u32 pitch,u32 height,const u8 *a,const u8 *b,u32 place_a,u32 place_b) {
+    u32 y,x,row_a=place_a>>16,row_b=place_b>>16;
+    for(y=0;y<height;++y) {
+        const u8 *line_a=a+row_a*GRAIN_TILE_A,*line_b=b+row_b*GRAIN_TILE_B;
+        u32 column_a=(place_a&0xffffU)*16U,column_b=(place_b&0xffffU)*16U;
+        u8 *out=plane+y*pitch;
+        for(x=0;x<pitch;x+=16) {
+            grain_add16(out+x,line_a+column_a,line_b+column_b);
+            column_a+=16; if(column_a==GRAIN_TILE_A) column_a=0;
+            column_b+=16; if(column_b==GRAIN_TILE_B) column_b=0;
+        }
+        if(++row_a==GRAIN_TILE_A) row_a=0;
+        if(++row_b==GRAIN_TILE_B) row_b=0;
+    }
+}
+/* A place in a tile of width n from a random word. The divisions are by
+   constants, which compile to multiplies. */
+static u32 grain_place(u32 p,u32 n) {
+    return (((p>>8)%n)<<16)|((p&0xffU)%(n/16U));
 }
 /* Replaces the noise fill of the granulation (grain_fill in picture.S). The
    profile counts the microseconds of the generic timer, which all cores
-   share: the fill takes a few hundred milliseconds, and the task can move to
-   another core, whose cycle counter is another one (runtime/profile.h). */
+   share: the task can move to another core, whose cycle counter is another
+   one (runtime/profile.h). */
 void grain_noise(u32 buffer,u32 size,u32 pitch,u32 height) {
     volatile u32 *h=framing_header();
-    u32 shot=h[GRKIT_HOST_GRAIN_SHOT/4],table=h[GRKIT_HOST_PROFILE/4],high,low,taps,ring,y;
+    u32 shot=h[GRKIT_HOST_GRAIN_SHOT/4],table=h[GRKIT_HOST_PROFILE/4],high,low,block,y;
     GrainRandom r;
     if(!shot || shot>3 || !pitch || pitch%16 || pitch>GRAIN_ROW_MAX || pitch*height!=size || height<1) {
         GRAIN_NATIVE_FILL(buffer,size);
@@ -497,16 +535,27 @@ void grain_noise(u32 buffer,u32 size,u32 pitch,u32 height) {
     }
     low=GRAIN_COUNTER(&high);
     grain_seed(&r,low^high*0x27d4eb2dU);
-    taps=shot==2 ? 3 : 5;
-    ring=shot==1 ? 0 : GRAIN_ALLOCATE(taps*pitch);
-    if(!ring) {
-        /* Small, or no memory for the row sums: one random byte each. */
+    block=shot==1 ? 0 : GRAIN_ALLOCATE(GRAIN_NOISE_BYTES);
+    if(!block) {
+        /* Small, or no memory for the tiles: one random byte each. */
         for(y=0;y<height;++y) grain_random_row(&r,GRAIN_MAP(buffer)+y*pitch,pitch);
     } else {
-        grain_blur(GRAIN_MAP(buffer),pitch,height,taps,GRAIN_MAP(ring),&r);
-        GRAIN_RELEASE(ring);
+        u8 *a=GRAIN_MAP(block),*b=a+GRAIN_TILE_A*GRAIN_TILE_A,*keep=b+GRAIN_TILE_B*GRAIN_TILE_B;
+        u16 *sums=(u16 *)(keep+4*GRAIN_TILE_A);
+        u32 taps=shot==2 ? 3 : 5,seed,place_a,place_b;
+        for(y=0;y<GRAIN_TILE_A;++y) grain_random_row(&r,a+y*GRAIN_TILE_A,GRAIN_TILE_A);
+        for(y=0;y<GRAIN_TILE_B;++y) grain_random_row(&r,b+y*GRAIN_TILE_B,GRAIN_TILE_B);
+        grain_tile(a,GRAIN_TILE_A,keep,sums,taps);
+        grain_tile(b,GRAIN_TILE_B,keep,sums,taps);
+        grain_center(a,GRAIN_TILE_A);
+        grain_center(b,GRAIN_TILE_B);
+        /* One statement each: the order of the draws is fixed. */
+        seed=r.d[0];
+        place_a=grain_place(grain_mix(&seed),GRAIN_TILE_A);
+        place_b=grain_place(grain_mix(&seed),GRAIN_TILE_B);
+        grain_layers(GRAIN_MAP(buffer),pitch,height,a,b,place_a,place_b);
+        GRAIN_RELEASE(block);
     }
     if(table) profile_add(table,GRKIT_PROFILE_PICTURE_GRAIN,core_divide(GRAIN_COUNTER(&high)-low,GRAIN_COUNTER_MHZ));
 }
 #endif
-

@@ -244,35 +244,88 @@ static uint32_t ref_mix(uint32_t *x)
     z = (z ^ (z >> 13)) * 0xc2b2ae35U;
     return z ^ (z >> 16);
 }
-static void ref_random(uint8_t *plane, uint32_t pitch, uint32_t height, uint32_t seed)
+/* The four xorshift128 generators of the fill. */
+struct ref_state { uint32_t a[4], b[4], c[4], d[4]; };
+static void ref_seed(struct ref_state *s, uint32_t seed)
 {
-    uint32_t a[4], b[4], c[4], d[4];
-    for (int i = 0; i < 4; ++i) { a[i] = ref_mix(&seed); b[i] = ref_mix(&seed); c[i] = ref_mix(&seed); d[i] = ref_mix(&seed) | 1U; }
+    for (int i = 0; i < 4; ++i) { s->a[i] = ref_mix(&seed); s->b[i] = ref_mix(&seed); s->c[i] = ref_mix(&seed); s->d[i] = ref_mix(&seed) | 1U; }
+}
+static void ref_fill(struct ref_state *s, uint8_t *plane, uint32_t pitch, uint32_t height)
+{
     for (uint32_t y = 0; y < height; ++y)
         for (uint32_t x = 0; x < pitch; x += 16)
             for (int i = 0; i < 4; ++i) {
-                uint32_t t = a[i] ^ (a[i] << 11);
-                a[i] = b[i]; b[i] = c[i]; c[i] = d[i];
-                d[i] = d[i] ^ (d[i] >> 19) ^ t ^ (t >> 8);
-                memcpy(plane + y * pitch + x + 4 * i, &d[i], 4);
+                uint32_t t = s->a[i] ^ (s->a[i] << 11);
+                s->a[i] = s->b[i]; s->b[i] = s->c[i]; s->c[i] = s->d[i];
+                s->d[i] = s->d[i] ^ (s->d[i] >> 19) ^ t ^ (t >> 8);
+                memcpy(plane + y * pitch + x + 4 * i, &s->d[i], 4);
             }
 }
-static void ref_blur(const uint8_t *in, uint8_t *out, uint32_t pitch, uint32_t height, uint32_t taps)
+static void ref_random(uint8_t *plane, uint32_t pitch, uint32_t height, uint32_t seed)
+{
+    struct ref_state s;
+    ref_seed(&s, seed);
+    ref_fill(&s, plane, pitch, height);
+}
+/* The blur of an n x n tile with its edges wrapped, at half the deviation. */
+static void ref_tile(const uint8_t *in, uint8_t *out, int n, uint32_t taps)
 {
     static const int k3[3] = {1, 2, 1}, k5[5] = {1, 4, 6, 4, 1};
     const int *k = taps == 3 ? k3 : k5, half = (int)taps / 2, mean = 128 * (taps == 3 ? 16 : 256);
     const int gain = taps == 3 ? 5461 : 468;
-    for (int y = 0; y < (int)height; ++y)
-        for (int x = 0; x < (int)pitch; ++x) {
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x) {
             int sum = 0;
             for (int j = -half; j <= half; ++j)
-                for (int i = -half; i <= half; ++i) {
-                    int yy = y + j < 0 ? 0 : y + j > (int)height - 1 ? (int)height - 1 : y + j;
-                    int xx = x + i < 0 ? 0 : x + i > (int)pitch - 1 ? (int)pitch - 1 : x + i;
-                    sum += k[j + half] * k[i + half] * in[yy * pitch + xx];
-                }
-            int v = 128 + ((2 * (sum - mean) * gain + 32768) >> 16);
-            out[y * pitch + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
+                for (int i = -half; i <= half; ++i)
+                    sum += k[j + half] * k[i + half] * in[((y + j + n) % n) * n + (x + i + n) % n];
+            int v = 128 + ((2 * (sum - mean) * gain + 65536) >> 17);
+            out[y * n + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
+        }
+}
+/* Each row, then each column, of a tile moved to the mean 128: the mean of
+   its deviations, rounded half away from zero, comes off each sample, which
+   stays in 0..255. */
+static void ref_center(uint8_t *tile, int n)
+{
+    for (int pass = 0; pass < 2; ++pass)
+        for (int a = 0; a < n; ++a) {
+            int s = 0;
+            for (int b = 0; b < n; ++b) s += tile[pass ? b * n + a : a * n + b] - 128;
+            int d = s < 0 ? -((-s + n / 2) / n) : (s + n / 2) / n;
+            for (int b = 0; b < n; ++b) {
+                uint8_t *v = &tile[pass ? b * n + a : a * n + b];
+                int w = *v - d;
+                *v = (uint8_t)(w < 0 ? 0 : w > 255 ? 255 : w);
+            }
+        }
+}
+/* Medium and large grain: tiles 256 and 240 wide from the random bytes in
+   that order, then the plane of their sum, each tile from a place that one
+   splitmix32 value of the last state word of generator 0 gives: the start
+   row from bits 8 and up, the start column in 16-sample blocks from bits 0
+   to 7. */
+enum { REF_A = 256, REF_B = 240 };
+static void ref_grain(uint8_t *plane, uint32_t pitch, uint32_t height, uint32_t taps, uint32_t seed)
+{
+    static uint8_t ra[REF_A * REF_A], rb[REF_B * REF_B], ta[REF_A * REF_A], tb[REF_B * REF_B];
+    struct ref_state s;
+    ref_seed(&s, seed);
+    ref_fill(&s, ra, REF_A, REF_A);
+    ref_fill(&s, rb, REF_B, REF_B);
+    ref_tile(ra, ta, REF_A, taps);
+    ref_tile(rb, tb, REF_B, taps);
+    ref_center(ta, REF_A);
+    ref_center(tb, REF_B);
+    uint32_t place = s.d[0], pa = ref_mix(&place), pb = ref_mix(&place);
+    uint32_t ya = (pa >> 8) % REF_A, xa = (pa & 255) % (REF_A / 16) * 16;
+    uint32_t yb = (pb >> 8) % REF_B, xb = (pb & 255) % (REF_B / 16) * 16;
+    for (uint32_t y = 0; y < height; ++y)
+        for (uint32_t x = 0; x < pitch; ++x) {
+            int a = ta[(ya + y) % REF_A * REF_A + (xa + x) % REF_A];
+            int b = tb[(yb + y) % REF_B * REF_B + (xb + x) % REF_B];
+            int s = a + b - 256, v = 128 + s + ((2 * s * 13573 + 32768) >> 16);
+            plane[y * pitch + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
         }
 }
 /* Mean, standard deviation, and the correlation of horizontal neighbours. */
@@ -315,35 +368,53 @@ static void grain_contract(void)
     grain_counter_value = 0x12345679U;
     grain_noise(GRAIN_PLANE, SIZE, PITCH, HEIGHT);
     assert(memcmp(plane, noise, SIZE));
-    /* Medium and large: the model's filter of the same random bytes, with
-       about the standard deviation of one random byte and wider grain. */
+    /* Medium and large: the sum of two wrapped tiles of the model's filter.
+       The noise has about the standard deviation of one random byte, wider
+       grain, and no seam: neighbours across a 128-sample line correlate as
+       the others do. */
     for (uint32_t shot = 2; shot <= 3; ++shot) {
         uint32_t taps = shot == 2 ? 3 : 5;
         header[GRKIT_HOST_GRAIN_SHOT / 4] = shot;
         grain_allocations = grain_releases = 0;
         grain_noise(GRAIN_PLANE, SIZE, PITCH, HEIGHT);
         assert(grain_allocations == 1 && grain_releases == 1);
-        ref_random(noise, PITCH, HEIGHT, 0x12345679U);
-        ref_blur(noise, want, PITCH, HEIGHT, taps);
+        ref_grain(want, PITCH, HEIGHT, taps, 0x12345679U);
         assert(!memcmp(plane, want, SIZE));
         grain_stats(plane, SIZE, &mean, &std, &corr);
-        assert(mean > 125 && mean < 131 && std > 66 && std < 76);
+        /* Each tile row and column has the mean 128, so the plane does too,
+           and no row repeats a mean along its length as a line. Rows of
+           tiles without that keep a mean with an RMS of 7 to 8 here; the
+           rest comes from the part of the last 240-sample repeat. */
+        assert(mean > 127 && mean < 129 && std > 66 && std < 76);
+        double rows = 0;
+        for (uint32_t y = 0; y < HEIGHT; ++y) {
+            double row = 0;
+            for (uint32_t x = 0; x < PITCH; ++x) row += plane[y * PITCH + x];
+            row = row / PITCH - mean;
+            rows += row * row;
+        }
+        assert(__builtin_sqrt(rows / HEIGHT) < 2);
         assert(taps == 3 ? corr > 0.6 && corr < 0.72 : corr > 0.74 && corr < 0.84);
+        double seam = 0, other = 0;
+        for (uint32_t y = 0; y < HEIGHT; ++y)
+            for (uint32_t x = 0; x + 1 < PITCH; ++x) {
+                double d = ((double)plane[y * PITCH + x] - mean) * ((double)plane[y * PITCH + x + 1] - mean);
+                if (x % 128 == 127) seam += d; else other += d;
+            }
+        seam /= HEIGHT * (PITCH / 128); other /= HEIGHT * (PITCH - 1 - PITCH / 128);
+        assert(seam > other * 0.8 && seam < other * 1.2);
     }
-    /* A pitch that is not a multiple of 64, and fewer rows than taps: the
-       last generator steps and the edge rows. */
+    /* A pitch that is not a multiple of 64 or of a tile, and fewer rows
+       than taps: the last generator steps and the tile wrap. */
     for (uint32_t shot = 1; shot <= 3; ++shot) {
         static const uint32_t pitch = 48, rows[2] = {7, 2};
         for (int h = 0; h < 2; ++h) {
             uint32_t size = pitch * rows[h];
             header[GRKIT_HOST_GRAIN_SHOT / 4] = shot;
             grain_noise(GRAIN_PLANE, size, pitch, rows[h]);
-            ref_random(noise, pitch, rows[h], 0x12345679U);
-            if (shot == 1) assert(!memcmp(plane, noise, size));
-            else {
-                ref_blur(noise, want, pitch, rows[h], shot == 2 ? 3 : 5);
-                assert(!memcmp(plane, want, size));
-            }
+            if (shot == 1) ref_random(noise, pitch, rows[h], 0x12345679U);
+            else ref_grain(noise, pitch, rows[h], shot == 2 ? 3 : 5, 0x12345679U);
+            assert(!memcmp(plane, noise, size));
         }
     }
     /* The profile counts the microseconds of the generic timer: two reads
