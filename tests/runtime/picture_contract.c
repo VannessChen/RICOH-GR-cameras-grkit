@@ -90,6 +90,9 @@ volatile u32 *framing_header(void) { return header; }
 const GrkitContext grkit_self = {0, 2, 0};
 u32 setting_get(u32 handle) { return setting_value(header, handle); }
 void local_time(GrkitDateTime *out) { PICTURE_DATE(out); }
+/* The live-view sign of the module (date_badge). This test checks pictures,
+   so the label draws nothing. */
+static void overlay_label(const Surface *s,u32 label,u32 left,u32 top) { (void)s; (void)label; (void)left; (void)top; }
 u32 divide(u32 n, u32 d) { return core_divide(n, d); }
 /* The turns of the last plane set that the date filter got. */
 static uint32_t applied_turns = 0xffffffffU;

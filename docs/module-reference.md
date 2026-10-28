@@ -257,8 +257,9 @@ A module calls the core only through these functions. The installer links each c
 | --- | --- |
 | `LABEL_GRKIT` | the GRKit cue |
 | `LABEL_RATIO(area)` | the name of a capture area (`Surface.area`), such as "XPan" |
+| `LABEL_DATE` | "DATE", the sign that Date Imprint is on |
 
-`LABEL_TOP` is the top of a label in the second row of the native live-view text. `LABEL_LEFT` is the left edge that lines up with the native icons.
+`LABEL_TOP` is the top of a label in the second row of the native live-view text. `LABEL_LEFT` is the left edge that lines up with the native icons. A capture area label is at most 80 pixels wide, so a second label of the row starts at `LABEL_NEXT_LEFT` and never covers it.
 
 A module also imports `grkit_self`, its context, which `GRKIT_SETTING` and `GRKIT_USED` use. `grkit_core::grm::EXPORTS` lists the exported functions. A new service is an addition to that list and to `grkit.h`, and it raises the minor ABI version.
 

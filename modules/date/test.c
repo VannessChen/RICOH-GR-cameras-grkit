@@ -4,6 +4,7 @@
 #include "grkit_module.h"
 
 void date_apply(PictureSet *set, u32 style);
+void date_badge(const Surface *s, u32 style);
 
 #define WIDTH 1200U
 #define HEIGHT 800U
@@ -43,10 +44,10 @@ int main(void)
 {
     u32 left, top;
     /* The descriptor: STYLE (6 values), LOOK (3), and POSITION (2), a page
-       with its native settings rows, and one filter. */
+       with its native settings rows, one filter, and one layer. */
     assert(grkit_module.setting_count == 3 && grkit_module.settings[0].values == 6 &&
            grkit_module.settings[1].values == 3 && grkit_module.settings[2].values == 2);
-    assert(grkit_module.registration_count == 2 && grkit_module.tile_count == 6);
+    assert(grkit_module.registration_count == 3 && grkit_module.tile_count == 6);
     assert(SETTING_STYLE == GRKIT_SETTING(0) && SETTING_LOOK == GRKIT_SETTING(1) &&
            SETTING_POSITION == GRKIT_SETTING(2));
     /* Each look of each style lights the lower right corner of the picture
@@ -83,6 +84,21 @@ int main(void)
         grkit_test_settings[SETTING_LOOK] = 0;
         date_apply(&set, 1);
         for (u32 i = 0; i < WIDTH * HEIGHT; ++i) assert(GRKIT_BYTES(set.planes[0].c + i)[0] == 128);
+    }
+    /* The live-view sign: "DATE" after the Framing label for each style, and
+       nothing for Off. */
+    {
+        static const u16 full[4] = {0, 0, 720, 480};
+        Surface s = grkit_test_surface(full);
+        grkit_test_labels = 0;
+        date_badge(&s, 0);
+        assert(grkit_test_labels == 0);
+        for (u32 style = 1; style < 6; ++style) {
+            date_badge(&s, style);
+            assert(grkit_test_labels == style);
+            assert(grkit_test_label[0] == LABEL_DATE && grkit_test_label[1] == LABEL_NEXT_LEFT &&
+                   grkit_test_label[2] == LABEL_TOP);
+        }
     }
     return 0;
 }

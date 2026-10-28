@@ -573,14 +573,16 @@ fn overlay_labels_fit_their_area_and_outline_their_text() {
 }
 
 /// Label n names the CORE.ASPECT value n (LABEL_RATIO in runtime/sdk/grkit.h):
-/// it starts the summary of value n of the Framing module.
+/// it starts the summary of value n of the Framing module. The Date Imprint
+/// sign follows the ratios (LABEL_DATE).
 #[test]
 fn overlay_labels_follow_the_aspect_values() {
     let aspect = grkit_core::capabilities::CAPABILITIES
         .iter()
         .find(|capability| capability.key == "ASPECT")
         .unwrap();
-    assert_eq!(artwork::OVERLAY_LABELS.len(), aspect.values as usize);
+    assert_eq!(artwork::OVERLAY_LABELS.len(), aspect.values as usize + 1);
+    assert_eq!(artwork::OVERLAY_LABELS[aspect.values as usize], "DATE");
     let text = fs::read_to_string(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../modules/framing/text/en.toml"),
     )
@@ -591,7 +593,7 @@ fn overlay_labels_follow_the_aspect_values() {
         .find_map(|line| line.strip_prefix("summaries = "))
         .unwrap();
     let summaries: Vec<String> = serde_json::from_str(line).unwrap();
-    assert_eq!(summaries.len(), artwork::OVERLAY_LABELS.len());
+    assert_eq!(summaries.len(), aspect.values as usize);
     for (value, summary) in summaries.iter().enumerate().skip(1) {
         assert!(
             summary.starts_with(artwork::OVERLAY_LABELS[value]),

@@ -51,3 +51,12 @@ options = true
 apply = "date_apply"
 setting = "STYLE"
 stage = "mark"
+
+# The sign that Date Imprint is on shows with the full display, next to the
+# Framing ratio label, like the top rows of native settings.
+[[layers]]
+paint = "date_badge"
+setting = "STYLE"
+order = 40
+full_disp = true
+live_only = true

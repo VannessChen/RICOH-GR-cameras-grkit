@@ -66,14 +66,19 @@ typedef struct {
     u32 order;
 } GrkitLayer;
 
-/* Live-view labels of the core (overlay_label): the GRKit cue, and the name
-   of each capture area (Surface.area), such as "XPan". */
+/* Live-view labels of the core (overlay_label): the GRKit cue, the name of
+   each capture area (Surface.area), such as "XPan", and the sign that Date
+   Imprint is on. */
 #define LABEL_GRKIT 0U
 #define LABEL_RATIO(area) (area)
+#define LABEL_DATE 8U
 /* The top of a label in the second row of the native live-view text, and
-   the left edge of a label that lines up with the native icons. */
+   the left edge of a label that lines up with the native icons. A capture
+   area label is at most 80 pixels wide, so a second label of the row starts
+   at LABEL_NEXT_LEFT and never covers it. */
 #define LABEL_TOP 45U
 #define LABEL_LEFT 7U
+#define LABEL_NEXT_LEFT (LABEL_LEFT + 88U)
 /* Draw a label of the core with its top left at (left, top), in the style of
    the native live-view text. A label that does not fit draws nothing. */
 #ifndef GRKIT_CORE_SURFACE

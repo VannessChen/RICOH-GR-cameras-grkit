@@ -524,8 +524,9 @@ pub fn modules_pixels() -> Vec<u8> {
 
 /// The live-view labels in label order: the load cue, then the Framing ratios
 /// in capture area order (runtime/framing.c: photo_boxes), so label n names
-/// capture area n.
-pub const OVERLAY_LABELS: [&str; 8] = [
+/// capture area n, then the sign of Date Imprint (LABEL_DATE in
+/// runtime/sdk/grkit.h).
+pub const OVERLAY_LABELS: [&str; 9] = [
     "GRKit Loaded",
     "XPan",
     "16:9",
@@ -534,6 +535,7 @@ pub const OVERLAY_LABELS: [&str; 8] = [
     "1:1",
     "5:4",
     "7:6",
+    "DATE",
 ];
 /// The width of the black outline around the text. The native live-view text
 /// has one black pixel around the gray edge of each stroke, and keeps the

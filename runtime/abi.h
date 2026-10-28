@@ -481,7 +481,7 @@
 #define GRKIT_TEXT_RECORDS 20
 #define GRKIT_TEXT(h) ((h)[GRKIT_HOST_TAIL/4]+GRKIT_PICTURE_SCRATCH)
 #define GRKIT_LABELS(h) (GRKIT_TEXT(h)+GRKIT_TEXT_SIZE)
-#define GRKIT_LABEL_COUNT 8
+#define GRKIT_LABEL_COUNT 9
 /* String IDs of the label table, in grkit_core::menu_text order. A run of IDs
    follows the rows or values that it names. */
 #define TEXT_OFF 0
