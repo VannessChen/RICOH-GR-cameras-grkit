@@ -52,7 +52,7 @@ body:
       label: Details
       description: |
         Give the modules that you tested, the size and format of the card, what you expected, and what occurred.
-        Copy all the lines of `GRKIT/REPORT.TXT` here. If the card has `SCRIPT/GRKIT/INSTALL.ERR`, also copy all its lines.
+        Copy all the lines of `GRKIT/REPORT.TXT` and `GRKIT/BOOT.TXT` here. If the card has `SCRIPT/GRKIT/INSTALL.ERR`, also copy all its lines.
         If the first line is 47, also attach a firmware dump. The [dump guide](https://github.com/ahonn/grkit/blob/main/resources/DUMP.md) tells you how to make one.
         Add photos of the screen if they help.
     validations:

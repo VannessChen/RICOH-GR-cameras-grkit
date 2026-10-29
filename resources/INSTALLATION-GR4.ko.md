@@ -66,7 +66,7 @@ GRKit은 효과를 `GRKIT/EFFECTS` 폴더에 저장합니다. 새 패키지는 �
 2. ADJ 모드에서 GRK를 찾습니다. GRKit의 설정은 MENU의 사용자 설정 탭의 GRKit 항목에도 있습니다.
 3. 3단계에서 Mode Set Command가 표시되지 않았다면 3단계를 다시 합니다.
 4. 카드 최상위에 `SCRIPT` 폴더가 있는지 확인합니다. `SCRIPT`를 포함해 `SD_ROOT`의 내용을 모두 복사합니다.
-5. 카드에 `SCRIPT/GRKIT/INSTALL.ERR`이 있으면 GRKit이 설치되지 않은 것입니다. 카메라에 지원하는 펌웨어 버전이 표시되는지 확인합니다. 펌웨어 버전은 카메라 메뉴에서 확인할 수 있습니다. 버전이 지원된다면 `INSTALL.ERR`과 `GRKIT/REPORT.TXT`의 내용을 모두 첨부해 [기기 리포트](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)를 보내 주십시오.
+5. 카드에 `SCRIPT/GRKIT/INSTALL.ERR`이 있으면 GRKit이 설치되지 않은 것입니다. 카메라에 지원하는 펌웨어 버전이 표시되는지 확인합니다. 펌웨어 버전은 카메라 메뉴에서 확인할 수 있습니다. 버전이 지원된다면 `INSTALL.ERR`, `GRKIT/REPORT.TXT`, `GRKIT/BOOT.TXT`의 내용을 모두 첨부해 [기기 리포트](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)를 보내 주십시오.
 6. GRKit은 리코의 공식 펌웨어에서만 작동합니다. 수정된 펌웨어에서는 작동하지 않습니다.
 
 ### 카드를 포맷한 뒤 GRKit이 작동하지 않습니다

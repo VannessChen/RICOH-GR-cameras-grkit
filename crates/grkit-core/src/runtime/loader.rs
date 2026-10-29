@@ -10,8 +10,8 @@ use crate::abi::{
 };
 use crate::capabilities::{self, StateFile};
 use crate::card::{
-    DATA_FOLDER, LINUX_CARD, LINUX_DIRECTORY, LINUX_LOAD_COPY, LINUX_MOUNT, PACKAGE_DIRECTORY,
-    RTOS_PACKAGE_FOLDER,
+    DATA_FOLDER, FAST_OFF, FAST_ON, FAST_TRY, LINUX_CARD, LINUX_DIRECTORY, LINUX_LOAD_COPY,
+    LINUX_MOUNT, LINUX_SLOW_START, PACKAGE_DIRECTORY, RTOS_PACKAGE_FOLDER,
 };
 
 /// The resident loader reads the selections at this interval. It writes the
@@ -53,19 +53,50 @@ pub fn loader() -> Vec<u8> {
 /// request after about 245 bytes.
 pub const REQUEST_MAX: usize = 220;
 
-/// The first request of the loader: the Linux side of the start. The script
-/// runs from a copy in RAM, because a shell reads a script while it runs it,
-/// and the script unmounts the card. The request removes the mount point
-/// after the script, and the script leaves a file in it. So a retry after a
-/// failed mount mounts again, and a retry after the script does not: each
-/// mount is a chance to collide with the mount of the camera.
+/// The first request of the loader on the fast path: the Linux side of the
+/// start. The script runs from a copy in RAM, because a shell reads a script
+/// while it runs it, and the script unmounts the card. If the copy fails, the
+/// request unmounts the card at once, because the camera cannot mount it
+/// while the loader holds it. The mount point stays after an attempt, so a
+/// retry does not mount the card again: each mount is a chance to collide
+/// with the mount of the camera, and a later retry waits for that mount.
 fn load_request() -> String {
     format!(
-        ": -q ; d={PACKAGE_DIRECTORY}/LOAD.SH; if grep -q storage /proc/mounts; then sh {LINUX_CARD}$d; \
-         else mkdir {LINUX_MOUNT} && mount -t ipcufs mnt {LINUX_MOUNT} -ofs=1 && cp {LINUX_MOUNT}$d {LINUX_LOAD_COPY} \
-         && sh {LINUX_LOAD_COPY} {LINUX_MOUNT}; rmdir {LINUX_MOUNT}; :; fi"
+        ": -q ; d={PACKAGE_DIRECTORY}/LOAD.SH; m={LINUX_MOUNT}; if grep -q storage /proc/mounts; then sh {LINUX_CARD}$d; \
+         else mkdir $m && mount -t ipcufs mnt $m -ofs=1 && {{ cp $m$d {LINUX_LOAD_COPY} || ! umount $m; }} \
+         && sh {LINUX_LOAD_COPY} $m; :; fi"
     )
 }
+
+/// The first request of the loader on the slow path: `LOAD.SH` from the
+/// camera's mount of the card, as GRKit 1.3.0 did. The first request also
+/// keeps the uptime at which Linux runs commands, which `FINISH.SH` uses to
+/// measure the fast path (`runtime::files`).
+fn slow_request() -> String {
+    format!(
+        ": -q ; t={LINUX_SLOW_START}; [ -e $t ] || cat /proc/uptime >$t; \
+         grep -q storage1 /proc/mounts && sh {LINUX_CARD}{PACKAGE_DIRECTORY}/LOAD.SH; :"
+    )
+}
+
+/// The most requests of the first step without a plan. Each takes at least
+/// 200 ms, so the loader waits longer than `LOAD.SH` waits for the camera to
+/// mount the card, and then for the copy and the second SCAN.
+const LOAD_ATTEMPTS: u32 = super::files::CARD_WAIT_SECONDS * 6;
+
+/// The statuses that the loader writes to `INSTALL.ERR` itself
+/// (`runtime/install_status.h`): SCAN posted no plan, the plan header is not
+/// valid, or INSTALL did not install. The next line has the attempts of the
+/// step.
+///
+/// The loader writes the status of a step before its first request and
+/// removes the file after the install. A request can wait for Linux for the
+/// rest of the power-on, so a file written after a request could never
+/// reach the card. A stop writes the status of SCAN or INSTALL in the
+/// mailbox, if one is there, else the status of the step.
+pub const STATUS_LOADER_NO_PLAN: u32 = 60;
+pub const STATUS_LOADER_BAD_PLAN: u32 = 61;
+pub const STATUS_LOADER_NO_INSTALL: u32 = 62;
 
 /// The loader for a target with `icon_stride`-byte icon slots.
 pub fn loader_for(icon_stride: usize) -> Vec<u8> {
@@ -75,10 +106,8 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
     let (result, status) = (mailbox(MAILBOX_RESULT), mailbox(MAILBOX_STATUS));
     // Wait for the host command tables of the RTOS before lcmd_resp.
     let mut lines: Vec<String> = vec!["mpause 2000".into(), "sendln 'lcmd_resp on'".into()];
-    // The results of the last start, which FINISH.SH copies to the card.
-    for name in ["INSTALL.OK", "INSTALL.ERR"] {
-        lines.push(format!("filedelete '{}'", path(name)));
-    }
+    // The result of the last start, which FINISH.SH copies to the card.
+    lines.push(format!("filedelete '{}'", path("INSTALL.OK")));
     lines.extend([
         // The mailbox (`abi::MAILBOX_FIELDS`): the first script array, which
         // SCAN and INSTALL find through the array table.
@@ -87,10 +116,38 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         format!("{result} = 0"),
         format!("{status} = 0"),
         // Early requests fail before Linux runs commands. A failed SCAN stops
-        // the loader; give up after 150 attempts without a plan.
+        // the loader; give up after LOAD_ATTEMPTS attempts without a plan.
         "attempts = 0".into(),
+        format!("failure = {STATUS_LOADER_NO_PLAN}"),
+        "call write_error".into(),
+        // The fast path only after a measurement allowed it (FAST.ON), never
+        // after it was turned off (FAST.OFF), and never after a fast start
+        // that stopped in the release of its mount: LOAD.SH writes FAST.TRY
+        // just before the release, and the loader removes it once the
+        // request returns, so a FAST.TRY at power-on turns the fast path off.
+        // A power-off at another time leaves no FAST.TRY.
+        "fast = 0".into(),
+        "cleared = 0".into(),
+        format!("filesearch '{}'", path(FAST_ON)),
+        "if result <> 0 fast = 1".into(),
+        format!("filesearch '{}'", path(FAST_OFF)),
+        "if result <> 0 fast = 0".into(),
+        format!("filesearch '{}'", path(FAST_TRY)),
+        "if result = 0 goto fast_checked".into(),
+        "fast = 0".into(),
+        format!("filecreate ffh '{}'", path(FAST_OFF)),
+        "if ffh >= 0 fileclose ffh".into(),
+        ":fast_checked".into(),
         ":scan".into(),
+        "if fast = 0 goto scan_slow".into(),
         format!("sendln 'lcmd {}'", load_request()),
+        "if cleared <> 0 goto scan_sent".into(),
+        format!("filedelete '{}'", path(FAST_TRY)),
+        "cleared = 1".into(),
+        "goto scan_sent".into(),
+        ":scan_slow".into(),
+        format!("sendln 'lcmd {}'", slow_request()),
+        ":scan_sent".into(),
         format!("posted = {result}"),
         format!("if posted = {MAILBOX_FAILED} goto reject"),
         format!("posted = {}", plan_word(PLAN_MAGIC)),
@@ -100,9 +157,10 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         ),
         "mpause 200".into(),
         "attempts = attempts + 1".into(),
-        "if attempts < 150 goto scan".into(),
+        format!("if attempts < {LOAD_ATTEMPTS} goto scan"),
         "goto reject".into(),
         ":plan_ready".into(),
+        format!("failure = {STATUS_LOADER_BAD_PLAN}"),
         // The words of the plan header (`abi::PLAN_FIELDS`).
         format!("count = {}", plan_word(PLAN_COUNT)),
         "if count < 0 goto reject".into(),
@@ -151,6 +209,8 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         // Not-ready attempts release the install lock. Retry every 0.5 s for about
         // 30 s, then every 10 s, so a later shooting-mode start can still install.
         "attempts = 0".into(),
+        format!("failure = {STATUS_LOADER_NO_INSTALL}"),
+        "call write_error".into(),
         ":install".into(),
         format!("sendln 'lcmd sh {LINUX_DIRECTORY}/INSTALL.SH'"),
         format!("posted = {result}"),
@@ -162,15 +222,32 @@ pub fn loader_for(icon_stride: usize) -> Vec<u8> {
         "goto install".into(),
         // The results go to the card after the camera mounts it.
         ":installed".into(),
+        format!("filedelete '{}'", path("INSTALL.ERR")),
         format!("sendln 'lcmd sh {LINUX_DIRECTORY}/FINISH.SH'"),
     ]);
     lines.extend(state_script());
     lines.extend(profile_script());
     lines.extend([
+        // FINISH.SH copies the INSTALL.ERR of INSTALL over this one.
         ":reject".into(),
+        format!("posted = {status}"),
+        "if posted <> 0 failure = posted".into(),
+        "call write_error".into(),
         format!("sendln 'lcmd sh {LINUX_DIRECTORY}/FINISH.SH'"),
         "dispstr 'GR_MODULE_LOADER_REJECTED'".into(),
         "end".into(),
+        // INSTALL.ERR from the RTOS, which needs no Linux.
+        ":write_error".into(),
+        format!("filedelete '{}'", path("INSTALL.ERR")),
+        format!("filecreate efh '{}'", path("INSTALL.ERR")),
+        "if efh < 0 goto write_error_end".into(),
+        "int2str line failure".into(),
+        "filewriteln efh line".into(),
+        "int2str line attempts".into(),
+        "filewriteln efh line".into(),
+        "fileclose efh".into(),
+        ":write_error_end".into(),
+        "return".into(),
     ]);
     (lines.join("\r\n") + "\r\n").into_bytes()
 }
@@ -686,7 +763,7 @@ mod tests {
             .lines()
             .filter_map(|l| l.strip_prefix("sendln 'lcmd ")?.strip_suffix('\''))
             .collect();
-        assert_eq!(requests.len(), 4, "{requests:?}");
+        assert_eq!(requests.len(), 5, "{requests:?}");
         for request in &requests {
             assert!(request.len() <= REQUEST_MAX, "{}: {request}", request.len());
             assert!(
@@ -696,12 +773,44 @@ mod tests {
         }
         let load = requests[0];
         assert!(load.starts_with(": -q ; "));
-        assert!(load.contains("if grep -q storage /proc/mounts; then sh /media/storage1$d; else mkdir /tmp/m && mount -t ipcufs mnt /tmp/m -ofs=1 && cp /tmp/m$d /tmp/l && sh /tmp/l /tmp/m; rmdir /tmp/m; :; fi"));
+        // One mount of the card at most: the mount point stays.
+        assert!(load.contains("m=/tmp/m; if grep -q storage /proc/mounts; then sh /media/storage1$d; else mkdir $m && mount -t ipcufs mnt $m -ofs=1 && { cp $m$d /tmp/l || ! umount $m; } && sh /tmp/l $m; :; fi"));
+        assert!(!load.contains("rmdir"));
+        assert!(script.contains("if attempts < 360 goto scan\r\n"));
         assert!(load.contains("d=/SCRIPT/GRKIT/LOAD.SH;"));
+        // The slow path never mounts the card, and measures the fast path.
+        let slow = requests[1];
+        assert!(slow.starts_with(": -q ; t=/tmp/t0; [ -e $t ] || cat /proc/uptime >$t; "));
+        assert!(slow.ends_with(
+            "grep -q storage1 /proc/mounts && sh /media/storage1/SCRIPT/GRKIT/LOAD.SH; :"
+        ));
+        assert!(!slow.contains("mount -t"));
         // SCAN and INSTALL run from the RAM copy of the card.
-        assert_eq!(requests[1], "sh /tmp/gc/SCRIPT/GRKIT/INSTALL.SH");
-        assert_eq!(requests[2], "sh /tmp/gc/SCRIPT/GRKIT/FINISH.SH");
-        assert_eq!(requests[3], requests[2]);
+        assert_eq!(requests[2], "sh /tmp/gc/SCRIPT/GRKIT/INSTALL.SH");
+        assert_eq!(requests[3], "sh /tmp/gc/SCRIPT/GRKIT/FINISH.SH");
+        assert_eq!(requests[4], requests[3]);
+        // The fast path needs FAST.ON, stops at FAST.OFF, and turns off after
+        // a FAST.TRY that a start left; the first return of its request
+        // removes the FAST.TRY of the release.
+        let lines: Vec<_> = script.lines().collect();
+        let at = |line: &str| {
+            lines
+                .iter()
+                .position(|l| *l == line)
+                .unwrap_or_else(|| panic!("{line}"))
+        };
+        let on = at("filesearch 'C:\\SCRIPT\\GRKIT\\FAST.ON'");
+        let off = at("filesearch 'C:\\SCRIPT\\GRKIT\\FAST.OFF'");
+        let tried = at("filesearch 'C:\\SCRIPT\\GRKIT\\FAST.TRY'");
+        let turn_off = at("filecreate ffh 'C:\\SCRIPT\\GRKIT\\FAST.OFF'");
+        let fast = lines.iter().position(|l| l.contains(load)).unwrap();
+        let clear = at("filedelete 'C:\\SCRIPT\\GRKIT\\FAST.TRY'");
+        assert!(on < off && off < tried && tried < turn_off && turn_off < fast);
+        assert_eq!(lines[tried + 1], "if result = 0 goto fast_checked");
+        assert_eq!(clear, fast + 2);
+        assert!(!lines
+            .iter()
+            .any(|l| l.contains("filecreate") && l.contains("FAST.TRY")));
         // The loader waits on the mailbox, the first array, not on card files.
         let mailbox = script
             .lines()

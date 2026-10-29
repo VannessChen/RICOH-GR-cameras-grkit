@@ -62,6 +62,7 @@ static u32 count, size, icon_chunks;
     X(data_path, DATA_PATH) \
     X(plan_path, PLAN_PATH) \
     X(plan_tmp, PLAN_TMP_PATH) \
+    X(plan_damaged_path, PLAN_DAMAGED_PATH) \
     X(lock_path, LOCK_PATH) \
     X(done_path, DONE_PATH) \
     X(failed_path, FAILED_PATH) \
@@ -184,18 +185,44 @@ static void write_plan_key(void)
     if (made < 0 && made != -17) return;
     write_file(plan_key_path, (const u8 *)words, sizeof(words));
 }
+static int read_plan(void);
+static int create(const char *path, u32 status);
+/* Whether the plan that read_plan read is the plan of this start: the sizes
+   that the loader allocates from its header are those of the modules and
+   the effects of the RAM copy (plan_modules). INSTALL refuses a plan that
+   does not fit, and SCAN makes such a kept plan again. */
+static int plan_fits(void)
+{
+    plan_array();
+    layout();
+    return get32(plan + GRKIT_PLAN_HEADER_WORDS) == size / 4 && get32(plan + GRKIT_PLAN_ICON_CHUNKS) == icon_chunks &&
+           get32(plan + GRKIT_PLAN_MODULE_WORDS) == module_words && get32(plan + GRKIT_PLAN_MODULE_TILES) == module_tiles;
+}
 static int scan(void)
 {
-    /* The modules of the RAM copy, and the saved values (plan_modules reads
-       the state), then the marker files of the safe mode and of the
-       profile: the key of the plan depends on them. */
-    plan_modules();
+    /* The marker files of the safe mode and of the profile, then the
+       modules of the RAM copy and the saved values (plan_modules reads the
+       state and the safe mode, as INSTALL does): the key of the plan depends
+       on them. */
     safe_mode = present(safe_path) || present(safe_text_path);
     profile_mode = present(profile_path) || present(profile_text_path);
+    plan_modules();
     /* The plan of an earlier start, which LOAD.SH copies from the card with
-       its key: it is the plan of this start when the keys are equal. */
+       its key: it is the plan of this start when the keys are equal, it
+       reads back whole, and it fits the modules of this start. A damaged or
+       wrong plan with a valid key would otherwise stop each start, because
+       FINISH.SH writes a plan to the card only after a change. */
     if (present(plan_path)) {
-        if (plan_key_matches()) { print("GR_MODULE_PLAN_KEPT\n"); return 0; }
+        if (plan_key_matches()) {
+            u32 safe = safe_mode, profile = profile_mode;
+            int status = read_plan();
+            if (!status && !plan_fits()) status = STATUS_PLAN;
+            safe_mode = safe;
+            profile_mode = profile;
+            if (!status) { print("GR_MODULE_PLAN_KEPT\n"); return 0; }
+            print("GR_MODULE_PLAN_DAMAGED\n");
+            create(plan_damaged_path, 0);
+        }
         syscall6(10, (u32)plan_path, 0, 0, 0, 0, 0);
     }
     /* A new plan needs the effect folders in the RAM copy. */
@@ -741,11 +768,7 @@ static int install(void)
     needed_points = 0;
     /* The modules of SCAN, which the loader reserved memory for. */
     plan_modules();
-    plan_array();
-    layout();
-    if (get32(plan + GRKIT_PLAN_HEADER_WORDS) != size / 4 || get32(plan + GRKIT_PLAN_ICON_CHUNKS) != icon_chunks ||
-        get32(plan + GRKIT_PLAN_MODULE_WORDS) != module_words || get32(plan + GRKIT_PLAN_MODULE_TILES) != module_tiles)
-        return STATUS_PLAN;
+    if (!plan_fits()) return STATUS_PLAN;
     if ((status = relocate())) return status;
     if ((status = check_arrays(&arrays))) return status;
     if ((status = check_firmware())) return status;
@@ -910,9 +933,12 @@ static int scan_and_post(void)
     long mapped = syscall6(192, 0, MAP_SIZE, 3, 1, fd, MAP_BASE >> 12);
     if ((u32)mapped < 0xfffff001U) {
         mapping = (volatile u8 *)mapped;
-        u32 box = relocation_found() ? mailbox() : 0;
-        if (!box) status = status ? status : STATUS_ARRAYS;
-        else {
+        u32 box = 0;
+        /* Before the release of the loader mount, a build that needs the
+           search waits for the second SCAN (start). */
+        if (!relocation_found()) status = relocation.deferred ? STATUS_PLAN_STALE : status ? status : STATUS_RELOCATION;
+        else if (!(box = mailbox())) status = status ? status : STATUS_ARRAYS;
+        if (box) {
             if (!status) status = read_plan();
             if (status) post_failure(box, status);
             else post_plan(box);
@@ -950,9 +976,22 @@ __attribute__((used)) void start(u32 *stack)
     else if (argc == 2 && text_equal(argv[1], "--scan-try")) { scanning = 1; scan_mode = INSTALL_TRY; }
     if (!set_root(root)) status = STATUS_USAGE;
     else if (scanning) {
+        /* The first SCAN of LOAD.SH runs while the loader holds its own
+           mount of the card, which the camera's mount must not meet, and
+           its RAM copy has no package effects yet. A search of the running
+           build takes seconds on a camera, so that SCAN resolves only known
+           addresses and else asks for the effects (STATUS_PLAN_STALE): the
+           second SCAN runs after the release. */
+        relocation.quick = !present(inbox_path);
         if (scan_mode != INSTALL_LAST && other_build(scan_mode))
-            status = scan_mode == INSTALL_KNOWN ? STATUS_OTHER_BUILD : STATUS_RELOCATION;
+            status = relocation.deferred ? STATUS_PLAN_STALE
+                     : scan_mode == INSTALL_KNOWN ? STATUS_OTHER_BUILD : STATUS_RELOCATION;
         else status = scan_and_post();
+        /* A final failure of SCAN also leaves its result for FINISH.SH: the
+           loader then stops without an install. */
+        if (status && status != STATUS_PLAN_STALE && status != STATUS_BUSY && status != STATUS_OTHER_BUILD &&
+            !(scan_mode == INSTALL_TRY && status == STATUS_RELOCATION))
+            create(failed_path, status);
     }
     else if (argc == 2 && text_equal(argv[1], "--import")) status = import_effects();
     else if (installing

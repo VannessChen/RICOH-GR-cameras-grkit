@@ -872,7 +872,8 @@ fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
     // The scripts run on the RAM copy of the card, the root of each installer.
     assert_eq!(
         script,
-        "for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
+        "read t _ </proc/uptime; echo \"$t install-start\" >>/tmp/gc/BOOT.TXT\n\
+         for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
          \x20 /tmp/gc/SCRIPT/GRKIT/$core --known /tmp/gc\n\
          \x20 status=$?\n\
          \x20 case $status in 48) ;; *) break ;; esac\n\
@@ -886,6 +887,7 @@ fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
          \x20 case $status in 47) /tmp/gc/SCRIPT/GRKIT/CORE3.BIN --install /tmp/gc; status=$? ;; esac\n\
          \x20 ;;\n\
          esac\n\
+         read t _ </proc/uptime; echo \"$t install $status\" >>/tmp/gc/BOOT.TXT\n\
          echo GR_MODULE_INSTALL_EXIT_$status\n\
          exit 0\n"
     );
@@ -894,7 +896,8 @@ fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
     // with the status, for LOAD.SH.
     assert_eq!(
         String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"].clone()).unwrap(),
-        "for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
+        "read t _ </proc/uptime; echo \"$t scan-start\" >>/tmp/gc/BOOT.TXT\n\
+         for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
          \x20 /tmp/gc/SCRIPT/GRKIT/$core --scan-known /tmp/gc\n\
          \x20 status=$?\n\
          \x20 case $status in 48) ;; *) break ;; esac\n\
@@ -908,25 +911,26 @@ fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
          \x20 case $status in 47) /tmp/gc/SCRIPT/GRKIT/CORE3.BIN --scan /tmp/gc; status=$? ;; esac\n\
          \x20 ;;\n\
          esac\n\
+         read t _ </proc/uptime; echo \"$t scan $status\" >>/tmp/gc/BOOT.TXT\n\
          echo GR_MODULE_SCAN_EXIT_$status\n\
          exit $status\n"
     );
     // LOAD.SH copies each core file into the RAM copy.
     let load = String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/LOAD.SH"].clone()).unwrap();
-    assert!(load.contains("FINISH.SH CORE1.BIN CORE2.BIN CORE3.BIN; do cp $src/SCRIPT/GRKIT/$f /tmp/gc/SCRIPT/GRKIT/; done\n"));
+    assert!(load.contains("FINISH.SH CORE1.BIN CORE2.BIN CORE3.BIN; do put $src/SCRIPT/GRKIT/$_f /tmp/gc/SCRIPT/GRKIT || return 1; done\n"));
     let gr3 = unpack(&package());
     assert_eq!(
         gr3["SD_ROOT/SCRIPT/GRKIT/SCAN.SH"],
-        b"/tmp/gc/SCRIPT/GRKIT/CORE.BIN --scan /tmp/gc\nstatus=$?\necho GR_MODULE_SCAN_EXIT_$status\nexit $status\n"
+        b"read t _ </proc/uptime; echo \"$t scan-start\" >>/tmp/gc/BOOT.TXT\n/tmp/gc/SCRIPT/GRKIT/CORE.BIN --scan /tmp/gc\nstatus=$?\nread t _ </proc/uptime; echo \"$t scan $status\" >>/tmp/gc/BOOT.TXT\necho GR_MODULE_SCAN_EXIT_$status\nexit $status\n"
     );
     assert_eq!(
         gr3["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"],
-        b"/tmp/gc/SCRIPT/GRKIT/CORE.BIN --install /tmp/gc\nstatus=$?\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
+        b"read t _ </proc/uptime; echo \"$t install-start\" >>/tmp/gc/BOOT.TXT\n/tmp/gc/SCRIPT/GRKIT/CORE.BIN --install /tmp/gc\nstatus=$?\nread t _ </proc/uptime; echo \"$t install $status\" >>/tmp/gc/BOOT.TXT\necho GR_MODULE_INSTALL_EXIT_$status\nexit 0\n"
     );
     assert!(
         String::from_utf8(gr3["SD_ROOT/SCRIPT/GRKIT/LOAD.SH"].clone())
             .unwrap()
-            .contains("FINISH.SH CORE.BIN; do cp ")
+            .contains("FINISH.SH CORE.BIN; do put ")
     );
     assert!(gr3.contains_key("SD_ROOT/SCRIPT/GRKIT/CORE.BIN"));
     assert!(!gr3.contains_key("SD_ROOT/SCRIPT/GRKIT/CORE1.BIN"));
@@ -1036,4 +1040,71 @@ fn module_files_install_from_the_modules_folder() {
     let error = package(&modules).unwrap_err();
     let limit = format!("at most {} modules", grkit_core::runtime::MODULES_MAX);
     assert!(error.to_string().contains(&limit), "{error}");
+}
+
+/// The functions of LOAD.SH run in the shell of the script, so a variable
+/// that a function sets would change the same variable of its caller: a
+/// clock function once overwrote the loop variable of the copy, and the
+/// fast start copied no module. Each variable that a function sets starts
+/// with an underscore, except the ones that are its result.
+#[test]
+fn load_functions_keep_the_variables_of_their_callers() {
+    let files = unpack(&package());
+    let load = String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/LOAD.SH"].clone()).unwrap();
+    let results = ["now", "src"];
+    let mut body = Vec::new();
+    let mut depth = 0;
+    for line in load.lines() {
+        let code = line.split(" #").next().unwrap();
+        if depth == 0 {
+            let Some((name, rest)) = code.split_once("() {") else {
+                continue;
+            };
+            assert!(!name.contains(' '), "{line}");
+            if rest.trim_end().ends_with('}') {
+                body.push(rest.to_owned());
+                continue;
+            }
+            depth = 1;
+            continue;
+        }
+        if code == "}" {
+            depth = 0;
+            continue;
+        }
+        body.push(code.to_owned());
+    }
+    assert!(!body.is_empty());
+    let mut names = Vec::new();
+    for code in &body {
+        let bytes = code.as_bytes();
+        for (i, _) in code.match_indices('=') {
+            let start = code[..i]
+                .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .map_or(0, |p| p + 1);
+            let name = &code[start..i];
+            let before = if start == 0 { b' ' } else { bytes[start - 1] };
+            let comparison =
+                i + 1 < bytes.len() && bytes[i + 1] == b'=' || before == b'!' || before == b'$';
+            if name.is_empty()
+                || comparison
+                || !name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+            {
+                continue;
+            }
+            if !(before == b' ' || before == b';' || before == b'{' || before == b'(') {
+                continue;
+            }
+            names.push(name.to_owned());
+        }
+        for part in code.split("for ").skip(1) {
+            names.push(part.split_whitespace().next().unwrap().to_owned());
+        }
+    }
+    for name in names {
+        assert!(
+            name.starts_with('_') || results.contains(&name.as_str()),
+            "a function of LOAD.SH sets {name}"
+        );
+    }
 }

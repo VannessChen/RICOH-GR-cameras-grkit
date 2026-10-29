@@ -59,5 +59,12 @@ enum install_status {
        plan: LOAD.SH copies them and runs SCAN again. */
     STATUS_PLAN_STALE = 49,
     /* 50 to 55: the module statuses of runtime/module_link.h (GRM_*). */
+    /* The loader stopped or waits: SCAN posted no plan, the plan header is
+       not valid, or INSTALL does not answer. The loader writes this status
+       to INSTALL.ERR itself, with its attempts on the next line
+       (grkit_core::runtime::loader). */
+    STATUS_LOADER_NO_PLAN = 60,
+    STATUS_LOADER_BAD_PLAN = 61,
+    STATUS_LOADER_NO_INSTALL = 62,
 };
 #endif

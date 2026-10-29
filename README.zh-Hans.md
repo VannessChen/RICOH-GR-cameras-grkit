@@ -50,7 +50,7 @@ GR IV Monochrome 不含胶片风格。其他机型和固件版本暂不支持。
 
 只有第一次需要按住 MENU 开机。用 ZIP 更新时，替换卡里的 `SCRIPT` 文件夹即可，设置保存在 `GRKIT` 里。格式化存储卡会删掉 GRKit，格式化前先把 `GRKIT` 备份到电脑。
 
-GRK 没有出现时，先看 [grkit.app](https://grkit.app) 上的常见问题。还是不行的话，提交[设备报告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，附上 `GRKIT/REPORT.TXT` 和 `SCRIPT/GRKIT/INSTALL.ERR`（如果有）。
+GRK 没有出现时，先看 [grkit.app](https://grkit.app) 上的常见问题。还是不行的话，提交[设备报告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，附上 `GRKIT/REPORT.TXT`、`GRKIT/BOOT.TXT` 和 `SCRIPT/GRKIT/INSTALL.ERR`（如果有）。
 
 ## 从源码构建
 

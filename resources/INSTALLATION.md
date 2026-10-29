@@ -71,7 +71,7 @@ The card root has a firmware update file. Turn the camera off. Remove each `.bin
 2. Look for GRK in ADJ. The GRKit settings are also in the GRKit section of the Customize tab of MENU.
 3. If the camera did not show Mode Set Command in step 3, do step 3 again.
 4. Make sure that the card root has the `SCRIPT` folder. Copy all the contents of `SD_ROOT`, including `SCRIPT`.
-5. If the card has `SCRIPT/GRKIT/INSTALL.ERR`, GRKit did not install. Make sure that the package is for the firmware version of your camera. To see the firmware version, open the camera menu. If the version is correct, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR` and `GRKIT/REPORT.TXT`.
+5. If the card has `SCRIPT/GRKIT/INSTALL.ERR`, GRKit did not install. Make sure that the package is for the firmware version of your camera. To see the firmware version, open the camera menu. If the version is correct, send a [device report](https://github.com/ahonn/grkit/issues/new?template=device-report.yml) with all the lines of `INSTALL.ERR`, `GRKIT/REPORT.TXT`, and `GRKIT/BOOT.TXT`.
 6. GRKit runs only on the official Ricoh firmware. It does not run on modified firmware.
 
 ### GRKit stops working after you format the card

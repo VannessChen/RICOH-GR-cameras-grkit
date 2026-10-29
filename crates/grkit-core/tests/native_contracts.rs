@@ -818,6 +818,18 @@ fn the_package_scripts_test_the_install_statuses_of_the_core() {
             "STATUS_OTHER_BUILD",
             grkit_core::runtime::STATUS_OTHER_BUILD,
         ),
+        (
+            "STATUS_LOADER_NO_PLAN",
+            grkit_core::runtime::STATUS_LOADER_NO_PLAN,
+        ),
+        (
+            "STATUS_LOADER_BAD_PLAN",
+            grkit_core::runtime::STATUS_LOADER_BAD_PLAN,
+        ),
+        (
+            "STATUS_LOADER_NO_INSTALL",
+            grkit_core::runtime::STATUS_LOADER_NO_INSTALL,
+        ),
     ] {
         let line = format!("    {name} = {value},");
         assert!(header.lines().any(|l| l == line), "{line}");

@@ -155,6 +155,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
     let paths = [
         ("PLAN_PATH", PACKAGE_DIRECTORY, "/PLAN.BIN"),
         ("PLAN_TMP_PATH", PACKAGE_DIRECTORY, "/PLAN.TMP"),
+        ("PLAN_DAMAGED_PATH", PACKAGE_DIRECTORY, "/PLAN.BAD"),
         ("LOCK_PATH", PACKAGE_DIRECTORY, "/INSTALL.LCK"),
         ("DONE_PATH", PACKAGE_DIRECTORY, "/INSTALL.OK"),
         ("FAILED_PATH", PACKAGE_DIRECTORY, "/INSTALL.ERR"),

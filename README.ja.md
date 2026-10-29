@@ -50,7 +50,7 @@ GR IV Monochrome ではフィルムルックは使えません。ほかの機種
 
 MENU ボタンを押しながら電源を入れるのは初回だけです。ZIP でアップデートするときは、カードの `SCRIPT` フォルダーを入れ替えてください。設定は `GRKIT` に残ります。カードをフォーマットすると GRKit も消えるので、先に `GRKIT` をパソコンにコピーしておいてください。
 
-GRK が表示されないときは、まず [grkit.app](https://grkit.app) の FAQ をご覧ください。それでも解決しない場合は、`GRKIT/REPORT.TXT` と `SCRIPT/GRKIT/INSTALL.ERR`（ある場合）を添えて[デバイスレポート](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)を送ってください。
+GRK が表示されないときは、まず [grkit.app](https://grkit.app) の FAQ をご覧ください。それでも解決しない場合は、`GRKIT/REPORT.TXT`、`GRKIT/BOOT.TXT`、`SCRIPT/GRKIT/INSTALL.ERR`（ある場合）を添えて[デバイスレポート](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)を送ってください。
 
 ## ソースからのビルド
 

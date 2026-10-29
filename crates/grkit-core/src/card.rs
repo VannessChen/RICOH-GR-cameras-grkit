@@ -40,6 +40,16 @@ pub const LINUX_MOUNT: &str = "/tmp/m";
 pub const LINUX_LOAD_COPY: &str = "/tmp/l";
 /// The RAM copy of the card on Linux: the root of SCAN and INSTALL.
 pub const LINUX_STAGE: &str = linux_stage!();
+/// On the slow path, the uptime at which Linux first ran a request of the
+/// loader.
+pub const LINUX_SLOW_START: &str = "/tmp/t0";
+/// The marker files of the fast path in the package folder, so that a new
+/// package starts on the slow path again. FAST.ON holds the measured time in
+/// centiseconds from the first request to the camera's mount; FAST.OFF turns
+/// the fast path off; FAST.TRY is a fast start that has not finished.
+pub const FAST_ON: &str = "FAST.ON";
+pub const FAST_OFF: &str = "FAST.OFF";
+pub const FAST_TRY: &str = "FAST.TRY";
 /// The longest card root that an installer accepts, in bytes.
 pub const CARD_ROOT_MAX: usize = 32;
 const _: () = assert!(LINUX_CARD.len() <= CARD_ROOT_MAX && LINUX_STAGE.len() <= CARD_ROOT_MAX);

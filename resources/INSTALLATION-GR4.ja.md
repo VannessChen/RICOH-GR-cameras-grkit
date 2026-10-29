@@ -70,7 +70,7 @@ GRKit はエフェクトを `GRKIT/EFFECTS` フォルダーに保存します。
 2. GRK は ADJ モードにあります。GRKit の設定は MENU のカスタマイズタブの GRKit にもあります。
 3. 手順 3 で Mode Set Command が表示されなかった場合は、手順 3 をやり直します。
 4. カードのルートに `SCRIPT` フォルダーがあることを確認します。`SCRIPT` を含めて、`SD_ROOT` の中身をすべてコピーします。
-5. カードに `SCRIPT/GRKIT/INSTALL.ERR` がある場合、GRKit はインストールされていません。カメラに対応するファームウェアのバージョンが表示されていることを確認します。ファームウェアのバージョンは、カメラのメニューで確認できます。バージョンが対応している場合は、`INSTALL.ERR` と `GRKIT/REPORT.TXT` の内容をすべて添えて[デバイスレポート](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)を送ってください。
+5. カードに `SCRIPT/GRKIT/INSTALL.ERR` がある場合、GRKit はインストールされていません。カメラに対応するファームウェアのバージョンが表示されていることを確認します。ファームウェアのバージョンは、カメラのメニューで確認できます。バージョンが対応している場合は、`INSTALL.ERR`、`GRKIT/REPORT.TXT`、`GRKIT/BOOT.TXT` の内容をすべて添えて[デバイスレポート](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)を送ってください。
 6. GRKit は Ricoh の公式ファームウェアでのみ動作します。改造されたファームウェアでは動作しません。
 
 ### カードをフォーマットした後、GRKit が動かない

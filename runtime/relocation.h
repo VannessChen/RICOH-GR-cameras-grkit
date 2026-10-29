@@ -59,9 +59,11 @@ struct relocation_state {
     u32 data_source, data_size, bss_start, bss_end, image_end, tail;
     u32 *window_at, *symbol_at;
     /* The window addresses that an earlier search of the same build found,
-       or 0. After a resolve, `searched` tells whether the search ran. */
+       or 0. After a resolve, `searched` tells whether the search ran. With
+       `quick`, a build that needs the search does not get it: the resolve
+       fails and `deferred` is set. */
     const u32 *hint;
-    u32 searched;
+    u32 searched, quick, deferred;
     u32 failures;
     struct relocation_failure failure[RELOCATION_REPORT];
 };
@@ -164,7 +166,13 @@ static int relocation_known(const struct relocation_tables *t, struct relocation
 static void relocation_search(const struct relocation_tables *t, struct relocation_state *s)
 {
     s->searched = 0;
+    s->deferred = 0;
     if (relocation_known(t, s, 0) || (s->hint && relocation_known(t, s, s->hint))) return;
+    if (s->quick) {
+        s->deferred = 1;
+        for (u32 w = 0; w < t->window_count; ++w) s->window_at[w] = 0;
+        return;
+    }
     s->searched = 1;
     for (u32 w = 0; w < t->window_count; ++w) {
         const struct relocation_window *window = &t->windows[w];
@@ -248,6 +256,8 @@ static int relocation_resolve(const struct relocation_tables *t, struct relocati
     s->failures = 0;
     if (!relocation_startup(t, s)) return 0;
     relocation_search(t, s);
+    /* A deferred search leaves no window to resolve from. */
+    if (s->deferred) return 0;
     u32 tail = RELOCATION_NONE;
     for (u32 symbol = 0; symbol < t->symbol_count; ++symbol) s->symbol_at[symbol] = 0;
     for (u32 i = 0; i < t->source_count; ++i) {

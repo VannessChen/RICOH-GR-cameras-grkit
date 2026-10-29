@@ -50,7 +50,7 @@ GR IV Monochrome에서는 필름 룩을 쓸 수 없습니다. 다른 기종이�
 
 MENU 버튼을 누른 채 전원을 켜는 것은 처음 한 번뿐입니다. ZIP으로 업데이트할 때는 카드의 `SCRIPT` 폴더를 바꿔 넣으세요. 설정은 `GRKIT`에 남습니다. 카드를 포맷하면 GRKit도 지워지므로 먼저 `GRKIT`을 컴퓨터에 복사해 두세요.
 
-GRK가 보이지 않으면 먼저 [grkit.app](https://grkit.app)의 FAQ를 확인하세요. 그래도 해결되지 않으면 `GRKIT/REPORT.TXT`와 `SCRIPT/GRKIT/INSTALL.ERR`(있는 경우)을 첨부해 [기기 리포트](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)를 보내 주세요.
+GRK가 보이지 않으면 먼저 [grkit.app](https://grkit.app)의 FAQ를 확인하세요. 그래도 해결되지 않으면 `GRKIT/REPORT.TXT`, `GRKIT/BOOT.TXT`, `SCRIPT/GRKIT/INSTALL.ERR`(있는 경우)을 첨부해 [기기 리포트](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)를 보내 주세요.
 
 ## 소스에서 빌드
 

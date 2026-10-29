@@ -71,7 +71,7 @@ GRKit 把效果保存在 `GRKIT/EFFECTS` 文件夹中。新的安装包会加入
 2. 在 ADJ 模式中找 GRK。GRKit 的设置也在 MENU 自定义页的 GRKit 小节中。
 3. 如果第 3 步中相机没有显示 Mode Set Command，重新执行第 3 步。
 4. 确认存储卡根目录中有 `SCRIPT` 文件夹。复制 `SD_ROOT` 中的全部内容，包括 `SCRIPT`。
-5. 如果存储卡中有 `SCRIPT/GRKIT/INSTALL.ERR`，表示 GRKit 没有安装成功。确认包与相机的固件版本对应。在相机菜单中可以查看固件版本。如果版本正确，请提交[设备报告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，并附上 `INSTALL.ERR` 和 `GRKIT/REPORT.TXT` 中的全部内容。
+5. 如果存储卡中有 `SCRIPT/GRKIT/INSTALL.ERR`，表示 GRKit 没有安装成功。确认包与相机的固件版本对应。在相机菜单中可以查看固件版本。如果版本正确，请提交[设备报告](https://github.com/ahonn/grkit/issues/new?template=device-report.yml)，并附上 `INSTALL.ERR`、`GRKIT/REPORT.TXT` 和 `GRKIT/BOOT.TXT` 中的全部内容。
 6. GRKit 只能在 Ricoh 官方固件上运行，不能在修改过的固件上运行。
 
 ### 格式化存储卡后 GRKit 不工作
