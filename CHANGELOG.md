@@ -1,3 +1,14 @@
+## 1.3.2 (2026-10-29)
+
+### Fixes
+
+- The viewfinder shows DATE while Date Imprint is on.
+- Framing has a 7:6 ratio, the 6x7 frame of medium-format film.
+- Grain has an Extra Strong level, half again as strong as Strong.
+- The histogram reaches its right edge and shows the clipping line again while a Film Look effect is on.
+- GRKit is in Korean on a camera set to 한국어, and on grkit.app and in its guides, and a module built for an earlier GRKit must be built again with a Korean text file.
+- GRKit loads again on the first starts with a new card or after an update, where 1.3.1 could stop with no GRK in ADJ.
+
 ## 1.3.1 (2026-10-28)
 
 ### Fixes
