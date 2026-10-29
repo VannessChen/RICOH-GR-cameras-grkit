@@ -51,6 +51,7 @@ static const char imported_path[] = IMPORTED_PATH;
 static const char data_path[] = DATA_PATH;
 static const char plan_path[] = PLAN_PATH;
 static const char plan_tmp[] = PLAN_TMP_PATH;
+static const char ram_plan_path[] = RAM_PLAN_PATH;
 static const char lock_path[] = LOCK_PATH;
 static const char done_path[] = DONE_PATH;
 static const char failed_path[] = FAILED_PATH;
@@ -160,13 +161,22 @@ static int scan(void)
         put32(entry + GRKIT_PLANNED_CHOICE, listed_choice[i]);
         put32(entry + GRKIT_PLANNED_RECORD, listed_record[i]);
     }
+    /* The whole plan goes to RAM, then only its header to the card. The
+       loader starts INSTALL when the header appears on the card, so INSTALL
+       always finds the whole plan. A card write of the plan takes about
+       0.35 s on a camera. */
     u32 done = 0, total = effects_at + listed_count * GRKIT_PLANNED_EFFECT_SIZE;
-    while (done < total) {
-        long n = syscall6(4, fd, (u32)(plan + done), total - done, 0, 0, 0);
+    if (!write_file(ram_plan_path, plan, total)) {
+        syscall6(6, fd, 0, 0, 0, 0, 0);
+        syscall6(10, (u32)plan_tmp, 0, 0, 0, 0, 0);
+        return STATUS_PLAN_WRITE;
+    }
+    while (done < GRKIT_PLAN_HEADER_SIZE) {
+        long n = syscall6(4, fd, (u32)(plan + done), GRKIT_PLAN_HEADER_SIZE - done, 0, 0, 0);
         if (n <= 0) break;
         done += n;
     }
-    if (syscall6(6, fd, 0, 0, 0, 0, 0) < 0 || done < total ||
+    if (syscall6(6, fd, 0, 0, 0, 0, 0) < 0 || done < GRKIT_PLAN_HEADER_SIZE ||
         syscall6(38, (u32)plan_tmp, (u32)plan_path, 0, 0, 0, 0) < 0) {
         syscall6(10, (u32)plan_tmp, 0, 0, 0, 0, 0);
         return STATUS_PLAN_WRITE;
@@ -290,10 +300,12 @@ static int relocate(void)
 /* SCAN wrote the plan at this power-on, and the loader allocated the arrays
    for it. INSTALL takes the effects from the plan, so that both steps install
    the same effects. */
+/* The plan of this start from RAM. Its header must be the header on the card,
+   which the loader allocated the arrays from. */
 static int read_plan(void)
 {
-    u32 have = 0; long got = 0; u8 extra;
-    long fd = syscall6(5, (u32)plan_path, 0x8800, 0, 0, 0, 0);
+    u32 have = 0; long got = 0; u8 extra, header[GRKIT_PLAN_HEADER_SIZE];
+    long fd = syscall6(5, (u32)ram_plan_path, 0x8800, 0, 0, 0, 0);
     if (fd < 0) return STATUS_PLAN;
     while (have < sizeof(plan)) {
         got = syscall6(3, fd, (u32)(plan + have), sizeof(plan) - have, 0, 0, 0);
@@ -304,6 +316,8 @@ static int read_plan(void)
     syscall6(6, fd, 0, 0, 0, 0, 0);
     if (got < 0 || (have == sizeof(plan) && got) || have < GRKIT_PLAN_HEADER_SIZE ||
         get32(plan + GRKIT_PLAN_MAGIC) != GRKIT_PLAN_MAGIC_VALUE) return STATUS_PLAN;
+    if (read_text(plan_path, header, sizeof(header)) != (long)sizeof(header) || !equal(header, plan, sizeof(header)))
+        return STATUS_PLAN;
     count = get32(plan + GRKIT_PLAN_COUNT);
     safe_mode = get32(plan + GRKIT_PLAN_MODES) & GRKIT_PLAN_SAFE;
     profile_mode = (get32(plan + GRKIT_PLAN_MODES) & GRKIT_PLAN_PROFILE) != 0;

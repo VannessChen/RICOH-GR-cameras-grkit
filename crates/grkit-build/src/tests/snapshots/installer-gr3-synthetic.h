@@ -72,6 +72,7 @@ static const u32 guard_symbols[] = {};
 #define RTOS_IDENTITY 0x53002038U
 #define RTOS_IDENTITY_COUNT 0U
 #define PLAN_PATH "/media/storage1/SCRIPT/GRKIT/PLAN.BIN"
+#define RAM_PLAN_PATH "/tmp/grkit-plan.bin"
 #define PLAN_TMP_PATH "/media/storage1/SCRIPT/GRKIT/PLAN.TMP"
 #define LOCK_PATH "/media/storage1/SCRIPT/GRKIT/INSTALL.LCK"
 #define DONE_PATH "/media/storage1/SCRIPT/GRKIT/INSTALL.OK"

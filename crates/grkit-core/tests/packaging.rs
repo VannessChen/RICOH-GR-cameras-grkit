@@ -843,6 +843,97 @@ fn dump_packages_hold_the_tool_files_and_their_checksums() {
 /// A GR IV package has the installer of each GR IV build, in release order,
 /// and the script that selects one at each power-on. A GR III package keeps
 /// the single installer and script of earlier packages.
+/// INSTALL.SH of a package with several builds tries the core of the last
+/// start first, and keeps the core that installed. A record of another build,
+/// after a firmware update, or of a name that the package does not hold, only
+/// costs the check of that core.
+#[cfg(unix)]
+#[test]
+fn install_tries_the_core_of_the_last_start_first() {
+    let files = unpack(
+        &assemble(
+            &gr4_runtimes(),
+            &EffectSet::default(),
+            &testing::official_modules(),
+            &camera::GR4,
+            &english(),
+        )
+        .unwrap()
+        .bytes,
+    );
+    let card = tempfile::tempdir().unwrap();
+    let root = card.path().to_str().unwrap();
+    let script = String::from_utf8(files["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"].clone())
+        .unwrap()
+        .replace("/media/storage1", root)
+        .replace("</proc/uptime", "</dev/null");
+    let package = card.path().join("SCRIPT/GRKIT");
+    std::fs::create_dir_all(&package).unwrap();
+    std::fs::create_dir_all(card.path().join("GRKIT")).unwrap();
+    std::fs::write(package.join("INSTALL.SH"), script).unwrap();
+    // A stand-in core: it logs its run and installs only on its build.
+    for (index, build) in ["1.11", "1.20", "0528"].iter().enumerate() {
+        let core = package.join(format!("CORE{}.BIN", index + 1));
+        std::fs::write(
+            &core,
+            format!(
+                "#!/bin/sh\necho CORE{} $1 >>{root}/RUNS\n[ \"$BUILD\" = {build} ] && exit 0\nexit 48\n",
+                index + 1
+            ),
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&core, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let start = |build: &str| {
+        let _ = std::fs::remove_file(card.path().join("RUNS"));
+        let output = std::process::Command::new("sh")
+            .arg(package.join("INSTALL.SH"))
+            .env("BUILD", build)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let runs = std::fs::read_to_string(card.path().join("RUNS")).unwrap_or_default();
+        let record =
+            std::fs::read_to_string(card.path().join("GRKIT/CORE.TXT")).unwrap_or_default();
+        (runs, record)
+    };
+    // The first start tries each core in order and keeps the one that installed.
+    assert_eq!(
+        start("0528"),
+        (
+            "CORE1 --known\nCORE2 --known\nCORE3 --known\n".into(),
+            "CORE3.BIN\n".into()
+        )
+    );
+    // The next start runs only that core.
+    assert_eq!(
+        start("0528"),
+        ("CORE3 --known\n".into(), "CORE3.BIN\n".into())
+    );
+    // After a firmware update, the kept core is checked once, then the others.
+    assert_eq!(
+        start("1.20"),
+        (
+            "CORE3 --known\nCORE1 --known\nCORE2 --known\n".into(),
+            "CORE2.BIN\n".into()
+        )
+    );
+    // A record that names no core of the package runs nothing of it.
+    std::fs::write(card.path().join("GRKIT/CORE.TXT"), "../../bin/sh\n").unwrap();
+    assert_eq!(
+        start("1.11"),
+        ("CORE1 --known\n".into(), "CORE1.BIN\n".into())
+    );
+    // A build that no core names keeps the record and goes on to --try.
+    let (runs, record) = start("2.00");
+    assert!(
+        runs.starts_with("CORE1 --known\nCORE2 --known\nCORE3 --known\nCORE1 --try\n"),
+        "{runs}"
+    );
+    assert_eq!(record, "CORE1.BIN\n");
+}
+
 #[test]
 fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
     let gr4 = |runtimes: &[VerifiedRuntime]| {
@@ -899,11 +990,19 @@ fn a_package_holds_the_core_file_of_each_build_of_its_camera() {
     wrapped(
         &files["SD_ROOT/SCRIPT/GRKIT/INSTALL.SH"],
         "install",
-        "for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
-         \x20 /media/storage1/SCRIPT/GRKIT/$core --known\n\
-         \x20 status=$?\n\
-         \x20 case $status in 48) ;; *) break ;; esac\n\
-         done\n\
+        "k=/media/storage1/GRKIT/CORE.TXT\n\
+         last=; [ -e $k ] && read last _ <$k\n\
+         status=48; used=\n\
+         case \" CORE1.BIN CORE2.BIN CORE3.BIN \" in *\" $last \"*) /media/storage1/SCRIPT/GRKIT/$last --known; status=$?; used=$last ;; esac\n\
+         if [ $status = 48 ]; then\n\
+         \x20 for core in CORE1.BIN CORE2.BIN CORE3.BIN; do\n\
+         \x20   [ \"$core\" = \"$last\" ] && continue\n\
+         \x20   /media/storage1/SCRIPT/GRKIT/$core --known\n\
+         \x20   status=$?; used=$core\n\
+         \x20   case $status in 48) ;; *) break ;; esac\n\
+         \x20 done\n\
+         fi\n\
+         [ $status = 0 ] && [ \"$used\" != \"$last\" ] && echo $used >$k\n\
          case $status in 48)\n\
          \x20 for core in CORE1.BIN CORE2.BIN; do\n\
          \x20   /media/storage1/SCRIPT/GRKIT/$core --try\n\

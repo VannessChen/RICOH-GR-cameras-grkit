@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{bail, ensure, Context, Result};
 use grkit_core::{
     artwork::{grkit_pixels, modules_pixels, off_pixels, version_pixels},
-    card::{LINUX_DATA_DIRECTORY, LINUX_DIRECTORY, LINUX_LEGACY_DIRECTORY},
+    card::{LINUX_DATA_DIRECTORY, LINUX_DIRECTORY, LINUX_LEGACY_DIRECTORY, LINUX_RAM_PLAN},
     runtime::{icon_stride, HOST_ICON_COUNT, ICONS_PER_CHUNK, MAX_CHUNKS, MAX_COUNT},
 };
 use std::fmt::Write;
@@ -146,6 +146,7 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
     // the data of the person in GRKIT.
     let paths = [
         ("PLAN_PATH", LINUX_DIRECTORY, "/PLAN.BIN"),
+        ("RAM_PLAN_PATH", LINUX_RAM_PLAN, ""),
         ("PLAN_TMP_PATH", LINUX_DIRECTORY, "/PLAN.TMP"),
         ("LOCK_PATH", LINUX_DIRECTORY, "/INSTALL.LCK"),
         ("DONE_PATH", LINUX_DIRECTORY, "/INSTALL.OK"),

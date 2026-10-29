@@ -54,6 +54,8 @@ pub const BOOT_LOG: &str = "BOOT.TXT";
 /// The most lines of the boot log, about 20 starts. A start that finds more
 /// keeps the last three quarters.
 const BOOT_LOG_LINES: u32 = 400;
+/// The core file that installed at the last start, in the data folder.
+const CORE_CHOICE: &str = "CORE.TXT";
 /// The marker in RAM of the first SCAN.SH of a power-on.
 const BOOT_MARK: &str = "/tmp/grkit-boot";
 
@@ -89,6 +91,12 @@ pub fn core_path_of(index: usize, count: usize) -> String {
 /// After Linux deletes a file in the folder, the camera does not find the next
 /// new name that it looks up there, and it keeps that miss. So `SCAN.SH`, the
 /// first script of a power-on, looks up each core file before it scans.
+///
+/// A core that installed with `--known` goes into `CORE_CHOICE`, and the next
+/// start tries it first. A core of another build takes seconds to rule out on
+/// GR IV, and the camera keeps its build until a firmware update. The record
+/// names only a core of the package, and `--known` checks the build again, so
+/// a stale record costs only that check.
 ///
 /// Both scripts add their start and the status of the installer to the boot
 /// log (`BOOT_LOG`).
@@ -140,11 +148,19 @@ pub fn package_runtime_files(binaries: &[&[u8]], icon_stride: usize) -> Files {
                 single("scan")
             ),
             format!(
-                "for core in {all}; do\n\
-                 \x20 {LINUX_DIRECTORY}/$core --known\n\
-                 \x20 status=$?\n\
-                 \x20 case $status in {other}) ;; *) break ;; esac\n\
-                 done\n\
+                "k={LINUX_DATA_DIRECTORY}/{CORE_CHOICE}\n\
+                 last=; [ -e $k ] && read last _ <$k\n\
+                 status={other}; used=\n\
+                 case \" {all} \" in *\" $last \"*) {LINUX_DIRECTORY}/$last --known; status=$?; used=$last ;; esac\n\
+                 if [ $status = {other} ]; then\n\
+                 \x20 for core in {all}; do\n\
+                 \x20   [ \"$core\" = \"$last\" ] && continue\n\
+                 \x20   {LINUX_DIRECTORY}/$core --known\n\
+                 \x20   status=$?; used=$core\n\
+                 \x20   case $status in {other}) ;; *) break ;; esac\n\
+                 \x20 done\n\
+                 fi\n\
+                 [ $status = 0 ] && [ \"$used\" != \"$last\" ] && echo $used >$k\n\
                  case $status in {other})\n\
                  \x20 for core in {tried}; do\n\
                  \x20   {LINUX_DIRECTORY}/$core --try\n\

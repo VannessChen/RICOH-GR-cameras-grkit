@@ -46,6 +46,12 @@ pub const LINUX_DATA_DIRECTORY: &str = concat!(linux_card!(), data_folder!());
 /// no effects library.
 pub const LINUX_LEGACY_DIRECTORY: &str = concat!(linux_card!(), "SCRIPT/PLUGINS");
 
+/// The whole plan of a start, in RAM on Linux. SCAN writes it and INSTALL
+/// reads it. The card gets only the plan header, which the loader reads, so a
+/// start writes no large file to the card. RAM is empty at each power-on, so
+/// a plan never reaches another start.
+pub const LINUX_RAM_PLAN: &str = "/tmp/grkit-plan.bin";
+
 /// The files of the package folder on the card.
 pub const LOADER_FILE: &str = concat!(package_folder!("/"), "/LOADER.TTL");
 pub const CORE_FILE: &str = concat!(package_folder!("/"), "/CORE.BIN");
