@@ -24,7 +24,7 @@ GRKit 為理光 GR III、GR IIIx 與 GR IV 加上底片濾鏡、XPan 等畫面�
 - **加印日期**：在照片上印日期，有經典、GR1s 點陣與 GR II 三種樣式。
 - **粒紋感**：弱、中、強、特強四段，粒紋大小可選自動、小、中、大。
 
-開機後 GRKit 需要 3 到 6 秒載入，在這之前相機使用原本的設定。完整設定在 MENU 自訂頁最後的 GRKit 小節。想自己寫模組，請見 [Writing a module](docs/modules.md)（英文）。
+開機後 GRKit 需要約 8 到 10 秒載入，GR IV 以及安裝或更新後的第一次開機會更久。在這之前相機使用原本的設定。完整設定在 MENU 自訂頁最後的 GRKit 小節。想自己寫模組，請見 [Writing a module](docs/modules.md)（英文）。
 
 ## 支援機型
 

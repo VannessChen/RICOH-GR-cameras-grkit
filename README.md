@@ -24,7 +24,7 @@ Press the ADJ lever while shooting and pick the sixth item, GRK.
 - **Date Imprint**: the date on the photo in classic, GR1s dot-matrix, or GR II style.
 - **Grain**: film grain in four strengths and four sizes (Auto, Small, Medium, Large).
 
-GRKit takes 3 to 6 seconds to load after power-on. Until then, the camera uses its own settings. All the settings are in the GRKit section at the end of the Customize tab in MENU. To write your own module, see [Writing a module](docs/modules.md).
+GRKit takes about 8 to 10 seconds to load after power-on, and longer on GR IV or on the first start after an install or update. Until then, the camera uses its own settings. All the settings are in the GRKit section at the end of the Customize tab in MENU. To write your own module, see [Writing a module](docs/modules.md).
 
 ## Supported cameras
 
