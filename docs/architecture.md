@@ -51,27 +51,16 @@ A build whose code moved only a little runs the runtime of another build through
 
 ## Installation
 
-At each power-on, a loader script in the RTOS runs three steps on Linux and stays resident:
+At each power-on, a loader script in the RTOS waits until the camera mounts the card. Then it runs two steps on Linux and stays resident:
 
-1. `LOAD.SH` copies the package and the data folder into RAM.
-2. SCAN lists the modules and the effects and writes an allocation plan. The loader allocates the arrays of the plan in the RTOS.
-3. INSTALL links the modules, writes the effect records and the icons, restores the saved settings, and installs the hooks last.
+1. SCAN lists the modules and the effects and writes an allocation plan. A new package also copies its effects into the effects library. The loader allocates the arrays of the plan in the RTOS.
+2. INSTALL links the modules, writes the effect records and the icons, restores the saved settings, and installs the hooks last.
 
-After INSTALL, `FINISH.SH` copies the results to the card and imports the new effects of the package into the effects library. The resident loader then saves the settings when they change.
+The resident loader then saves the settings when they change.
 
 INSTALL changes nothing on a firmware that it does not expect. Each address must resolve in the running image, and each hook site must hold its stock instruction. Each hook belongs to one extension point, and INSTALL installs only the points that the loaded modules need. When a camera has several targets, its package holds the installer of each, and the installer of the running build runs.
 
-A start keeps the plan of an earlier start when nothing it depends on changed, so it reads no effect file. A kept plan that does not fit the start is made again.
-
 The loader writes `INSTALL.ERR` from the RTOS before each step and removes it after the install. So a start that stops leaves its step on the card. The scripts also write a boot log, `GRKIT/BOOT.TXT`, with the time of each step.
-
-### Fast and slow path
-
-The camera mounts the card on Linux about 2 s after Linux runs commands. To load earlier, the loader can mount the card itself, copy what SCAN needs, and release the card before the camera's mount. This is the fast path. The camera's own mount fails while another mount holds the card, and a release after that failure stops Linux. So the fast path is the one step that can stop a start.
-
-The rule is that an optimization may not apply, but it must not stop GRKit from loading. The loader takes the fast path only with evidence that it fits.
-
-A new package starts on the slow path, after the camera's mount, as GRKit 1.3.0 did, and that start measures whether the fast path fits. A fast start gives up its mount at a deadline before the measured camera mount and then goes on as a slow start. A fast start can stop in its release, come close to the camera's mount, or not install. Then the fast path stays off until the next package. Slow work, such as the copy of the effects or a relocation search, runs after the release.
 
 ### Card layout
 

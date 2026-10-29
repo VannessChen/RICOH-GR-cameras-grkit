@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{bail, ensure, Context, Result};
 use grkit_core::{
     artwork::{grkit_pixels, modules_pixels, off_pixels, version_pixels},
-    card::{CARD_ROOT_MAX, DATA_DIRECTORY, LEGACY_DIRECTORY, LINUX_CARD, PACKAGE_DIRECTORY},
+    card::{LINUX_DATA_DIRECTORY, LINUX_DIRECTORY, LINUX_LEGACY_DIRECTORY},
     runtime::{icon_stride, HOST_ICON_COUNT, ICONS_PER_CHUNK, MAX_CHUNKS, MAX_COUNT},
 };
 use std::fmt::Write;
@@ -143,42 +143,33 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         );
     }
     // The card layout (grkit_core::card): the package in SCRIPT/GRKIT, and
-    // the data of the person in GRKIT. Each path is relative to the card
-    // root that the installer takes as its argument: the RAM copy of the
-    // card, or the card itself for the import after the camera mounts it.
-    writeln!(
-        result,
-        "#define CARD_ROOT {}\n#define CARD_ROOT_MAX {}U",
-        serde_json::to_string(LINUX_CARD)?,
-        CARD_ROOT_MAX
-    )?;
+    // the data of the person in GRKIT.
     let paths = [
-        ("PLAN_PATH", PACKAGE_DIRECTORY, "/PLAN.BIN"),
-        ("PLAN_TMP_PATH", PACKAGE_DIRECTORY, "/PLAN.TMP"),
-        ("PLAN_DAMAGED_PATH", PACKAGE_DIRECTORY, "/PLAN.BAD"),
-        ("LOCK_PATH", PACKAGE_DIRECTORY, "/INSTALL.LCK"),
-        ("DONE_PATH", PACKAGE_DIRECTORY, "/INSTALL.OK"),
-        ("FAILED_PATH", PACKAGE_DIRECTORY, "/INSTALL.ERR"),
-        ("INBOX_PATH", PACKAGE_DIRECTORY, "/EFFECTS"),
-        ("PACKAGE_PATH", PACKAGE_DIRECTORY, "/PACKAGE.TXT"),
-        ("DATA_PATH", DATA_DIRECTORY, ""),
-        ("IMPORTED_PATH", DATA_DIRECTORY, "/IMPORTED.TXT"),
-        ("LIBRARY_PATH", DATA_DIRECTORY, "/EFFECTS"),
-        ("STATE_PATH", DATA_DIRECTORY, "/STATE.TXT"),
-        ("STATE_TMP_PATH", DATA_DIRECTORY, "/STATE.TMP"),
-        ("REPORT_PATH", DATA_DIRECTORY, "/REPORT.TXT"),
-        ("RELOCATION_PATH", DATA_DIRECTORY, "/RELOC.BIN"),
-        ("PLAN_KEY_PATH", DATA_DIRECTORY, "/PLAN.KEY"),
-        ("LIST_PATH", DATA_DIRECTORY, "/LIST.TXT"),
-        ("SAFE_PATH", DATA_DIRECTORY, "/SAFE"),
-        ("SAFE_TEXT_PATH", DATA_DIRECTORY, "/SAFE.TXT"),
-        ("PROFILE_PATH", DATA_DIRECTORY, "/PROFILE"),
-        ("PROFILE_TEXT_PATH", DATA_DIRECTORY, "/PROFILE.TXT"),
-        ("LEGACY_STATE_PATH", LEGACY_DIRECTORY, "/STATE.TXT"),
-        ("LEGACY_STATE_TMP_PATH", LEGACY_DIRECTORY, "/STATE.TMP"),
-        ("LEGACY_EFFECTS_PATH", LEGACY_DIRECTORY, "/EFFECTS"),
-        ("MODULES_PATH", DATA_DIRECTORY, "/MODULES"),
-        ("PACKAGE_MODULES_PATH", PACKAGE_DIRECTORY, "/MODULES"),
+        ("PLAN_PATH", LINUX_DIRECTORY, "/PLAN.BIN"),
+        ("PLAN_TMP_PATH", LINUX_DIRECTORY, "/PLAN.TMP"),
+        ("LOCK_PATH", LINUX_DIRECTORY, "/INSTALL.LCK"),
+        ("DONE_PATH", LINUX_DIRECTORY, "/INSTALL.OK"),
+        ("FAILED_PATH", LINUX_DIRECTORY, "/INSTALL.ERR"),
+        ("INBOX_PATH", LINUX_DIRECTORY, "/EFFECTS"),
+        ("PACKAGE_PATH", LINUX_DIRECTORY, "/PACKAGE.TXT"),
+        ("DATA_PATH", LINUX_DATA_DIRECTORY, ""),
+        ("IMPORTED_PATH", LINUX_DATA_DIRECTORY, "/IMPORTED.TXT"),
+        ("LIBRARY_PATH", LINUX_DATA_DIRECTORY, "/EFFECTS"),
+        ("STATE_PATH", LINUX_DATA_DIRECTORY, "/STATE.TXT"),
+        ("STATE_TMP_PATH", LINUX_DATA_DIRECTORY, "/STATE.TMP"),
+        ("REPORT_PATH", LINUX_DATA_DIRECTORY, "/REPORT.TXT"),
+        ("RELOCATION_PATH", LINUX_DATA_DIRECTORY, "/RELOC.BIN"),
+        ("SAFE_PATH", LINUX_DATA_DIRECTORY, "/SAFE"),
+        ("SAFE_TEXT_PATH", LINUX_DATA_DIRECTORY, "/SAFE.TXT"),
+        ("PROFILE_PATH", LINUX_DATA_DIRECTORY, "/PROFILE"),
+        ("PROFILE_TEXT_PATH", LINUX_DATA_DIRECTORY, "/PROFILE.TXT"),
+        ("LEGACY_STATE_PATH", LINUX_LEGACY_DIRECTORY, "/STATE.TXT"),
+        (
+            "LEGACY_STATE_TMP_PATH",
+            LINUX_LEGACY_DIRECTORY,
+            "/STATE.TMP",
+        ),
+        ("LEGACY_EFFECTS_PATH", LINUX_LEGACY_DIRECTORY, "/EFFECTS"),
     ];
     for (name, directory, suffix) in paths {
         writeln!(
@@ -226,8 +217,14 @@ pub fn header(plan: &PatchPlan, body: &FirmwareImage, version: &str) -> Result<S
         "#define GRKIT_VERSION {}",
         serde_json::to_string(version)?
     )?;
-    // Modules (runtime/module_link.h): the end of the area that holds their
-    // code, and the services of the core.
+    // Modules (runtime/module_link.h): their folder, the end of the area
+    // that holds their code, and the services of the core.
+    writeln!(
+        result,
+        "#define MODULES_PATH {}\n#define PACKAGE_MODULES_PATH {}",
+        serde_json::to_string(&format!("{LINUX_DATA_DIRECTORY}/MODULES"))?,
+        serde_json::to_string(&format!("{LINUX_DIRECTORY}/MODULES"))?
+    )?;
     writeln!(
         result,
         "#define POINT_VIEWFINDER_OVERLAY {:#x}U",

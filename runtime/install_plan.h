@@ -16,8 +16,8 @@
 /* The most code bytes of all modules after the tail. The area is larger on
    each target. */
 #define MODULE_CODE_LIMIT 0x100000U
-/* installer.c declares modules_path and package_modules_path with the other
-   paths under the card root. */
+static const char modules_path[] = MODULES_PATH;
+static const char package_modules_path[] = PACKAGE_MODULES_PATH;
 _Static_assert(sizeof(package_modules_path) >= sizeof(modules_path), "The path buffer fits both folders");
 static char module_names[GRKIT_MODULES_MAX][CATALOG_NAME_SIZE];
 /* The listed modules, the usable ones (bit i), and what they need: script
@@ -249,20 +249,6 @@ static int state_taken(u32 id)
         if (manage_id(i, "OFF") == id || manage_id(i, "POS") == id || manage_id(i, "ROWS") == id) return 1;
     for (u32 i = 0; i < listed_count; ++i)
         if (effect_choice_id(i) == id) return 1;
-    return 0;
-}
-/* Whether the plan does not depend on the saved value of `id`: INSTALL
-   takes a Fn adjustment, a capability of the core, and a saved setting of a
-   module from the state file (apply_state), so the key of the plan
-   (installer.c: plan_key) leaves them out. */
-static int plan_independent(u32 id)
-{
-    static const u32 core_ids[] = {CORE_STATE_IDS};
-    if (id >= PARAMETER_KEY_BASE) return 1;
-    for (u32 k = 0; k < GRKIT_CORE_SETTING_COUNT; ++k)
-        if (core_ids[k] == id) return 1;
-    for (u32 k = 0; k < setting_total; ++k)
-        if ((setting_flags[k] & GRM_SETTING_SAVED) && grm_state_id(setting_names[k]) == id) return 1;
     return 0;
 }
 /* The saved values that the table keeps, at most `room`. A later pair of a

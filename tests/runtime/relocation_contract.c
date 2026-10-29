@@ -87,12 +87,10 @@ static void pinned(void)
 static u32 window_at[4], symbol_at[8];
 static struct relocation_state state;
 static const u32 *hint;
-static u32 quick;
 static int resolve(void)
 {
     memset(&state, 0, sizeof(state));
     state.read = read_word; state.window_at = window_at; state.symbol_at = symbol_at; state.hint = hint;
-    state.quick = quick;
     return relocation_resolve(&tables, &state);
 }
 
@@ -137,13 +135,6 @@ int main(void)
     assert(resolve() && !state.searched && symbol_at[0] == 0x53010308U);
     found[1] += 4;
     assert(resolve() && state.searched && symbol_at[0] == 0x53010308U);
-    /* Quick: a build that needs the search defers it and resolves nothing,
-       with no failure. A hint that matches still resolves. */
-    quick = 1;
-    assert(!resolve() && state.deferred && !state.searched && state.failures == 0);
-    found[1] -= 4;
-    assert(resolve() && !state.deferred && symbol_at[0] == 0x53010308U);
-    quick = 0;
     hint = 0;
 
     /* A changed instruction in the function: the window is not found. */
