@@ -81,6 +81,9 @@
    Standard parameter page (still mode). */
 #define ADJ_IC_SLOT_TYPE 12
 #define IC_PARAMETERS_CONTROLLER 0x2000014
+/* The shooting screen: a half-press on a page changes to it, and the release
+   changes back to the page. */
+#define SHOOTING_CONTROLLER 0x8000000
 /* The native screens of ui_open_native (runtime/ui.h): the targets of the
    MENU rows White Balance (still) and LCD. */
 #define UI_NATIVE_WHITE_BALANCE 0x200004eU

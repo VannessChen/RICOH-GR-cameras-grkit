@@ -597,6 +597,42 @@ static void icons_toolbar_and_edges_map_their_ids(void)
     assert(advance_from_private(EV_LEFT, 2) == 1);
 }
 
+/* A half-press on the Fn adjustments page changes to the shooting screen,
+   and the release changes back and starts the page again. The page must
+   still edit the effect, not the native Image Control settings. Any other
+   screen ends the session, so a later native page edits the native ones. */
+static void a_half_press_keeps_the_parameter_session(void)
+{
+    const u32 record = 0x59005000;
+    reset();
+    test_header[GRKIT_HOST_PARAMETERS / 4] = record | 1U;
+    menu_parameter_controller(test_header, IC_PARAMETERS_CONTROLLER);
+    menu_parameter_started(test_header);
+    assert(menu_parameter_session() == record);
+    menu_parameter_controller(test_header, SHOOTING_CONTROLLER);
+    assert(menu_parameter_session() == record);
+    menu_parameter_controller(test_header, IC_PARAMETERS_CONTROLLER);
+    menu_parameter_started(test_header);
+    assert(menu_parameter_session() == record);
+    /* The page ends at ADJ (menu_settings_controller calls this on each
+       controller change): a native page that ADJ opens later has no
+       session. */
+    menu_parameter_controller(test_header, 0x2000000);
+    assert(menu_parameter_session() == 0 && test_header[GRKIT_HOST_PARAMETERS / 4] == 0);
+    menu_parameter_started(test_header);
+    assert(menu_parameter_session() == 0);
+    /* A native page with no session stays native through a half-press. */
+    menu_parameter_controller(test_header, SHOOTING_CONTROLLER);
+    menu_parameter_controller(test_header, IC_PARAMETERS_CONTROLLER);
+    menu_parameter_started(test_header);
+    assert(menu_parameter_session() == 0);
+    /* A record that waits for its page stays through the change to it. */
+    test_header[GRKIT_HOST_PARAMETERS / 4] = record | 1U;
+    menu_parameter_controller(test_header, IC_PARAMETERS_CONTROLLER);
+    assert(test_header[GRKIT_HOST_PARAMETERS / 4] == (record | 1U));
+    test_header[GRKIT_HOST_PARAMETERS / 4] = 0;
+}
+
 static void adj_exits_return_once_for_the_parameter_page(void)
 {
     reset();
@@ -2078,6 +2114,7 @@ int main(void)
     playback_matches_private_tags_only();
     icons_toolbar_and_edges_map_their_ids();
     adj_exits_return_once_for_the_parameter_page();
+    a_half_press_keeps_the_parameter_session();
     the_root_lists_the_official_modules();
     module_tiles_follow_the_effect_icons();
     the_framing_page_sets_the_ratios_of_the_target();

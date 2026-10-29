@@ -527,12 +527,28 @@ A32_ENTRY u32 menu_parameter_set(u32 index,u32 value) {
     }
     return 1;
 }
-/* A page that GRKit opened starts its session. Any other page ends it. */
+/* A page that GRKit opened starts its session. A start while the session
+   runs is the same page again: a half-press changes from the page to the
+   shooting screen and back (menu_parameter_controller). A controller change
+   to any other screen ends the session, so a native page starts without
+   one. */
+static void menu_parameter_started(volatile u32 *h) {
+    u32 record=h[GRKIT_HOST_PARAMETERS/4];
+    if(record&1U) h[GRKIT_HOST_PARAMETERS/4]=record&~1U;
+}
 A32_ENTRY void menu_parameter_page_start(void) {
     volatile u32 *h=menu_header();
-    u32 record=h[GRKIT_HOST_PARAMETERS/4];
-    h[GRKIT_HOST_PARAMETERS/4]=record&1U ? record&~1U : 0;
+    menu_parameter_started(h);
     parameter_title(h)[0]=0;
+}
+/* A controller change to `id` while a session runs: it stays for the page
+   and for the shooting screen that a half-press shows over the page, and
+   ends for any other controller. A record that waits for its page to start
+   (bit 0) stays: ADJ opens the page with it. */
+static void menu_parameter_controller(volatile u32 *h,u32 id) {
+    u32 record=h[GRKIT_HOST_PARAMETERS/4];
+    if(!record || record&1U || id==IC_PARAMETERS_CONTROLLER || id==SHOOTING_CONTROLLER) return;
+    h[GRKIT_HOST_PARAMETERS/4]=0;
 }
 /* Show the Standard rows of the base set. The type is Standard, so the
    native title would read Standard. Keep the page and the effect name, so

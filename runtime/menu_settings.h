@@ -165,6 +165,7 @@ A32_ENTRY u32 menu_settings_controller(u32 id) {
         return 0;
     }
     id=menu_rows_controller(h,id);
+    menu_parameter_controller(h,id);
     /* The checkbox page serves the options page that opens now. The return
        to the settings page keeps it, as the submenu finds the row to put
        its cursor on from the page that returns. Any other controller gets
@@ -199,8 +200,10 @@ A32_ENTRY u32 menu_settings_controller(u32 id) {
             services_word(h,SERVICES_MENU+MENU_ROWS_STAY_ROW)[0]=0;
         return id;
     }
-    /* The Fn adjustments that a row of the page opened return to the page. */
-    if(id==IC_PARAMETERS_CONTROLLER && h[GRKIT_HOST_SETTINGS/4]&SETTINGS_FN) return id;
+    /* The Fn adjustments that a row of the page opened return to the page,
+       also after a half-press, which shows the shooting screen over them. */
+    if((id==IC_PARAMETERS_CONTROLLER || (id==SHOOTING_CONTROLLER && menu_parameter_session())) &&
+       h[GRKIT_HOST_SETTINGS/4]&SETTINGS_FN) return id;
     h[GRKIT_HOST_SETTINGS/4]=0;
     return id;
 }
