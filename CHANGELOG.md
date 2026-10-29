@@ -1,3 +1,10 @@
+## 1.3.3 (2026-10-29)
+
+### Fixes
+
+- The Fn adjustments of a Film Look effect stay on screen after a half-press, where they showed and changed the native Image Control settings.
+- GRKit loads again on every start with a new card, after an update, and with cards that macOS copied files to, where 1.3.1 and 1.3.2 could miss GRK, Film Look, or effects.
+
 ## 1.3.2 (2026-10-29)
 
 ### Fixes
