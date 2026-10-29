@@ -162,6 +162,17 @@ button {
   background: transparent;
 }
 
+/* A banner above the page, in a browser of a computer that cannot write to a card. */
+
+.browser-banner {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 12px clamp(16px, 4vw, 56px);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 /* Header */
 
 .languages {

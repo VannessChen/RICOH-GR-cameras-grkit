@@ -5,6 +5,7 @@ import {
   cardEffects,
   cardModules,
   hasChanges,
+  isMobileDevice,
   parseList,
   parseReport,
   planChanges,
@@ -510,5 +511,32 @@ describe('cardEffects', () => {
     ]);
     await card.put('GRKIT/EFFECTS/AAAAAAAA.GRF', 'a');
     expect(cardEffects(await readCard(card))).toEqual(['GRKIT/EFFECTS/AAAAAAAA.GRF']);
+  });
+});
+
+describe('isMobileDevice', () => {
+  const ANDROID = 'Mozilla/5.0 (Linux; Android 14) Chrome/130.0 Mobile Safari/537.36';
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148';
+  const SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/18.0 Safari/605.1.15';
+  const FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0';
+  const LINUX = 'Mozilla/5.0 (X11; Linux x86_64) Chrome/130.0 Safari/537.36';
+  const device = (userAgent: string, platform: string, maxTouchPoints = 0, mobile?: boolean) => ({
+    userAgent,
+    platform,
+    maxTouchPoints,
+    ...(mobile === undefined ? {} : { userAgentData: { mobile } }),
+  });
+
+  it('names phones and tablets, where no browser writes to a card', () => {
+    expect(isMobileDevice(device(ANDROID, 'Linux armv8l', 5, true))).toBe(true);
+    expect(isMobileDevice(device(IPHONE, 'iPhone', 5))).toBe(true);
+    // Safari on an iPad gives the user agent of a Mac.
+    expect(isMobileDevice(device(SAFARI, 'MacIntel', 5))).toBe(true);
+  });
+
+  it('leaves computers, where Chrome or Edge can write to a card', () => {
+    expect(isMobileDevice(device(SAFARI, 'MacIntel'))).toBe(false);
+    expect(isMobileDevice(device(FIREFOX, 'Win32'))).toBe(false);
+    expect(isMobileDevice(device(LINUX, 'Linux x86_64', 0, false))).toBe(false);
   });
 });

@@ -591,3 +591,26 @@ export async function pickCard(): Promise<CardDirectory> {
 }
 
 export const canWriteCards = () => typeof window !== 'undefined' && 'showDirectoryPicker' in window;
+
+/** The parts of `Navigator` that tell a phone or a tablet. */
+export interface DeviceNavigator {
+  userAgent: string;
+  platform: string;
+  maxTouchPoints: number;
+  userAgentData?: { mobile?: boolean };
+}
+
+/** Whether the page runs on a phone or a tablet, where no browser can write to a card. */
+export function isMobileDevice(device: DeviceNavigator): boolean {
+  if (device.userAgentData?.mobile) return true;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(device.userAgent)) return true;
+  // Safari on an iPad gives the user agent of a Mac, but a Mac has no touch screen.
+  return device.platform === 'MacIntel' && device.maxTouchPoints > 1;
+}
+
+/**
+ * Whether the page names the browsers that can write to a card: on a computer whose browser
+ * cannot, such as Safari or Firefox.
+ */
+export const suggestCardBrowser = () =>
+  typeof navigator !== 'undefined' && !canWriteCards() && !isMobileDevice(navigator as DeviceNavigator);

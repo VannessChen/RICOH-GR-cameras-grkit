@@ -3,6 +3,7 @@ import { trackCardUninstall, trackCardWrite, trackDownload, trackScriptsOff } fr
 import {
   applyChanges,
   canWriteCards,
+  suggestCardBrowser,
   cardBuilds,
   cardModules,
   pickCard,
@@ -502,6 +503,12 @@ export function App({
   );
 
   return (
+    <>
+      {suggestCardBrowser() && (
+        <div className="browser-banner" role="note">
+          {t.cardBrowser}
+        </div>
+      )}
     <div className="page">
       <div className="languages">
         <a className="github" href={REPOSITORY} aria-label="GitHub" title="GitHub">
@@ -934,6 +941,7 @@ export function App({
         </div>
       </footer>
     </div>
+    </>
   );
 }
 
