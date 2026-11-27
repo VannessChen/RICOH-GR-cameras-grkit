@@ -1,3 +1,19 @@
+## 1.7.0 (2026-11-27)
+
+### Features
+
+- Battery Percentage in Display Settings shows the battery charge as a number in steps of 2 %.
+- Grain has a Style setting: Film-like adds the colored grain of color negative film, modeled on spektrafilm, and System keeps the camera's grain.
+- GR II Positive is the Positive Film of GR II for GR III, GR IIIx, and GR IV, made on the site from your GR II firmware.
+- Film Look can unlock the GR IV Monochrome looks, Solarized included, on GR III, GR IIIx, and GR IV.
+- With the camera's Wi-Fi on, GRKit is ready for the GRKit phone app, coming later, to manage Looks, recipes, settings, and updates.
+
+### Fixes
+
+- On GR III and GR IIIx, Cinema Yellow and Cinema Green set Toning in three levels as on GR IV, also in RAW development.
+- On GR IV, a crop chosen right after a shot applies once that photo is saved, so changing the crop no longer damages that photo.
+- Photos with a Framing or Crop size now go to GR WORLD as a smaller copy when it asks for resized photos.
+
 ## 1.6.6 (2026-11-22)
 
 ### Fixes
